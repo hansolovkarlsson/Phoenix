@@ -110,12 +110,18 @@ Value *eval_call(Eval *e, const Expr *x)
         int     n      = args[0]->n;
         Value **items  = arena_alloc(a, (size_t)(n + adding) * sizeof *items);
 
+        /* As many values as names binds them **pairwise**; one value binds
+         * every name to it. Both are the same operation seen from different
+         * sides, so both are `bind` rather than one being a second function. */
+        bool pairwise = args[1]->kind == V_LIST && args[2]->kind == V_LIST
+                        && args[2]->n == adding && adding > 0;
+
         for (int i = 0; i < adding; i++) {
             Value *name = args[1]->kind == V_LIST ? args[1]->items[i] : args[1];
             if (name->kind != V_TEXT)
                 return library_fail(e, x, "'bind' wants text for a name, and one "
                                           "of these is %s", value_kind_name(name));
-            items[i] = pair(a, name, args[2]);
+            items[i] = pair(a, name, pairwise ? args[2]->items[i] : args[2]);
         }
         memcpy(items + adding, args[0]->items, (size_t)n * sizeof *items);
         return list_of(a, items, n + adding);
@@ -297,6 +303,78 @@ Value *eval_call(Eval *e, const Expr *x)
                 for (int k = 0; k < item->n; k++) items[n++] = item->items[k];
             else
                 items[n++] = item;
+        }
+        return list_of(a, items, n);
+    }
+
+    /* ---- each ----
+     *
+     * A template applied to every element of a list. There is no map in a
+     * notation with no lambda, and every declaration list wants one: `var a, b
+     * : Flags` is one node naming two things, and C wants `long a[30]` and
+     * `long b[30]` written out.
+     *
+     * The template's `{}` is the element. It is built with `of` like any
+     * other, so the parts that do not vary are already in it by the time this
+     * is called:
+     *
+     *     each($names, "{} {}{};" of $type.pre, "{}", $type.post)
+     */
+    if (strcmp(f, "each") == 0) {
+        bool two = x->nkids == 3;
+        if (!two && !want(e, x, 2, args)) return NULL;
+
+        Value *template = two ? args[2] : args[1];
+        Value *second   = two ? args[1] : NULL;
+
+        if (args[0]->kind != V_LIST || (two && second->kind != V_LIST))
+            return library_fail(e, x, "'each' wants a list");
+        if (template->kind != V_TEXT)
+            return library_fail(e, x, "'each' wants a template, and this is %s",
+                                value_kind_name(template));
+
+        /* Two lists **in step**, when two are given: one hole from each, in
+         * order. Pairing a call's arguments with the parameters they are for
+         * is what wanted it, and it is the same operation as one list with one
+         * hole, so it is the same function.
+         *
+         * A list that runs out contributes nothing rather than being an
+         * error -- a call to something this description does not declare has
+         * no parameters to pair with, and adding nothing is right. */
+        int n = args[0]->n;
+        Value **items = arena_alloc(a, (size_t)(n ? n : 1) * sizeof *items);
+
+        for (int i = 0; i < n; i++) {
+            char  *pieces[2] = { "", "" };
+            size_t lens[2]   = { 0, 0 };
+
+            if (!value_format(a, args[0]->items[i], &pieces[0], &lens[0]))
+                return library_fail(e, x, "'each' cannot write a %s",
+                                    value_kind_name(args[0]->items[i]));
+            if (two && i < second->n
+                && !value_format(a, second->items[i], &pieces[1], &lens[1]))
+                return library_fail(e, x, "'each' cannot write a %s",
+                                    value_kind_name(second->items[i]));
+
+            size_t cap  = template->len + lens[0] + lens[1] + 1;
+            char  *buf  = arena_alloc(a, cap + 1);
+            size_t used = 0;
+            int    hole = 0;
+
+            for (size_t k = 0; k < template->len; k++) {
+                char c = template->text[k];
+                if (c == '{' && k + 1 < template->len && template->text[k + 1] == '}') {
+                    int which = hole < 2 ? hole : 1;
+                    memcpy(buf + used, pieces[which], lens[which]);
+                    used += lens[which];
+                    hole++;
+                    k++;
+                    continue;
+                }
+                buf[used++] = c;
+            }
+            buf[used] = '\0';
+            items[i] = value_text(a, buf, used);
         }
         return list_of(a, items, n);
     }

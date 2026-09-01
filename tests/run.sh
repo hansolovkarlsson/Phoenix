@@ -416,6 +416,39 @@ else
     report fail "a Pascal compiler, and it agrees with phx" "it did not build"
 fi
 
+# ---------------------------------------------------------------------------
+# Pascal to C, and then the whole way: phx writes a Pascal compiler, cc builds
+# it, that compiler compiles a Pascal program to C, cc builds that, and the
+# program runs and is right. Nothing in the chain but cc.
+
+echo "Pascal to C"
+
+if "$phx" "$root/examples/pascal-c.phx" "$root/examples/primes.pas" \
+        > "$tmp0/primes.c" 2>/dev/null \
+   && cc -Wall -Werror -o "$tmp0/primes" "$tmp0/primes.c" 2>/dev/null; then
+    report pass "primes.pas compiles to C that cc -Werror accepts"
+    got=$("$tmp0/primes" | tr '\n' ' ')
+    if [ "$got" = "10 29 21 2 3 5 7 11 " ]; then
+        report pass "and the program is right"
+    else
+        report fail "and the program is right" "got: $got"
+    fi
+else
+    report fail "primes.pas compiles to C that cc -Werror accepts"
+fi
+
+if "$phx" "$root/examples/pascal-c.phx" -o "$tmp0/pasc.c" 2>/dev/null \
+   && cc -o "$tmp0/pasc" "$tmp0/pasc.c" 2>/dev/null; then
+    "$tmp0/pasc" "$root/examples/primes.pas" > "$tmp0/again.c" 2>/dev/null
+    if cmp -s "$tmp0/again.c" "$tmp0/primes.c"; then
+        report pass "a standalone Pascal-to-C compiler, agreeing with phx"
+    else
+        report fail "a standalone Pascal-to-C compiler, agreeing with phx"
+    fi
+else
+    report fail "a standalone Pascal-to-C compiler, agreeing with phx" "it did not build"
+fi
+
 echo "Pascal, with actions"
 accepts "the description reads" "$root/examples/pascal.phx"
 accepts "the outline description reads" "$root/examples/pascal-outline.phx"

@@ -1,0 +1,280 @@
+(* pascal-c.phx -- Pascal, compiled to C.
+ *
+ *   phx examples/pascal-c.phx prog.pas > prog.c && cc prog.c -o prog
+ *
+ * The grammar, the tree, the symbol table and the typechecker are in
+ * `pascal.phx` and are imported: none of them has an opinion about C. This
+ * file is the emit pass and the driver that orders it, and that is all a
+ * target is.
+ *
+ * ---------------------------------------------------------------------------
+ * The subset, said plainly rather than discovered
+ *
+ * **In:** integer, real, boolean, char; subranges of integer; one-dimensional
+ * arrays with written bounds; records without variants; constants, type
+ * definitions and variables; procedures and functions, by value and by `var`,
+ * not nested; `if`, `while`, `repeat`, `for` both ways, compound statements,
+ * assignment and calls; the operators; `write` and `writeln`.
+ *
+ * **Out:** sets, files, pointers, `goto`, `case`, `with`, nested routines,
+ * variant records. Phoenix names the missing clause the first time a program
+ * reaches for one, which is the right way round -- the compiler works for what
+ * it covers and says exactly what it does not.
+ *
+ * ---------------------------------------------------------------------------
+ * Two things C makes awkward, and how they are done
+ *
+ * **A C type is written around its name**, not before it: `long v[30]`, not
+ * `long[30] v`. So a type answers two pieces -- what goes before the name and
+ * what goes after -- and every declaration is `{pre} {name}{post}`. That is
+ * the declarator rule C actually has, and writing it out once here is cheaper
+ * than special-casing arrays in four places.
+ *
+ * **Pascal indexes from wherever it likes**, and C from nought. Every index is
+ * emitted with one subtracted, and **the subset requires arrays to start at
+ * one** -- which is what almost every Pascal array does.
+ *
+ * Doing it properly is following the variable to its type and that type to its
+ * index subrange, which is the same chain of backward hops `pascal.phx` uses
+ * to find a record's fields through a `with`. It is known to work and it is
+ * four lookups long; the restriction is here to keep this file readable, not
+ * because the notation could not say it.
+ *)
+
+%import "pascal.phx"
+
+(* ------------------------------------------------------------------ *)
+(* What a `var` parameter is called inside the routine.                *)
+(*                                                                     *)
+(* This is its own pass for a reason worth stating. `emit-c` hands the  *)
+(* by-reference names *down* to a routine's body, and an inherited      *)
+(* clause runs on the way **in**, before that routine's parameters have *)
+(* been looked at. Gathering them is bottom-up; handing them down is    *)
+(* top-down; one walk cannot do both.                                   *)
+(*                                                                     *)
+(* It is the same shape as `symbols` before `typecheck` in `pascal.phx`, *)
+(* and it turned up the same way -- by being written as one pass first   *)
+(* and not working.                                                     *)
+
+%pass prepare
+
+  (* **An array parameter is by reference in C whether or not it says so**,
+   * because an array decays to a pointer when it is passed. So a Pascal
+   * `var f : Flags` is a plain `Flags f` in C and needs no dereference, while
+   * a `var n : integer` is `long *n` and every use of it is `(*n)`.
+   *
+   * `shapeof` is what the typechecker worked out this parameter's type really
+   * is, and the choice between the two spellings is a `lookup` against it --
+   * a table standing in for the conditional the notation has not got. *)
+  (* What a *caller* has to put in front of an argument for this parameter:
+   * `&` for a by-reference one that is not an array, and nothing otherwise.
+   * One entry per name, so the list lines up with the argument positions. *)
+  Param(byref: true)  : addr = each($names, lookup([["array", ""]], $shapeof, "&"))
+                      : star = lookup([["array", ""]], $shapeof, "*")
+                      : refs = bind([], $names,
+                                 each($names, lookup([["array", "{}"]], $shapeof,
+                                                     "(*{})"))) .
+  Param(byref: false) : addr = each($names, "")
+                      : star = ""
+                      : refs = [] .
+
+  Procedure : byrefs = flatten([...$params.refs]) .
+  Function  : byrefs = flatten([...$params.refs]) .
+
+%pass emit-c
+
+
+  (* Where a variable lives, and how it is spelled, are both handed *down* --
+   * a program's variables are C globals and a routine's are C locals, and a
+   * `var` parameter is a pointer that every use of has to dereference.
+   *
+   * There is no `if` in the notation, so both are done with `lookup` against a
+   * default: a name that is not by reference looks up to itself. That is the
+   * conditional, written as a table. *)
+
+
+
+
+
+  (* A parameter's type is written as a bare *name* in Pascal, so there is no
+   * type node to ask -- the table is the same one `NamedType` uses, and a name
+   * that is not a base type is a typedef and stands for itself. *)
+  Param : out = join(each($names, "{} {}{}"
+                        of lookup($ctypes, $type, $type), $star, "{}"), ", ") .
+
+  (* ---- types, as C declarators ----
+   *
+   * A C type is written *around* its name -- `long v[30]`, not `long[30] v` --
+   * so a type answers two pieces and every declaration is `{pre} {name}{post}`.
+   * Writing C's declarator rule out once here is cheaper than special-casing
+   * arrays in the four places a type is declared. *)
+
+  NamedType(name: "integer") : pre = "long"   : post = "" .
+  NamedType(name: "real")    : pre = "double" : post = "" .
+  NamedType(name: "boolean") : pre = "int"    : post = "" .
+  NamedType(name: "char")    : pre = "char"   : post = "" .
+  NamedType                  : pre = $name    : post = "" .
+
+  NoType    : pre = "void" : post = "" .
+  Subrange  : pre = "long" : post = "" .
+  EnumType  : pre = "long" : post = "" .
+  Packed    : pre = $type.pre : post = $type.post .
+
+  ArrayType : pre  = $of.pre
+            : post = "[({}) - ({}) + 1]{}"
+                       of at($indices, 1).high.out, at($indices, 1).low.out,
+                          $of.post .
+
+  RecordType : pre  = "struct {{ {} }}" of join($fields.out, " ")
+             : post = "" .
+  FieldDecl  : out  = join(each($names, "{} {}{};" of $type.pre, "{}", $type.post), " ") .
+
+  (* ---- constants ---- *)
+
+  Integer       : out = "{}" of $text .
+  Real          : out = "{}" of $text .
+  Text          : out = "\"{}\"" of $value .
+  (* Pascal's two boolean literals are ordinary named constants in the
+   * grammar, and C spells them differently. Another table standing in for a
+   * conditional. *)
+  NamedConstant : out = lookup($spelled, $name, $name) .
+  Signed        : out = "({}{})" of $sign, $value.out .
+  Nil           : out = "0" .
+
+  (* ---- declarations ---- *)
+
+  ConstDef : out = "#define {} {}\n" of $name, $value.out .
+  TypeDef  : out = "typedef {} {}{};\n" of $type.pre, $name, $type.post .
+  VarDecl  : out = "{}\n" of join(each($names, "{}{} {}{};"
+                                              of $storage, $type.pre, "{}",
+                                                 $type.post), "\n") .
+
+  (* ---- routines ----
+   *
+   * A Pascal function returns by assigning to its own name, so C gets a local
+   * of that name and a `return` at the end. *)
+
+  Forward   : out = "" : inner = "" .
+
+  Procedure : down storage = ""
+            : down spelled = [...$byrefs, ...$spelled]
+            : out = "static void {}({})\n{{\n{}{}\n}}\n"
+                of $name, join($params.out, ", "), $body.decls, $body.code .
+
+  Function  : down storage = ""
+            : down spelled = [...$byrefs, ...$spelled]
+            : out = "static {} {}({})\n{{\n  {} {};\n{}{}\n  return {};\n}}\n"
+                of $returns.pre, $name, join($params.out, ", "),
+                   $returns.pre, $name, $body.decls, $body.code, $name .
+
+  (* ---- blocks ---- *)
+
+  (* The same scope the typechecker built. An inherited attribute lives only
+   * for the walk that made it, so a later pass needing one says so again --
+   * one line, and explicit about needing it. *)
+  Block : down known = [...$shapes, ...$known]
+        : decls      = "{}{}{}" of join($consts.out, ""), join($types.out, ""),
+                                join($vars.out, "")
+        : routinecode = join($routines.out, "\n")
+        : code     = $body.out
+        : out      = "{{\n{}{}\n}}" of $decls, $code
+        : inner    = "{}{}" of $decls, $code .
+
+  (* ---- statements ---- *)
+
+  Compound : out = "  {{\n{}\n  }}" of join($body.out, "\n") .
+  Empty    : out = "  ;" .
+  Assign   : out = "  {} = {};" of $target.out, $value.out .
+
+(* **Every body is braced, even a single statement.** `writeln(x)` is two C
+   * statements -- a `printf` and the newline -- so `if (c) writeln(x);` would
+   * put the newline outside the `if` and print it every time. A brace is free
+   * and a one-statement body that is secretly two is not. `cc -Wall` found
+   * this, which is a good argument for compiling what a compiler emits. *)
+  If     : out = "  if ({}) {{\n{}\n  }}"                 of $cond.out, $then.out .
+  IfElse : out = "  if ({}) {{\n{}\n  }} else {{\n{}\n  }}"
+                   of $cond.out, $then.out, $else.out .
+  While  : out = "  while ({}) {{\n{}\n  }}"              of $cond.out, $body.out .
+  Repeat : out = "  do {{\n{}\n  }} while (!({}));"
+             of join($body.out, "\n"), $until.out .
+
+  For(dir: "to")     : out = "  for ({} = {}; {} <= {}; {}++) {{\n{}\n  }}"
+                         of $var, $from.out, $var, $to.out, $var, $body.out .
+  For(dir: "downto") : out = "  for ({} = {}; {} >= {}; {}--) {{\n{}\n  }}"
+                         of $var, $from.out, $var, $to.out, $var, $body.out .
+
+  (* ---- calls ----
+   *
+   * `writeln(x)` picks its format from the argument's *type*, which the
+   * typechecker worked out and left on the node. The choice is a `lookup`
+   * against a table, which is what a notation with no conditional uses for
+   * one. *)
+
+  Argument : out   = $value.out
+           : write = "printf(\"{}\", {}); "
+                       of lookup([["integer", "%ld"], ["real", "%g"],
+                                  ["char", "%c"], ["string", "%s"],
+                                  ["boolean", "%d"]], $value.type, "%ld"),
+                          $value.out .
+
+  CallStatement(name: "writeln") : out = "  {}printf(\"\\n\");"
+                                           of join($args.write, "") .
+  CallStatement(name: "write")   : out = "  {}" of join($args.write, "") .
+(* A call has to know which of the routine's parameters are by reference,
+   * so that it can take the address. The routine was declared earlier and its
+   * name is bound to its parameter list -- **another backward hop** -- and
+   * `each` over two lists pairs the arguments with what goes in front of
+   * them. *)
+  CallStatement : out = "  {}({});"
+                    of $name, join(each(flatten([...lookup($known, $name, []).addr]),
+                                        $args.out, "{}{}"), ", ") .
+
+  CallExpression : out = "{}({})"
+                    of $name, join(each(flatten([...lookup($known, $name, []).addr]),
+                                        $args.out, "{}{}"), ", ") .
+
+  (* ---- expressions ---- *)
+
+  Not : out = "(!{})" of $value.out .
+
+  Binary(op: "div") : out = "({} / {})"  of $left.out, $right.out .
+  Binary(op: "mod") : out = "({} % {})"  of $left.out, $right.out .
+  Binary(op: "and") : out = "({} && {})" of $left.out, $right.out .
+  Binary(op: "or")  : out = "({} || {})" of $left.out, $right.out .
+  Binary(op: "/")   : out = "((double)({}) / (double)({}))" of $left.out, $right.out .
+  Binary            : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
+  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  (* ---- variables ----
+   *
+   * A name that is by reference looks up to `(*name)`; one that is not looks
+   * up to itself, because that is the default. No conditional, and no second
+   * clause for a distinction the table already makes. *)
+
+  Variable : out = lookup($spelled, $name, $name) .
+  Accessed : out = "{}{}" of lookup($spelled, $base, $base), join($access.out, "") .
+
+  Index    : out = "[({}) - 1]" of at($at, 1).out .
+  FieldOf  : out = ".{}" of $name .
+
+  (* ---- the whole ---- *)
+
+  (* Pascal's type names in C -- a name that is not here is a typedef and
+   * stands for itself -- and where a variable lives. Both are handed down,
+   * and all of Program's clauses go in the one rule. *)
+  Program : down known = []
+          : down ctypes = [["integer", "long"], ["real", "double"],
+                           ["boolean", "int"], ["char", "char"]]
+          : down storage = "static "
+
+          (* Names that C spells differently: a `var` parameter, and Pascal's
+           * two boolean literals -- which the grammar makes ordinary variable
+           * references, because that is what they look like. *)
+          : down spelled = [["true", "1"], ["false", "0"]]
+          : out = "#include <stdio.h>\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
+              of $body.decls, $body.routinecode, $body.code .
+
+%driver c = symbols, typecheck, prepare, emit-c -> out .

@@ -544,6 +544,19 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
                   : "'{}' is not declared" of $name .
   Argument      : type = $value.type .
 
+  (* What a parameter's declared type turns out to *be* -- "array", "record",
+   * "integer" and so on. Only this pass can answer it, because only this pass
+   * has the scope; `emit-c` runs later and reads it off the node. *)
+(* A node built inside a clause has **fields but no attributes** -- a pass
+   * puts attributes on the nodes it walks, and one made here was never walked.
+   * So the default of a lookup cannot be `NamedType(name: "?")` and then be
+   * asked for its `tname`.
+   *
+   * It does not need to be: `env` already maps a name to its type's *name*,
+   * which is what this wants. *)
+  Param    : type = "void"
+           : shapeof = lookup($env, $type, "?") .
+
   Compare  : type = "boolean" .
   Binary(op: "/")   : type = "real" .
   Binary(op: "div") : type = "integer" .

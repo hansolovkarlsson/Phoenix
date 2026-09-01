@@ -521,13 +521,19 @@ static void pass_reads(const Pass *p, const char **names, int *n)
 }
 
 /* Whether a pass leaves this attribute *on a node*, which is what another
- * pass could later read. Threaded attributes are the walk's, not a node's. */
+ * pass could later read -- and so what another pass could overwrite.
+ *
+ * Only a synthesised attribute is one. A **threaded** attribute belongs to the
+ * walk, and an **inherited** one lives in a scope that is pushed on the way
+ * into a node and popped on the way out; neither is written anywhere a later
+ * pass could find it. Two passes each handing down their own `env` have their
+ * own, and saying they collide was wrong twice, for the same reason. */
 static bool attr_on_node(const Pass *p, const char *attr)
 {
     for (int i = 0; i < p->nrules; i++)
         for (int k = 0; k < p->rules[i].nclauses; k++) {
             const Clause *c = &p->rules[i].clauses[k];
-            if (c->kind != C_SYNTH && c->kind != C_DOWN) continue;
+            if (c->kind != C_SYNTH) continue;
             if (c->attr && strcmp(c->attr, attr) == 0) return true;
         }
     return false;

@@ -717,3 +717,79 @@ something different under the same name. The driver's collision check said so �
 *both 'symbols' and 'typecheck' define 'shapes', the later one wins* — which is
 a check written for a hazard that had not yet happened, catching the first time
 it did.
+
+## 2026-09-01 — Pascal to C
+
+`examples/pascal-c.phx` is `%import "pascal.phx"` and an emit pass.
+`examples/primes.pas` compiles to C that `cc -Wall -Werror` accepts, and the
+program is right — ten primes below thirty, the last of them 29, and
+`Gcd(1071, 462)` is 21. The whole chain has nothing in it but `cc`.
+
+The subset is written at the top of the file rather than discovered: in are
+scalars, subranges, one-dimensional arrays, records, value and `var`
+parameters, the control structures and `write`; out are sets, files, pointers,
+`goto`, `case`, `with` and nested routines. **Phoenix names the missing clause
+the first time a program reaches for one**, which is the right way round.
+
+### What C made awkward, and what the notation had to say about it
+
+**A C type is written around its name** — `long v[30]`, not `long[30] v` — so a
+type answers two pieces, `pre` and `post`, and every declaration is
+`{pre} {name}{post}`. Writing C's declarator rule out once is cheaper than
+special-casing arrays in the four places a type is declared.
+
+**An array parameter is by reference in C whether it says so or not**, because
+an array decays to a pointer. So Pascal's `var f : Flags` is a plain `Flags f`
+with no dereference, while `var r : Result` is `Result *r` and every use is
+`(*r)`. Telling them apart needs the parameter's type resolved, which only the
+typechecker can do — so the typechecker computes it and `emit-c` reads it off
+the node. That is what a sequence of passes is for.
+
+**A call has to know which of its arguments to take the address of.** The
+routine was declared earlier and its name is bound to its parameter list, so
+this is another backward hop — the same mechanism as the `with` statement, used
+for something that looks nothing like it.
+
+### The conditional the notation does not have, four times
+
+There is no `if`, and four times something needed one. Every time the answer
+was a **table**:
+
+```
+lookup([["array", ""]], $shapeof, "*")              a pointer, unless it is an array
+lookup([["integer", "%ld"], ["real", "%g"], ...], $value.type, "%ld")
+lookup($spelled, $name, $name)                      a name C spells differently
+lookup([["array", "{}"]], $shapeof, "(*{})")        which template to apply
+```
+
+`lookup` with a default *is* the conditional, and reading these back they are
+better than the `if`s would have been: each one is a small explicit table of
+what differs, with everything else falling through to a default that is right.
+[3.5](ROADMAP.md#35-conditionals-in-the-meta-language) has now survived a real
+compiler.
+
+### Three findings, and `cc -Wall` found the worst one
+
+**A field is read before an attribute, and a field can shadow.** `Block` has a
+field called `routines` and I computed an attribute of the same name; the field
+won, silently, and the message was about a list where text was wanted. The rule
+is right — one rule for `$name` and `$x.name` both — and the hazard is real.
+
+**A node built inside a clause has fields but no attributes.** A pass puts
+attributes on the nodes it walks, and `NamedType(name: "?")` as a lookup default
+was never walked, so asking it for `.tname` fails. Obvious in hindsight, and not
+before.
+
+**And an inherited attribute is not on the node either.** The driver's collision
+check said `typecheck` and `emit-c` both define `known` and the later would win.
+They do not: a `down` attribute lives in a scope pushed on the way into a node
+and popped on the way out. That is the *second* time this check has been wrong
+in the same way — `thread` was the first — and both are the same fact said
+twice: **only a synthesised attribute is on a node.** It is one condition in
+`check.c` now and the comment says why.
+
+**The worst bug was a `writeln` inside an `if`.** `writeln(x)` is two C
+statements, a `printf` and the newline, so `if (c) writeln(x);` put the newline
+outside the `if` and printed it every time. `cc -Wall` said *misleading
+indentation* and it was right — which is a good argument for a test that
+compiles what the compiler emits rather than only reading it.

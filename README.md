@@ -65,10 +65,12 @@ parsing a file, checking it, compiling it — or writes it out as a C program
 that does the same thing without Phoenix.
 
 ```sh
-phx examples/pascal.phx -o pascal.c   # a Pascal compiler, 4,800 lines
-cc pascal.c -o pas                    # no flags, no headers, no library
-./pas prog.pas
+phx examples/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 7,400 lines
+cc pasc.c -o pasc                     # no flags, no headers, no library
+./pasc prog.pas > prog.c && cc prog.c -o prog && ./prog
 ```
+
+Nothing in that chain but `cc`.
 
 ```sh
 make
@@ -491,7 +493,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 90 checks, including Solveig's pascal.bnf when it is present
+make test       # 93 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
