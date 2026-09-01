@@ -354,3 +354,48 @@ reusable together with the grammar that produces the nodes it keys on — a pass
 naming `Binary` needs something to build a `Binary`. So the natural module is a
 grammar fragment *and* the passes over it, never either half alone. That is why
 `lexical.phx` is all grammar and works: it is upstream of any node at all.
+
+## 2026-09-01 — lib/expression.phx, and what building it taught
+
+The expression module was proposed as the test of a rule stated the day it was
+written: *a pass is only reusable together with the grammar that produces the
+nodes it keys on.* Building it half-confirmed the rule and falsified what was
+expected to follow from it.
+
+**The rule held.** `show` — rendering an expression back to something close to
+what was read, for putting inside a diagnostic — depends on the shape of these
+nodes and on nothing else, and it belongs with the grammar that makes them.
+
+**What did not hold is the expectation that there would be several such
+passes.** There is one. A typechecker over these nodes needs the importing
+language's type system; an emit pass needs its target. Both are the caller's, so
+both stay the caller's. A `lib/` module is therefore mostly grammar, occasionally
+with a pass attached — and `lexical.phx` being pure grammar is not the exception
+it looked like, it is upstream of any node at all.
+
+**And the module needed something Phoenix did not have.** An expression grammar
+cannot know what a language's atoms are, which is the one thing every language
+differs about. So `%require primary` declares a hole: the description reads fine
+with it open, because that is what a module *is*, and is refused by name the
+moment something asks it to parse a file. **A module system needs an interface
+in both directions**, and the half saying what a module *needs* is the one easy
+to forget.
+
+Two checks had to learn about incompleteness. A rule named by a directive and
+never defined is a mistake unless it was required. And a literal nothing spells
+cannot be judged while a description has holes — `expression.phx` writes `"or"`
+and the language importing it is what makes an `or` token — so that check waits
+for the assembled description, which is where it belonged anyway.
+
+**One bug only a three-deep import could show.** A file with no `%start` used to
+*assign* the fallback goal rule, so `calc-c.phx` — which says nothing about a
+goal — silently unsaid the `%start program` that `calc.phx` had settled. A file
+that says nothing must not unsay something. The fallback now applies only when
+nothing has chosen yet.
+
+**What is still missing, and it is stage 3's.** `show` exists so that a
+typechecker can write *"cannot add {} and {}" of $left.show, $right.show* — and
+that needs `show` to have run before `typecheck` does. There is no way to
+sequence two passes yet, so the module's one pass is written, tested and not yet
+usable for the thing it is for. That is the clearest argument for `%driver` so
+far, and a better one than ordering passes for tidiness.

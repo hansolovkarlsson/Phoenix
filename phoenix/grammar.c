@@ -650,6 +650,17 @@ static void mark_fragment(Reader *r, MToken *t)
     r->g->rules[i].fragment = true;
 }
 
+/* `%require primary` -- a rule this module uses and leaves to whoever imports
+ * it. A grammar module that could not say this would have to guess at what a
+ * language's atoms are, which is the one thing an expression grammar cannot
+ * know and the one thing every language differs about. */
+static void mark_required(Reader *r, MToken *t)
+{
+    int i = grammar_find(r->g, t->text, t->len);
+    if (i < 0) { add_rule(r, t->text, t->pos, false)->required = true; return; }
+    r->g->rules[i].required = true;
+}
+
 static void mark_skip(Reader *r, MToken *t)
 {
     int i = grammar_find(r->g, t->text, t->len);
@@ -698,6 +709,7 @@ static bool read_file(Reader *r, const char *path)
             else if (strcmp(d->text, "ignorecase") == 0) g->ignorecase = true;
             else if (strcmp(d->text, "fragment")   == 0) mark_named(r, d->line, mark_fragment);
             else if (strcmp(d->text, "skip")       == 0) mark_named(r, d->line, mark_skip);
+            else if (strcmp(d->text, "require")    == 0) mark_named(r, d->line, mark_required);
             else if (strcmp(d->text, "import")     == 0) {
                 if (!at(r, T_LIT)) {
                     diag_error(r->src, d->pos,
@@ -722,7 +734,8 @@ static bool read_file(Reader *r, const char *path)
             } else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
-                          "%%skip %%start %%ignorecase %%pass %%import");
+                          "%%skip %%start %%ignorecase %%pass %%import "
+                          "%%require");
                 return false;
             }
             continue;
@@ -756,10 +769,13 @@ static bool read_file(Reader *r, const char *path)
             return false;
         }
         g->start = i;
-    } else {
-        g->start = -1;
+    } else if (g->start < 0) {
+        /* Only when nothing has chosen one yet. A file that says nothing about
+         * the goal rule must not *unsay* what an imported one settled -- which
+         * is what a plain assignment here did, and it went unnoticed until a
+         * description was assembled from three files. */
         for (int i = 0; i < g->nrules; i++)
-            if (!g->rules[i].lexical) { g->start = i; break; }
+            if (!g->rules[i].lexical && g->rules[i].body) { g->start = i; break; }
     }
     return true;
 }
@@ -811,6 +827,7 @@ Grammar *grammar_read(Arena *a, const char *path)
     g->arena   = a;
     g->src.path = path;
     g->src.text = arena_alloc(a, 1);
+    g->start    = -1;
 
     if (!read_description(a, g, path, NULL, NULL, 0)) return NULL;
     if (!grammar_check(g)) return NULL;

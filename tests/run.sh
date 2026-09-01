@@ -72,8 +72,42 @@ echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
 warns "a fragment not declared one"     "%fragment"       "$root/tests/grammars/fragment-forgotten.phx"
 
+tmp0=$(mktemp -d)
+trap 'rm -rf "$tmp0" "${tmp:-}"' EXIT
+
 echo "imports"
 accepts "the shared lexical module" "$root/lib/lexical.phx"
+accepts "the shared expression module" "$root/lib/expression.phx"
+accepts "the expression module, hole filled" "$root/tests/grammars/expression-only.phx"
+refuses "a module used with its hole open" "holes in it" \
+        "$root/lib/expression.phx" "$root/tests/sources/an-expression.txt"
+
+# Precedence and associativity come from the module, and nothing that imports
+# it restates them. This is the whole reason it exists, so it is checked
+# exactly rather than approximately.
+shown=$("$phx" --run show --show show \
+        "$root/tests/grammars/expression-only.phx" \
+        "$root/tests/sources/an-expression.txt" 2>/dev/null)
+if [ "$shown" = "(((a + (2 * -b)) < 10) and not c)" ]; then
+    report pass "the module's precedence, rendered back"
+else
+    report fail "the module's precedence, rendered back" "got: $shown"
+fi
+
+# calc's own grammar defines neither boolean operators nor unary minus; all of
+# it arrives with the module, and calc only answers for the nodes.
+if "$phx" --run emit-c "$root/examples/calc-c.phx" "$root/examples/logic.calc" \
+        > "$tmp0/logic.c" 2>/dev/null \
+   && cc -Wall -Werror -o "$tmp0/logic" "$tmp0/logic.c" 2>/dev/null; then
+    got=$("$tmp0/logic")
+    if [ "$got" = "21" ]; then
+        report pass "operators the language never defined"
+    else
+        report fail "operators the language never defined" "got '$got', wanted 21"
+    fi
+else
+    report fail "operators the language never defined" "it did not compile"
+fi
 accepts "a description in three files" "$root/examples/calc-c.phx"
 accepts "modules that import each other" "$root/tests/grammars/circular-a.phx"
 refuses "a rule defined in two files" "already defined" \
@@ -82,11 +116,14 @@ refuses "an import that is not there" "cannot read" \
         "$root/tests/grammars/missing-import.phx"
 
 # A file named twice is read once, so the joined text holds one copy.
-seen=$("$phx" --imports "$root/examples/calc-c.phx" 2>/dev/null | wc -l | tr -d ' ')
-if [ "$seen" = "3" ]; then
+# calc-c imports calc, which imports lexical and expression: four, each once.
+listed=$("$phx" --imports "$root/examples/calc-c.phx" 2>/dev/null)
+seen=$(printf '%s\n' "$listed" | wc -l | tr -d ' ')
+uniq=$(printf '%s\n' "$listed" | sort -u | wc -l | tr -d ' ')
+if [ "$seen" = "4" ] && [ "$uniq" = "4" ]; then
     report pass "each file appears once"
 else
-    report fail "each file appears once" "listed $seen files, wanted 3"
+    report fail "each file appears once" "listed $seen, distinct $uniq, wanted 4 and 4"
 fi
 
 # A message about an imported file has to name *that* file and its own line
@@ -173,7 +210,6 @@ else
 fi
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
 
 # `{ statement }` matched exactly once must still be a list. The `.phx` author
 # cannot know how many statements a block will hold, so the grammar decides the

@@ -156,6 +156,19 @@ int main(int argc, char **argv)
         }
     }
 
+    if (g->incomplete) {
+        fprintf(stderr, "%s: this description has holes in it, so it cannot "
+                        "parse %s\n", grammar_path, source_path);
+        for (int i = 0; i < g->nrules; i++)
+            if (g->rules[i].required && !g->rules[i].body)
+                fprintf(stderr, "phx:   '%s' is required and never defined\n",
+                        g->rules[i].name);
+        fprintf(stderr, "phx: a module that requires a rule is imported by a "
+                        "description that defines it\n");
+        arena_free(a);
+        return 1;
+    }
+
     if (g->start < 0) {
         fprintf(stderr,
                 "%s: there are no syntactic rules, so there is nothing to "

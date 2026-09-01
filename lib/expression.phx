@@ -1,0 +1,95 @@
+(* expression.phx -- infix expressions, with the precedence everybody expects.
+ *
+ *     %import "expression.phx"
+ *     primary = integer -> Number(text: $1) | name -> Variable(name: $1) .
+ *
+ * This module has a **hole** in it. An expression grammar cannot know what a
+ * language's atoms are -- a number, a name, a call, an index, a field -- and
+ * that is the one thing every language differs about. So `primary` is declared
+ * and left to whoever imports this. Reading this module on its own is fine;
+ * using it to parse a file without filling the hole is refused, by name.
+ *
+ * Parenthesised grouping and unary minus are *here* rather than in the hole,
+ * because they are the same in every language that has infix at all.
+ *
+ * ---------------------------------------------------------------------------
+ * What importing this costs you
+ *
+ * **Reserved words.** `and`, `or` and `not` are word-shaped literals in the
+ * syntactic half, so they become reserved and cannot be used as names in the
+ * importing language. That is the price of the module and it is not
+ * negotiable; a language that wants `and` as an identifier writes its own
+ * expressions.
+ *
+ * `div` and `mod` are deliberately **not** here for exactly that reason -- they
+ * would reserve two more words to save one line, and Pascal's spelling is not
+ * every language's.
+ *
+ * **A vocabulary.** Importing this means the tree will contain `Logical`,
+ * `Not`, `Compare`, `Binary` and `Negate`, and a pass keyed on this grammar
+ * has to answer for all five even if a program never uses one -- Phoenix will
+ * say which clause is missing the first time a program reaches for it.
+ *)
+
+%require primary
+
+(* The operators this module reads, as one token rule. An importing language
+ * keeps its own rule for its own punctuation -- `:=` and `;` and the rest --
+ * and the scanner takes the longest match across both, so neither has to know
+ * about the other.
+ *
+ * Two characters before one, every time: `<` first would leave the `=` of
+ * `<=` behind, and the error would surface at the token after it. *)
+operator = "<=" | ">=" | "<>"
+         | "+" | "-" | "*" | "/" | "=" | "<" | ">" | "(" | ")" .
+
+%syntax
+
+(* Loosest first, so that each level is written in terms of the one that binds
+ * tighter than it. `$$` is what has been built so far, and an action naming it
+ * replaces that rather than following it -- which is a left fold, and is what
+ * makes `a - b - c` group as `(a - b) - c` without anybody saying so. *)
+
+expression  = disjunction .
+
+disjunction = conjunction { "or"  conjunction -> Logical(op: $1, left: $$, right: $2) } .
+conjunction = negation    { "and" negation    -> Logical(op: $1, left: $$, right: $2) } .
+
+negation    = "not" n:negation -> Not(value: $n)
+            | comparison .
+
+(* A comparison does not chain: `a < b < c` is not a thing anybody means, so it
+ * is an option rather than a repetition and the second one is a syntax error
+ * rather than a surprise. *)
+comparison  = sum [ relation s:sum -> Compare(op: $1, left: $$, right: $s) ] .
+
+relation    = "=" | "<>" | "<=" | ">=" | "<" | ">" .
+
+sum         = product { ( "+" | "-" ) product -> Binary(op: $1, left: $$, right: $2) } .
+product     = unary   { ( "*" | "/" ) unary   -> Binary(op: $1, left: $$, right: $2) } .
+
+unary       = "-" u:unary        -> Negate(value: $u)
+            | "(" expression ")" -> $2
+            | primary .
+
+(* ------------------------------------------------------------------ *)
+(* One pass, and the reason there is only one.                        *)
+(*                                                                     *)
+(* `show` writes an expression back out as something close to what was  *)
+(* read, for putting inside a diagnostic: *"cannot add {} and {}" of    *)
+(* $left.show, $right.show*. It is here because it depends on the shape  *)
+(* of these nodes and on nothing else at all.                           *)
+(*                                                                     *)
+(* Nothing else qualifies, and that is worth knowing rather than        *)
+(* working around. A typechecker over these nodes would need the        *)
+(* importing language's type system; an emit pass would need its        *)
+(* target. Both are the caller's, so both stay the caller's.            *)
+
+%pass show
+  Number   : show = "{}" of $text .
+  Variable : show = "{}" of $name .
+  Negate   : show = "-{}" of $value.show .
+  Not      : show = "not {}" of $value.show .
+  Logical  : show = "({} {} {})" of $left.show, $op, $right.show .
+  Compare  : show = "({} {} {})" of $left.show, $op, $right.show .
+  Binary   : show = "({} {} {})" of $left.show, $op, $right.show .

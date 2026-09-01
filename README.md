@@ -221,8 +221,46 @@ target — which is why `calc-solveig.phx` went from ninety lines of duplicated
 grammar, quietly wrong the first time `calc.phx` changed, to an emit pass and a
 line naming the language.
 
-**What goes in `lib/`.** [`lib/lexical.phx`](lib/lexical.phx) is the first
-citizen and the obvious one: `name`, `integer`, `real`, `hex`, `text` with
+### Modules declare their holes
+
+An expression grammar cannot know what a language's atoms are — a number, a
+name, a call, an index — and that is the one thing every language differs
+about. So a module says what it needs and leaves it open:
+
+```ebnf
+%require primary
+...
+unary = "-" u:unary -> Negate(value: $u) | "(" expression ")" -> $2 | primary .
+```
+
+A description with an open hole reads fine — that is what a module *is* — and
+is refused, by name, the moment something asks it to parse a file. A module
+system needs an interface in both directions, and `%require` is the half that
+is easy to forget.
+
+### What goes in `lib/`
+
+[`lib/expression.phx`](lib/expression.phx) is infix with the precedence
+everybody expects: `or`, `and`, `not`, the six comparisons, `+ -`, `* /`, unary
+minus and grouping, folded left. Fill in `primary` and you have expressions:
+
+```ebnf
+%import "expression.phx"
+primary = integer -> Number(text: $1) | name -> Variable(name: $1) .
+```
+
+`a + 2 * -b < 10 and not c` then parses as `(((a + (2 * -b)) < 10) and not c)`,
+and `examples/calc.phx` gets boolean operators and unary minus without writing
+a line of grammar for them.
+
+**Importing a grammar module costs two things, and both are worth stating.**
+It **reserves words** — `and`, `or` and `not` cannot be identifiers in a
+language that imports this one, which is why `div` and `mod` are deliberately
+*not* in it. And it **hands you a vocabulary**: the tree will contain `Logical`,
+`Not` and `Negate`, and your passes have to answer for them. Phoenix names the
+missing clause the first time a program reaches for one.
+
+[`lib/lexical.phx`](lib/lexical.phx) is the other citizen and the simpler one: `name`, `integer`, `real`, `hex`, `text` with
 escapes, three comment shapes, `space`, and the `%fragment` declarations that
 keep `letter` from arriving as a token. Every language needs most of that and
 the fiddly parts are fiddly in the same way each time.
@@ -231,12 +269,22 @@ the fiddly parts are fiddly in the same way each time.
 language's business — a layout-sensitive one keeps it — so the importing
 description says so.
 
-The rule for what else earns a place: **a pass is only reusable together with
-the grammar that produces the nodes it keys on.** A pass module and a grammar
-module cannot be separated, because the pass names `Binary` and `Compare` and
-something has to build those. So the natural unit for `lib/` is a grammar
-fragment *and* the passes over it — an expression language with its precedence,
-its tree and its typing rules, say — rather than either half alone.
+**A pass is only reusable together with the grammar that produces the nodes it
+keys on** — a pass naming `Binary` needs something to build one. That much held
+up. What did not is the expectation that followed from it: building
+`expression.phx` turned up exactly **one** pass worth sharing, and it is not a
+typechecker.
+
+`show` renders an expression back to something close to what was read, for
+putting inside a diagnostic — *"cannot add {} and {}"* — and it qualifies
+because it depends on the shape of these nodes and on nothing else. A
+typechecker over the same nodes would need the importing language's type
+system; an emit pass would need its target. Both are the caller's, so both stay
+the caller's.
+
+So a `lib/` module is mostly grammar, occasionally with a pass attached, and
+`lexical.phx` being pure grammar is not the exception it looked like — it is
+upstream of any node at all.
 
 ## The notation
 
@@ -356,7 +404,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 53 checks, including Solveig's pascal.bnf when it is present
+make test       # 58 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

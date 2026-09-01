@@ -188,6 +188,7 @@ typedef struct {
     bool    fragment;  /* %fragment: a helper, never a token on its own     */
     bool    skip;      /* %skip: produced, then thrown away                 */
     bool    used;      /* referred to by some other rule                    */
+    bool    required;  /* %require: a hole, filled by whoever imports this   */
     bool    nullable;  /* can match nothing -- wanted by the checks         */
     size_t  pos;
 } Rule;
@@ -216,6 +217,10 @@ typedef struct {
     Pass   *passes;
     int     npasses;
     int     cappasses;
+
+    /* A module may name rules it does not define. Reading one on its own is
+     * fine; using one to parse a file is not, and this is what says so. */
+    bool    incomplete;
 } Grammar;
 
 /* Reads a `.phx` file. Answers NULL when it could not, having said why. */

@@ -25,12 +25,14 @@
 (* said here and not there.                                            *)
 
 %import "lexical.phx"
+%import "expression.phx"
 %skip space line-comment
 
-(* Two characters before one, every time: "<" first would leave the "="
- * of "<=" behind, and the error would surface at the token after it. *)
-symbol = ":=" | "<=" | ">=" | "<>"
-       | "+" | "-" | "*" | "/" | "(" | ")" | ";" | "=" | "<" | ">" .
+(* calc's own punctuation, and all of it. The operators belong to
+ * `expression.phx` and live in its own `operator` rule; the scanner takes the
+ * longest match across every token rule, so neither has to know the other is
+ * there. *)
+symbol = ":=" | ";" .
 
 (* ------------------------------------------------------------------ *)
 (* Tokens to a program.                                               *)
@@ -64,18 +66,14 @@ block = { statement } -> Block(body: $1) .
  * the flat repetition every grammar writes for a binary operator becomes the
  * left-leaning tree it means. *)
 
-(* A comparison does not chain, so it is written as an option rather than
- * a repetition -- `a < b < c` is not a thing anybody means. *)
-expression = sum [ relation s:sum -> Compare(op: $1, left: $$, right: $s) ] .
+(* The hole `expression.phx` left open. An expression grammar cannot know
+ * what a language's atoms are, and these two lines are calc's whole
+ * answer to that -- the precedence, the associativity, the comparisons,
+ * the grouping and unary minus all come from the module. *)
 
-relation   = "=" | "<>" | "<=" | ">=" | "<" | ">" .
+primary = integer -> Number(text: $1)
+        | name    -> Variable(name: $1) .
 
-sum        = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
-term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
-
-factor     = integer            -> Number(text: $1)
-           | name               -> Variable(name: $1)
-           | "(" expression ")" -> $2 .
 
 (* ------------------------------------------------------------------ *)
 (* Pass one: are the names defined, and do the types line up?          *)
@@ -111,6 +109,18 @@ factor     = integer            -> Number(text: $1)
   Compare  : type = "bool"
            ! $left.type <> $right.type
                : "'{}' compares {} with {}" of $op, $left.type, $right.type .
+
+  (* `expression.phx` builds these three, so calc has to answer for them
+   * even though it did not write the grammar that makes them. That is what
+   * importing a grammar module costs, and the module says so. *)
+  Negate   : type = "int"
+           ! $value.type <> "int" : "'-' wants an int, and got {}" of $value.type .
+  Not      : type = "bool"
+           ! $value.type <> "bool" : "'not' wants a bool, and got {}" of $value.type .
+  Logical  : type = "bool"
+           ! $left.type <> "bool" or $right.type <> "bool"
+               : "'{}' wants two bools, and got {} and {}"
+                   of $op, $left.type, $right.type .
 
   Print    : type = "void"
            ! $value.type <> "int" : "print wants an int, and got {}" of $value.type .
@@ -166,6 +176,11 @@ factor     = integer            -> Number(text: $1)
   Compare(op: ">")  : val = $left.val > $right.val .
   Compare(op: "<=") : val = $left.val <= $right.val .
   Compare(op: ">=") : val = $left.val >= $right.val .
+
+  Negate   : val = 0 - $value.val .
+  Not      : val = not $value.val .
+  Logical(op: "and") : val = $left.val and $right.val .
+  Logical(op: "or")  : val = $left.val or $right.val .
 
   Let      : env = bind($env, $name, $value.val)
            : out = "" .

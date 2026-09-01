@@ -31,6 +31,14 @@ static void resolve(Check *c, GNode *n, const Rule *owner)
             return;
         }
         if (!g->rules[i].body) {
+            /* A hole a module declared is not a mistake -- it is the module's
+             * interface, and stays open until something fills it. */
+            if (g->rules[i].required) {
+                n->ref = i;
+                g->rules[i].used = true;
+                g->incomplete    = true;
+                return;
+            }
             diag_error(&g->src, n->pos,
                        "'%s' is named but never defined", n->text);
             c->ok = false;
@@ -551,6 +559,11 @@ bool grammar_check(Grammar *g)
     for (int i = 0; i < g->nrules; i++) {
         Rule *r = &g->rules[i];
         if (!r->body) {
+            /* A hole a module declared is its interface, not a mistake. It
+             * stays open until something fills it, and main.c is what refuses
+             * to parse with one still open. */
+            if (r->required) { g->incomplete = true; continue; }
+
             diag_error(&g->src, r->pos,
                        "'%s' is named by a directive but never defined", r->name);
             c.ok = false;
@@ -575,9 +588,16 @@ bool grammar_check(Grammar *g)
 
     check_reachable(&c);
 
-    for (int i = 0; i < g->nrules; i++)
-        if (!g->rules[i].lexical && g->rules[i].body)
-            check_spellable(&c, &g->rules[i], g->rules[i].body);
+    /* Only once the description is whole. A module with a hole in it is read
+     * without the token rules that will spell its literals -- `expression.phx`
+     * says `"or"` and the language that imports it is what makes an `or`
+     * token -- so asking now would refuse every module for being a module.
+     * The assembled description is checked in one go, and that is where this
+     * belongs. */
+    if (!g->incomplete)
+        for (int i = 0; i < g->nrules; i++)
+            if (!g->rules[i].lexical && g->rules[i].body)
+                check_spellable(&c, &g->rules[i], g->rules[i].body);
 
     /* A rule nothing reaches is either a leftover or a typo, and both are
      * worth a line. Three kinds of rule are reached without being named, and

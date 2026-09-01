@@ -1,0 +1,7 @@
+# Boolean operators and unary minus, none of which calc's own grammar defines
+# -- they all arrive with lib/expression.phx.
+let a := 0 - 7;
+let b := -3;
+if a < 0 and not (b > 0) then
+  print a * b;
+end

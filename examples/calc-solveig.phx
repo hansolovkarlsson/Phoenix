@@ -39,6 +39,12 @@
   Binary(op: "/") : out = "{}:quo({})" of $left.out, $right.out .
   Binary          : out = "@expr({} {} {})" of $left.out, $op, $right.out .
 
+  (* Solveig's `@expr` region spells these `~ & |`, in that precedence. *)
+  Negate : out = "{}:negated" of $value.out .
+  Not    : out = "@expr(~{})" of $value.out .
+  Logical(op: "and") : out = "@expr({} & {})" of $left.out, $right.out .
+  Logical(op: "or")  : out = "@expr({} | {})" of $left.out, $right.out .
+
   Compare(op: "=")  : out = "@expr({} = {})"  of $left.out, $right.out .
   Compare(op: "<>") : out = "@expr({} <> {})" of $left.out, $right.out .
   Compare           : out = "@expr({} {} {})" of $left.out, $op, $right.out .

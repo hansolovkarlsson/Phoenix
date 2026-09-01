@@ -28,6 +28,11 @@
 
   (* Two spellings differ, and shape matching is how a clause says so
    * rather than a conditional inside one clause. *)
+  Negate : out = "(-{})"  of $value.out .
+  Not    : out = "(!{})"  of $value.out .
+  Logical(op: "and") : out = "({} && {})" of $left.out, $right.out .
+  Logical(op: "or")  : out = "({} || {})" of $left.out, $right.out .
+
   Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
   Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
   Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
