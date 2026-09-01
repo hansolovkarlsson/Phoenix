@@ -510,7 +510,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 101 checks (14 of them against fpc), including Solveig's pascal.bnf when it is present
+make test       # 105 checks (18 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -609,8 +609,22 @@ description:
 | Pascal's standard functions | `abs`, `sqr`, `odd`, `ord`, `chr`, `succ`, `pred`, `round`, `trunc` — none is a C function, and `abs` and `succ` depend on their argument's type |
 | a one-character literal is a **char** | `c := 'a'` was a type error, and `ord('A')` took the address of a C string |
 
-And four more after that, of which one is the reason to be careful about what
-an oracle proves:
+### And what it does not cover
+
+An oracle says the subset is right. It says nothing about what is outside it,
+and **a silent wrong answer looks like success**: `set of 0 .. 200` compiled
+quietly and answered `no` where Pascal answers `yes`, because a set is a bit
+per member in a `long` and the two-hundredth bit is not there.
+
+[`tests/refused/`](tests/refused/) is the other half — programs that must fail,
+each with a message naming the feature at a position in the Pascal. A program
+there that starts *compiling* is as much a failure as one in `tests/oracle/`
+that starts disagreeing.
+
+### The bugs it found
+
+Four more after the first ten, of which one is the reason to be careful about
+what an oracle proves:
 
 | | |
 | --- | --- |

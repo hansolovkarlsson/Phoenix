@@ -643,6 +643,29 @@ fi
 #
 # Skipped and not failed without fpc: it is an oracle, not a dependency.
 
+# Everything outside the subset has to be refused with a message, rather than
+# compiled into something that runs and is wrong. See tests/refused/README.md.
+echo "outside the subset"
+for src in "$root"/tests/refused/*.pas; do
+    name=$(basename "$src" .pas)
+    out=$("$phx" --driver c "$root/examples/pascal-c.phx" "$src" 2>&1 >/dev/null)
+    code=$?
+    if [ "$code" -eq 0 ]; then
+        report fail "$name is refused" "it compiled"
+    elif printf '%s' "$out" | grep -q "error:.*not compiled\|error:.*does not fit"; then
+        # The message has to name the feature and point into the *Pascal*,
+        # not report a missing attribute in the description.
+        if printf '%s' "$out" | grep -q "$(basename "$src")"; then
+            report pass "$name is refused, at a position in the Pascal"
+        else
+            report fail "$name is refused, at a position in the Pascal" \
+                        "the message points at the description"
+        fi
+    else
+        report fail "$name is refused" "$(printf '%s' "$out" | head -1)"
+    fi
+done
+
 echo "the oracle"
 if command -v fpc >/dev/null 2>&1; then
     if oracle=$("$root/tests/oracle/run.sh" 2>&1); then

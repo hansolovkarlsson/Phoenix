@@ -18,11 +18,16 @@
  * and calls; the operators including `in`; `write` and `writeln` with field
  * widths.
  *
- * **Out:** files, pointers, `goto`, nested routines, variant records, sets of
- * anything large, ranges inside a set constructor. Phoenix names the missing
- * clause the first time a program reaches for one, which is the right way
- * round -- the compiler works for what it covers and says exactly what it
- * does not.
+ * **Also in:** `goto` and labels, which C has and which a translator into
+ * Solveig *source* could not have had -- there being no control-flow syntax
+ * there to translate them into.
+ *
+ * **Out:** files, pointers, nested routines, variant records, and a set of
+ * more than 63 values. Each is **refused with a message naming it**, at a
+ * position in the Pascal, and `tests/refused/` checks that they are: a
+ * compiler for a subset has to be right about what it covers *and* loud about
+ * what it does not, and the second is the half that is easy to get wrong,
+ * because a silent wrong answer looks like success.
  *
  * `tests/pascal/gcd.pas` is inside it, and that file was written for another
  * tool years before Phoenix existed.
@@ -122,6 +127,15 @@
   NamedType                  : pre = $name    : post = "" .
 
   NoType    : pre = "void" : post = "" .
+
+  (* Outside the subset, and said so *here* rather than left to fail as a
+   * missing attribute. A check blocks its node's attributes, so the message
+   * is the one a person reads and the consequences stay quiet -- and it
+   * carries a position in the Pascal rather than in this file. *)
+  Pointer  : pre = "void *" : post = ""
+           ! true : "a pointer type is not compiled: ^, new and dispose are not in this subset" .
+  FileType : pre = "long" : post = ""
+           ! true : "a file type is not compiled: input and output are the only files in this subset" .
   Subrange  : pre = "long" : post = "" .
   Packed    : pre = $type.pre : post = $type.post .
 
@@ -130,9 +144,18 @@
    * constant wherever a Pascal program writes it. *)
   EnumType  : pre = "enum {{ {} }}" of join($names, ", ") : post = "" .
 
-  (* A set of a small ordinal type is a bit per member in a `long`. Pascal's
-   * sets are exactly this and C has no other cheap way to be one. *)
-  SetType   : pre = "long" : post = "" .
+  (* A set of a small ordinal type is a bit per member in a `long`, which is
+   * how Pascal's sets are built and the only cheap way for C to have one.
+   *
+   * **Which means it holds 63 members and not one more.** `set of 0 .. 200`
+   * compiled quietly and answered wrongly before this check existed, which is
+   * the worst thing this compiler could do. A span of nought means the
+   * typechecker could not work the size out -- a named constant in the bounds
+   * -- and an unknown is not refused. *)
+  SetType   : pre = "long" : post = ""
+            ! lookup($spans, $of.iname, $of.span) > 63
+              : "a set of {} values does not fit -- {} is the most a set can hold here"
+                  of lookup($spans, $of.iname, $of.span), 63 .
 
   (* `bound` is the index range the typechecker resolved -- written out or
    * named, it is a subrange by the time it reaches here. *)
@@ -181,7 +204,8 @@
 
   Forward   : out = "" : inner = "" .
 
-  Procedure : down storage = ""
+  Procedure : down inroutine = true
+            : down storage = ""
             : down spelled = [...$byrefs, ...$spelled]
             : out = "static void {}({})\n{{\n{}{}\n}}\n"
                 of $name, join($params.out, ", "), $body.decls, $body.code .
@@ -192,7 +216,8 @@
    * compiling. The result gets a name of its own, and *reading* the function's
    * name inside it is spelled that way while *calling* it is not, because a
    * call is a different node and does not go through this table. *)
-  Function  : down storage = ""
+  Function  : down inroutine = true
+            : down storage = ""
             : down spelled = [...bind([], $name, "phx_result"),
                               ...$byrefs, ...$spelled]
             : out = "static {} {}({})\n{{\n  {} phx_result;\n{}{}\n  return phx_result;\n}}\n"
@@ -204,7 +229,18 @@
   (* The same scope the typechecker built. An inherited attribute lives only
    * for the walk that made it, so a later pass needing one says so again --
    * one line, and explicit about needing it. *)
-  Block : down known = [...$shapes, ...$known]
+  (* Both tables the typechecker built are rebuilt here: an inherited
+   * attribute lives only for the walk that made it, so a later pass needing
+   * one says so again. *)
+  (* **A routine inside a routine is refused, and the *block* is what asks.**
+   * A routine cannot ask about itself: its own `down inroutine` is pushed on
+   * the way in and is still in scope when its checks run on the way out, so
+   * it would see its own answer. The block inside it sees the routine's, and
+   * the program's block sees the program's. *)
+  Block ! $inroutine and size($routines) > 0
+          : "a routine inside a routine is not compiled: C has no nested functions, and this does not hoist them"
+        : down known = [...$shapes, ...$known]
+        : down spans = [...$spanmap, ...$spans]
         : decls      = "{}{}{}" of join($consts.out, ""), join($types.out, ""),
                                 join($vars.out, "")
         : routinecode = join($routines.out, "\n")
@@ -215,6 +251,13 @@
   (* ---- statements ---- *)
 
   Compound : out = "  {{\n{}\n  }}" of join($body.out, "\n") .
+
+  (* `goto` is one of the things emitting C makes easy and emitting Solveig
+   * could not: `docs/PASCAL.md` in the Solveig repository records that a
+   * translator into *source* has no control-flow syntax to translate it into.
+   * A C label cannot be a number, so it gets a letter in front. *)
+  Goto     : out = "  goto L{};" of $label .
+  Labelled : out = "  L{}: ;\n{}" of $label, $do.out .
   Empty    : out = "  ;" .
   Assign   : out = "  {} = {};" of $target.out, $value.out .
 
@@ -412,7 +455,9 @@
    * exponent**, and C's `%e` gives two. A positive one is preceded by a
    * space where the sign would be.
    *)
-  Program : down known = []
+  Program : down inroutine = false
+          : down known = []
+          : down spans = []
           : down ctypes = [["integer", "long"], ["real", "double"],
                            ["boolean", "int"], ["char", "char"]]
           : down storage = "static "

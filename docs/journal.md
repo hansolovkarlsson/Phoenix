@@ -1105,3 +1105,40 @@ always meant.
 **`Member` is the fifth time an option should have been a choice.** A set
 constructor could not ask whether an element was one bit or a run of them, so it
 shifted a range that was already a mask.
+
+## 2026-09-01 — the other half of correct
+
+An oracle says the subset is right. It says nothing about what is outside it,
+and that is the half where a mistake looks like success.
+
+`set of 0 .. 200` **compiled quietly and answered `no`** where Pascal answers
+`yes`. A set is a bit per member in a `long`; the two-hundredth bit is not
+there. Nothing said so until a program was written that asked, and the oracle
+would never have asked, because a program using a big set is not a program
+anybody writes by accident.
+
+`tests/refused/` is that half now: programs that must fail, each with a message
+naming the feature, at a position in the Pascal. Four of them — a nested
+routine, a set too large, pointers, files — and the test insists on both halves
+of the message, so a refusal that says *'Pointer' has no attribute 'pre' in
+pass 'emit-c'* counts as a failure. That is a true sentence about the
+description and no use at all to somebody holding a Pascal program.
+
+**Three things came out of writing them.**
+
+`goto` turned out to be *in* rather than out. C has labels and `goto`, so it is
+two clauses — and it is the one place emitting C is strictly better than
+emitting Solveig would have been, which `Solveig/docs/PASCAL.md` predicted from
+the other side: a translator into *source* has no control-flow syntax to
+translate a `goto` into.
+
+**A node cannot ask a question about itself that its own `down` clause
+answers.** `Procedure : down inroutine = true` with a check reading
+`$inroutine` sees its own value: the scope is pushed on the way in and is still
+there when the checks run on the way out. The *block inside* it is what can
+ask, and the program's block gets the program's answer. Obvious afterwards, and
+the false positive was on every top-level routine in the suite.
+
+**And a check is introduced by `!` alone, not by `: !`.** I wrote the latter
+twice. The message — *expected the name of an attribute* — is accurate and
+points at the `!`, which is not where a person would look.

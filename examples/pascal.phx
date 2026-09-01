@@ -378,17 +378,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * answers with its own name, so that one more lookup in the table resolves
    * it -- which is what lets `Vector = array [Small] of integer` find what
    * `Small` starts at. *)
-  NamedType : tname = $name     : entries = [] : iname = $name : startsat = $name .
-  NoType    : tname = "void"    : entries = [] : iname = "" : startsat = "1" .
-  Subrange  : tname = "integer" : entries = [] : iname = "" : startsat = $low.ctext .
-  ArrayType : tname = "array"   : entries = [] : iname = "" : startsat = at($indices, 1).startsat .
-  RecordType: tname = "record"  : entries = [] : iname = "" : startsat = "1" .
-  SetType   : tname = "set"     : entries = [] : iname = "" : startsat = "1" .
-  FileType  : tname = "file"    : entries = [] : iname = "" : startsat = "1" .
-  Pointer   : tname = "pointer" : entries = [] : iname = "" : startsat = "1" .
+  NamedType : tname = $name     : entries = [] : iname = $name : startsat = $name : span = 0 .
+  NoType    : tname = "void"    : entries = [] : iname = "" : startsat = "1" : span = 0 .
+  Subrange  : tname = "integer" : entries = [] : iname = "" : startsat = $low.ctext : span = $high.num - $low.num + 1 .
+  ArrayType : tname = "array"   : entries = [] : iname = "" : startsat = at($indices, 1).startsat : span = 0 .
+  RecordType: tname = "record"  : entries = [] : iname = "" : startsat = "1" : span = 0 .
+  SetType   : tname = "set"     : entries = [] : iname = "" : startsat = "1" : span = 0 .
+  FileType  : tname = "file"    : entries = [] : iname = "" : startsat = "1" : span = 0 .
+  Pointer   : tname = "pointer" : entries = [] : iname = "" : startsat = "1" : span = 0 .
 
-  EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" : startsat = "0" .
-  Packed    : tname = $type.tname : entries = $type.entries : iname = "" : startsat = $type.startsat .
+  EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" : startsat = "0" : span = size($names) .
+  Packed    : tname = $type.tname : entries = $type.entries : iname = "" : startsat = $type.startsat : span = $type.span .
 
   (* A Pascal string literal arrives with its quotes on and its doubled
    * quotes undoubled. `plain` is what it actually says, and **a literal
@@ -397,17 +397,25 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * error. *)
   Text          : plain = join(split(slice($value, 2, size($value) - 1), "''"), "'")
                 : ctype = lookup([[1, "char"]], size($plain), "string")
-                : ctext = "0" .
+                : ctext = "0" : num = 0 .
 
   (* A constant as C would write it. `symbols` can do this because a Pascal
    * constant is a literal or a name and C spells both the same way -- which
    * matters, because an array's lower bound has to be known here and used
    * in `emit-c`, two passes later. *)
-  Integer       : ctype = "integer" : ctext = $text .
-  Real          : ctype = "real" : ctext = $text .
-  Nil           : ctype = "pointer" : ctext = "0" .
-  NamedConstant : ctype = "integer" : ctext = $name .
-  SignedConstant : ctype = $value.ctype : ctext = "({}{})" of $sign, $value.ctext .
+  (* Constants as numbers, so that a set can be asked how many members it
+   * would need. A named constant answers nought, meaning *unknown*, and the
+   * check below does not fire on an unknown. *)
+  Integer       : ctype = "integer" : ctext = $text : num = int($text) .
+  Real          : ctype = "real" : ctext = $text : num = 0 .
+  Nil           : ctype = "pointer" : ctext = "0" : num = 0 .
+  NamedConstant : ctype = "integer" : ctext = $name : num = 0 .
+  SignedConstant(sign: "-") : ctype = $value.ctype
+                            : ctext = "(-{})" of $value.ctext
+                            : num   = 0 - $value.num .
+  SignedConstant            : ctype = $value.ctype
+                            : ctext = "(+{})" of $value.ctext
+                            : num   = $value.num .
 
   (* Two things per declaration, in one rule because clauses for one pattern
    * cannot be split across two: `entries` binds a name to its type's *name*,
@@ -416,7 +424,8 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   ConstDef  : entries = bind([], $name, $value.ctype)
             : shape   = [] .
   TypeDef   : entries = flatten([bind([], $name, $type.tname), $type.entries])
-            : lowentry = bind([], $name, $type.startsat)
+            : lowentry  = bind([], $name, $type.startsat)
+            : spanentry = bind([], $name, $type.span)
             : shape   = bind([], $name, Shape(iname: $type.iname,
                                               startsat: $type.startsat, node: $type)) .
   VarDecl   : entries = bind([], $names, $type.tname)
@@ -464,7 +473,8 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
 
         (* Type names to where their indices start, so that `a : Low` can be
          * asked what `Low` starts at. *)
-        : lowmap = flatten([...$types.lowentry]) .
+        : lowmap  = flatten([...$types.lowentry])
+        : spanmap = flatten([...$types.spanentry]) .
 
 (* ------------------------------------------------------------------ *)
 (* Are the names declared, and do the types line up?                   *)
@@ -486,6 +496,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   Program : type = "void"
           : down known = []
           : down lows  = []
+          : down spans = []
           : down checking = true
           : down env =
       (* A base type is bound to **itself**, so that resolving an alias is
@@ -517,6 +528,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * attribute, and it was right to. *)
   Block     : type = "void"
             : down lows  = [...$lowmap, ...$lows]
+            : down spans = [...$spanmap, ...$spans]
             : down env   = [...$scope, ...$env]
             : down known = [...$shapes, ...$known] .
   Procedure : type = "void" : down env = [...$own, ...$env] .
