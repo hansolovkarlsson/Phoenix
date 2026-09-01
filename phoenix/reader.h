@@ -73,4 +73,11 @@ void    expr_add(Reader *r, Expr *parent, const char *field, Expr *kid);
 /* the pass half, in pass.c */
 bool    read_passes(Reader *r, MToken *directive);
 
+/* reading one file into a grammar, in grammar.c -- recursive, for %import */
+bool    read_description(Arena *a, Grammar *g, const char *named, const char *by,
+                         const Source *blamed, size_t blame);
+
+/* where the modules that ship with phx live, in main.c */
+const char *phx_library_path(Arena *a);
+
 #endif /* PHX_READER_H */

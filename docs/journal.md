@@ -316,3 +316,41 @@ and `remainder` were added — and they earn their place by the rule at the top 
 `library.c`: target languages disagree with each other about negative division,
 and a pass that models one of them has to be able to say which. There is a test
 with a negative number in it now, so this cannot come back quietly.
+
+## 2026-09-01 — %import, and what to call a `.phx`
+
+**The naming, settled because the docs say it on every page.** A `.phx` file is
+a **description** — it describes a language, and Phoenix turns a description
+into a compiler. It is not a program, since nothing runs it, and it stopped
+being a grammar when it grew passes. Spoken of as a unit — importable, one of
+several, in a directory — it is a **module**. A module with a `%start` stands on
+its own and one without is only ever imported, which is the whole distinction;
+there is deliberately no word for the partial kind, because *fragment* is spoken
+for by `%fragment` and a second meaning would be a trap.
+
+**The split `%import` makes possible is not grammar-versus-passes**, which is
+where the idea started. It is *the language* against *the target*: the grammar,
+the tree, the typechecker and the interpreter all belong to the source language
+and have no opinion about C, so only the emit pass is per-target.
+`calc-solveig.phx` went from ninety lines of duplicated grammar — quietly wrong
+the first time `calc.phx` changed — to an emit pass and a line naming the
+language.
+
+**Two things had to change underneath, and one was not foreseen.** A position
+was an offset into one file; with imports it has to name which file. The files
+are held end to end in one buffer with a map saying which stretch came from
+where, so an offset stays a single number and everything downstream keeps
+working unchanged while getting the right filename and the file's own line
+numbers.
+
+The unforeseen one: `grammar_check` refused a description with no syntactic
+rules. That was right when a description was always a whole thing and is wrong
+now — `lib/lexical.phx` is exactly that and is *meant* to be imported. The check
+moved from *reading* a description to *using* one, which is where it belongs:
+having nothing to parse with is only a problem when something asks you to parse.
+
+**What earns a place in `lib/`, and the rule that decides.** A pass is only
+reusable together with the grammar that produces the nodes it keys on — a pass
+naming `Binary` needs something to build a `Binary`. So the natural module is a
+grammar fragment *and* the passes over it, never either half alone. That is why
+`lexical.phx` is all grammar and works: it is upstream of any node at all.

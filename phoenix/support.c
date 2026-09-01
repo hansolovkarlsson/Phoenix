@@ -82,11 +82,13 @@ char *arena_strndup(Arena *a, const char *s, size_t n)
 /* ------------------------------------------------------------------ */
 /* Source */
 
-bool source_read(Arena *a, const char *path, Source *out)
+static bool read_into(Arena *a, const char *path, Source *out, bool complain)
 {
+    memset(out, 0, sizeof *out);      /* `map` in particular: callers use the stack */
+
     FILE *f = fopen(path, "rb");
     if (!f) {
-        fprintf(stderr, "phx: cannot read %s\n", path);
+        if (complain) fprintf(stderr, "phx: cannot read %s\n", path);
         return false;
     }
 
@@ -113,13 +115,46 @@ bool source_read(Arena *a, const char *path, Source *out)
     return true;
 }
 
+bool source_read(Arena *a, const char *path, Source *out)
+{
+    return read_into(a, path, out, true);
+}
+
+bool source_try(Arena *a, const char *path, Source *out)
+{
+    return read_into(a, path, out, false);
+}
+
+/* The stretch of the joined text an offset belongs to. */
+static const Unit *unit_at(const Source *src, size_t off)
+{
+    if (!src->map) return NULL;
+
+    for (int i = src->map->n - 1; i >= 0; i--)
+        if (off >= src->map->units[i].start) return &src->map->units[i];
+
+    return src->map->n ? &src->map->units[0] : NULL;
+}
+
+const char *source_path_at(const Source *src, size_t off)
+{
+    const Unit *u = unit_at(src, off);
+    return u ? u->path : src->path;
+}
+
 void source_position(const Source *src, size_t off, int *line, int *col)
 {
     if (off > src->size) off = src->size;
 
+    /* Lines are counted from the start of the file the offset is in, not from
+     * the start of the joined text -- otherwise an imported file's line
+     * numbers would be its position in a buffer nobody wrote. */
+    const Unit *u    = unit_at(src, off);
+    size_t      from = u ? u->start : 0;
+
     int    ln    = 1;
-    size_t start = 0;
-    for (size_t i = 0; i < off; i++) {
+    size_t start = from;
+    for (size_t i = from; i < off; i++) {
         if (src->text[i] == '\n') {
             ln++;
             start = i + 1;
@@ -133,11 +168,17 @@ void source_line(const Source *src, size_t off, const char **start, size_t *len)
 {
     if (off > src->size) off = src->size;
 
+    /* A line never runs past the end of the file it is in. */
+    const Unit *u    = unit_at(src, off);
+    size_t      from = u ? u->start : 0;
+    size_t      to   = u ? u->start + u->size : src->size;
+    if (to > src->size) to = src->size;
+
     size_t a = off;
-    while (a > 0 && src->text[a - 1] != '\n') a--;
+    while (a > from && src->text[a - 1] != '\n') a--;
 
     size_t b = a;
-    while (b < src->size && src->text[b] != '\n') b++;
+    while (b < to && src->text[b] != '\n') b++;
 
     *start = src->text + a;
     *len   = b - a;
@@ -154,7 +195,8 @@ static void report(const char *kind, const Source *src, size_t off,
     if (src) {
         int line, col;
         source_position(src, off, &line, &col);
-        fprintf(stderr, "%s:%d:%d: %s: ", src->path, line, col, kind);
+        fprintf(stderr, "%s:%d:%d: %s: ",
+                source_path_at(src, off), line, col, kind);
     } else {
         fprintf(stderr, "phx: %s: ", kind);
     }

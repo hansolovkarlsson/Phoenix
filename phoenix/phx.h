@@ -37,15 +37,41 @@ char  *arena_strndup(Arena *a, const char *s, size_t n);
  * every node is a field on everything.
  */
 
+/* A description may be assembled from several files, and a position has to
+ * name the one it came from. The text of every file is held end to end in one
+ * buffer so that an offset stays a single number, and a map says which file
+ * each stretch of it came from. Everything downstream keeps working with plain
+ * offsets and gets the right filename and line without knowing any of this. */
+
 typedef struct {
     const char *path;
-    char       *text;
+    size_t      start;    /* where this file begins in the joined text */
     size_t      size;
+} Unit;
+
+typedef struct {
+    Unit *units;
+    int   n;
+    int   cap;
+} SourceMap;
+
+typedef struct {
+    const char      *path;
+    char            *text;
+    size_t           size;
+    const SourceMap *map;    /* NULL when the text is one file */
 } Source;
 
 bool source_read(Arena *a, const char *path, Source *out);
+
+/* The same, saying nothing when the file is not there -- for looking in more
+ * than one place before deciding a file is missing. */
+bool source_try(Arena *a, const char *path, Source *out);
 void source_position(const Source *src, size_t off, int *line, int *col);
 void source_line(const Source *src, size_t off, const char **start, size_t *len);
+
+/* Which file an offset falls in. The source's own path when there is no map. */
+const char *source_path_at(const Source *src, size_t off);
 
 /* ------------------------------------------------------------------ */
 /* Diagnostics
@@ -169,8 +195,13 @@ typedef struct {
 typedef struct Pass Pass;      /* below -- the Grammar holds them */
 
 typedef struct {
-    Arena  *arena;
-    Source  src;
+    Arena     *arena;
+    Source     src;         /* every imported file, joined */
+    SourceMap  map;
+
+    char     **imported;    /* the paths already read, so none is read twice */
+    int        nimported;
+    int        capimported;
 
     Rule   *rules;
     int     nrules;

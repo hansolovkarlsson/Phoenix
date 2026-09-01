@@ -1,36 +1,36 @@
-(* calc.phx -- the smallest language worth having a compiler for.
+(* calc.phx -- the calculator: what it looks like, and what it means.
  *
- *   bin/phx examples/calc.phx examples/sum.calc
+ * **The language, and nothing about any target.** The grammar, the tree it
+ * builds, the typechecker and the interpreter are all here, because none of
+ * them has an opinion about what a compiler for this language should emit.
+ * A target is a small file that imports this one and adds an emit pass:
+ * `calc-c.phx` is C, `calc-solveig.phx` is Solveig.
  *
- * Stage 0 is the grammar half only: this file says what a `.calc` program
- * looks like, and Phoenix scans one, parses it and prints the tree. There is
- * nothing here yet about what a program *means* -- that is stage 2.
+ *   phx examples/calc-c.phx prog.calc                 the tree
+ *   phx --run typecheck --show type examples/calc-c.phx prog.calc
+ *   phx --run eval examples/calc-c.phx prog.calc      run it
+ *   phx --run emit-c examples/calc-c.phx prog.calc    compile it
  *)
 
 (* ------------------------------------------------------------------ *)
 (* Characters to tokens.                                              *)
+(*                                                                     *)
+(* The lexical half is nearly the same in every language, so it is      *)
+(* imported rather than written again: `name`, `integer`, `real`, the   *)
+(* comment shapes and `space` come from there, along with the           *)
+(* `%fragment` declarations that keep `letter` from being a token.      *)
+(*                                                                     *)
+(* Whether whitespace is thrown away is the *language's* business,      *)
+(* though -- a layout-sensitive one would keep it -- so `%skip` is      *)
+(* said here and not there.                                            *)
 
-(* `letter` and `digit` are what the token rules are written out of, and are
- * never tokens themselves. Without this line a file comes back as a stream of
- * `letter`, because both rules match `x` and ties go to the one declared
- * first. *)
-%fragment letter digit
-
-letter = "a" .. "z" | "A" .. "Z" | "_" .
-digit  = "0" .. "9" .
-
-name   = letter { letter | digit } .
-number = digit { digit } [ "." digit { digit } ] .
+%import "lexical.phx"
+%skip space line-comment
 
 (* Two characters before one, every time: "<" first would leave the "="
  * of "<=" behind, and the error would surface at the token after it. *)
 symbol = ":=" | "<=" | ">=" | "<>"
        | "+" | "-" | "*" | "/" | "(" | ")" | ";" | "=" | "<" | ">" .
-
-comment = "#" { ! "\n" } .
-space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
-
-%skip space comment
 
 (* ------------------------------------------------------------------ *)
 (* Tokens to a program.                                               *)
@@ -73,7 +73,7 @@ relation   = "=" | "<>" | "<=" | ">=" | "<" | ">" .
 sum        = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
 term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
 
-factor     = number             -> Number(text: $1)
+factor     = integer            -> Number(text: $1)
            | name               -> Variable(name: $1)
            | "(" expression ")" -> $2 .
 
@@ -185,49 +185,3 @@ factor     = number             -> Number(text: $1)
            ! true : "a branch cannot be interpreted -- compile it with emit-c" .
   IfElse   : out = ""
            ! true : "a branch cannot be interpreted -- compile it with emit-c" .
-
-(* ------------------------------------------------------------------ *)
-(* Pass three: C.                                                      *)
-(*                                                                     *)
-(* An emit pass builds a string and nothing anywhere cares what is in   *)
-(* it, which is why the language a compiler emits is this file's        *)
-(* business and not Phoenix's.                                         *)
-
-%pass emit-c
-
-  Number   : out = "{}" of $text .
-  Variable : out = "{}" of $name .
-  Binary   : out = "({} {} {})" of $left.out, $op, $right.out .
-
-  (* Two spellings differ, and shape matching is how a clause says so
-   * rather than a conditional inside one clause. *)
-  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
-  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
-  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
-
-  Let    : out = "{}long {} = {};"   of $indent, $name, $value.out .
-  Assign : out = "{}{} = {};"        of $indent, $name, $value.out .
-  (* The cast is not decoration: a C integer literal is an `int`, and
-   * `%ld` wants a `long`. *)
-  Print  : out = "{}printf(\"%ld\\n\", (long)({}));" of $indent, $value.out .
-
-  (* Indentation flows *downward*: a node hands it to its children and to
-   * nothing else, which is what an inherited attribute is for and the one
-   * thing neither a synthesised nor a threaded attribute can say.
-   *
-   * Both of Block's clauses live in this one rule, because clauses are tried
-   * in order and the first match wins -- a second `Block` rule further down
-   * would never be reached, and Phoenix refuses one. *)
-  Block  : down indent = "{}    " of $indent
-         : out = join($body.out, "\n") .
-
-  If     : out = "{}if ({}) {{\n{}\n{}}}"
-             of $indent, $cond.out, $then.out, $indent .
-  IfElse : out = "{}if ({}) {{\n{}\n{}}} else {{\n{}\n{}}}"
-             of $indent, $cond.out, $then.out, $indent, $else.out, $indent .
-  While  : out = "{}while ({}) {{\n{}\n{}}}"
-             of $indent, $cond.out, $body.out, $indent .
-
-  Program : down indent = "    "
-          : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
-              of join($body.out, "\n") .

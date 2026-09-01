@@ -1,0 +1,4 @@
+%import "nothing-is-here.phx"
+%syntax
+%start line
+line = "x" .

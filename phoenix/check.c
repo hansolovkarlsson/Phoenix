@@ -596,11 +596,9 @@ bool grammar_check(Grammar *g)
         diag_warn(&g->src, r->pos, "nothing uses '%s'", r->name);
     }
 
-    if (g->start < 0) {
-        diag_error(&g->src, 0,
-                   "there are no syntactic rules -- add %%syntax before the "
-                   "rules that are matched over tokens");
-        return false;
-    }
+    /* A description with no syntactic half is not wrong -- `lib/lexical.phx`
+     * is exactly that, and is meant to be imported rather than used. It is
+     * only wrong when something asks it to parse a file, which is where the
+     * message belongs and where main.c puts it. */
     return c.ok;
 }

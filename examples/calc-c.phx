@@ -1,0 +1,60 @@
+(* calc-c.phx -- the calculator, compiled to C.
+ *
+ *     phx --run emit-c examples/calc-c.phx prog.calc > prog.c
+ *     cc prog.c -o prog && ./prog
+ *
+ * **This file is only the emit clauses.** The grammar, the actions, the
+ * typechecker and the interpreter are in `calc.phx` and are imported, because
+ * none of them has an opinion about C. A second target is this file again with
+ * different clauses -- see `calc-solveig.phx` -- and the two cannot drift apart
+ * on anything but their emit passes, because there is nothing else in them to
+ * drift.
+ *)
+
+%import "calc.phx"
+
+(* ------------------------------------------------------------------ *)
+(* Pass three: C.                                                      *)
+(*                                                                     *)
+(* An emit pass builds a string and nothing anywhere cares what is in   *)
+(* it, which is why the language a compiler emits is this file's        *)
+(* business and not Phoenix's.                                         *)
+
+%pass emit-c
+
+  Number   : out = "{}" of $text .
+  Variable : out = "{}" of $name .
+  Binary   : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  (* Two spellings differ, and shape matching is how a clause says so
+   * rather than a conditional inside one clause. *)
+  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
+  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  Let    : out = "{}long {} = {};"   of $indent, $name, $value.out .
+  Assign : out = "{}{} = {};"        of $indent, $name, $value.out .
+  (* The cast is not decoration: a C integer literal is an `int`, and
+   * `%ld` wants a `long`. *)
+  Print  : out = "{}printf(\"%ld\\n\", (long)({}));" of $indent, $value.out .
+
+  (* Indentation flows *downward*: a node hands it to its children and to
+   * nothing else, which is what an inherited attribute is for and the one
+   * thing neither a synthesised nor a threaded attribute can say.
+   *
+   * Both of Block's clauses live in this one rule, because clauses are tried
+   * in order and the first match wins -- a second `Block` rule further down
+   * would never be reached, and Phoenix refuses one. *)
+  Block  : down indent = "{}    " of $indent
+         : out = join($body.out, "\n") .
+
+  If     : out = "{}if ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent .
+  IfElse : out = "{}if ({}) {{\n{}\n{}}} else {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent, $else.out, $indent .
+  While  : out = "{}while ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $body.out, $indent .
+
+  Program : down indent = "    "
+          : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
+              of join($body.out, "\n") .

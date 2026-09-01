@@ -66,7 +66,7 @@ what the program *means* — interpreting it, or compiling it.
 
 ```sh
 make
-bin/phx examples/calc.phx examples/sum.calc
+bin/phx examples/calc-c.phx examples/sum.calc
 ```
 
 ```
@@ -172,6 +172,71 @@ Variable(name)
 
 A type built with two different field lists is a warning, since a pass keyed on
 it would have to handle both.
+
+## What a `.phx` file is called
+
+Worth settling, because the docs say it on every page.
+
+A `.phx` file is a **description** — it describes a language: how it is written
+and what it means. Phoenix turns a description into a compiler, which is the
+same word the compiler-generator literature uses and the one that says what the
+file is *for* rather than what it is made of. It is not a program: nothing runs
+it. It is not a grammar either, not since it grew passes.
+
+When the file is being talked about as a **unit** — one of several, importable,
+sitting in a directory — it is a **module**. `%import` brings in a module. A
+module with a `%start` can stand on its own; one without is only ever imported,
+and that is the whole of the distinction. There is no separate word for the
+partial kind, and deliberately so: *fragment* is already spoken for by
+`%fragment`, and a second meaning for it would be a trap.
+
+So: **a description, assembled from modules, describing a language.**
+
+## `%import`, and what belongs in `lib/`
+
+```ebnf
+%import "lexical.phx"
+%skip space line-comment
+```
+
+A description is read into one grammar however many files it came from, and a
+file is read **once** however many times it is named — so two modules may both
+import a third, and two modules may import each other, without anybody arranging
+for it. A module is looked for beside the file that names it, and then in the
+library beside the `phx` executable (`$PHX_LIB` overrides). `--imports` lists
+what a description was assembled from, and a diagnostic always names the file it
+came from, with that file's own line numbers.
+
+**The split that matters is not grammar-versus-passes.** It is *the language*
+against *the target*:
+
+| | |
+| --- | --- |
+| `examples/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about C |
+| `examples/calc-c.phx` | `%import "calc.phx"` and an emit pass |
+| `examples/calc-solveig.phx` | `%import "calc.phx"` and a different emit pass |
+
+Everything upstream of emitting is about the source language. Only emit is per
+target — which is why `calc-solveig.phx` went from ninety lines of duplicated
+grammar, quietly wrong the first time `calc.phx` changed, to an emit pass and a
+line naming the language.
+
+**What goes in `lib/`.** [`lib/lexical.phx`](lib/lexical.phx) is the first
+citizen and the obvious one: `name`, `integer`, `real`, `hex`, `text` with
+escapes, three comment shapes, `space`, and the `%fragment` declarations that
+keep `letter` from arriving as a token. Every language needs most of that and
+the fiddly parts are fiddly in the same way each time.
+
+`%skip` is *not* in it, on purpose. Whether whitespace is thrown away is the
+language's business — a layout-sensitive one keeps it — so the importing
+description says so.
+
+The rule for what else earns a place: **a pass is only reusable together with
+the grammar that produces the nodes it keys on.** A pass module and a grammar
+module cannot be separated, because the pass names `Binary` and `Compare` and
+something has to build those. So the natural unit for `lib/` is a grammar
+fragment *and* the passes over it — an expression language with its precedence,
+its tree and its typing rules, say — rather than either half alone.
 
 ## The notation
 
@@ -291,7 +356,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 45 checks, including Solveig's pascal.bnf when it is present
+make test       # 53 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

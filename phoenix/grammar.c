@@ -134,6 +134,88 @@ static bool scan_literal(Reader *r, size_t *ip, int line)
     return true;
 }
 
+/* ------------------------------------------------------------------ */
+/* Bringing in another file
+ *
+ *     %import "lib/lexical.phx"
+ *
+ * A description is read into one grammar however many files it came from, and
+ * a file is read **once** however many times it is named -- so two modules may
+ * both import a third without anybody arranging for them not to.
+ *
+ * The path is looked for beside the file that names it first, and then beside
+ * the executable in `lib/`, so that a shared module is found without being
+ * told where it lives.
+ */
+
+static void unit_add(Grammar *g, const char *path, size_t start, size_t size)
+{
+    if (g->map.n == g->map.cap) {
+        int   cap = g->map.cap ? g->map.cap * 2 : 8;
+        Unit *big = arena_alloc(g->arena, (size_t)cap * sizeof *big);
+        memcpy(big, g->map.units, (size_t)g->map.n * sizeof *big);
+        g->map.units = big;
+        g->map.cap   = cap;
+    }
+    g->map.units[g->map.n++] = (Unit){ .path = path, .start = start, .size = size };
+    g->src.map = &g->map;
+}
+
+/* Appends a file's text to the joined buffer and answers where it starts. */
+static bool source_join(Grammar *g, const char *path, const Source *file,
+                        size_t *start)
+{
+    size_t need = g->src.size + file->size + 1;
+    char  *joined = arena_alloc(g->arena, need + 1);
+
+    memcpy(joined, g->src.text, g->src.size);
+    memcpy(joined + g->src.size, file->text, file->size);
+    joined[need - 1] = '\n';        /* so the last line of a file ends */
+    joined[need]     = '\0';
+
+    *start      = g->src.size;
+    g->src.text = joined;
+    g->src.size = need;
+
+    unit_add(g, path, *start, file->size + 1);
+    return true;
+}
+
+static bool already_imported(Grammar *g, const char *path)
+{
+    for (int i = 0; i < g->nimported; i++)
+        if (strcmp(g->imported[i], path) == 0) return true;
+    return false;
+}
+
+static void remember_imported(Grammar *g, char *path)
+{
+    if (g->nimported == g->capimported) {
+        int    cap = g->capimported ? g->capimported * 2 : 8;
+        char **big = arena_alloc(g->arena, (size_t)cap * sizeof *big);
+        memcpy(big, g->imported, (size_t)g->nimported * sizeof *big);
+        g->imported    = big;
+        g->capimported = cap;
+    }
+    g->imported[g->nimported++] = path;
+}
+
+/* `dir/of/importer` + `named/path` */
+static char *path_beside(Arena *a, const char *beside, const char *name)
+{
+    const char *slash = strrchr(beside, '/');
+    if (!slash) return arena_strndup(a, name, strlen(name));
+
+    size_t dir = (size_t)(slash - beside) + 1;
+    size_t n   = strlen(name);
+    char  *out = arena_alloc(a, dir + n + 1);
+
+    memcpy(out, beside, dir);
+    memcpy(out + dir, name, n);
+    out[dir + n] = '\0';
+    return out;
+}
+
 bool reader_scan(Reader *r)
 {
     const char *s    = r->src->text;
@@ -584,8 +666,14 @@ static Rule *rule_for(Reader *r, MToken *name, bool lexical)
     if (i >= 0) {
         Rule *rule = &r->g->rules[i];
         if (rule->body) {
-            diag_error(r->src, name->pos, "'%s' is defined twice", rule->name);
-            diag_note("the first was on line %d", 0);
+            /* Two files may both define `name`, and which two is the whole of
+             * what the reader needs to know. */
+            int line, col;
+            source_position(r->src, rule->pos, &line, &col);
+
+            diag_error(r->src, name->pos, "'%s' is already defined", rule->name);
+            diag_note("the first is at %s:%d",
+                      source_path_at(r->src, rule->pos), line);
             return NULL;
         }
         rule->lexical = lexical;
@@ -595,7 +683,7 @@ static Rule *rule_for(Reader *r, MToken *name, bool lexical)
     return add_rule(r, name->text, name->pos, lexical);
 }
 
-static bool read_file(Reader *r)
+static bool read_file(Reader *r, const char *path)
 {
     Grammar *g       = r->g;
     bool     lexical = true;       /* %tokens is the default, so it is silent */
@@ -610,6 +698,17 @@ static bool read_file(Reader *r)
             else if (strcmp(d->text, "ignorecase") == 0) g->ignorecase = true;
             else if (strcmp(d->text, "fragment")   == 0) mark_named(r, d->line, mark_fragment);
             else if (strcmp(d->text, "skip")       == 0) mark_named(r, d->line, mark_skip);
+            else if (strcmp(d->text, "import")     == 0) {
+                if (!at(r, T_LIT)) {
+                    diag_error(r->src, d->pos,
+                               "%%import wants a path in quotes");
+                    return false;
+                }
+                MToken *named = advance(r);
+                if (!read_description(r->a, g, named->text, path, r->src, named->pos))
+                    return false;
+                continue;
+            }
             else if (strcmp(d->text, "pass")       == 0) {
                 if (!read_passes(r, d)) return false;
                 continue;
@@ -623,7 +722,7 @@ static bool read_file(Reader *r)
             } else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
-                          "%%skip %%start %%ignorecase %%pass");
+                          "%%skip %%start %%ignorecase %%pass %%import");
                 return false;
             }
             continue;
@@ -667,16 +766,53 @@ static bool read_file(Reader *r)
 
 /* ------------------------------------------------------------------ */
 
+/* `named` as written; `by` is the file that named it, or NULL for the first. */
+bool read_description(Arena *a, Grammar *g, const char *named, const char *by,
+                      const Source *blamed, size_t blame)
+{
+    char *path = (by && named[0] != '/') ? path_beside(a, by, named)
+                                         : arena_strndup(a, named, strlen(named));
+
+    Source file;
+    if (!source_try(a, path, &file)) {
+        /* Beside the description, then in the library that ships with phx. */
+        char *shared = path_beside(a, phx_library_path(a), named);
+        if (!source_try(a, shared, &file)) {
+            if (blamed) diag_error(blamed, blame, "cannot read '%s'", named);
+            else        diag_error(NULL, 0, "cannot read '%s'", named);
+            diag_note("looked at %s and at %s", path, shared);
+            return false;
+        }
+        path = shared;
+    }
+
+    /* Read once however many times it is named -- which is also what stops a
+     * pair of modules that import each other from reading forever. */
+    if (already_imported(g, path)) return true;
+    remember_imported(g, path);
+
+    size_t start;
+    source_join(g, path, &file, &start);
+
+    Reader r = { .a = a, .g = g, .src = &file };
+    if (!reader_scan(&r)) return false;
+
+    /* The tokens were scanned with the file's own offsets; the rest of Phoenix
+     * works in the joined buffer, so they are moved once, here. */
+    for (int i = 0; i < r.n; i++) r.toks[i].pos += start;
+
+    r.src = &g->src;
+    return read_file(&r, path);
+}
+
 Grammar *grammar_read(Arena *a, const char *path)
 {
     Grammar *g = arena_alloc(a, sizeof *g);
     g->arena   = a;
+    g->src.path = path;
+    g->src.text = arena_alloc(a, 1);
 
-    if (!source_read(a, path, &g->src)) return NULL;
-
-    Reader r = { .a = a, .g = g, .src = &g->src };
-    if (!reader_scan(&r)) return NULL;
-    if (!read_file(&r)) return NULL;
+    if (!read_description(a, g, path, NULL, NULL, 0)) return NULL;
     if (!grammar_check(g)) return NULL;
 
     return g;

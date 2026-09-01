@@ -1,0 +1,45 @@
+(* lexical.phx -- what nearly every language needs before it can be read.
+ *
+ *     %import "lexical.phx"
+ *
+ * Found beside the description that names it, or in the library that ships
+ * with `phx`. Import only what a language actually uses: every non-fragment
+ * rule here becomes a token kind, and a rule that matches something the
+ * language does not have will happily match it.
+ *
+ * `%skip space comment` is **not** here, because whether a language throws
+ * whitespace away is the language's business -- a layout-sensitive one does
+ * not. Say it in the description that imports this.
+ *)
+
+(* `letter` and `digit` are what the token rules are written out of and are
+ * never tokens of their own. Without this line a file comes back as a stream
+ * of `letter`: both rules match `x`, and a longest-match tie goes to the rule
+ * declared first. *)
+%fragment letter digit hex-digit escape
+
+letter    = "a" .. "z" | "A" .. "Z" | "_" .
+digit     = "0" .. "9" .
+hex-digit = digit | "a" .. "f" | "A" .. "F" .
+
+name = letter { letter | digit } .
+
+(* Longest match across rules settles `3` against `3.14` without either rule
+ * knowing about the other. It does not settle `3..5`: the real rule wants a
+ * digit after the point, so it fails on `3..` and the integer takes the `3`. *)
+integer = digit { digit } .
+real    = digit { digit } "." digit { digit }
+          [ ( "e" | "E" ) [ "+" | "-" ] digit { digit } ] .
+
+hex = "0" ( "x" | "X" ) hex-digit { hex-digit } .
+
+(* A backslash takes the character after it, whatever it is, so that a `\"`
+ * does not end the string. *)
+escape = "\\" ! "" .
+text   = "\"" { escape | ! "\"" } "\"" .
+
+line-comment  = "#" { ! "\n" } .
+block-comment = "/*" { ! "*/" } "*/" .
+brace-comment = "{" { ! "}" } "}" .
+
+space = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .

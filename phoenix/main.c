@@ -7,9 +7,50 @@
  *     phx --tokens grammar.phx source stop after the scanner
  */
 #include "phx.h"
+#include "reader.h"
+
+#include <unistd.h>
 
 #include <stdlib.h>
 #include <string.h>
+
+/* ------------------------------------------------------------------ */
+/* Where the shared modules live
+ *
+ * `%import "lexical.phx"` is looked for beside the description that named it
+ * and then here, so that a module every language wants is found without every
+ * description saying where it is.
+ *
+ * `$PHX_LIB` first, for anyone who has put them somewhere else; otherwise
+ * `lib/` beside the running executable, so that a built tree works from any
+ * directory without being installed.
+ */
+const char *phx_library_path(Arena *a)
+{
+    const char *set = getenv("PHX_LIB");
+    if (set && *set) {
+        size_t n = strlen(set);
+        char  *p = arena_alloc(a, n + 2);
+        memcpy(p, set, n);
+        if (n && p[n - 1] != '/') p[n++] = '/';
+        p[n] = '\0';
+        return p;
+    }
+
+    /* argv[0]'s directory, then `../lib/` -- bin/phx puts us one below. */
+    extern const char *phx_argv0;
+    const char *slash = phx_argv0 ? strrchr(phx_argv0, '/') : NULL;
+
+    if (!slash) return "lib/";
+
+    size_t dir = (size_t)(slash - phx_argv0) + 1;
+    char  *p   = arena_alloc(a, dir + 8);
+    memcpy(p, phx_argv0, dir);
+    memcpy(p + dir, "../lib/", 8);
+    return p;
+}
+
+const char *phx_argv0;
 
 static const char usage[] =
     "phx -- a compiler-compiler\n"
@@ -22,6 +63,7 @@ static const char usage[] =
     "options:\n"
     "  --tokens     print the token stream and stop\n"
     "  --nodes      print the node types the grammar builds, and stop\n"
+    "  --imports    list the files the description was assembled from\n"
     "  --run PASS   run a %pass over the tree and print what it worked out\n"
     "  --show ATTR  which attribute --run prints from the root (default: out)\n"
     "  --grammar    print the grammar as it was understood\n"
@@ -30,11 +72,14 @@ static const char usage[] =
 
 int main(int argc, char **argv)
 {
+    phx_argv0 = argv[0];
+
     const char *grammar_path = NULL;
     const char *source_path  = NULL;
     bool        want_tokens  = false;
     bool        want_grammar = false;
     bool        want_nodes   = false;
+    bool        want_imports = false;
     const char *run_pass     = NULL;
     const char *show_attr    = "out";
     bool        quiet        = false;
@@ -48,6 +93,7 @@ int main(int argc, char **argv)
         }
         if (strcmp(arg, "--tokens")  == 0) { want_tokens  = true; continue; }
         if (strcmp(arg, "--nodes")   == 0) { want_nodes   = true; continue; }
+        if (strcmp(arg, "--imports") == 0) { want_imports = true; continue; }
 
         if (strcmp(arg, "--run") == 0) {
             if (i + 1 >= argc) {
@@ -89,6 +135,12 @@ int main(int argc, char **argv)
     Grammar *g = grammar_read(a, grammar_path);
     if (!g) { arena_free(a); return 1; }
 
+    if (want_imports) {
+        for (int i = 0; i < g->map.n; i++) printf("%s\n", g->map.units[i].path);
+        arena_free(a);
+        return diag_failed() ? 1 : 0;
+    }
+
     if (want_nodes) {
         if (!quiet) grammar_nodes(stdout, g);
         arena_free(a);
@@ -102,6 +154,17 @@ int main(int argc, char **argv)
             arena_free(a);
             return status;
         }
+    }
+
+    if (g->start < 0) {
+        fprintf(stderr,
+                "%s: there are no syntactic rules, so there is nothing to "
+                "parse %s with\n", grammar_path, source_path);
+        fprintf(stderr, "phx: add %%syntax before the rules that are matched "
+                        "over tokens -- a description with only lexical rules "
+                        "is a module to import, not one to use\n");
+        arena_free(a);
+        return 1;
     }
 
     Source src;
