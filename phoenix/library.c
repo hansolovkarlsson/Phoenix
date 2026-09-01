@@ -241,7 +241,67 @@ Value *eval_call(Eval *e, const Expr *x)
         return value_int(a, (long long)r);
     }
 
-    /* ---- text and lists ---- */
+    /* ---- text ----
+     *
+     * Ordinary operations on bytes, and their absence was a real gap: a
+     * Pascal string literal arrives with its quotes on and its doubled quotes
+     * undoubled, and turning `'it''s'` into `"it's"` is
+     * `join(split(slice(t, 2, size(t) - 1), "''"), "'")` and cannot be written
+     * any other way here. One-based, both ends included, as everything in
+     * this notation is. */
+
+    if (strcmp(f, "slice") == 0) {
+        if (!want(e, x, 3, args)) return NULL;
+        if (args[0]->kind != V_TEXT)
+            return library_fail(e, x, "'slice' wants text, and this is %s",
+                                value_kind_name(args[0]));
+        if (args[1]->kind != V_INT || args[2]->kind != V_INT)
+            return library_fail(e, x, "'slice' wants two integers");
+
+        long long from = args[1]->ival, to = args[2]->ival;
+        if (from < 1) from = 1;
+        if (to > (long long)args[0]->len) to = (long long)args[0]->len;
+        if (to < from) return value_text(a, "", 0);
+
+        return value_text(a, args[0]->text + (from - 1), (size_t)(to - from + 1));
+    }
+
+    if (strcmp(f, "split") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_TEXT || args[1]->kind != V_TEXT)
+            return library_fail(e, x, "'split' wants text and text");
+        if (args[1]->len == 0)
+            return library_fail(e, x, "'split' cannot split on nothing");
+
+        int cap = 8, n = 0;
+        Value **items = arena_alloc(a, (size_t)cap * sizeof *items);
+
+        size_t start = 0;
+        for (size_t i = 0; i + args[1]->len <= args[0]->len; ) {
+            if (memcmp(args[0]->text + i, args[1]->text, args[1]->len) != 0) {
+                i++;
+                continue;
+            }
+            if (n == cap) {
+                cap *= 2;
+                Value **big = arena_alloc(a, (size_t)cap * sizeof *big);
+                memcpy(big, items, (size_t)n * sizeof *big);
+                items = big;
+            }
+            items[n++] = value_text(a, args[0]->text + start, i - start);
+            i += args[1]->len;
+            start = i;
+        }
+        if (n == cap) {
+            Value **big = arena_alloc(a, (size_t)(cap + 1) * sizeof *big);
+            memcpy(big, items, (size_t)n * sizeof *big);
+            items = big;
+        }
+        items[n++] = value_text(a, args[0]->text + start, args[0]->len - start);
+        return list_of(a, items, n);
+    }
+
+    /* ---- lists ---- */
 
     if (strcmp(f, "size") == 0) {
         if (!want(e, x, 1, args)) return NULL;

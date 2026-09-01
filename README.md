@@ -70,7 +70,21 @@ cc pasc.c -o pasc                     # no flags, no headers, no library
 ./pasc prog.pas > prog.c && cc prog.c -o prog && ./prog
 ```
 
-Nothing in that chain but `cc`.
+Nothing in that chain but `cc`. What it compiles includes
+[`tests/pascal/gcd.pas`](tests/pascal/), the fixture that has been in this
+repository since the first commit — records, sets, enumerations, a `case`, a
+`with`, `var` parameters and field widths — written for another tool years
+before Phoenix existed:
+
+```
+greatest common divisor
+   3   4
+green was not seen
+blue
+    21
+   1   4   9  16  25  36  49  64  81 100
+       both positive
+```
 
 ```sh
 make
@@ -493,7 +507,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 93 checks, including Solveig's pascal.bnf when it is present
+make test       # 95 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

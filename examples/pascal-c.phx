@@ -10,16 +10,22 @@
  * ---------------------------------------------------------------------------
  * The subset, said plainly rather than discovered
  *
- * **In:** integer, real, boolean, char; subranges of integer; one-dimensional
- * arrays with written bounds; records without variants; constants, type
- * definitions and variables; procedures and functions, by value and by `var`,
- * not nested; `if`, `while`, `repeat`, `for` both ways, compound statements,
- * assignment and calls; the operators; `write` and `writeln`.
+ * **In:** integer, real, boolean, char; subranges; enumerations; sets of a
+ * small ordinal type; one-dimensional arrays, bounds written out or named;
+ * records without variants; constants, type definitions and variables;
+ * procedures and functions, by value and by `var`, not nested; `if`, `while`,
+ * `repeat`, `for` both ways, `case`, `with`, compound statements, assignment
+ * and calls; the operators including `in`; `write` and `writeln` with field
+ * widths.
  *
- * **Out:** sets, files, pointers, `goto`, `case`, `with`, nested routines,
- * variant records. Phoenix names the missing clause the first time a program
- * reaches for one, which is the right way round -- the compiler works for what
- * it covers and says exactly what it does not.
+ * **Out:** files, pointers, `goto`, nested routines, variant records, sets of
+ * anything large, ranges inside a set constructor. Phoenix names the missing
+ * clause the first time a program reaches for one, which is the right way
+ * round -- the compiler works for what it covers and says exactly what it
+ * does not.
+ *
+ * `tests/pascal/gcd.pas` is inside it, and that file was written for another
+ * tool years before Phoenix existed.
  *
  * ---------------------------------------------------------------------------
  * Two things C makes awkward, and how they are done
@@ -117,13 +123,22 @@
 
   NoType    : pre = "void" : post = "" .
   Subrange  : pre = "long" : post = "" .
-  EnumType  : pre = "long" : post = "" .
   Packed    : pre = $type.pre : post = $type.post .
 
+  (* An enumeration becomes a C `enum`, which numbers its members from nought
+   * exactly as Pascal does -- so nothing here has to count, and `Red` is a C
+   * constant wherever a Pascal program writes it. *)
+  EnumType  : pre = "enum {{ {} }}" of join($names, ", ") : post = "" .
+
+  (* A set of a small ordinal type is a bit per member in a `long`. Pascal's
+   * sets are exactly this and C has no other cheap way to be one. *)
+  SetType   : pre = "long" : post = "" .
+
+  (* `bound` is the index range the typechecker resolved -- written out or
+   * named, it is a subrange by the time it reaches here. *)
   ArrayType : pre  = $of.pre
             : post = "[({}) - ({}) + 1]{}"
-                       of at($indices, 1).high.out, at($indices, 1).low.out,
-                          $of.post .
+                       of $bound.high.out, $bound.low.out, $of.post .
 
   RecordType : pre  = "struct {{ {} }}" of join($fields.out, " ")
              : post = "" .
@@ -133,7 +148,10 @@
 
   Integer       : out = "{}" of $text .
   Real          : out = "{}" of $text .
-  Text          : out = "\"{}\"" of $value .
+  (* A Pascal string arrives with its quotes on and its doubled quotes
+   * undoubled: `'it''s'` has to become `"it's"`. *)
+  Text          : out = "\"{}\""
+                    of join(split(slice($value, 2, size($value) - 1), "''"), "'") .
   (* Pascal's two boolean literals are ordinary named constants in the
    * grammar, and C spells them differently. Another table standing in for a
    * conditional. *)
@@ -198,6 +216,21 @@
   Repeat : out = "  do {{\n{}\n  }} while (!({}));"
              of join($body.out, "\n"), $until.out .
 
+  (* Pascal's `case` is C's `switch`, and every arm breaks -- Pascal has no
+   * fall-through, so putting one in would be inventing a behaviour. *)
+  Case   : out = "  switch ({}) {{\n{}\n  }}" of $value.out, join($elements.out, "\n") .
+  CaseOf : out = "{}\n{}\n    break;"
+             of join(each($values.out, "    case {}:"), "\n"), $do.out .
+
+  (* `with origin do ... x ...` -- the fields are spelled `origin.x` inside,
+   * and *that is all it is*. The table of names C spells differently already
+   * existed for `var` parameters, so a `with` is four lines and no mechanism.
+   * Only the first of `with a, b do` is taken, as in the typechecker. *)
+  With   : down spelled = [...bind([], $fields,
+                                   each($fields, "{}.{{}}" of at($vars, 1).name)),
+                           ...$spelled]
+         : out = "  {{\n{}\n  }}" of $body.out .
+
   For(dir: "to")     : out = "  for ({} = {}; {} <= {}; {}++) {{\n{}\n  }}"
                          of $var, $from.out, $var, $to.out, $var, $body.out .
   For(dir: "downto") : out = "  for ({} = {}; {} >= {}; {}--) {{\n{}\n  }}"
@@ -212,10 +245,19 @@
 
   Argument : out   = $value.out
            : write = "printf(\"{}\", {}); "
-                       of lookup([["integer", "%ld"], ["real", "%g"],
-                                  ["char", "%c"], ["string", "%s"],
-                                  ["boolean", "%d"]], $value.type, "%ld"),
+                       of lookup($formats, $value.type, "%ld"), $value.out .
+
+  (* `write(x:8)` -- the field width is part of the call syntax, and C spells
+   * it inside the conversion. `%ld` becomes `%8ld`, which is the format with
+   * the width put after its `%`. *)
+  Padded   : out   = $value.out
+           : write = "printf(\"%{}{}\", {}); "
+                       of $width.out,
+                          slice(lookup($formats, $value.type, "%ld"), 2, 9),
                           $value.out .
+  Rounded  : out   = $value.out
+           : write = "printf(\"%{}.{}f\", (double)({})); "
+                       of $width.out, $places.out, $value.out .
 
   CallStatement(name: "writeln") : out = "  {}printf(\"\\n\");"
                                            of join($args.write, "") .
@@ -246,7 +288,14 @@
 
   Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
   Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+  Compare(op: "in") : out = "((({}) >> ({})) & 1)" of $right.out, $left.out .
   Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  (* `[Red, Blue]` is those bits set. The leading `0` is not decoration: it is
+   * what makes the empty set `(0)` rather than `()`, without a second clause
+   * for a case the arithmetic already covers. *)
+  SetOf : out = "(0{})" of join(each($elements.out, " | (1L << ({}))"), "") .
+  Range : out = "0 /* a set range is not compiled */" .
 
   (* ---- variables ----
    *
@@ -274,6 +323,11 @@
            * two boolean literals -- which the grammar makes ordinary variable
            * references, because that is what they look like. *)
           : down spelled = [["true", "1"], ["false", "0"]]
+
+          (* How each Pascal type is written by `printf`. A table, because
+           * that is what this notation has instead of a conditional. *)
+          : down formats = [["integer", "%ld"], ["real", "%g"], ["char", "%c"],
+                            ["string", "%s"], ["boolean", "%ld"]]
           : out = "#include <stdio.h>\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
               of $body.decls, $body.routinecode, $body.code .
 

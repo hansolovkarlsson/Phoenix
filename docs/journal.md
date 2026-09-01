@@ -793,3 +793,50 @@ statements, a `printf` and the newline, so `if (c) writeln(x);` put the newline
 outside the `if` and printed it every time. `cc -Wall` said *misleading
 indentation* and it was right — which is a good argument for a test that
 compiles what the compiler emits rather than only reading it.
+
+## 2026-09-01 — gcd.pas compiles
+
+The Pascal subset now covers `tests/pascal/gcd.pas`, which is the file that has
+been in this repository since the first commit and was written for another tool
+years before Phoenix existed. It compiles to C that `cc -Wall -Werror` accepts,
+and every line of its output is right — the record through a `with`, the
+enumeration through a `case`, the set membership, the field widths.
+
+**`with` cost four lines**, and that is the finding. C has nothing like it, so
+the fields have to be spelled `origin.x` inside the body — which is a table of
+names spelled differently, handed down. That table already existed, for `var`
+parameters. A construct C does not have turned out to need no mechanism, because
+the mechanism it needs was built for something that looks nothing like it.
+
+**An enumeration became a C `enum`** rather than a `long` and a run of
+`#define`s, which means nothing has to count: C numbers enum members from nought
+exactly as Pascal does. That is the second time the answer has been *emit the C
+construct that already agrees* rather than *emit the arithmetic*, the first
+being array parameters, which C passes by reference whether you ask or not.
+
+**A set is a bit per member in a `long`**, and the empty set is why `SetOf`
+emits `(0 | ...)`: the leading nought makes `[]` come out as `(0)` instead of
+`()`, without a second clause for a case the arithmetic already covers.
+
+### Two things the library did not have, and one it did not need
+
+`slice` and `split`. A Pascal string arrives with its quotes on and its doubled
+quotes undoubled, and turning `'it''s'` into `"it's"` cannot be written without
+them. They are ordinary operations on bytes and their absence was a real gap
+rather than a Pascal-shaped one.
+
+What it did *not* need was a way to number a list. That was wanted for
+enumeration members, and choosing C's `enum` removed the want — which is worth
+noticing, because the first instinct was to add `indexed()` to the library and
+the better answer was to emit different C.
+
+### The lesson that keeps arriving
+
+`Argument(width: nil)` could not be told from `Argument(width: something)`,
+because a pattern matches a node type and cannot ask whether a field is nil. So
+`Argument`, `Padded` and `Rounded` are three node types.
+
+That is the fourth time: `Labelled`, `Packed`, `Signed`, `Accessed`, and now
+these. **An option is not a choice**, and every time the grammar has been asked
+to make a distinction it already knows, the passes have got simpler and a node
+that was usually empty has stopped existing.

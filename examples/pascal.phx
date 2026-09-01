@@ -293,12 +293,15 @@ accessor = "[" e:expression { "," f:expression -> $f } "]" -> Index(at: [$e, ...
 
 (* `write(x:8:2)` -- the field widths are part of the call syntax, and they
  * belong to the argument rather than to the call. *)
+(* Three shapes rather than one with fields that are usually nil: a pattern
+ * can tell node types apart and cannot ask whether a field is nil, which is
+ * the same lesson `Labelled` and `Accessed` taught. *)
 actual-parameter = v:expression ":" w:expression ":" p:expression            (* order *)
-                     -> Argument(value: $v, width: $w, precision: $p)
+                     -> Rounded(value: $v, width: $w, places: $p)
                  | v:expression ":" w:expression
-                     -> Argument(value: $v, width: $w, precision: nil)
+                     -> Padded(value: $v, width: $w)
                  | v:expression
-                     -> Argument(value: $v, width: nil, precision: nil) .
+                     -> Argument(value: $v) .
 
 (* ---- procedures and functions ---- *)
 
@@ -362,17 +365,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * `entries` is what a type *declares* beyond itself, which is nothing for
    * all of these but an enumeration -- and `TypeDef` reads it from whatever
    * type it was given, so every one of them has to answer. *)
-  NamedType : tname = $name     : entries = [] .
-  NoType    : tname = "void"    : entries = [] .
-  Subrange  : tname = "integer" : entries = [] .
-  ArrayType : tname = "array"   : entries = [] .
-  RecordType: tname = "record"  : entries = [] .
-  SetType   : tname = "set"     : entries = [] .
-  FileType  : tname = "file"    : entries = [] .
-  Pointer   : tname = "pointer" : entries = [] .
+  NamedType : tname = $name     : entries = [] : iname = $name .
+  NoType    : tname = "void"    : entries = [] : iname = "" .
+  Subrange  : tname = "integer" : entries = [] : iname = "" .
+  ArrayType : tname = "array"   : entries = [] : iname = "" .
+  RecordType: tname = "record"  : entries = [] : iname = "" .
+  SetType   : tname = "set"     : entries = [] : iname = "" .
+  FileType  : tname = "file"    : entries = [] : iname = "" .
+  Pointer   : tname = "pointer" : entries = [] : iname = "" .
 
-  EnumType  : tname = "integer" : entries = bind([], $names, "integer") .
-  Packed    : tname = $type.tname : entries = $type.entries .
+  EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" .
+  Packed    : tname = $type.tname : entries = $type.entries : iname = "" .
 
   Integer       : ctype = "integer" .
   Real          : ctype = "real" .
@@ -542,7 +545,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   CallExpression: type = lookup($env, lookup($env, $name, "unknown"), "unknown")
                 ! $checking and not defined($env, $name)
                   : "'{}' is not declared" of $name .
-  Argument      : type = $value.type .
+  Argument : type = $value.type .
+  Padded   : type = $value.type .
+  Rounded  : type = $value.type .
+
+  (* An array's index range, resolved. It is written out (`array [1..30]`) or
+   * named (`array [Small]`), and only this pass has the scope to follow the
+   * name -- so it finds the subrange and `emit-c` reads it off the node.
+   * `iname` is "" for a range written out, which no scope binds, so the
+   * lookup falls through to the range itself. *)
+  ArrayType : type = "void"
+            : bound = lookup($known, at($indices, 1).iname, at($indices, 1)) .
 
   (* What a parameter's declared type turns out to *be* -- "array", "record",
    * "integer" and so on. Only this pass can answer it, because only this pass
@@ -620,6 +633,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * Only the first of `with a, b do` is followed: taking all of them is a
    * fold, and there is no fold in the notation. *)
   With     : type = "void"
+
+           (* The names the `with` brought into scope, left on the node for a
+            * later pass. This is computed on the way *out*, where the `down`
+            * clause below runs on the way in -- so the two say the chain
+            * twice rather than sharing it, which is the price of one walk
+            * having two phases. *)
+           : fields = flatten([...lookup($known,
+                                         lookup($known, at($vars, 1).name,
+                                                NamedType(name: "?")).name,
+                                         RecordType(fields: [])).fields.names])
+
            : down env = [...flatten([...lookup($known,
                                               lookup($known, at($vars, 1).name,
                                                      NamedType(name: "?")).name,

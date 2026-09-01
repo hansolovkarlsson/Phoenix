@@ -437,6 +437,31 @@ else
     report fail "primes.pas compiles to C that cc -Werror accepts"
 fi
 
+# gcd.pas is the fixture that has been in this repository since the first
+# commit, written for another tool years before Phoenix existed. Compiling it
+# is the strongest thing the Pascal description can be asked to do.
+if "$phx" "$root/examples/pascal-c.phx" "$root/tests/pascal/gcd.pas" \
+        > "$tmp0/gcd.c" 2>/dev/null \
+   && cc -Wall -Werror -o "$tmp0/gcd" "$tmp0/gcd.c" 2>/dev/null; then
+    report pass "gcd.pas compiles to C that cc -Werror accepts"
+    got=$("$tmp0/gcd")
+    want='greatest common divisor
+   3   4
+green was not seen
+blue
+    21
+   1   4   9  16  25  36  49  64  81 100
+       both positive'
+    if [ "$got" = "$want" ]; then
+        report pass "and every line of it is right"
+    else
+        report fail "and every line of it is right" \
+                    "$(printf '%s' "$got" | head -2 | tr '\n' '|')"
+    fi
+else
+    report fail "gcd.pas compiles to C that cc -Werror accepts"
+fi
+
 if "$phx" "$root/examples/pascal-c.phx" -o "$tmp0/pasc.c" 2>/dev/null \
    && cc -o "$tmp0/pasc" "$tmp0/pasc.c" 2>/dev/null; then
     "$tmp0/pasc" "$root/examples/primes.pas" > "$tmp0/again.c" 2>/dev/null
