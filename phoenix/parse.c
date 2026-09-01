@@ -117,7 +117,7 @@ static Value *value_new(Parse *p, VKind kind, size_t pos)
 
 static Value *token_value(Parse *p, const Token *tok)
 {
-    Value *v = value_new(p, V_TOKEN, tok->pos);
+    Value *v = value_new(p, V_TEXT, tok->pos);
     v->text  = tok->text;
     v->len   = tok->len;
     return v;
@@ -151,8 +151,10 @@ static Value *one_of(Parse *p, Slots *s, size_t pos)
 /* ------------------------------------------------------------------ */
 /* Evaluating an action
  *
- * `slots` holds one value per factor of the sequence, and `acc` is what the
- * enclosing sequence has built so far -- the `$$` a fold is written with.
+ * The expression itself is evaluated by eval.c, which is the same code a
+ * stage-2 pass clause runs. All this half provides is what `$2`, `$name` and
+ * `$$` mean *here*: the factors of the sequence being built, and the value the
+ * enclosing sequence built last.
  */
 
 typedef struct {
@@ -162,119 +164,48 @@ typedef struct {
     Value       *acc;
 } Build;
 
-static Value *evaluate(Build *b, const Expr *x);
-
-/* How many values a list expression will have, once spreads are opened out. */
-static int list_size(Build *b, const Expr *x)
+static Value *build_ref(Eval *e, const Expr *x)
 {
-    int n = 0;
-    for (int i = 0; i < x->nkids; i++) {
-        const Expr *item = x->kids[i];
-        if (item->kind != X_SPREAD) { n++; continue; }
+    Build *b = e->data;
 
-        Value *v = evaluate(b, item->kids[0]);
-        n += (v && v->kind == V_LIST) ? v->n : 1;
-    }
-    return n;
-}
-
-static Value *evaluate(Build *b, const Expr *x)
-{
-    Parse *p = b->p;
-
-    switch (x->kind) {
-    case X_ACC:
+    if (x->kind == X_ACC) {
         if (!b->acc) {
-            diag_error(&p->g->src, x->pos,
+            diag_error(&e->g->src, x->pos,
                        "$$ is nothing here -- there is no value before this one");
             return NULL;
         }
         return b->acc;
-
-    case X_REF: {
-        int index = x->index;
-
-        if (x->name) {                              /* by label */
-            index = 0;
-            for (int i = 0; i < b->seq->nkids; i++)
-                if (b->seq->kids[i]->label
-                    && strcmp(b->seq->kids[i]->label, x->name) == 0) {
-                    index = i + 1;
-                    break;
-                }
-            if (!index) {
-                diag_error(&p->g->src, x->pos,
-                           "no factor here is named '%s'", x->name);
-                return NULL;
-            }
-        }
-        if (index > b->slots->n) {
-            diag_error(&p->g->src, x->pos,
-                       "$%d, but this alternative has %d factor%s",
-                       index, b->slots->n, b->slots->n == 1 ? "" : "s");
-            return NULL;
-        }
-        return b->slots->items[index - 1];
     }
 
-    case X_TEXT: {
-        Value *v = value_new(p, V_TOKEN, x->pos);
-        v->text  = x->name;
-        v->len   = (size_t)x->len;
-        return v;
-    }
-
-    case X_LIST: {
-        Value  *v     = value_new(p, V_LIST, x->pos);
-        int     size  = list_size(b, x);
-        Value **items = arena_alloc(p->a, (size_t)(size ? size : 1) * sizeof *items);
-        int     n     = 0;
-
-        for (int i = 0; i < x->nkids; i++) {
-            const Expr *item = x->kids[i];
-
-            if (item->kind == X_SPREAD) {
-                Value *inner = evaluate(b, item->kids[0]);
-                if (!inner) return NULL;
-                if (inner->kind == V_LIST)
-                    for (int k = 0; k < inner->n; k++) items[n++] = inner->items[k];
-                else
-                    items[n++] = inner;
-                continue;
-            }
-            Value *got = evaluate(b, item);
-            if (!got) return NULL;
-            items[n++] = got;
-        }
-        v->items = items;
-        v->n     = n;
-        return v;
-    }
-
-    case X_NODE: {
-        Value *v = value_new(p, V_NODE, x->pos);
-        v->type  = x->name;
-
-        if (x->nkids == 0) return v;
-
-        v->items  = arena_alloc(p->a, (size_t)x->nkids * sizeof *v->items);
-        v->fields = arena_alloc(p->a, (size_t)x->nkids * sizeof *v->fields);
-
-        for (int i = 0; i < x->nkids; i++) {
-            Value *got = evaluate(b, x->kids[i]);
-            if (!got) return NULL;
-            v->items[i]  = got;
-            v->fields[i] = x->fields[i];
-        }
-        v->n = x->nkids;
-        return v;
-    }
-
-    case X_SPREAD:
-        diag_error(&p->g->src, x->pos, "'...' belongs inside a list");
+    if (x->kind == X_DOT) {
+        diag_error(&e->g->src, x->pos,
+                   "'.%s' reads an attribute, and a production has none -- "
+                   "attributes belong to a %%pass", x->name);
         return NULL;
     }
-    return NULL;
+
+    int index = x->index;
+
+    if (x->name) {                              /* by label */
+        index = 0;
+        for (int i = 0; i < b->seq->nkids; i++)
+            if (b->seq->kids[i]->label
+                && strcmp(b->seq->kids[i]->label, x->name) == 0) {
+                index = i + 1;
+                break;
+            }
+        if (!index) {
+            diag_error(&e->g->src, x->pos, "no factor here is named '%s'", x->name);
+            return NULL;
+        }
+    }
+    if (index > b->slots->n) {
+        diag_error(&e->g->src, x->pos,
+                   "$%d, but this alternative has %d factor%s",
+                   index, b->slots->n, b->slots->n == 1 ? "" : "s");
+        return NULL;
+    }
+    return b->slots->items[index - 1];
 }
 
 /* Whether an action mentions `$$`, and so folds rather than appends. */
@@ -307,6 +238,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     }
 
     Build b = { .p = p, .seq = n, .slots = &gathered, .acc = NULL };
+    Eval  e = { .a = p->a, .g = p->g, .ref = build_ref, .data = &b };
 
     /* `$$` is the value the enclosing sequence built last, and the result
      * takes its place rather than following it. That is the whole of a left
@@ -322,7 +254,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
         b.acc = out->items[out->n - 1];
     }
 
-    Value *built = evaluate(&b, n->action);
+    Value *built = eval_expr(&e, n->action);
     if (!built) return -1;
 
     if (fold) out->items[out->n - 1] = built;
@@ -491,8 +423,8 @@ Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t)
 /* ------------------------------------------------------------------ */
 /* Printing a tree */
 
-static void dump(FILE *out, const Value *v, const char *prefix, bool last,
-                 const char *field, bool root)
+static void dump(FILE *out, Arena *a, const Value *v, const char *prefix,
+                 bool last, const char *field, bool root)
 {
     char here[512];
 
@@ -505,9 +437,19 @@ static void dump(FILE *out, const Value *v, const char *prefix, bool last,
     }
 
     switch (v->kind) {
-    case V_TOKEN:
+    case V_TEXT:
         fprintf(out, "\"%.*s\"\n", (int)v->len, v->text);
         return;
+
+    case V_INT: case V_FLOAT: case V_BOOL: case V_NIL: {
+        char  *text;
+        size_t len;
+        if (v->kind == V_NIL)                fputs("nil\n", out);
+        else if (value_format(a, v, &text, &len)) fprintf(out, "%.*s\n", (int)len, text);
+        else                                 fputs("?\n", out);
+        return;
+    }
+
     case V_NODE:
         fprintf(out, "%s\n", v->type);
         break;
@@ -517,18 +459,13 @@ static void dump(FILE *out, const Value *v, const char *prefix, bool last,
     }
 
     for (int i = 0; i < v->n; i++)
-        dump(out, v->items[i], here, i == v->n - 1,
+        dump(out, a, v->items[i], here, i == v->n - 1,
              v->fields ? v->fields[i] : NULL, false);
 }
 
 void tree_dump(FILE *out, const Value *root)
 {
-    switch (root->kind) {
-    case V_TOKEN: fprintf(out, "\"%.*s\"\n", (int)root->len, root->text); return;
-    case V_NODE:  fprintf(out, "%s\n", root->type); break;
-    case V_LIST:  fprintf(out, "[%d]\n", root->n);  break;
-    }
-    for (int i = 0; i < root->n; i++)
-        dump(out, root->items[i], "", i == root->n - 1,
-             root->fields ? root->fields[i] : NULL, false);
+    Arena *a = arena_new();
+    dump(out, a, root, "", true, NULL, true);
+    arena_free(a);
 }

@@ -87,24 +87,36 @@ int  diag_errors(void);
  */
 
 typedef enum {
-    X_NODE,    /* Type(field: value, ...)                                   */
+    X_NODE,    /* Type(field: value, ...), or a bare Type with no fields    */
     X_REF,     /* $2, or $name                                              */
     X_ACC,     /* $$ -- what the enclosing sequence has built so far        */
-    X_TEXT,    /* "a literal", for a name a production wants to invent      */
+    X_TEXT,    /* "a literal"                                               */
     X_LIST,    /* [ a, b ]                                                  */
-    X_SPREAD   /* ...a  -- inside a list, opens a list out into it          */
+    X_SPREAD,  /* ...a  -- inside a list, opens a list out into it          */
+    X_INT,     /* 45                                                        */
+    X_FLOAT,   /* 4.5                                                       */
+    X_BOOL,    /* true, false                                               */
+    X_NIL,     /* nil                                                       */
+    X_BINOP,   /* a + b   -- the spelling in `name`                         */
+    X_UNOP,    /* not a, -a                                                 */
+    X_CALL,    /* f(a, b)                                                   */
+    X_DOT,     /* $left.val -- an attribute of another node                 */
+    X_FORMAT   /* "{} {}" of a, b                                           */
 } XKind;
 
 typedef struct Expr Expr;
 struct Expr {
-    XKind   kind;
-    char   *name;     /* X_NODE: the type. X_REF: the label. X_TEXT: text   */
-    int     len;      /* X_TEXT: its length                                 */
-    int     index;    /* X_REF: the 1-based position, or 0 when by name     */
-    char  **fields;   /* X_NODE: one name per kid                           */
-    Expr  **kids;
-    int     nkids;
-    size_t  pos;
+    XKind      kind;
+    char      *name;   /* X_NODE: the type. X_REF/X_DOT: the name.
+                        * X_TEXT: the bytes. X_BINOP/X_UNOP/X_CALL: which    */
+    int        len;    /* X_TEXT: its length                                 */
+    int        index;  /* X_REF: the 1-based position, or 0 when by name     */
+    long long  ival;   /* X_INT, X_BOOL                                      */
+    double     real;   /* X_FLOAT                                            */
+    char     **fields; /* X_NODE: one name per kid, else NULL throughout     */
+    Expr     **kids;
+    int        nkids;
+    size_t     pos;
 };
 
 /* ------------------------------------------------------------------ */
@@ -154,6 +166,8 @@ typedef struct {
     size_t  pos;
 } Rule;
 
+typedef struct Pass Pass;      /* below -- the Grammar holds them */
+
 typedef struct {
     Arena  *arena;
     Source  src;
@@ -167,6 +181,10 @@ typedef struct {
 
     char  **reserved;    /* word-shaped literals from the syntactic half    */
     int     nreserved;
+
+    Pass   *passes;
+    int     npasses;
+    int     cappasses;
 } Grammar;
 
 /* Reads a `.phx` file. Answers NULL when it could not, having said why. */
@@ -184,6 +202,81 @@ void grammar_nodes(FILE *out, const Grammar *g);
 
 /* Finds a rule by name, or -1. */
 int grammar_find(const Grammar *g, const char *name, size_t len);
+
+/* ------------------------------------------------------------------ */
+/* Passes
+ *
+ * A pass is clauses keyed on the vocabulary the actions build. Clauses are
+ * tried **in order and the first match wins** -- the same dispatch discipline
+ * as the ordered choice in the syntactic half, so the tool has one rule about
+ * ordering rather than two.
+ *
+ *     %pass eval
+ *       thread env = empty
+ *
+ *       Number          : val = number($text) .
+ *       Binary(op: "+") : val = $left.val + $right.val .
+ *       Let             : env = bind($env, $name, $value.val) .
+ *       Variable        : val = lookup($env, $name) .
+ *                       ! error("'{}' is not defined" of $name)
+ *                           when lookup($env, $name) = nil .
+ *
+ * A pattern tests and binds at once: `Number(text: t)` matches a `Number` and
+ * binds `t`. A field written with a value tests it; a field written with a
+ * name binds it; a field left out is not looked at.
+ */
+
+typedef enum {
+    P_TYPE,   /* Binary, or Binary(op: "+")                                 */
+    P_BIND,   /* a name: matches anything and binds it                      */
+    P_TEXT,   /* "literal"                                                  */
+    P_INT,    /* 45                                                         */
+    P_ANY     /* _                                                          */
+} PKind;
+
+typedef struct Pattern Pattern;
+struct Pattern {
+    PKind      kind;
+    char      *name;    /* P_TYPE: the type. P_BIND: the name. P_TEXT: bytes */
+    int        len;
+    long long  ival;
+    char     **fields;  /* P_TYPE: which field each kid tests                */
+    Pattern  **kids;
+    int        nkids;
+    size_t     pos;
+};
+
+typedef enum {
+    C_SYNTH,   /* attr = expr      -- computed from this node and its kids  */
+    C_DOWN,    /* down attr = expr -- handed to the children                */
+    C_THREAD,  /* a threaded attribute's update, recognised by its name     */
+    C_ERROR    /* ! error(...) when cond                                    */
+} CKind;
+
+typedef struct {
+    CKind   kind;
+    char   *attr;    /* the attribute defined, for the three that define one */
+    Expr   *value;   /* the expression, or the message for C_ERROR           */
+    Expr   *when;    /* C_ERROR: the condition, or NULL for always           */
+    size_t  pos;
+} Clause;
+
+typedef struct {
+    Pattern *pattern;
+    Clause  *clauses;
+    int      nclauses;
+    size_t   pos;
+} PassRule;
+
+struct Pass {
+    char     *name;
+    char    **threads;    /* the threaded attributes, in order declared      */
+    Expr    **initial;    /* what each one enters the root with              */
+    int       nthreads;
+    PassRule *rules;
+    int       nrules;
+    size_t    pos;
+};
 
 /* ------------------------------------------------------------------ */
 /* Tokens
@@ -232,21 +325,65 @@ void tokens_dump(FILE *out, const Grammar *g, const Source *src, const Tokens *t
 
 typedef enum {
     V_NODE,    /* a named node with named fields                            */
-    V_TOKEN,   /* a leaf: the text a token was spelled with                 */
-    V_LIST     /* several values in order, from a repetition or a group     */
+    V_TEXT,    /* bytes -- what a token was spelled with, or any text       */
+    V_LIST,    /* several values in order                                   */
+    V_INT,     /* 64-bit signed                                             */
+    V_FLOAT,   /* IEEE 754 binary64                                         */
+    V_BOOL,
+    V_NIL      /* absence, and nothing else                                 */
 } VKind;
 
 typedef struct Value Value;
 struct Value {
     VKind         kind;
     const char   *type;    /* V_NODE: its name                             */
-    const char   *text;    /* V_TOKEN: its spelling                        */
+    const char   *text;    /* V_TEXT: its bytes                            */
     size_t        len;
     size_t        pos;
     const char  **fields;  /* V_NODE: one name per kid, or NULL throughout  */
     Value       **items;
     int           n;
+    long long     ival;    /* V_INT, V_BOOL                                */
+    double        real;    /* V_FLOAT                                      */
+    void         *attrs;   /* V_NODE: what a pass has worked out about it  */
 };
+
+/* ------------------------------------------------------------------ */
+/* Evaluating an expression
+ *
+ * One evaluator, used by both halves. A stage-1 action resolves `$2` against
+ * the factors of a sequence; a stage-2 clause resolves `$name` against what its
+ * pattern bound. Everything between those two ends -- the arithmetic, the
+ * comparisons, the formatting -- is the same code, because two evaluators of
+ * one notation would be two things to keep in agreement and the project has
+ * enough of those already.
+ */
+
+typedef struct Eval Eval;
+struct Eval {
+    Arena         *a;
+    const Grammar *g;
+    Value       *(*ref)(Eval *, const Expr *);   /* $n, $name, $$, x.attr   */
+    void          *data;                          /* whatever ref needs      */
+};
+
+Value *eval_expr(Eval *e, const Expr *x);
+
+/* The functions a pass may call -- library.c, kept separate so that the
+ * question of where the library stops stays a visible one. */
+Value *eval_call(Eval *e, const Expr *x);
+
+Value *value_int(Arena *a, long long n);
+Value *value_float(Arena *a, double d);
+Value *value_bool(Arena *a, bool b);
+Value *value_nil(Arena *a);
+Value *value_text(Arena *a, const char *text, size_t len);
+
+/* Writes a value the way `of` writes it -- see docs/semantics.md. Answers
+ * false, having reported, for the kinds that refuse to be written. */
+bool value_format(Arena *a, const Value *v, char **out, size_t *len);
+
+const char *value_kind_name(const Value *v);
 
 /* Matches the tokens against the grammar. Answers NULL on a syntax error,
  * having reported where the match got furthest and what it wanted there. */

@@ -1,0 +1,260 @@
+/* library.c -- the functions a pass may call.
+ *
+ * Deliberately its own file, because the honest risk with a compiler generator
+ * is that its library grows without ever being decided about, and a library
+ * nobody drew a line around is a language nobody can reimplement. Every entry
+ * below is one a pass for the calculator or for Pascal actually needed; the
+ * moment one is added for a reason weaker than that, this file is the evidence.
+ *
+ * An **environment** is an association list -- a list of `[name, value]` pairs,
+ * most recent first. `bind` puts a pair on the front, so shadowing is what
+ * naturally happens and nobody implemented it. It is linear to look up, which
+ * is right for the sizes a compiler description works at and is a thing to
+ * revisit with measurements rather than with feelings.
+ */
+#include "phx.h"
+
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
+
+static Value *fail(Eval *e, const Expr *x, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+
+    char message[512];
+    vsnprintf(message, sizeof message, fmt, ap);
+    va_end(ap);
+
+    diag_error(&e->g->src, x->pos, "%s", message);
+    return NULL;
+}
+
+static bool want(Eval *e, const Expr *x, int n, Value **args)
+{
+    if (x->nkids == n) return true;
+
+    diag_error(&e->g->src, x->pos, "'%s' takes %d argument%s, and %d %s given",
+               x->name, n, n == 1 ? "" : "s", x->nkids,
+               x->nkids == 1 ? "was" : "were");
+    (void)args;
+    return false;
+}
+
+static bool text_equal(const Value *a, const Value *b)
+{
+    return a->kind == V_TEXT && b->kind == V_TEXT
+        && a->len == b->len && memcmp(a->text, b->text, a->len) == 0;
+}
+
+/* ------------------------------------------------------------------ */
+
+static Value *list_of(Arena *a, Value **items, int n)
+{
+    Value *v = arena_alloc(a, sizeof *v);
+    v->kind  = V_LIST;
+    v->items = items;
+    v->n     = n;
+    return v;
+}
+
+static Value *pair(Arena *a, Value *k, Value *v)
+{
+    Value **items = arena_alloc(a, 2 * sizeof *items);
+    items[0] = k;
+    items[1] = v;
+    return list_of(a, items, 2);
+}
+
+/* ------------------------------------------------------------------ */
+
+Value *eval_call(Eval *e, const Expr *x)
+{
+    Arena *a    = e->a;
+    Value *args[4];
+    int    argc = x->nkids < 4 ? x->nkids : 4;
+
+    for (int i = 0; i < argc; i++) {
+        args[i] = eval_expr(e, x->kids[i]);
+        if (!args[i]) return NULL;
+    }
+    const char *f = x->name;
+
+    /* ---- environments ---- */
+
+    if (strcmp(f, "empty") == 0) {
+        if (!want(e, x, 0, args)) return NULL;
+        return list_of(a, NULL, 0);
+    }
+
+    if (strcmp(f, "bind") == 0) {
+        if (!want(e, x, 3, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return fail(e, x, "'bind' wants an environment, and this is %s",
+                        value_kind_name(args[0]));
+        if (args[1]->kind != V_TEXT)
+            return fail(e, x, "'bind' wants text for a name, and this is %s",
+                        value_kind_name(args[1]));
+
+        int     n     = args[0]->n;
+        Value **items = arena_alloc(a, (size_t)(n + 1) * sizeof *items);
+        items[0] = pair(a, args[1], args[2]);
+        memcpy(items + 1, args[0]->items, (size_t)n * sizeof *items);
+        return list_of(a, items, n + 1);
+    }
+
+    if (strcmp(f, "lookup") == 0 || strcmp(f, "defined") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return fail(e, x, "'%s' wants an environment, and this is %s",
+                        f, value_kind_name(args[0]));
+
+        bool asking = f[0] == 'd';
+        for (int i = 0; i < args[0]->n; i++) {
+            const Value *entry = args[0]->items[i];
+            if (entry->kind != V_LIST || entry->n != 2) continue;
+            if (text_equal(entry->items[0], args[1]))
+                return asking ? value_bool(a, true) : entry->items[1];
+        }
+        return asking ? value_bool(a, false) : value_nil(a);
+    }
+
+    /* ---- conversions ---- */
+
+    if (strcmp(f, "int") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind == V_INT) return args[0];
+        if (args[0]->kind == V_FLOAT)
+            return fail(e, x, "'int' does not narrow a float -- "
+                              "say floor, ceiling, round or truncate");
+        if (args[0]->kind != V_TEXT)
+            return fail(e, x, "'int' wants text, and this is %s",
+                        value_kind_name(args[0]));
+
+        char *end;
+        char *copy = arena_strndup(a, args[0]->text, args[0]->len);
+        long long n = strtoll(copy, &end, 10);
+        if (end == copy || *end)
+            return fail(e, x, "\"%s\" is not an integer", copy);
+        return value_int(a, n);
+    }
+
+    if (strcmp(f, "float") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind == V_FLOAT) return args[0];
+        if (args[0]->kind == V_INT)   return value_float(a, (double)args[0]->ival);
+        if (args[0]->kind != V_TEXT)
+            return fail(e, x, "'float' wants text or an integer, and this is %s",
+                        value_kind_name(args[0]));
+
+        char *end;
+        char *copy = arena_strndup(a, args[0]->text, args[0]->len);
+        double d = strtod(copy, &end);
+        if (end == copy || *end)
+            return fail(e, x, "\"%s\" is not a number", copy);
+        return value_float(a, d);
+    }
+
+    if (strcmp(f, "text") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        char  *out;
+        size_t len;
+        if (!value_format(a, args[0], &out, &len))
+            return fail(e, x, "a %s has no written form", value_kind_name(args[0]));
+        return value_text(a, out, len);
+    }
+
+    if (strcmp(f, "floor") == 0 || strcmp(f, "ceiling") == 0
+     || strcmp(f, "round") == 0 || strcmp(f, "truncate") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind != V_FLOAT)
+            return fail(e, x, "'%s' wants a float, and this is %s",
+                        f, value_kind_name(args[0]));
+
+        double d = args[0]->real;
+        double r = f[0] == 'f' ? __builtin_floor(d)
+                 : f[0] == 'c' ? __builtin_ceil(d)
+                 : f[0] == 'r' ? __builtin_round(d)
+                               : __builtin_trunc(d);
+
+        if (!(r >= -9223372036854775808.0 && r < 9223372036854775808.0))
+            return fail(e, x, "%g does not fit a 64-bit integer", d);
+        return value_int(a, (long long)r);
+    }
+
+    /* ---- text and lists ---- */
+
+    if (strcmp(f, "size") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        switch (args[0]->kind) {
+        case V_TEXT: return value_int(a, (long long)args[0]->len);
+        case V_LIST:
+        case V_NODE: return value_int(a, args[0]->n);
+        default:
+            return fail(e, x, "'size' wants text, a list or a node, and this is %s",
+                        value_kind_name(args[0]));
+        }
+    }
+
+    if (strcmp(f, "at") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return fail(e, x, "'at' wants a list, and this is %s",
+                        value_kind_name(args[0]));
+        if (args[1]->kind != V_INT)
+            return fail(e, x, "'at' wants an integer index, and this is %s",
+                        value_kind_name(args[1]));
+
+        long long i = args[1]->ival;         /* one-based, both ends included */
+        if (i < 1 || i > args[0]->n)
+            return fail(e, x, "at(%lld) of a list of %d", i, args[0]->n);
+        return args[0]->items[i - 1];
+    }
+
+    if (strcmp(f, "join") == 0) {
+        if (x->nkids != 1 && x->nkids != 2) {
+            diag_error(&e->g->src, x->pos,
+                       "'join' takes a list, and optionally what to put between");
+            return NULL;
+        }
+        if (args[0]->kind != V_LIST)
+            return fail(e, x, "'join' wants a list, and this is %s",
+                        value_kind_name(args[0]));
+
+        const char *sep    = "";
+        size_t      seplen = 0;
+        if (x->nkids == 2) {
+            if (args[1]->kind != V_TEXT)
+                return fail(e, x, "'join' wants text between, and this is %s",
+                            value_kind_name(args[1]));
+            sep    = args[1]->text;
+            seplen = args[1]->len;
+        }
+
+        size_t total = 0;
+        for (int i = 0; i < args[0]->n; i++) {
+            char  *piece;
+            size_t len;
+            if (!value_format(a, args[0]->items[i], &piece, &len))
+                return fail(e, x, "'join' cannot write a %s",
+                            value_kind_name(args[0]->items[i]));
+            total += len + (i ? seplen : 0);
+        }
+
+        char  *buf  = arena_alloc(a, total + 1);
+        size_t used = 0;
+        for (int i = 0; i < args[0]->n; i++) {
+            if (i) { memcpy(buf + used, sep, seplen); used += seplen; }
+            char  *piece;
+            size_t len;
+            value_format(a, args[0]->items[i], &piece, &len);
+            memcpy(buf + used, piece, len);
+            used += len;
+        }
+        buf[used] = '\0';
+        return value_text(a, buf, used);
+    }
+
+    return fail(e, x, "there is no function called '%s'", f);
+}

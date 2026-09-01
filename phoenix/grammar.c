@@ -36,53 +36,10 @@
  * number rather than failing quietly.
  */
 #include "phx.h"
+#include "reader.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-/* ------------------------------------------------------------------ */
-/* The grammar file's own tokens */
-
-typedef enum {
-    T_EOF,
-    T_NAME,
-    T_LIT,
-    T_DEFSYM,     /*  =  :=  ::=  */
-    T_DOT,
-    T_DOTDOT,
-    T_BAR,
-    T_LPAREN, T_RPAREN,
-    T_LBRACK, T_RBRACK,
-    T_LBRACE, T_RBRACE,
-    T_BANG,
-    T_ARROW,      /*  ->     */
-    T_DOLLAR,     /*  $      */
-    T_COLON,      /*  :      */
-    T_COMMA,      /*  ,      */
-    T_ELLIPSIS,   /*  ...    */
-    T_NUMBER,
-    T_DIRECTIVE   /*  %name  */
-} TKind;
-
-typedef struct {
-    TKind   kind;
-    char   *text;   /* NAME, DIRECTIVE: the name. LIT: the decoded bytes.   */
-    int     value;  /* NUMBER: what it says                                 */
-    size_t  len;    /* LIT may hold a NUL, so the length is carried         */
-    size_t  pos;
-    int     line;
-} MToken;
-
-typedef struct {
-    Arena   *a;
-    Grammar *g;
-    Source  *src;
-
-    MToken  *toks;
-    int      n;
-    int      cap;
-    int      at;      /* the cursor, while parsing */
-} Reader;
 
 /* ------------------------------------------------------------------ */
 /* Characters. ASCII, deliberately: a grammar that wants a byte outside it
@@ -177,12 +134,13 @@ static bool scan_literal(Reader *r, size_t *ip, int line)
     return true;
 }
 
-static bool scan(Reader *r)
+bool reader_scan(Reader *r)
 {
     const char *s    = r->src->text;
     size_t      size = r->src->size;
-    size_t      i    = 0;
-    int         line = 1;
+    size_t      i     = 0;
+    int         line  = 1;
+    size_t      after = 0;      /* where the previous token ended */
 
     while (i < size) {
         char c = s[i];
@@ -215,9 +173,12 @@ static bool scan(Reader *r)
         }
 
         size_t start = i;
+        bool   tight = (i == after);
 
         if (c == '"' || c == '\'') {
             if (!scan_literal(r, &i, line)) return false;
+            r->toks[r->n - 1].tight = tight;
+            after = i;
             continue;
         }
 
@@ -229,17 +190,32 @@ static bool scan(Reader *r)
                 push(r, (MToken){ .kind = T_NAME,
                                   .text = arena_strndup(r->a, s + i + 1, j - i - 1),
                                   .len  = j - i - 1, .pos = start, .line = line });
+                r->toks[r->n - 1].tight = tight;
                 i = j + 1;
+                after = i;
                 continue;
             }
         }
 
         if (is_digit(c)) {
-            int    v = 0;
-            size_t j = i;
+            long long v = 0;
+            size_t    j = i;
             while (j < size && is_digit(s[j])) { v = v * 10 + (s[j] - '0'); j++; }
-            push(r, (MToken){ .kind = T_NUMBER, .value = v, .pos = start, .line = line });
+
+            /* `4.5` is a float and `4..5` is a range, so the point is only
+             * part of the number when a digit follows it. */
+            if (j + 1 < size && s[j] == '.' && is_digit(s[j + 1])) {
+                size_t from = i;
+                j++;
+                while (j < size && is_digit(s[j])) j++;
+                push(r, (MToken){ .kind = T_REAL, .real = strtod(s + from, NULL),
+                                  .pos = start, .line = line });
+            } else {
+                push(r, (MToken){ .kind = T_NUMBER, .value = v, .pos = start, .line = line });
+            }
+            r->toks[r->n - 1].tight = tight;
             i = j;
+            after = i;
             continue;
         }
 
@@ -249,7 +225,9 @@ static bool scan(Reader *r)
             push(r, (MToken){ .kind = T_NAME,
                               .text = arena_strndup(r->a, s + i, j - i),
                               .len  = j - i, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
             i = j;
+            after = i;
             continue;
         }
 
@@ -259,7 +237,9 @@ static bool scan(Reader *r)
             push(r, (MToken){ .kind = T_DIRECTIVE,
                               .text = arena_strndup(r->a, s + i + 1, j - i - 1),
                               .len  = j - i - 1, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
             i = j;
+            after = i;
             continue;
         }
 
@@ -268,23 +248,56 @@ static bool scan(Reader *r)
          * would mean it never saw a spread. */
         if (c == '.' && i + 2 < size && s[i + 1] == '.' && s[i + 2] == '.') {
             push(r, (MToken){ .kind = T_ELLIPSIS, .pos = start, .line = line });
-            i += 3; continue;
+            r->toks[r->n - 1].tight = tight;
+            i += 3; after = i; continue;
         }
         if (c == '-' && i + 1 < size && s[i + 1] == '>') {
             push(r, (MToken){ .kind = T_ARROW, .pos = start, .line = line });
-            i += 2; continue;
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
+        }
+        if (c == '=' && i + 1 < size && s[i + 1] == '>') {
+            push(r, (MToken){ .kind = T_FATARROW, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
+        }
+        if (c == '<' && i + 1 < size && s[i + 1] == '>') {
+            push(r, (MToken){ .kind = T_NE, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
+        }
+        if (c == '<' && i + 1 < size && s[i + 1] == '=') {
+            push(r, (MToken){ .kind = T_LE, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
+        }
+        if (c == '>' && i + 1 < size && s[i + 1] == '=') {
+            push(r, (MToken){ .kind = T_GE, .pos = start, .line = line });
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
+        }
+        if (c == '<') {
+            push(r, (MToken){ .kind = T_LT, .pos = start, .line = line });
+            i++; continue;
+        }
+        if (c == '>') {
+            push(r, (MToken){ .kind = T_GT, .pos = start, .line = line });
+            i++; continue;
         }
         if (c == ':' && i + 2 < size && s[i + 1] == ':' && s[i + 2] == '=') {
             push(r, (MToken){ .kind = T_DEFSYM, .pos = start, .line = line });
-            i += 3; continue;
+            r->toks[r->n - 1].tight = tight;
+            i += 3; after = i; continue;
         }
         if (c == ':' && i + 1 < size && s[i + 1] == '=') {
             push(r, (MToken){ .kind = T_DEFSYM, .pos = start, .line = line });
-            i += 2; continue;
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
         }
         if (c == '.' && i + 1 < size && s[i + 1] == '.') {
             push(r, (MToken){ .kind = T_DOTDOT, .pos = start, .line = line });
-            i += 2; continue;
+            r->toks[r->n - 1].tight = tight;
+            i += 2; after = i; continue;
         }
 
         TKind kind;
@@ -299,7 +312,12 @@ static bool scan(Reader *r)
         case '{': kind = T_LBRACE; break;
         case '}': kind = T_RBRACE; break;
         case '!': kind = T_BANG;   break;
+        case '-': kind = T_MINUS;  break;
         case '$': kind = T_DOLLAR;  break;
+        case '+': kind = T_PLUS;    break;
+        case '*': kind = T_STAR;    break;
+        case '/': kind = T_SLASH;   break;
+        case '_': kind = T_UNDER;   break;
         case ':': kind = T_COLON;   break;
         case ',': kind = T_COMMA;   break;
         default:
@@ -308,6 +326,8 @@ static bool scan(Reader *r)
         }
         push(r, (MToken){ .kind = kind, .pos = start, .line = line });
         i++;
+        r->toks[r->n - 1].tight = tight;
+        after = i;
     }
 
     push(r, (MToken){ .kind = T_EOF, .pos = size, .line = line });
@@ -317,10 +337,15 @@ static bool scan(Reader *r)
 /* ------------------------------------------------------------------ */
 /* Reading the notation */
 
-static MToken *peek(Reader *r)       { return &r->toks[r->at]; }
-static MToken *peek2(Reader *r)      { return &r->toks[r->at + (r->toks[r->at].kind == T_EOF ? 0 : 1)]; }
-static MToken *advance(Reader *r)    { return &r->toks[r->at++]; }
-static bool    at(Reader *r, TKind k){ return r->toks[r->at].kind == k; }
+MToken *reader_peek(Reader *r)        { return &r->toks[r->at]; }
+MToken *reader_peek2(Reader *r)       { return &r->toks[r->at + (r->toks[r->at].kind == T_EOF ? 0 : 1)]; }
+MToken *reader_next(Reader *r)        { return &r->toks[r->at++]; }
+bool    reader_at(Reader *r, TKind k) { return r->toks[r->at].kind == k; }
+
+#define peek(r)      reader_peek(r)
+#define peek2(r)     reader_peek2(r)
+#define advance(r)   reader_next(r)
+#define at(r, k)     reader_at((r), (k))
 
 static GNode *node(Reader *r, GKind kind, size_t pos)
 {
@@ -350,156 +375,6 @@ static char *fold(Arena *a, const char *s, size_t len)
 
 static GNode *read_expression(Reader *r);
 
-/* ------------------------------------------------------------------ */
-/* What an alternative builds
- *
- *     action = "$" ( number | name | "$" )
- *            | name [ "(" [ binding { "," binding } ] ")" ]
- *            | literal
- *            | "[" [ element { "," element } ] "]" .
- *     binding = name ":" action .
- *     element = [ "..." ] action .
- */
-
-static Expr *expr_new(Reader *r, XKind kind, size_t pos)
-{
-    Expr *x = arena_alloc(r->a, sizeof *x);
-    x->kind = kind;
-    x->pos  = pos;
-    return x;
-}
-
-static void expr_add(Reader *r, Expr *parent, const char *field, Expr *kid)
-{
-    int    n      = parent->nkids;
-    Expr **kids   = arena_alloc(r->a, (size_t)(n + 1) * sizeof *kids);
-    char **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
-
-    memcpy(kids,   parent->kids,   (size_t)n * sizeof *kids);
-    memcpy(fields, parent->fields, (size_t)n * sizeof *fields);
-
-    kids[n]   = kid;
-    fields[n] = (char *)field;
-
-    parent->kids   = kids;
-    parent->fields = fields;
-    parent->nkids  = n + 1;
-}
-
-static Expr *read_action(Reader *r)
-{
-    MToken *t = peek(r);
-
-    switch (t->kind) {
-    case T_DOLLAR: {
-        advance(r);
-
-        if (at(r, T_DOLLAR)) {                    /* $$ -- the accumulator */
-            MToken *d = advance(r);
-            return expr_new(r, X_ACC, d->pos);
-        }
-        if (at(r, T_NUMBER)) {                    /* $2 -- by position     */
-            MToken *n = advance(r);
-            if (n->value < 1) {
-                diag_error(r->src, n->pos, "$0 -- factors are counted from one");
-                return NULL;
-            }
-            Expr *x = expr_new(r, X_REF, n->pos);
-            x->index = n->value;
-            return x;
-        }
-        if (at(r, T_NAME)) {                      /* $e -- by label        */
-            MToken *n = advance(r);
-            Expr *x = expr_new(r, X_REF, n->pos);
-            x->name = n->text;
-            return x;
-        }
-        diag_error(r->src, t->pos, "'$' wants a number, a name, or another '$'");
-        return NULL;
-    }
-
-    case T_LIT: {
-        advance(r);
-        Expr *x = expr_new(r, X_TEXT, t->pos);
-        x->name = t->text;
-        x->len  = (int)t->len;
-        return x;
-    }
-
-    case T_LBRACK: {
-        advance(r);
-        Expr *x = expr_new(r, X_LIST, t->pos);
-
-        while (!at(r, T_RBRACK)) {
-            bool spread = false;
-            size_t pos  = peek(r)->pos;
-            if (at(r, T_ELLIPSIS)) { advance(r); spread = true; }
-
-            Expr *item = read_action(r);
-            if (!item) return NULL;
-
-            if (spread) {
-                Expr *s = expr_new(r, X_SPREAD, pos);
-                expr_add(r, s, NULL, item);
-                item = s;
-            }
-            expr_add(r, x, NULL, item);
-
-            if (at(r, T_COMMA)) { advance(r); continue; }
-            break;
-        }
-        if (!at(r, T_RBRACK)) {
-            diag_error(r->src, peek(r)->pos, "expected ']'");
-            return NULL;
-        }
-        advance(r);
-        return x;
-    }
-
-    case T_NAME: {
-        advance(r);
-        Expr *x = expr_new(r, X_NODE, t->pos);
-        x->name = t->text;
-
-        if (!at(r, T_LPAREN)) return x;           /* a node with no fields */
-        advance(r);
-
-        while (!at(r, T_RPAREN)) {
-            if (!at(r, T_NAME)) {
-                diag_error(r->src, peek(r)->pos, "expected a field name");
-                return NULL;
-            }
-            MToken *field = advance(r);
-
-            if (!at(r, T_COLON)) {
-                diag_error(r->src, peek(r)->pos,
-                           "expected ':' after the field '%s'", field->text);
-                return NULL;
-            }
-            advance(r);
-
-            Expr *value = read_action(r);
-            if (!value) return NULL;
-            expr_add(r, x, field->text, value);
-
-            if (at(r, T_COMMA)) { advance(r); continue; }
-            break;
-        }
-        if (!at(r, T_RPAREN)) {
-            diag_error(r->src, peek(r)->pos, "expected ')'");
-            return NULL;
-        }
-        advance(r);
-        return x;
-    }
-
-    default:
-        diag_error(r->src, t->pos,
-                   "expected what this alternative builds -- a node, a $, or a list");
-        return NULL;
-    }
-}
-
 /* Whether the cursor is at something a factor can begin with -- and, for a
  * name, whether that name is the start of the *next* production rather than
  * part of this one. That test is what makes the trailing `.` optional. */
@@ -509,6 +384,7 @@ static bool starts_factor(Reader *r)
     case T_NAME:
         return peek2(r)->kind != T_DEFSYM;
     case T_ARROW:
+    case T_DIRECTIVE:
         return false;
     case T_LIT: case T_LPAREN: case T_LBRACK: case T_LBRACE: case T_BANG:
         return true;
@@ -621,7 +497,7 @@ static GNode *read_term(Reader *r)
 
     if (at(r, T_ARROW)) {
         advance(r);
-        seq->action = read_action(r);
+        seq->action = read_expr(r);
         if (!seq->action) return NULL;
         return seq;                 /* the sequence is kept, to hold it */
     }
@@ -795,7 +671,7 @@ Grammar *grammar_read(Arena *a, const char *path)
     if (!source_read(a, path, &g->src)) return NULL;
 
     Reader r = { .a = a, .g = g, .src = &g->src };
-    if (!scan(&r))      return NULL;
+    if (!reader_scan(&r)) return NULL;
     if (!read_file(&r)) return NULL;
     if (!grammar_check(g)) return NULL;
 
@@ -892,6 +768,36 @@ static void dump_action(FILE *out, const Expr *x)
             dump_action(out, x->kids[i]);
         }
         fputs(")", out);
+        return;
+
+    case X_INT:    fprintf(out, "%lld", x->ival);              return;
+    case X_FLOAT:  fprintf(out, "%g", x->real);                return;
+    case X_BOOL:   fputs(x->ival ? "true" : "false", out);     return;
+    case X_NIL:    fputs("nil", out);                          return;
+    case X_UNOP:   fprintf(out, "%s ", x->name);
+                   dump_action(out, x->kids[0]);               return;
+    case X_BINOP:  fputs("(", out);
+                   dump_action(out, x->kids[0]);
+                   fprintf(out, " %s ", x->name);
+                   dump_action(out, x->kids[1]);
+                   fputs(")", out);                            return;
+    case X_DOT:    dump_action(out, x->kids[0]);
+                   fprintf(out, ".%s", x->name);               return;
+    case X_CALL:
+        fprintf(out, "%s(", x->name);
+        for (int i = 0; i < x->nkids; i++) {
+            if (i) fputs(", ", out);
+            dump_action(out, x->kids[i]);
+        }
+        fputs(")", out);
+        return;
+    case X_FORMAT:
+        dump_action(out, x->kids[0]);
+        fputs(" of ", out);
+        for (int i = 1; i < x->nkids; i++) {
+            if (i > 1) fputs(", ", out);
+            dump_action(out, x->kids[i]);
+        }
         return;
     }
 }
