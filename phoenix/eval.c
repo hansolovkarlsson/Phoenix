@@ -113,7 +113,7 @@ bool value_format(Arena *a, const Value *v, char **out, size_t *len)
  * `$x = nil` without knowing what `$x` is.
  */
 
-static bool equal(const Value *a, const Value *b)
+bool value_equal(const Value *a, const Value *b)
 {
     if (a->kind != b->kind) return false;
 
@@ -128,7 +128,7 @@ static bool equal(const Value *a, const Value *b)
     case V_LIST:
         if (a->n != b->n) return false;
         for (int i = 0; i < a->n; i++)
-            if (!equal(a->items[i], b->items[i])) return false;
+            if (!value_equal(a->items[i], b->items[i])) return false;
         return true;
 
     case V_NODE:
@@ -139,7 +139,7 @@ static bool equal(const Value *a, const Value *b)
             const char *fb = b->fields ? b->fields[i] : NULL;
             if ((fa == NULL) != (fb == NULL)) return false;
             if (fa && strcmp(fa, fb) != 0) return false;
-            if (!equal(a->items[i], b->items[i])) return false;
+            if (!value_equal(a->items[i], b->items[i])) return false;
         }
         return true;
     }
@@ -265,8 +265,8 @@ static Value *compare(Eval *e, const Expr *x, Value *l, Value *r)
     if (value_failed(l)) return l;
     if (value_failed(r)) return r;
 
-    if (strcmp(op, "=")  == 0) return value_bool(e->a,  equal(l, r));
-    if (strcmp(op, "<>") == 0) return value_bool(e->a, !equal(l, r));
+    if (strcmp(op, "=")  == 0) return value_bool(e->a,  value_equal(l, r));
+    if (strcmp(op, "<>") == 0) return value_bool(e->a, !value_equal(l, r));
 
     /* Ordering is within a kind only: across kinds there is no order anyone
      * would agree on, and agreeing is the whole job. */

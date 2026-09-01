@@ -510,7 +510,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 101 checks, including Solveig's pascal.bnf when it is present
+make test       # 101 checks (14 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -582,8 +582,8 @@ Four things came out of writing it, and three were improvements:
 **fpc is the oracle**: where they differ, Phoenix is wrong until somebody shows
 otherwise, because fpc has been read by more people than this repository has.
 
-It is skipped rather than failed where there is no fpc, and it earned its place
-on the first run by finding **six bugs at once**:
+It is skipped rather than failed where there is no fpc. Fourteen programs agree
+with `fpc -Miso` byte for byte; the first eight found **six bugs at once**:
 
 | | |
 | --- | --- |
@@ -596,6 +596,17 @@ on the first run by finding **six bugs at once**:
 
 Every one is a place C's obvious answer is not Pascal's, and none would have
 been found by reading the output and thinking it looked right.
+
+Six more programs — the standard functions, chars, enumerations, sets, `case`
+with several labels, a `with` inside a `with` — found **four more**, and two of
+them were in Phoenix rather than in the description:
+
+| | |
+| --- | --- |
+| **`each` ran to the shorter list** | so `abs(i)` came out as `abs()`. The first list is what a call puts before each argument, and a call to something undeclared puts nothing before anything — so the first list was empty and so was the answer |
+| **`lookup` compared only text** | an integer key silently never matched, so `lookup([[1, "char"]], size(t), "string")` answered `"string"` for every length. It compares the way `=` does now |
+| Pascal's standard functions | `abs`, `sqr`, `odd`, `ord`, `chr`, `succ`, `pred`, `round`, `trunc` — none is a C function, and `abs` and `succ` depend on their argument's type |
+| a one-character literal is a **char** | `c := 'a'` was a type error, and `ord('A')` took the address of a C string |
 
 ## Where this sits
 

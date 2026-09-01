@@ -1027,3 +1027,39 @@ so does where arithmetic overflows. The oracle would catch it only on a program
 that overflows, and such a program has no agreed answer to compare. It is a
 divergence in the sense Solveig's `PASCAL.md` uses the word: written down, not
 fixed.
+
+## 2026-09-01 — six more oracle programs, four more bugs, two of them in Phoenix
+
+The standard functions, chars, enumerations, sets, `case` with several labels,
+and a `with` inside a `with`. Fourteen programs now agree with `fpc -Miso` byte
+for byte.
+
+**Two of the four were in Phoenix, and both were silent.**
+
+`each` ran to the length of its **first** list, so everything the second had
+beyond it was dropped without a word. `abs(i)` came out as `abs()`: the first
+list is what a call puts before each argument, and a call to something the
+description does not declare puts nothing before anything — so the first list
+was empty, and so was the answer. It runs to the longer of the two now.
+
+`lookup` compared **only text**, so an integer key never matched and never said
+so. `lookup([[1, "char"]], size(t), "string")` quietly answered `"string"` for
+every length, which is exactly the shape of bug a table-instead-of-a-conditional
+design invites. It compares the way `=` compares now, which is what it should
+always have done: one notion of equality, not two.
+
+Both are the same kind of fault — **a silent wrong answer from a library
+function**, where an error would have been found in a minute. Neither would have
+surfaced without an oracle, because both produce output that looks plausible.
+
+**The other two were Pascal facts.** None of `abs`, `sqr`, `odd`, `ord`, `chr`,
+`succ`, `pred`, `round`, `trunc` is a C function, and two of them depend on
+their argument's type — which the typechecker knows and leaves on the node. And
+a one-character Pascal literal is a `char`, not a string: `c := 'a'` was a type
+error and `ord('A')` took the address of a C string literal.
+
+**And a nested `with` needed one word changed.** The prefix a `with` puts in
+front of its fields has to be the *spelled* form of its own variable, not its
+name — inside `with o do with p do ...`, `p` is already `o.p`, so `a` becomes
+`o.p.a`. Looking the prefix up in the very table the clause is extending is the
+whole of it.

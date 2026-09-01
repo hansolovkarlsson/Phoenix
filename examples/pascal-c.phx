@@ -148,10 +148,16 @@
 
   Integer       : out = "{}" of $text .
   Real          : out = "{}" of $text .
-  (* A Pascal string arrives with its quotes on and its doubled quotes
-   * undoubled: `'it''s'` has to become `"it's"`. *)
-  Text          : out = "\"{}\""
-                    of join(split(slice($value, 2, size($value) - 1), "''"), "'") .
+  (* `plain` is what the literal says, worked out by `symbols`. A literal of
+   * one character is a `char` in Pascal, and C spells a character and a string
+   * differently -- so which of the two templates is used is another lookup.
+   *
+   * Both escape a backslash first and their own quote second, in that order,
+   * because doing it the other way round would escape the escapes. *)
+  Text : c-escaped = join(split(join(split($plain, "\\"), "\\\\"), "\""), "\\\"")
+       : q-escaped = join(split(join(split($plain, "\\"), "\\\\"), "'"), "\\'")
+       : out = lookup([[1, "'{}'"]], size($plain), "\"{}\"")
+                 of lookup([[1, $q-escaped]], size($plain), $c-escaped) .
   (* Pascal's two boolean literals are ordinary named constants in the
    * grammar, and C spells them differently. Another table standing in for a
    * conditional. *)
@@ -234,8 +240,14 @@
    * and *that is all it is*. The table of names C spells differently already
    * existed for `var` parameters, so a `with` is four lines and no mechanism.
    * Only the first of `with a, b do` is taken, as in the typechecker. *)
+(* The prefix is the *spelled* form of the variable, not its name: inside
+   * `with o do with p do ...`, `p` is already `o.p`, so `a` has to become
+   * `o.p.a` and not `p.a`. Looking the prefix up in the table this clause is
+   * extending is the whole of that. *)
   With   : down spelled = [...bind([], $fields,
-                                   each($fields, "{}.{{}}" of at($vars, 1).name)),
+                                   each($fields, "{}.{{}}"
+                                          of lookup($spelled, at($vars, 1).name,
+                                                    at($vars, 1).name))),
                            ...$spelled]
          : out = "  {{\n{}\n  }}" of $body.out .
 
@@ -279,6 +291,42 @@
   CallStatement : out = "  {}({});"
                     of $name, join(each(flatten([...lookup($known, $name, []).addr]),
                                         $args.out, "{}{}"), ", ") .
+
+  (* ---- Pascal's standard functions ----
+   *
+   * None of these is a C function, and each is one line. `abs` is the only one
+   * that depends on its argument's type, which the typechecker worked out and
+   * left on the node -- so the choice is a `lookup`, as every choice here is.
+   *
+   * `sqr` evaluates its argument twice in C, which is wrong for anything with
+   * a side effect; Pascal has no expression with one, so it is right here and
+   * would not be in another language. *)
+
+  CallExpression(name: "abs")   : out = "{}({})"
+                                    of lookup([["real", "fabs"]],
+                                              at($args, 1).type, "labs"),
+                                       at($args, 1).out .
+  CallExpression(name: "sqr")   : out = "(({}) * ({}))" of at($args, 1).out,
+                                                           at($args, 1).out .
+  CallExpression(name: "odd")   : out = "((({}) & 1) != 0)" of at($args, 1).out .
+  CallExpression(name: "ord")   : out = "((long)({}))"  of at($args, 1).out .
+  CallExpression(name: "chr")   : out = "((char)({}))"  of at($args, 1).out .
+  (* `succ` of a char is a char, so C has to be told to keep it one. *)
+  CallExpression(name: "succ")  : out = lookup([["char", "((char)(({}) + 1))"]],
+                                               at($args, 1).type, "(({}) + 1)")
+                                         of at($args, 1).out .
+  CallExpression(name: "pred")  : out = lookup([["char", "((char)(({}) - 1))"]],
+                                               at($args, 1).type, "(({}) - 1)")
+                                         of at($args, 1).out .
+  CallExpression(name: "round") : out = "((long)phx_round({}))" of at($args, 1).out .
+  CallExpression(name: "trunc") : out = "((long)({}))"  of at($args, 1).out .
+
+  CallExpression(name: "sqrt")   : out = "sqrt({})" of at($args, 1).out .
+  CallExpression(name: "sin")    : out = "sin({})"  of at($args, 1).out .
+  CallExpression(name: "cos")    : out = "cos({})"  of at($args, 1).out .
+  CallExpression(name: "ln")     : out = "log({})"  of at($args, 1).out .
+  CallExpression(name: "exp")    : out = "exp({})"  of at($args, 1).out .
+  CallExpression(name: "arctan") : out = "atan({})" of at($args, 1).out .
 
   CallExpression : out = "{}({})"
                     of $name, join(each(flatten([...lookup($known, $name, []).addr]),
@@ -400,6 +448,11 @@
               "    return r < 0 ? r + b : r;",
               "}",
               "",
+              "long phx_round(double v)",
+              "{",
+              "    return (long)(v < 0 ? v - 0.5 : v + 0.5);",
+              "}",
+              "",
               "void phx_real(int width, double v)",
               "{",
               "    char buf[64], out[96];",
@@ -415,7 +468,7 @@
               "    printf(\"%*s\", width, out);",
               "}"], "\n")
 
-          : out = "#include <stdio.h>\n#include <stdlib.h>\n\n{}\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
+          : out = "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n\n{}\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
               of $helpers, $body.decls, $body.routinecode, $body.code .
 
 %driver c = symbols, typecheck, prepare, emit-c -> out .

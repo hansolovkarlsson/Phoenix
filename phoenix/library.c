@@ -43,11 +43,7 @@ static bool want(Eval *e, const Expr *x, int n, Value **args)
     return false;
 }
 
-static bool text_equal(const Value *a, const Value *b)
-{
-    return a->kind == V_TEXT && b->kind == V_TEXT
-        && a->len == b->len && memcmp(a->text, b->text, a->len) == 0;
-}
+
 
 /* ------------------------------------------------------------------ */
 
@@ -141,7 +137,11 @@ Value *eval_call(Eval *e, const Expr *x)
         for (int i = 0; i < args[0]->n; i++) {
             const Value *entry = args[0]->items[i];
             if (entry->kind != V_LIST || entry->n != 2) continue;
-            if (text_equal(entry->items[0], args[1]))
+            /* Compared the way `=` compares, not as text only. Text-only
+             * meant an integer key never matched and never said so:
+             * `lookup([[1, "char"]], size(t), "string")` quietly answered
+             * "string" for every length. */
+            if (value_equal(entry->items[0], args[1]))
                 return asking ? value_bool(a, true) : entry->items[1];
         }
         if (asking)    return value_bool(a, false);
@@ -398,17 +398,23 @@ Value *eval_call(Eval *e, const Expr *x)
          * is what wanted it, and it is the same operation as one list with one
          * hole, so it is the same function.
          *
-         * A list that runs out contributes nothing rather than being an
-         * error -- a call to something this description does not declare has
-         * no parameters to pair with, and adding nothing is right. */
+         * **It runs to the longer of the two.** Taking the first list's
+         * length silently dropped everything the second had beyond it, which
+         * is how `abs(i)` came out as `abs()`: the first list was what a call
+         * puts before each argument, and a call to something the description
+         * does not declare puts nothing before anything, so the first list was
+         * empty and so was the answer. A list that runs out contributes
+         * nothing; it does not end the walk. */
         int n = args[0]->n;
+        if (two && second->n > n) n = second->n;
         Value **items = arena_alloc(a, (size_t)(n ? n : 1) * sizeof *items);
 
         for (int i = 0; i < n; i++) {
             char  *pieces[2] = { "", "" };
             size_t lens[2]   = { 0, 0 };
 
-            if (!value_format(a, args[0]->items[i], &pieces[0], &lens[0]))
+            if (i < args[0]->n
+                && !value_format(a, args[0]->items[i], &pieces[0], &lens[0]))
                 return library_fail(e, x, "'each' cannot write a %s",
                                     value_kind_name(args[0]->items[i]));
             if (two && i < second->n

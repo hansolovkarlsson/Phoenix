@@ -382,9 +382,16 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" .
   Packed    : tname = $type.tname : entries = $type.entries : iname = "" .
 
+  (* A Pascal string literal arrives with its quotes on and its doubled
+   * quotes undoubled. `plain` is what it actually says, and **a literal
+   * saying one character is a `char`, not a string** -- `c := 'a'` is an
+   * ordinary assignment and the first version of this called it a type
+   * error. *)
+  Text          : plain = join(split(slice($value, 2, size($value) - 1), "''"), "'")
+                : ctype = lookup([[1, "char"]], size($plain), "string") .
+
   Integer       : ctype = "integer" .
   Real          : ctype = "real" .
-  Text          : ctype = "string" .
   Nil           : ctype = "pointer" .
   NamedConstant : ctype = "integer" .
   SignedConstant : ctype = $value.ctype .
@@ -540,7 +547,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
 
   Integer       : type = "integer" .
   Real          : type = "real" .
-  Text          : type = "string" .
+  Text          : type = lookup([[1, "char"]], size($plain), "string") .
   Nil           : type = "pointer" .
   NamedConstant : type = lookup($env, lookup($env, $name, "unknown"), "unknown") .
   Signed         : type = $value.type .
@@ -548,6 +555,13 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   SetOf         : type = "set" .
   Range         : type = "integer" .
   Not           : type = "boolean" .
+(* The standard functions whose result depends on the argument rather than
+   * on the name. Everything else is in the table `Program` hands down. *)
+  CallExpression(name: "succ") : type = at($args, 1).type .
+  CallExpression(name: "pred") : type = at($args, 1).type .
+  CallExpression(name: "abs")  : type = at($args, 1).type .
+  CallExpression(name: "sqr")  : type = at($args, 1).type .
+
   CallExpression: type = lookup($env, lookup($env, $name, "unknown"), "unknown")
                 ! $checking and not defined($env, $name)
                   : "'{}' is not declared" of $name .
@@ -654,7 +668,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
                                               lookup($known, at($vars, 1).name,
                                                      NamedType(name: "?")).name,
                                               RecordType(fields: [])).fields.entries]),
-                         ...$env] .
+                         ...$env]
+
+           (* The fields' *shapes* as well as their types, so that a `with`
+            * inside a `with` can find the record a field names. `with o do
+            * with p do ...` needs `p`'s type, and `p` is only in scope
+            * because the outer one put it there. *)
+           : down known = [...flatten([...lookup($known,
+                                                 lookup($known, at($vars, 1).name,
+                                                        NamedType(name: "?")).name,
+                                                 RecordType(fields: [])).fields.shape]),
+                           ...$known] .
   Forward  : type = "void" .
 
 (* Analysis alone, with nothing asked of it but an answer about whether the

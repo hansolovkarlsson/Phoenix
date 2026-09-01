@@ -459,6 +459,10 @@ bool value_format(Arena *a, const Value *v, char **out, size_t *len);
 
 const char *value_kind_name(const Value *v);
 
+/* Structural equality -- the same `=` answers, so that everything comparing
+ * values compares them the one way. */
+bool value_equal(const Value *a, const Value *b);
+
 /* Matches the tokens against the grammar. Answers NULL on a syntax error,
  * having reported where the match got furthest and what it wanted there. */
 Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t);

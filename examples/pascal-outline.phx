@@ -36,10 +36,10 @@
   Integer       : show = "{}" of $text .
   Real          : show = "{}" of $text .
   Text          : show = "{}" of $value .
+  SignedConstant : show = "{}{}" of $sign, $value.show .
   Nil           : show = "nil" .
   NamedConstant : show = "{}" of $name .
   Signed        : show = "{}{}" of $sign, $value.show .
-  SignedConstant : show = "{}{}" of $sign, $value.show .
 
   ConstDef  : line = "  const     {} = {}" of $name, $value.show .
   TypeDef   : line = "  type      {} = {}" of $name, $type.show .
