@@ -403,6 +403,52 @@ static void collect_types(Check *c, const Expr *x)
     for (int i = 0; i < x->nkids; i++) collect_types(c, x->kids[i]);
 }
 
+static bool mentions_acc(const Expr *x)
+{
+    if (!x) return false;
+    if (x->kind == X_ACC) return true;
+    for (int i = 0; i < x->nkids; i++)
+        if (mentions_acc(x->kids[i])) return true;
+    return false;
+}
+
+/* `$$` is the value the **enclosing sequence** built last, and an action
+ * naming it replaces that value rather than following it. So a fold and the
+ * value it folds onto have to be in the same list -- and they are not, when
+ * the enclosing sequence carries an action of its own, because then every
+ * factor is gathered separately so that `$2` can mean the second *factor*.
+ *
+ *     simple-expression = [ "+" | "-" ] term { op term -> Binary(...) }
+ *                       -> Signed(sign: $1, value: $2) .     (* wrong *)
+ *
+ * The `term` before the repetition is in one slot and the repetition is in the
+ * next, so `$$` looks in an empty one. The fix is always the same shape: give
+ * the fold a rule of its own, where nothing else competes for the list.
+ *
+ *     simple-expression = [ "+" | "-" ] s:sum -> Signed(sign: $1, value: $s) .
+ *     sum = term { op term -> Binary(...) } .
+ *
+ * Found by putting actions on Wirth's Pascal, which is exactly the shape that
+ * grammar has. It was a message from inside the matcher, at parse time, on a
+ * file that was fine; it is a message about the grammar now.
+ */
+static void check_folds(Check *c, const Rule *owner, const GNode *n, bool wrapped)
+{
+    if (n->kind == G_SEQ && n->action && mentions_acc(n->action) && wrapped) {
+        diag_error(&c->g->src, n->action->pos,
+                   "in '%s', this fold is inside an alternative that builds "
+                   "something of its own, so $$ has nothing to fold onto",
+                   owner->name);
+        diag_note("give the repetition a rule of its own, and let this one "
+                  "wrap what that answers");
+        c->ok = false;
+        return;
+    }
+
+    bool inside = wrapped || (n->kind == G_SEQ && n->action != NULL);
+    for (int i = 0; i < n->nkids; i++) check_folds(c, owner, n->kids[i], inside);
+}
+
 static void check_actions(Check *c, const Rule *owner, const GNode *n)
 {
     if (n->kind == G_SEQ && n->action) {
@@ -656,6 +702,10 @@ static bool subsumes(const Pattern *general, const Pattern *specific)
             && memcmp(general->name, specific->name, (size_t)general->len) == 0;
     case P_INT:
         return general->ival == specific->ival;
+    case P_BOOL:
+        return (general->ival != 0) == (specific->ival != 0);
+    case P_NIL:
+        return true;
 
     case P_TYPE: {
         if (strcmp(general->name, specific->name) != 0) return false;
@@ -685,6 +735,8 @@ static void describe(char *buf, size_t size, const Pattern *p)
     case P_ANY:  snprintf(buf, size, "_"); return;
     case P_BIND: snprintf(buf, size, "%s", p->name); return;
     case P_INT:  snprintf(buf, size, "%lld", p->ival); return;
+    case P_BOOL: snprintf(buf, size, "%s", p->ival ? "true" : "false"); return;
+    case P_NIL:  snprintf(buf, size, "nil"); return;
     case P_TEXT: snprintf(buf, size, "\"%.*s\"", p->len, p->name); return;
     case P_TYPE:
         if (!p->nkids) { snprintf(buf, size, "%s", p->name); return; }
@@ -788,7 +840,10 @@ bool grammar_check(Grammar *g)
     find_reserved(g);
 
     for (int i = 0; i < g->nrules; i++)
-        if (g->rules[i].body) check_actions(&c, &g->rules[i], g->rules[i].body);
+        if (g->rules[i].body) {
+            check_actions(&c, &g->rules[i], g->rules[i].body);
+            check_folds(&c, &g->rules[i], g->rules[i].body, false);
+        }
 
     check_reachable(&c);
     check_drivers(&c);

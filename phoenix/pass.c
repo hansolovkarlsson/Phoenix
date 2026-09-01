@@ -112,6 +112,16 @@ static Pattern *read_pattern(Reader *r)
     case T_NAME: {
         advance(r);
 
+        /* `true`, `false` and `nil` are values in an expression and are values
+         * here too. Reading them as binders is the sort of thing that matches
+         * everything and looks like it worked. */
+        if (strcmp(t->text, "true") == 0 || strcmp(t->text, "false") == 0) {
+            Pattern *p = pat_new(r, P_BOOL, t->pos);
+            p->ival = t->text[0] == 't';
+            return p;
+        }
+        if (strcmp(t->text, "nil") == 0) return pat_new(r, P_NIL, t->pos);
+
         if (!capitalised(t->text)) {         /* a binder */
             Pattern *p = pat_new(r, P_BIND, t->pos);
             p->name = t->text;

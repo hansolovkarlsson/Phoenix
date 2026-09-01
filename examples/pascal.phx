@@ -1,0 +1,383 @@
+(* pascal.phx -- ISO 7185 Pascal: what it looks like, and what it means.
+ *
+ *   bin/phx --tree examples/pascal.phx prog.pas
+ *   bin/phx --nodes examples/pascal.phx
+ *
+ * **The grammar is Wirth's and is not this project's work.** It came from
+ * `tests/pascal/pascal.bnf`, which is kept unmodified because three tests
+ * depend on it being a real published grammar that Phoenix reads without
+ * being met halfway. What is added here is the `->` clauses: what each
+ * construct *builds*, which is the half a grammar does not have.
+ *
+ * The point of doing this to Pascal rather than to another toy is that the
+ * grammar was written by somebody else, for another purpose, years before
+ * Phoenix existed. Everything the notation could not say about it is a
+ * finding.
+ *
+ * The source is *Pascal User Manual and Report*, Jensen and Wirth, where the
+ * syntax is given in this notation and the lexical rules are given in it too.
+ * What is here is that grammar, rearranged in three ways and no more:
+ *
+ *   1. Alternatives are ordered so that ordered choice picks the right one --
+ *      the longer of two overlapping alternatives goes first. Every place that
+ *      mattered is marked below with an "order" note.
+ *   2. The punctuation is gathered into one `symbol` token rule, because a
+ *      grammar that is matched over tokens needs something to have made them.
+ *   3. Names are hyphenated. Wirth writes `unsigned integer`, with a space,
+ *      which cannot be told from two names in a row.
+ *
+ * Simplified on purpose, and each of these is a place a real compiler differs:
+ * a formal parameter section takes only `var`, not procedural parameters; a
+ * conformant array is not here; and `forward` is treated as a reserved word
+ * rather than as the directive it technically is.
+ *)
+
+(* ------------------------------------------------------------------ *)
+(* The lexical half: characters to tokens.                            *)
+
+(* Helpers, not tokens. Without this line `T` comes out as a `letter`: both
+ * rules match it, longest match ties are broken by declaration order, and
+ * `letter` is declared first. *)
+%fragment letter digit
+
+letter = "a" .. "z" .
+digit  = "0" .. "9" .
+
+identifier = letter { letter | digit } .
+
+(* Longest match across rules settles `3` against `3.14` without either rule
+ * knowing about the other. It does not settle `3..5`: this rule requires a
+ * digit after the point, so it fails on `3..` and `integer-number` takes the
+ * `3`, leaving `..` to `symbol`. *)
+real-number = digit { digit }
+              ( "." digit { digit } [ "e" [ "+" | "-" ] digit { digit } ]
+              | "e" [ "+" | "-" ] digit { digit } ) .
+
+integer-number = digit { digit } .
+
+(* A doubled quote is an escaped quote, so it has to be tried first. *)
+string = "'" { "''" | ! "'" } "'" .                          (* order *)
+
+comment = "{" { ! "}" } "}"
+        | "(*" { ! "*)" } "*)" .
+
+space = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+
+(* Ordered choice inside one rule, so every two-character symbol must come
+ * before the character it starts with. `.` before `..` would mean the tool
+ * never saw a subrange. *)
+symbol = ":=" | "<=" | ">=" | "<>" | ".."                    (* order *)
+       | "+" | "-" | "*" | "/" | "=" | "<" | ">"
+       | "(" | ")" | "[" | "]" | "," | ";" | ":" | "." | "^" | "@" .
+
+%skip space comment
+
+(* ------------------------------------------------------------------ *)
+(* The syntactic half: tokens to a program.                           *)
+(*                                                                     *)
+(* Every word-shaped literal below is a reserved word, worked out from *)
+(* this half of the file rather than declared -- so `begin` cannot be  *)
+(* used as a variable, and nothing here had to say so.                 *)
+
+%syntax
+%ignorecase
+%start program
+
+(* ------------------------------------------------------------------ *)
+(* Three habits run through everything below, and each was learned by   *)
+(* getting it wrong on this grammar first.                              *)
+(*                                                                     *)
+(* **A separator has to be dropped where it is matched.** `{ "," name }` *)
+(* answers *everything* it matched, commas included, so the repetition   *)
+(* carries an action -- `{ "," n:name -> $n }` -- and the list comes out *)
+(* holding names.                                                       *)
+(*                                                                     *)
+(* **An empty alternative beats an option** for a part that may be       *)
+(* absent. `[ constant-part ]` answers a list of nought or one *lists*,  *)
+(* which a pass then has to unwrap; a rule with an empty alternative     *)
+(* answers a list either way, and `Block` holds declarations rather than *)
+(* a box containing declarations.                                       *)
+(*                                                                     *)
+(* **A node that is nearly always empty is not worth having.**           *)
+(* `[ "+" | "-" ] ... -> Signed(sign: $1, ...)` wraps every expression   *)
+(* in the program in a `Signed` holding no sign. Written as two          *)
+(* alternatives, a `Signed` appears only where one was written, and      *)
+(* means something wherever a pass finds it.                            *)
+
+program = "program" n:identifier p:program-parameters ";" b:block "."
+        -> Program(name: $n, params: $p, body: $b) .
+
+program-parameters = "(" i:identifier { "," n:identifier -> $n } ")" -> [$i, ...$3]
+                   | -> [] .
+
+block = l:label-part c:constant-part t:type-part v:variable-part
+        r:{ procedure-or-function } b:compound-statement
+      -> Block(labels: $l, consts: $c, types: $t, vars: $v,
+               routines: $r, body: $b) .
+
+label-part    = "label" i:integer-number { "," n:integer-number -> $n } ";"
+                  -> [$i, ...$3]
+              | -> [] .
+constant-part = "const" d:constant-definition ";"
+                { e:constant-definition ";" -> $e } -> [$d, ...$4]
+              | -> [] .
+type-part     = "type" d:type-definition ";"
+                { e:type-definition ";" -> $e } -> [$d, ...$4]
+              | -> [] .
+variable-part = "var" d:variable-declaration ";"
+                { e:variable-declaration ";" -> $e } -> [$d, ...$4]
+              | -> [] .
+
+constant-definition  = n:identifier "=" v:constant -> ConstDef(name: $n, value: $v) .
+type-definition      = n:identifier "=" t:type     -> TypeDef(name: $n, type: $t) .
+variable-declaration = i:identifier { "," n:identifier -> $n } ":" t:type
+                     -> VarDecl(names: [$i, ...$2], type: $t) .
+
+constant = s:( "+" | "-" ) v:unsigned-constant -> Signed(sign: $s, value: $v)  (* order *)
+         | unsigned-constant .
+
+unsigned-constant = real-number     -> Real(text: $1)                  (* order *)
+                  | integer-number  -> Integer(text: $1)
+                  | string          -> Text(value: $1)
+                  | "nil"           -> Nil
+                  | identifier      -> NamedConstant(name: $1) .
+
+(* ---- types ---- *)
+
+type = structured-type | pointer-type | simple-type .
+
+pointer-type = "^" t:identifier -> Pointer(to: $t) .
+
+(* `packed` asks for a representation the machine does not let a program
+ * choose, and is read and ignored -- but the node exists where it was
+ * written, so a pass can say it was ignored instead of pretending it was
+ * never there. *)
+structured-type = "packed" t:unpacked-type -> Packed(type: $t)
+                | unpacked-type .
+
+unpacked-type = array-type | record-type | set-type | file-type .
+
+array-type  = "array" "[" i:simple-type { "," s:simple-type -> $s } "]" "of" t:type
+            -> ArrayType(indices: [$i, ...$4], of: $t) .
+record-type = "record" f:field-list "end" -> RecordType(fields: $f) .
+set-type    = "set" "of" t:simple-type    -> SetType(of: $t) .
+file-type   = "file" "of" t:type          -> FileType(of: $t) .
+
+field-list     = r:record-section { ";" s:record-section -> $s } [ ";" ] -> [$r, ...$2]
+               | -> [] .
+record-section = i:identifier { "," n:identifier -> $n } ":" t:type
+               -> FieldDecl(names: [$i, ...$2], type: $t) .
+
+(* A subrange begins with a constant and so does a plain type name; the one
+ * that goes on to want `..` has to be asked first. *)
+simple-type = enumerated-type | subrange-type | named-type .          (* order *)
+
+named-type      = n:identifier -> NamedType(name: $n) .
+enumerated-type = "(" i:identifier { "," n:identifier -> $n } ")"
+                -> EnumType(names: [$i, ...$3]) .
+subrange-type   = lo:constant ".." hi:constant -> Subrange(low: $lo, high: $hi) .
+
+(* ---- statements ---- *)
+
+compound-statement = "begin" s:statement { ";" t:statement -> $t } "end"
+                   -> Compound(body: [$s, ...$3]) .
+
+statement = l:integer-number ":" s:any-statement -> Labelled(label: $l, do: $s)
+          | any-statement .
+
+any-statement = structured-statement | simple-statement .
+
+simple-statement = assignment | goto-statement | procedure-statement | empty .
+empty = -> Empty .
+
+assignment          = t:variable ":=" v:expression -> Assign(target: $t, value: $v) .
+goto-statement      = "goto" l:integer-number      -> Goto(label: $l) .
+procedure-statement = n:identifier a:arguments     -> CallStatement(name: $n, args: $a) .
+
+arguments = "(" a:actual-parameter { "," b:actual-parameter -> $b } ")" -> [$a, ...$3]
+          | -> [] .
+
+structured-statement = compound-statement | if-statement | case-statement
+                     | while-statement | repeat-statement | for-statement
+                     | with-statement .
+
+if-statement     = "if" c:expression "then" t:statement "else" f:statement
+                     -> IfElse(cond: $c, then: $t, else: $f)                (* order *)
+                 | "if" c:expression "then" t:statement
+                     -> If(cond: $c, then: $t) .
+
+case-statement   = "case" v:expression "of" e:case-element
+                   { ";" f:case-element -> $f } [ ";" ] "end"
+                 -> Case(value: $v, elements: [$e, ...$5]) .
+
+case-element     = c:constant { "," d:constant -> $d } ":" s:statement
+                     -> CaseOf(values: [$c, ...$2], do: $s)
+                 | -> Empty .
+
+while-statement  = "while" c:expression "do" b:statement -> While(cond: $c, body: $b) .
+
+repeat-statement = "repeat" s:statement { ";" t:statement -> $t } "until" c:expression
+                 -> Repeat(body: [$s, ...$3], until: $c) .
+
+for-statement    = "for" v:identifier ":=" f:expression d:( "to" | "downto" )
+                   t:expression "do" b:statement
+                 -> For(var: $v, from: $f, dir: $d, to: $t, body: $b) .
+
+with-statement   = "with" v:variable { "," w:variable -> $w } "do" b:statement
+                 -> With(vars: [$v, ...$3], body: $b) .
+
+(* ---- expressions ---- *)
+
+expression = simple-expression [ o:relational-operator s:simple-expression
+                                 -> Compare(op: $o, left: $$, right: $s) ] .
+
+(* Two characters before one, again -- `<` first would leave the `=` of `<=`
+ * behind, and the error would appear at the token after it. *)
+relational-operator = "<=" | ">=" | "<>" | "=" | "<" | ">" | "in" .   (* order *)
+
+(* The leading sign is Wirth's and applies to the whole of what follows, so it
+ * wraps the sum. **The sum needs a rule of its own**: `$$` is what the
+ * enclosing sequence built last, so a fold and the value it folds onto must be
+ * in one list -- and they are not, once the enclosing alternative builds
+ * something of its own. Phoenix refuses the one-rule version when it reads it,
+ * with that explanation. *)
+simple-expression = s:( "+" | "-" ) x:sum -> Signed(sign: $s, value: $x)
+                  | sum .
+
+sum = term { o:adding-operator t:term -> Binary(op: $o, left: $$, right: $t) } .
+adding-operator = "+" | "-" | "or" .
+
+term = factor { o:multiplying-operator f:factor -> Binary(op: $o, left: $$, right: $f) } .
+multiplying-operator = "*" | "/" | "div" | "mod" | "and" .
+
+(* A function call and a variable both begin with an identifier, and the call
+ * is the longer of the two. *)
+factor = unsigned-constant-not-name                                       (* order *)
+       | function-designator
+       | variable
+       | "(" e:expression ")" -> $e
+       | "not" f:factor       -> Not(value: $f)
+       | set-constructor .
+
+(* `identifier` is left out here: in an expression a bare name is a variable,
+ * and `unsigned-constant`'s last alternative would take it first. *)
+unsigned-constant-not-name = real-number    -> Real(text: $1)             (* order *)
+                           | integer-number -> Integer(text: $1)
+                           | string         -> Text(value: $1)
+                           | "nil"          -> Nil .
+
+function-designator = n:identifier "(" a:actual-parameter
+                      { "," b:actual-parameter -> $b } ")"
+                    -> CallExpression(name: $n, args: [$a, ...$4]) .
+
+set-constructor = "[" e:element { "," f:element -> $f } "]" -> SetOf(elements: [$e, ...$3])
+                | "[" "]" -> SetOf(elements: []) .
+
+element = lo:expression ".." hi:expression -> Range(low: $lo, high: $hi)   (* order *)
+        | expression .
+
+(* A variable is a name and then any number of ways of reaching into it. The
+ * accessors stay a list rather than a nest, because that is the shape the
+ * grammar has, and turning a list into a nest is a decision a pass can make
+ * with more context than this rule has. *)
+variable = n:identifier a:{ "[" e:expression { "," f:expression -> $f } "]"
+                              -> Index(at: [$e, ...$3])
+                          | "." f:identifier -> FieldOf(name: $f)
+                          | "^"              -> Deref }
+         -> Variable(name: $n, access: $a) .
+
+(* `write(x:8:2)` -- the field widths are part of the call syntax, and they
+ * belong to the argument rather than to the call. *)
+actual-parameter = v:expression ":" w:expression ":" p:expression            (* order *)
+                     -> Argument(value: $v, width: $w, precision: $p)
+                 | v:expression ":" w:expression
+                     -> Argument(value: $v, width: $w, precision: nil)
+                 | v:expression
+                     -> Argument(value: $v, width: nil, precision: nil) .
+
+(* ---- procedures and functions ---- *)
+
+procedure-or-function = f:( procedure-declaration | function-declaration ) ";" -> $f .
+
+(* The result type is optional because a function declared `forward` gives its
+ * heading once and repeats only the name. Accepting it where it is not needed
+ * is the deliberate direction to be wrong in: a checker that rejects a correct
+ * file is worse than one that accepts a slightly wider language. *)
+procedure-declaration = "procedure" n:identifier p:formal-parameters ";" b:body
+                      -> Procedure(name: $n, params: $p, body: $b) .
+function-declaration  = "function" n:identifier p:formal-parameters r:returns ";" b:body
+                      -> Function(name: $n, params: $p, returns: $r, body: $b) .
+
+(* A node rather than `nil`, because there is no `if` in the notation and a
+ * pass reading `$returns.show` should not have to ask first. This is the
+ * design working rather than being worked around: where another language
+ * would test for absence, this one gives absence a name. *)
+returns = ":" t:identifier -> NamedType(name: $t)
+        | -> NoType .
+
+body = "forward" -> Forward
+     | block .
+
+formal-parameters = "(" s:formal-section { ";" t:formal-section -> $t } ")"
+                      -> [$s, ...$3]
+                  | -> [] .
+
+(* `var` on a parameter is Pascal saying by reference, and it is the whole of
+ * an analysis that another language needs a pass for. *)
+formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifier
+                      -> Param(byref: true, names: [$i, ...$3], type: $t)
+                  | i:identifier { "," n:identifier -> $n } ":" t:identifier
+                      -> Param(byref: false, names: [$i, ...$2], type: $t) .
+
+
+(* ------------------------------------------------------------------ *)
+(* An outline of what a program declares.                              *)
+(*                                                                     *)
+(* Not a compiler -- the smallest pass that has to walk the whole of    *)
+(* this tree and read something from most of it, which is what makes it *)
+(* worth having as evidence that the shape above is usable.            *)
+
+%pass outline
+
+  (* Types, rendered back to something readable. A child's `show` is ready
+   * before its parent's clause runs, because the walk is post-order -- so
+   * one pass does the whole of this and no ordering was declared. *)
+  NamedType : show = "{}" of $name .
+  NoType    : show = "" .
+  Pointer   : show = "^{}" of $to .
+  Packed    : show = "packed {}" of $type.show .
+  ArrayType : show = "array [{}] of {}" of join($indices.show, ", "), $of.show .
+  RecordType: show = "record {}" of join($fields.show, "; ") .
+  FieldDecl : show = "{}: {}" of join($names, ", "), $type.show .
+  SetType   : show = "set of {}" of $of.show .
+  FileType  : show = "file of {}" of $of.show .
+  EnumType  : show = "({})" of join($names, ", ") .
+  Subrange  : show = "{}..{}" of $low.show, $high.show .
+
+  Integer       : show = "{}" of $text .
+  Real          : show = "{}" of $text .
+  Text          : show = "{}" of $value .
+  Nil           : show = "nil" .
+  NamedConstant : show = "{}" of $name .
+  Signed        : show = "{}{}" of $sign, $value.show .
+
+  ConstDef  : line = "  const     {} = {}" of $name, $value.show .
+  TypeDef   : line = "  type      {} = {}" of $name, $type.show .
+  VarDecl   : line = "  var       {} : {}" of join($names, ", "), $type.show .
+
+  (* Two clauses rather than a conditional inside one. There is no `if` in
+   * the notation, and matching on the shape is what stands in for it --
+   * which needs `true` in a pattern to be the value and not a name that
+   * binds anything, and it is. *)
+  Param(byref: true)  : show = "var {} : {}" of join($names, ", "), $type .
+  Param(byref: false) : show = "{} : {}"     of join($names, ", "), $type .
+  Procedure : line = "  procedure {}({})" of $name, join($params.show, "; ") .
+  Function  : line = "  function  {}({}) : {}"
+                of $name, join($params.show, "; "), $returns.show .
+
+  Block     : out = join([...$consts.line, ...$types.line, ...$vars.line,
+                          ...$routines.line], "\n") .
+  Program   : out = "program {}({})\n{}"
+                of $name, join($params, ", "), $body.out .
+
+%driver outline = outline -> out .

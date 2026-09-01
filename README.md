@@ -457,7 +457,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 65 checks, including Solveig's pascal.bnf when it is present
+make test       # 75 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -528,6 +528,25 @@ missing-semicolon.pas:13:3: error: expected else, ; or end, and found "n"
     n := n + 1;
     ^
 ```
+
+[`examples/pascal.phx`](examples/pascal.phx) is that grammar with `->` clauses
+added — 51 node types, an abstract tree with no punctuation in it, and a pass
+that reads packed arrays, pointer types, records, sets and `var` parameters back
+out:
+
+```
+$ bin/phx examples/pascal.phx tests/pascal/features.pas
+program Features(input, output)
+  const     Max = 100
+  type      Str = packed array [1..80] of char
+  type      Node = record key: integer; left, right: Tree
+  var       d : Digits
+  procedure Walk(t : Tree; var count : integer)
+```
+
+The value of doing this to Pascal rather than to another toy is that the grammar
+was written by somebody else, for another purpose, years before Phoenix existed.
+What it could not say is recorded in [the journal](docs/journal.md).
 
 When a PEG fails at the top it has usually backtracked a long way from the real
 mistake, so the position reported is the one the match got *furthest*, not the

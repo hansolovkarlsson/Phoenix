@@ -147,6 +147,12 @@ static bool match_pattern(Run *r, const Pattern *p, Value *v)
     case P_INT:
         return v->kind == V_INT && v->ival == p->ival;
 
+    case P_BOOL:
+        return v->kind == V_BOOL && (v->ival != 0) == (p->ival != 0);
+
+    case P_NIL:
+        return v->kind == V_NIL;
+
     case P_TYPE: {
         if (v->kind != V_NODE || !v->type || strcmp(v->type, p->name) != 0)
             return false;

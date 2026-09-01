@@ -272,6 +272,8 @@ typedef enum {
     P_BIND,   /* a name: matches anything and binds it                      */
     P_TEXT,   /* "literal"                                                  */
     P_INT,    /* 45                                                         */
+    P_BOOL,   /* true, false                                                */
+    P_NIL,    /* nil                                                        */
     P_ANY     /* _                                                          */
 } PKind;
 

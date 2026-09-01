@@ -1,0 +1,8 @@
+(* `$$` inside a repetition whose enclosing alternative builds something of
+ * its own: the fold and the value it folds onto are in different lists. *)
+%import "lexical.phx"
+%skip space
+%syntax
+%start line
+line = [ "-" ] integer { "+" n:integer -> Sum(left: $$, right: $n) }
+     -> Signed(sign: $1, value: $2) .

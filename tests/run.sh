@@ -67,6 +67,8 @@ accepts "no syntactic half, on its own" "$root/tests/grammars/no-syntax.phx"
 refuses "a literal nothing spells" "no token rule spells" "$root/tests/grammars/unspellable.phx"
 refuses "a clause nothing can reach" "can never match" \
         "$root/tests/grammars/unreachable-clause.phx"
+refuses "a fold with nothing to fold onto" "nothing to fold onto" \
+        "$root/tests/grammars/fold-in-action.phx"
 
 echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
@@ -339,6 +341,47 @@ if [ -n "${PHX_TEST_SOLVEIG:-}" ]; then
     else
         report fail "through the Solveig backend, same answer" "no solas at $SOL"
     fi
+fi
+
+echo "Pascal, with actions"
+accepts "the description reads" "$root/examples/pascal.phx"
+
+for f in gcd features; do
+    accepts "$f.pas builds a tree" --tree "$root/examples/pascal.phx" \
+            "$root/tests/pascal/$f.pas"
+done
+for f in keyword missing-semicolon unclosed; do
+    refuses "$f.pas is still refused" "error" --tree \
+            "$root/examples/pascal.phx" "$root/tests/pascal/$f.pas"
+done
+
+# The tree has to be abstract, not a parse tree wearing node names: no
+# punctuation, and no wrapper node holding nothing.
+tree=$("$phx" --tree "$root/examples/pascal.phx" "$root/tests/pascal/gcd.pas" 2>/dev/null)
+if printf '%s' "$tree" | grep -qE '"[,;()]"'; then
+    report fail "the Pascal tree drops its punctuation" \
+                "$(printf '%s' "$tree" | grep -oE '"[,;()]"' | head -1) is in it"
+else
+    report pass "the Pascal tree drops its punctuation"
+fi
+
+# A pass over the whole of it, reading something from most of it.
+out=$("$phx" "$root/examples/pascal.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
+if printf '%s' "$out" | grep -qF "type      Str = packed array [1..80] of char" \
+   && printf '%s' "$out" | grep -qF "procedure Walk(t : Tree; var count : integer)"; then
+    report pass "the outline pass reads the whole tree"
+else
+    report fail "the outline pass reads the whole tree" \
+                "$(printf '%s' "$out" | head -2 | tr '\n' ' ')"
+fi
+
+# `var` on a parameter is matched with `Param(byref: true)`, which needs a
+# boolean in a pattern to be a value rather than a name that binds anything.
+if printf '%s' "$out" | grep -qF "var count : integer" \
+   && ! printf '%s' "$out" | grep -q "truecount"; then
+    report pass "a boolean in a pattern is a value"
+else
+    report fail "a boolean in a pattern is a value"
 fi
 
 # Wirth's Pascal, vendored into tests/pascal -- the strongest evidence that

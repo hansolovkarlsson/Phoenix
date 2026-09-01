@@ -447,3 +447,94 @@ threaded attribute or an inherited one, and deciding which would mean knowing
 what shapes reach the clause. So it catches a pass reading another node's work,
 which is the ordinary case and the one that goes wrong, and stays quiet about a
 pass reading its own.
+
+## 2026-09-01 — actions on Wirth's Pascal
+
+The point of doing this to Pascal rather than to another toy is that the
+grammar was written by somebody else, for another purpose, years before Phoenix
+existed. `examples/pascal.phx` is `tests/pascal/pascal.bnf` with `->` clauses
+added — the fixture is left unmodified, because three tests depend on it being
+a real published grammar that Phoenix reads without being met halfway.
+
+It works: 51 node types, both good programs building an abstract tree with no
+punctuation in it, all four bad ones still refused, and an `outline` pass that
+reads packed arrays, pointer types, records, sets, enumerations and `var`
+parameters back out. **Five things had to change, and three of them are lessons
+about the notation rather than bugs in it.**
+
+### `$$` needs its fold and its base in one list
+
+```
+simple-expression = [ "+" | "-" ] term { op term -> Binary(op: $1, left: $$, right: $2) }
+                  -> Signed(sign: $1, value: $2) .
+```
+
+That was the natural way to write Wirth's leading sign and it cannot work.
+`$$` is what the *enclosing sequence* built last, and when that sequence carries
+an action of its own every factor is gathered separately — so that `$1` can mean
+the first *factor* — and the `term` before the repetition is in a different slot
+from the repetition. `$$` looked in an empty one.
+
+It was a message from inside the matcher, at parse time, on a file that was
+fine. It is a message about the grammar now, with the fix in it: **give the fold
+a rule of its own**. Which is also the better decomposition, and is what the
+grammar wanted all along.
+
+### An option is not a choice, and the difference is a node per program
+
+`[ integer-number ":" ] statement -> Statement(label: $1, do: $2)` builds a
+`Statement` around every statement in the program, nearly all of them holding an
+empty label. Written as two alternatives, a `Labelled` node exists only where
+there is a label and means something wherever a pass finds one.
+
+The same mistake was in four places — `Signed` around every expression, `Packed`
+around every structured type, `Constant` around every constant, `Statement`
+around every statement. **A node that is nearly always empty is not worth
+having**, and the notation makes the better version no harder to write.
+
+### A separator has to be dropped where it is matched
+
+`{ "," identifier }` answers *everything* it matched. The commas were in the
+tree. A repetition that means "a list of these" carries an action —
+`{ "," n:identifier -> $n }` — and there is no way around that, because the
+repetition is the only place that knows which of its factors was the payload.
+
+### Patterns could not match a boolean
+
+`Param(byref: true)` read `true` as a lower-case name, which is a binder, which
+matches anything. The outline printed `falseu, v` for a parameter list. `true`,
+`false` and `nil` are values in an expression and are values in a pattern now —
+reading them as binders is the sort of mistake that matches everything and looks
+like it worked.
+
+### And the absence of `if` was right
+
+`function-declaration` has an optional result type. A pass reading
+`$returns.show` would have to ask whether there is one — except there is no `if`
+to ask with. The answer the notation forces is to **give absence a name**:
+
+```
+returns = ":" t:identifier -> NamedType(name: $t)
+        | -> NoType .
+```
+
+and `NoType : show = ""`. That is better than the conditional would have been,
+and it is the clearest evidence so far for
+[3.5](ROADMAP.md#35-conditionals-in-the-meta-language) being the right call.
+The other half of the same story is `Param(byref: true)` and
+`Param(byref: false)` as two clauses: shape matching *is* the conditional, and
+it reads better than one.
+
+### What the shared expression module could not do
+
+`lib/expression.phx` was not used. Pascal's operators are `div mod and or not
+in`, its `factor` includes a set constructor and a function call, and its
+leading sign attaches to the whole simple-expression. None of that fits the
+module, and bending the module to fit would mean reserving `div`, `mod` and `in`
+in every language that imports it.
+
+**So the module is less reusable than it looked**, and the reason is worth
+keeping: an expression grammar is not one thing. What is shared between calc and
+Pascal is the *shape* — precedence climbing, a fold per level, a hole at the
+bottom — and a shape is not a module. That is a real limit on what `lib/` can
+hold, and it was found by the second language rather than argued about.
