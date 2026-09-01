@@ -211,6 +211,52 @@ the only place the two behave differently.
 
 ---
 
+---
+
+## Host independence, and what keeps it
+
+Three axes, and they are independent:
+
+| | Decided by | Now |
+| --- | --- | --- |
+| what **Phoenix** is written in | settled | C11 |
+| what the **generated compiler** is written in | Phoenix's *backend* | Solveig, and not only |
+| what the **generated compiler emits** | the `.phx`'s emit passes | anything |
+
+`phx pascal.phx -o pascal.c && cc pascal.c -o cpas && cpas myprog.pas` is the
+middle axis, and it must stay reachable.
+
+**It is reachable because actions are a notation Phoenix owns.** A yacc-style
+splice of host code into the grammar would put Solveig source inside every
+`.phx` file and make a C backend impossible without rewriting all of them.
+Because a `.phx` contains no host language at all, lowering it to C is a second
+code generator rather than a different input format. That is what the choice
+made at the start of this project bought, and it was not the reason it was made.
+
+**A C backend is also cheap.** A generated compiler needs a runtime -- the PEG
+engine, values, strings, lists, maps -- and in C that runtime is `phoenix/`
+itself, because Phoenix is written in C. The backend emits tables and pass code
+that link against what the tool already is.
+
+**Two places host independence can still leak, and both are closed by
+decisions rather than by code:**
+
+1. **Arithmetic.** If `/` means "what Solveig does" -- floored division,
+   trapping overflow -- then a C backend either diverges or emulates Solveig.
+   The meta-language needs its own specified semantics, written down here and
+   identical in every backend.
+
+2. **The standard library.** If `bind`, `lookup` and `join` are thin covers
+   over Solveig messages, every backend must reimplement Solveig. They are
+   Phoenix's, specified in Phoenix's terms.
+
+**So stage 5 builds two backends, Solveig and C**, for the same reason stage 4
+builds two emit passes. The calculator becomes a 2x2 matrix, and the
+conformance suite falls out of it: *the same `.phx`, through every backend and
+through `--run`, produces identical output.* That is also what turns the
+divergence risk taken when `phx` became C rather than Solveig into a failing
+test rather than a surprise.
+
 ## What this does not answer
 
 **Passes that are not tree walks.** Left-recursion detection is a Warshall
