@@ -133,7 +133,12 @@ type-definition      = n:identifier "=" t:type     -> TypeDef(name: $n, type: $t
 variable-declaration = i:identifier { "," n:identifier -> $n } ":" t:type
                      -> VarDecl(names: [$i, ...$2], type: $t) .
 
-constant = s:( "+" | "-" ) v:unsigned-constant -> Signed(sign: $s, value: $v)  (* order *)
+(* A signed *constant* is not a signed *expression*: this one is only ever a
+ * number or a named constant, and `symbols` asks it what type it is. Sharing
+ * `Signed` with `simple-expression` meant asking a `Variable` the same
+ * question, which it cannot answer. *)
+constant = s:( "+" | "-" ) v:unsigned-constant                          (* order *)
+             -> SignedConstant(sign: $s, value: $v)
          | unsigned-constant .
 
 unsigned-constant = real-number     -> Real(text: $1)                  (* order *)
@@ -382,7 +387,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   Text          : ctype = "string" .
   Nil           : ctype = "pointer" .
   NamedConstant : ctype = "integer" .
-  Signed        : ctype = $value.ctype .
+  SignedConstant : ctype = $value.ctype .
 
   (* Two things per declaration, in one rule because clauses for one pattern
    * cannot be split across two: `entries` binds a name to its type's *name*,
@@ -538,7 +543,8 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   Text          : type = "string" .
   Nil           : type = "pointer" .
   NamedConstant : type = lookup($env, lookup($env, $name, "unknown"), "unknown") .
-  Signed        : type = $value.type .
+  Signed         : type = $value.type .
+  SignedConstant : type = $value.type .
   SetOf         : type = "set" .
   Range         : type = "integer" .
   Not           : type = "boolean" .

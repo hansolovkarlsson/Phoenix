@@ -982,3 +982,48 @@ And `fpc` fails on the 20,000-line file — *"Procedure too complex, it requires
 too many registers"* — where Phoenix does not, because register allocation was
 never Phoenix's problem. That is not a point in Phoenix's favour so much as a
 description of what emitting C means.
+
+## 2026-09-01 — the oracle, and the six bugs it found on the first run
+
+`tests/oracle/` compiles the same Pascal with `fpc -Miso` and with Phoenix, runs
+both, and compares byte for byte. **fpc is the oracle**: where they differ,
+Phoenix is wrong until somebody shows otherwise, because fpc has been read by
+more people than this repository has. It is the method Solveig's `PASCAL.md`
+uses, for the same reason.
+
+Eight programs. The first run had **one** of them agreeing.
+
+| | |
+| --- | --- |
+| **`mod` was C's `%`** | ISO Pascal's `i mod j` is the non-negative remainder and wants `j > 0`: `-7 mod 2` is **1**, not −1, and `7 mod -2` is a runtime error. There is a `phx_mod` helper now |
+| **an integer had no default width** | Pascal right-justifies in eleven, so `writeln(15)` writes nine spaces first. Every unwidthed integer in every program was wrong |
+| **a boolean printed as `1`** | it is ` true` and `false`, in a field of five |
+| **a real printed as `1.5`** | it is ` 1.5000000000000000e+000` — scientific, sixteen fraction digits, and a **three**-digit exponent where C's `%e` gives two. There is a `phx_real` helper now |
+| **a recursive function would not compile** | the result variable took the function's own name, so `Fact := n * Fact(n-1)` became `Fact = n * Fact(n-1)` with `Fact` a `long`. The result is `phx_result` now, and *reading* the function's name is spelled that way while *calling* it is not, because a call is a different node |
+| **`Signed` was two things** | a signed *constant* and a signed *expression* shared a node, and `symbols` asked a `Variable` what type of constant it was |
+
+**Every one is a place C's obvious answer is not Pascal's**, and not one would
+have been found by reading the output and thinking it looked right. Three of
+them — the widths — had been in front of me the whole time, in `primes.pas`'s
+own expected output, which I wrote down from what Phoenix produced.
+
+### What it cost to fix, and what that says
+
+Nothing was added to Phoenix. All six are changes to `examples/pascal-c.phx`,
+and the two that needed C that Pascal has and C does not — `phx_mod` and
+`phx_real` — are **emitted by the description into every program it compiles**.
+A description that needs a runtime writes one.
+
+Two notation things came out of it. `of` does not chain, so a template built by
+`lookup` is filled once and not twice. And adjacent string literals do not run
+together, so a multi-line C helper is `join([...], "\n")` — which turns out to
+be better anyway, because the braces in C code are then *values* rather than
+template syntax and none of them has to be doubled.
+
+### And one thing the oracle cannot check
+
+`fpc -Miso` has 32-bit integers and Phoenix has 64-bit, so `maxint` differs and
+so does where arithmetic overflows. The oracle would catch it only on a program
+that overflows, and such a program has no agreed answer to compare. It is a
+divergence in the sense Solveig's `PASCAL.md` uses the word: written down, not
+fixed.

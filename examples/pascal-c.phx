@@ -156,7 +156,8 @@
    * grammar, and C spells them differently. Another table standing in for a
    * conditional. *)
   NamedConstant : out = lookup($spelled, $name, $name) .
-  Signed        : out = "({}{})" of $sign, $value.out .
+  Signed         : out = "({}{})" of $sign, $value.out .
+  SignedConstant : out = "({}{})" of $sign, $value.out .
   Nil           : out = "0" .
 
   (* ---- declarations ---- *)
@@ -179,11 +180,18 @@
             : out = "static void {}({})\n{{\n{}{}\n}}\n"
                 of $name, join($params.out, ", "), $body.decls, $body.code .
 
+  (* **A Pascal function returns by assigning to its own name**, and C cannot
+   * have a local with the same name as the function -- `Fact := n * Fact(n-1)`
+   * became `Fact = n * Fact(n-1)` with `Fact` a `long`, and recursion stopped
+   * compiling. The result gets a name of its own, and *reading* the function's
+   * name inside it is spelled that way while *calling* it is not, because a
+   * call is a different node and does not go through this table. *)
   Function  : down storage = ""
-            : down spelled = [...$byrefs, ...$spelled]
-            : out = "static {} {}({})\n{{\n  {} {};\n{}{}\n  return {};\n}}\n"
+            : down spelled = [...bind([], $name, "phx_result"),
+                              ...$byrefs, ...$spelled]
+            : out = "static {} {}({})\n{{\n  {} phx_result;\n{}{}\n  return phx_result;\n}}\n"
                 of $returns.pre, $name, join($params.out, ", "),
-                   $returns.pre, $name, $body.decls, $body.code, $name .
+                   $returns.pre, $body.decls, $body.code .
 
   (* ---- blocks ---- *)
 
@@ -244,19 +252,20 @@
    * one. *)
 
   Argument : out   = $value.out
-           : write = "printf(\"{}\", {}); "
-                       of lookup($formats, $value.type, "%ld"), $value.out .
+           : write = lookup($writes, $value.type,
+                            "printf(\"%11ld\", (long)({})); ") of $value.out .
 
-  (* `write(x:8)` -- the field width is part of the call syntax, and C spells
-   * it inside the conversion. `%ld` becomes `%8ld`, which is the format with
-   * the width put after its `%`. *)
+  (* `write(x:8)` -- a field width, which C spells with a `*` and an extra
+   * argument. The template takes the width first and the value second. *)
   Padded   : out   = $value.out
-           : write = "printf(\"%{}{}\", {}); "
-                       of $width.out,
-                          slice(lookup($formats, $value.type, "%ld"), 2, 9),
-                          $value.out .
+           : write = lookup($padded, $value.type,
+                            "printf(\"%*ld\", (int)({}), (long)({})); ")
+                       of $width.out, $value.out .
+
+  (* `write(x:8:3)` -- fixed point, and the only place Pascal writes a real
+   * without an exponent. *)
   Rounded  : out   = $value.out
-           : write = "printf(\"%{}.{}f\", (double)({})); "
+           : write = "printf(\"%*.*f\", (int)({}), (int)({}), (double)({})); "
                        of $width.out, $places.out, $value.out .
 
   CallStatement(name: "writeln") : out = "  {}printf(\"\\n\");"
@@ -280,7 +289,12 @@
   Not : out = "(!{})" of $value.out .
 
   Binary(op: "div") : out = "({} / {})"  of $left.out, $right.out .
-  Binary(op: "mod") : out = "({} % {})"  of $left.out, $right.out .
+  (* **`mod` is not `%`.** ISO Pascal's `i mod j` is the non-negative
+   * remainder and wants `j > 0`: `-7 mod 2` is 1 where C says -1, and
+   * `7 mod -2` is an error where C answers. `fpc -Miso` does this and the
+   * first version of this file did not; `tests/oracle/run.sh` is what said
+   * so. *)
+  Binary(op: "mod") : out = "phx_mod({}, {})" of $left.out, $right.out .
   Binary(op: "and") : out = "({} && {})" of $left.out, $right.out .
   Binary(op: "or")  : out = "({} || {})" of $left.out, $right.out .
   Binary(op: "/")   : out = "((double)({}) / (double)({}))" of $left.out, $right.out .
@@ -314,6 +328,22 @@
   (* Pascal's type names in C -- a name that is not here is a typedef and
    * stands for itself -- and where a variable lives. Both are handed down,
    * and all of Program's clauses go in the one rule. *)
+  (* ------------------------------------------------------------------
+   * What Pascal needs that C does not have, emitted once at the top.
+   *
+   * These were all found by `tests/oracle/run.sh`, which compiles the same
+   * program with `fpc -Miso` and compares. Every one of them is a place C's
+   * obvious answer is not Pascal's answer.
+   *
+   * **`mod` is not `%`.** ISO Pascal's `i mod j` is the non-negative
+   * remainder and requires `j > 0`: `-7 mod 2` is 1 where C says -1, and
+   * `7 mod -2` is an error where C says 1. fpc gets this right and the first
+   * version of this file did not.
+   *
+   * **A real is written in scientific notation with a three-digit
+   * exponent**, and C's `%e` gives two. A positive one is preceded by a
+   * space where the sign would be.
+   *)
   Program : down known = []
           : down ctypes = [["integer", "long"], ["real", "double"],
                            ["boolean", "int"], ["char", "char"]]
@@ -324,11 +354,68 @@
            * references, because that is what they look like. *)
           : down spelled = [["true", "1"], ["false", "0"]]
 
-          (* How each Pascal type is written by `printf`. A table, because
-           * that is what this notation has instead of a conditional. *)
-          : down formats = [["integer", "%ld"], ["real", "%g"], ["char", "%c"],
-                            ["string", "%s"], ["boolean", "%ld"]]
-          : out = "#include <stdio.h>\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
-              of $body.decls, $body.routinecode, $body.code .
+          (* How each Pascal type is *written*, as a whole C statement rather
+           * than a format -- because a boolean is words and a real needs a
+           * helper, and neither is a `printf` conversion. The default widths
+           * are fpc's: 11 for an integer, 5 for a boolean, 24 for a real.
+           *
+           * A table, because that is what this notation has instead of a
+           * conditional, and because it reads as what it is: a list of the
+           * types that differ. *)
+          : down writes =
+              [["integer", "printf(\"%11ld\", (long)({})); "],
+               ["real",    "phx_real(24, {}); "],
+               ["boolean", "printf(\"%5s\", ({}) ? \"true\" : \"false\"); "],
+               ["char",    "printf(\"%c\", (char)({})); "],
+               ["string",  "printf(\"%s\", {}); "]]
+
+          (* The same, given a field width. *)
+          : down padded =
+              [["integer", "printf(\"%*ld\", (int)({}), (long)({})); "],
+               ["real",    "phx_real((int)({}), {}); "],
+               ["boolean", "printf(\"%*s\", (int)({}), ({}) ? \"true\" : \"false\"); "],
+               ["char",    "printf(\"%*c\", (int)({}), (char)({})); "],
+               ["string",  "printf(\"%*s\", (int)({}), {}); "]]
+          (* Two things Pascal has that C does not, written into every
+           * program. Both were found by the oracle: `mod` is not `%`, and a
+           * real is written in scientific notation with a *three*-digit
+           * exponent where C's `%e` gives two.
+           *
+           * Built with `join` rather than as one literal, because adjacent
+           * strings do not run together in this notation -- and because the
+           * braces in C code are then *values* rather than template syntax,
+           * so none of them has to be doubled.
+           *
+           * They are not `static`: a program that never writes a real never
+           * calls `phx_real`, and a `static` function nothing calls is a
+           * warning `cc -Werror` refuses. External linkage in a
+           * single-translation-unit program costs nothing and says nothing
+           * about whether it is used. *)
+          : helpers = join([
+              "long phx_mod(long a, long b)",
+              "{",
+              "    long r;",
+              "    if (b <= 0) { fprintf(stderr, \"Runtime error 200\\n\"); exit(200); }",
+              "    r = a % b;",
+              "    return r < 0 ? r + b : r;",
+              "}",
+              "",
+              "void phx_real(int width, double v)",
+              "{",
+              "    char buf[64], out[96];",
+              "    char *e = buf;",
+              "    int mant, exp;",
+              "    snprintf(buf, sizeof buf, \"%.16e\", v);",
+              "    while (*e && *e != 'e') e++;",
+              "    mant = (int)(e - buf);",
+              "    exp = (int)strtol(e + 1, 0, 10);",
+              "    snprintf(out, sizeof out, \"%s%.*se%c%03d\",",
+              "             v < 0 ? \"\" : \" \", mant, buf,",
+              "             exp < 0 ? '-' : '+', exp < 0 ? -exp : exp);",
+              "    printf(\"%*s\", width, out);",
+              "}"], "\n")
+
+          : out = "#include <stdio.h>\n#include <stdlib.h>\n\n{}\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
+              of $helpers, $body.decls, $body.routinecode, $body.code .
 
 %driver c = symbols, typecheck, prepare, emit-c -> out .

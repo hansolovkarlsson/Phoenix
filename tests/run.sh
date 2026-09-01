@@ -427,8 +427,11 @@ if "$phx" "$root/examples/pascal-c.phx" "$root/examples/primes.pas" \
         > "$tmp0/primes.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp0/primes" "$tmp0/primes.c" 2>/dev/null; then
     report pass "primes.pas compiles to C that cc -Werror accepts"
-    got=$("$tmp0/primes" | tr '\n' ' ')
-    if [ "$got" = "10 29 21 2 3 5 7 11 " ]; then
+    # What `fpc -Miso` prints for this program, taken from fpc and kept
+    # beside it. The oracle checks the two agree; this checks nothing has
+    # drifted since.
+    "$tmp0/primes" > "$tmp0/primes.got"
+    if cmp -s "$tmp0/primes.got" "$root/examples/primes.expected"; then
         report pass "and the program is right"
     else
         report fail "and the program is right" "got: $got"
@@ -444,15 +447,8 @@ if "$phx" "$root/examples/pascal-c.phx" "$root/tests/pascal/gcd.pas" \
         > "$tmp0/gcd.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp0/gcd" "$tmp0/gcd.c" 2>/dev/null; then
     report pass "gcd.pas compiles to C that cc -Werror accepts"
-    got=$("$tmp0/gcd")
-    want='greatest common divisor
-   3   4
-green was not seen
-blue
-    21
-   1   4   9  16  25  36  49  64  81 100
-       both positive'
-    if [ "$got" = "$want" ]; then
+    "$tmp0/gcd" > "$tmp0/gcd.got"
+    if cmp -s "$tmp0/gcd.got" "$root/tests/pascal/gcd.expected"; then
         report pass "and every line of it is right"
     else
         report fail "and every line of it is right" \
@@ -637,6 +633,27 @@ echo "Wirth's Pascal"
     else
         report fail "both stray characters reported" "got $n messages, wanted 2"
     fi
+fi
+
+# ---------------------------------------------------------------------------
+# The oracle. Every program in tests/oracle is compiled by `fpc -Miso` and by
+# Phoenix, and the two must write the same bytes. fpc has been read by more
+# people than this repository has, so where they differ Phoenix is wrong until
+# somebody shows otherwise.
+#
+# Skipped and not failed without fpc: it is an oracle, not a dependency.
+
+echo "the oracle"
+if command -v fpc >/dev/null 2>&1; then
+    if oracle=$("$root/tests/oracle/run.sh" 2>&1); then
+        n=$(printf '%s' "$oracle" | grep -c '^  ok')
+        report pass "$n Pascal programs agree with fpc -Miso"
+    else
+        report fail "Pascal programs agree with fpc -Miso"
+        printf '%s\n' "$oracle" | grep -A6 'FAIL' | sed 's/^/        /' | head -14
+    fi
+else
+    printf '  --    the oracle needs fpc, which is not on this machine\n'
 fi
 
 echo

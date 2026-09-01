@@ -510,7 +510,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 100 checks, including Solveig's pascal.bnf when it is present
+make test       # 101 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -574,6 +574,28 @@ Four things came out of writing it, and three were improvements:
 | **a directive can be terminated** | `%fragment letter digit` ended at the end of a line, and a grammar over tokens cannot see one. A `.` after a directive is now accepted, as everything else in the notation already was |
 | **reserved words cannot be opted out of** | every word-shaped literal becomes one, so `of` and `and` and `div` are operators here and good field names elsewhere. A place wanting a plain name has to list them |
 | **the optional production terminator is undescribable** | ending a production without its `.` needs two-token lookahead, and `!` is lexical only. The one real gap |
+
+## The oracle
+
+[`tests/oracle/`](tests/oracle/) holds Pascal programs that are compiled twice
+— once by `fpc -Miso`, once by Phoenix — run, and compared byte for byte.
+**fpc is the oracle**: where they differ, Phoenix is wrong until somebody shows
+otherwise, because fpc has been read by more people than this repository has.
+
+It is skipped rather than failed where there is no fpc, and it earned its place
+on the first run by finding **six bugs at once**:
+
+| | |
+| --- | --- |
+| `mod` was C's `%` | ISO Pascal's is the non-negative remainder: `-7 mod 2` is **1**, not −1, and `7 mod -2` is an error |
+| an integer had no default width | Pascal right-justifies in 11; `writeln(15)` prints nine spaces first |
+| a boolean printed as `1` | it is ` true` and `false`, in a field of five |
+| a real printed as `1.5` | it is ` 1.5000000000000000e+000` — scientific, sixteen digits, a **three**-digit exponent where C's `%e` gives two |
+| a recursive function would not compile | the result variable took the function's name, so `Fact(n-1)` called a `long` |
+| a signed constant and a signed expression shared a node | and only one of them can answer what type it is |
+
+Every one is a place C's obvious answer is not Pascal's, and none would have
+been found by reading the output and thinking it looked right.
 
 ## Where this sits
 
