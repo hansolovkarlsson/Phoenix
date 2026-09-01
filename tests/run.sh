@@ -585,6 +585,20 @@ else
     report fail "an attribute of a reference, of a call, and a terminator" "got: $got"
 fi
 
+# Deeply nested input used to exhaust the C stack and die with a signal.
+# Recursive descent makes the stack proportional to how deeply the *input*
+# nests, and input is not a thing a compiler gets to trust.
+awk -v n=5000 -v shape=nest -f "$root/bench/generate.awk" > "$tmp0/deep.pas"
+out=$("$phx" --quiet --tree "$root/examples/pascal.phx" "$tmp0/deep.pas" 2>&1)
+code=$?
+if [ "$code" -ge 128 ]; then
+    report fail "deep nesting is refused, not fatal" "died with signal $((code - 128))"
+elif printf '%s' "$out" | grep -qF "nested too deeply"; then
+    report pass "deep nesting is refused, not fatal"
+else
+    report fail "deep nesting is refused, not fatal" "$(printf '%s' "$out" | head -1)"
+fi
+
 echo "the notation, in itself"
 accepts "phoenix.phx reads" "$root/examples/phoenix.phx"
 

@@ -38,10 +38,14 @@ static bool lex_same(const Lex *l, const char *a, const char *b, size_t len)
 }
 
 /* Answers where the lex_match ended, or -1. */
+extern Work phx_work;
+
 static long lex_match(Lex *l, const GNode *n, long pos)
 {
     const char *s    = l->src->text;
     long        size = (long)l->src->size;
+
+    phx_work.lex_steps++;
 
     switch (n->kind) {
     case G_LIT:

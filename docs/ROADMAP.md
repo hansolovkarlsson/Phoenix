@@ -17,13 +17,17 @@ of there being **one** implementation of the notation rather than two — see
 [the README](../README.md#writing-a-compiler-out) for why that trade was made
 deliberately.
 
-If speed ever matters, this is the answer, and the order is what makes it safe:
-the tables pin the definition down first, and code generated against them can be
-checked against the interpreter that produced them. Doing it the other way round
-is how two implementations appear.
+**Measured, and the case for doing it is weak.** [performance.md](performance.md)
+has the numbers: the matcher is linear in all four shapes tried, at about 24
+match-steps per token, and 20,000 lines of Pascal reach running C in 238 ms.
+Memoisation would cut the constant and cost a table per position; generating
+code would cut it further and cost a second implementation of the notation.
+Nothing has asked for either.
 
-Not now. Nothing has been measured, and a generated Pascal compiler is 216K and
-starts instantly.
+If it is ever done, the order is what makes it safe: the tables pin the
+definition down first, and code generated against them can be checked against
+the interpreter that produced them. Doing it the other way round is how two
+implementations appear.
 
 ---
 

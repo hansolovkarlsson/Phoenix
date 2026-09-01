@@ -945,3 +945,40 @@ places, and getting one wrong would have been a silent misparse.
 **The rule is now written where a rule belongs.** It was a condition in
 `expr.c`, one call deep, in a loop about something else. It is a scanner rule
 about what a token is, which is what it always was.
+
+## 2026-09-01 — measured, and it found a segfault
+
+`bench/` and [performance.md](performance.md). The question was never *how
+fast*; it was **whether the work grows in proportion to the input**, because a
+PEG with no memoisation need not and Phoenix has none. A constant factor is a
+decision and a bad complexity is a defect.
+
+**It is linear**, in all four shapes tried — statements in sequence, one long
+expression, nested parentheses, nested blocks — at about 24 match-steps per
+token, flat across sixteen times the input. There is no bad case in Pascal's
+grammar, which is a thing nobody had checked. Steps are deterministic, so that
+is the curve exactly rather than a measurement of it.
+
+**And measuring found a crash nobody suspected.** Matching is recursive
+descent, so the C stack is proportional to how deeply the *input* nests, and
+about 3,400 nested parentheses exhausted it: a SIGSEGV, which tells a person
+nothing, cannot be caught, and arrives on input a compiler does not get to
+trust. There is a depth limit now and a message with a position. Real programs
+reach 62 to 99; the limit is 10,000.
+
+That is the whole argument for measuring. The linearity result confirmed what
+was hoped, which is worth having written down and is not why it was worth
+doing. The crash would otherwise have been found by somebody else's malformed
+file.
+
+**One number is worth keeping for what it says about stage 5.** The generated
+compiler is 18% faster than `phx` on the same input, and all of the saving is
+fixed cost — it neither reads a description nor checks one. On a small program
+that is most of the run and on a large one it is noise. **The generated
+compiler's value is that it stands alone, not that it is quick**, and it is
+better to know that than to have assumed either way.
+
+And `fpc` fails on the 20,000-line file — *"Procedure too complex, it requires
+too many registers"* — where Phoenix does not, because register allocation was
+never Phoenix's problem. That is not a point in Phoenix's favour so much as a
+description of what emitting C means.

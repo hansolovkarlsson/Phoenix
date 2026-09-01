@@ -147,8 +147,11 @@ ok    a Pascal compiler, and it agrees with phx
 ```
 
 What it costs is speed: the generated compiler interprets a PEG rather than
-being one. If that ever matters, the answer is to compile the tables to code
-*afterwards*, against a definition the tables have already pinned down.
+being one. [docs/performance.md](docs/performance.md) says how much — the
+matcher is linear in every shape tried, at about 24 match-steps per token, and
+20,000 lines of Pascal reach running C in 238 ms. If that ever matters, the
+answer is to compile the tables to code *afterwards*, against a definition the
+tables have already pinned down.
 
 Each stage is useful on its own and tagged in git, so a design that turns out
 wrong can be backed out of to the last stage that was right.
@@ -507,7 +510,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 99 checks, including Solveig's pascal.bnf when it is present
+make test       # 100 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

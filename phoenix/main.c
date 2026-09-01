@@ -66,6 +66,7 @@ static const char usage[] =
     "  -o FILE.c      write this description out as a C program that is its\n"
     "                 compiler, and stop\n"
     "  --tree         print the tree and stop, whatever drivers there are\n"
+    "  --stats        report how much work reading the source took\n"
     "  --driver NAME  which %driver to run (default: the first declared)\n"
     "  --drivers      list the drivers this description declares\n"
     "  --run PASS     run one %pass on its own, for looking at it\n"
@@ -90,6 +91,7 @@ int main(int argc, char **argv)
     const char *driver_name  = NULL;
     bool        want_drivers = false;
     bool        want_tree    = false;
+    bool        want_stats   = false;
     const char *compile_to   = NULL;
     bool        quiet        = false;
 
@@ -105,6 +107,7 @@ int main(int argc, char **argv)
         if (strcmp(arg, "--imports") == 0) { want_imports = true; continue; }
         if (strcmp(arg, "--drivers") == 0) { want_drivers = true; continue; }
         if (strcmp(arg, "--tree")    == 0) { want_tree    = true; continue; }
+        if (strcmp(arg, "--stats")   == 0) { want_stats   = true; continue; }
 
         if (strcmp(arg, "-o") == 0) {
             if (i + 1 >= argc) {
@@ -265,6 +268,16 @@ int main(int argc, char **argv)
 
     Value *tree = parse_run(a, g, &src, &toks);
     if (!tree) { arena_free(a); return 1; }
+
+    if (want_stats) {
+        const Work *w = work_done();
+        fprintf(stderr,
+                "%zu bytes  %d tokens  %lld nodes  "
+                "%lld scan-steps  %lld match-steps  depth %d  "
+                "(%.1f match-steps per token)\n",
+                src.size, toks.n, w->nodes, w->lex_steps, w->parse_steps, w->depth,
+                toks.n ? (double)w->parse_steps / toks.n : 0.0);
+    }
 
     /* What to run: one pass named on the command line, or a driver -- the one
      * named, or the first declared, or none at all, in which case the tree is

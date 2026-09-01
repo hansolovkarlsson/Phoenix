@@ -463,6 +463,25 @@ const char *value_kind_name(const Value *v);
  * having reported where the match got furthest and what it wanted there. */
 Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t);
 
+/* ------------------------------------------------------------------ */
+/* Counting the work
+ *
+ * A PEG with no memoisation can do more work than there is input, and how much
+ * more is a property of the grammar rather than of the machine. These say how
+ * much was actually done, so that a curve can be explained and not merely
+ * drawn: `steps` is one attempt to match one grammar node at one position.
+ */
+
+typedef struct {
+    long long lex_steps;     /* attempts in the scanner   */
+    long long parse_steps;   /* attempts in the matcher   */
+    long long nodes;         /* values the tree came to   */
+    int       depth;         /* how deep the matcher went */
+} Work;
+
+const Work *work_done(void);
+void        work_reset(void);
+
 void tree_dump(FILE *out, const Value *root);
 
 /* ------------------------------------------------------------------ */

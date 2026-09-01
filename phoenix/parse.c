@@ -34,6 +34,8 @@
 
 #include <string.h>
 
+extern Work phx_work;
+
 /* A growable list of values -- one per sequence being matched. */
 typedef struct {
     Value **items;
@@ -48,12 +50,14 @@ typedef struct {
     const Tokens  *t;
 
     long           furthest;      /* the highest token index ever reached   */
+    int            depth;         /* how deep the matcher is, right now      */
     const char   **wanted;        /* what was being asked for there         */
     int            nwanted;
     int            capwanted;
 } Parse;
 
 static long parse_match(Parse *p, const GNode *n, long at, Slots *out);
+static long parse_body(Parse *p, const GNode *n, long at, Slots *out);
 
 /* ------------------------------------------------------------------ */
 
@@ -109,6 +113,7 @@ static void note_want(Parse *p, long at, const char *what)
 
 static Value *value_new(Parse *p, VKind kind, size_t pos)
 {
+    phx_work.nodes++;
     Value *v = arena_alloc(p->a, sizeof *v);
     v->kind  = kind;
     v->pos   = pos;
@@ -290,7 +295,43 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     return at;
 }
 
+/* How deep the matcher may go before it says so.
+ *
+ * Matching is recursive descent, so the C stack is proportional to how deeply
+ * the *input* nests -- and input is not something a compiler gets to trust.
+ * Measuring found the real limit at about 3,400 nested parentheses and a
+ * SIGSEGV, which is never an answer: a crash tells the person nothing and
+ * cannot be caught.
+ *
+ * Pascal's grammar spends about ten frames a parenthesis, and no program
+ * anybody writes nests past a few dozen -- `gcd.pas` reaches 60. This is set
+ * an order of magnitude above anything real and an order below where the
+ * stack actually goes. */
+#define MAX_DEPTH 10000
+
 static long parse_match(Parse *p, const GNode *n, long at, Slots *out)
+{
+    const Token *toks = p->t->items;
+    long         end  = p->t->n;
+
+    phx_work.parse_steps++;
+
+    if (++p->depth > MAX_DEPTH) {
+        p->depth--;
+        if (!diag_failed())
+            diag_error(p->src, at < end ? toks[at].pos : p->src->size,
+                       "nested too deeply here -- more than %d levels, which is "
+                       "past anything a person writes", MAX_DEPTH);
+        return -1;
+    }
+    if (p->depth > phx_work.depth) phx_work.depth = p->depth;
+
+    long answer = parse_body(p, n, at, out);
+    p->depth--;
+    return answer;
+}
+
+static long parse_body(Parse *p, const GNode *n, long at, Slots *out)
 {
     const Token *toks = p->t->items;
     long         end  = p->t->n;

@@ -246,5 +246,13 @@ void diag_note(const char *fmt, ...)
     va_end(ap);
 }
 
+/* ------------------------------------------------------------------ */
+/* Counting the work */
+
+Work phx_work;
+
+const Work *work_done(void) { return &phx_work; }
+void        work_reset(void) { phx_work = (Work){ 0 }; }
+
 bool diag_failed(void) { return errors > 0; }
 int  diag_errors(void) { return errors; }
