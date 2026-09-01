@@ -60,9 +60,15 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**Stage 3 of six.** Phoenix reads a description, parses a source file with it,
-builds the AST its `->` clauses describe, and runs the passes its `%driver`
-names, in order — checking the program, interpreting it, or compiling it.
+**All six stages are done.** Phoenix reads a description, and either runs it —
+parsing a file, checking it, compiling it — or writes it out as a C program
+that does the same thing without Phoenix.
+
+```sh
+phx examples/pascal.phx -o pascal.c   # a Pascal compiler, 4,800 lines
+cc pascal.c -o pas                    # no flags, no headers, no library
+./pas prog.pas
+```
 
 ```sh
 make
@@ -91,14 +97,42 @@ Nothing yet describes what a program *means*. That is stage 2.
 | **1** | `->` names the AST node a production builds | **done** |
 | **2** | `%pass` — attributes over the tree, interpreted | **done** |
 | **3** | `%driver` — several passes, ordered | **done** |
-| 4 | an `emit` pass that writes Solveig source **and C** | **done early** |
-| 5 | `phx calc.phx -o calc.sol` — the standalone compiler | |
+| **4** | an `emit` pass that writes C | **done** |
+| **5** | `phx desc.phx -o desc.c` — the standalone compiler | **done** |
 
 The emitted target belongs to the `.phx` file, not to Phoenix: an emit pass
 synthesises a string and nothing cares what is in it, so a grammar that wants C
 or assembly out of its compiler writes different emit clauses rather than
 needing a different Phoenix. Stage 4 builds two backends from one `calc.phx`
 specifically to keep that true.
+
+## Writing a compiler out
+
+A generator has two ways to produce a compiler. It can **emit code** — a
+recursive-descent function per rule, a switch per pass — which is faster and is
+what most of the yacc family does. Or it can **emit the description as data**
+and ship the machine that already runs it.
+
+Phoenix emits data, and the reason is the one this project keeps returning to:
+the alternative is a second implementation of everything. A second matcher with
+the same ordered-choice rules, a second evaluator with the same floored
+division, a second pattern matcher. **Two implementations of one notation have
+to agree**, and avoiding exactly that is why actions are not host-language
+splices and why [semantics.md](docs/semantics.md) exists.
+
+So a generated compiler runs *the same* `lex.c`, `parse.c`, `eval.c` and
+`run.c` that `phx` runs, over a grammar frozen into static tables, all of it
+written into one file. There is nothing for the two to disagree about, because
+there is only one of them — and the test says so:
+
+```
+ok    sum.calc: identical to phx, byte for byte
+ok    a Pascal compiler, and it agrees with phx
+```
+
+What it costs is speed: the generated compiler interprets a PEG rather than
+being one. If that ever matters, the answer is to compile the tables to code
+*afterwards*, against a definition the tables have already pinned down.
 
 Each stage is useful on its own and tagged in git, so a design that turns out
 wrong can be backed out of to the last stage that was right.
@@ -457,7 +491,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 75 checks, including Solveig's pascal.bnf when it is present
+make test       # 84 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

@@ -3,22 +3,27 @@
 *What is coming, what is borrowed, and what is deliberately absent. An entry
 here names **why** rather than when.*
 
-Stages 0 to 3 are done; [journal.md](journal.md) records what each one cost
+All six stages are done; [journal.md](journal.md) records what each one cost
 and what it got wrong first.
 
 ---
 
 ## 1. The stages that remain
 
-### 1.1 A standalone compiler
+### 1.1 Compiling the tables to code
 
-`phx pascal.phx -o pascal.c && cc pascal.c -o cpas && cpas prog.pas`.
+A generated compiler interprets a PEG rather than being one, which is the price
+of there being **one** implementation of the notation rather than two — see
+[the README](../README.md#writing-a-compiler-out) for why that trade was made
+deliberately.
 
-Phoenix emits a program containing the grammar as tables, the passes as code,
-and a runtime — which in C is `phoenix/` itself, since that is what the tool is
-already made of. **This is the one place targeting C only is a genuine
-narrowing**, because a backend is Phoenix's own code rather than anybody's
-description.
+If speed ever matters, this is the answer, and the order is what makes it safe:
+the tables pin the definition down first, and code generated against them can be
+checked against the interpreter that produced them. Doing it the other way round
+is how two implementations appear.
+
+Not now. Nothing has been measured, and a generated Pascal compiler is 216K and
+starts instantly.
 
 ---
 

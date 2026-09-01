@@ -10,14 +10,14 @@
  * what almost every published grammar is. It costs something on a grammar with
  * an alternative that is a proper prefix of a later one.
  *
- * When the match fails, the position it got *furthest* is the one worth
+ * When the parse_match fails, the position it got *furthest* is the one worth
  * reporting -- not the position it stopped at. A PEG that fails at the top has
  * usually backtracked a long way from where the real mistake is, and the
  * furthest token it ever reached is very nearly always the place a person
  * would point at.
  *
  * ---------------------------------------------------------------------------
- * What a match produces
+ * What a parse_match produces
  *
  * Matching appends **values** to a list belonging to the enclosing sequence.
  * A literal or a token appends one. A rule appends whatever its body answered.
@@ -53,29 +53,29 @@ typedef struct {
     int            capwanted;
 } Parse;
 
-static long match(Parse *p, const GNode *n, long at, Slots *out);
+static long parse_match(Parse *p, const GNode *n, long at, Slots *out);
 
 /* ------------------------------------------------------------------ */
 
-static char lower(char c)
+static char parse_lower(char c)
 {
     return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
 }
 
-static bool same(const Parse *p, const char *a, size_t alen,
+static bool parse_same(const Parse *p, const char *a, size_t alen,
                  const char *b, size_t blen)
 {
     if (alen != blen) return false;
     if (!p->g->ignorecase) return memcmp(a, b, alen) == 0;
     for (size_t i = 0; i < alen; i++)
-        if (lower(a[i]) != lower(b[i])) return false;
+        if (parse_lower(a[i]) != parse_lower(b[i])) return false;
     return true;
 }
 
 static bool reserved(const Parse *p, const char *text, size_t len)
 {
     for (int i = 0; i < p->g->nreserved; i++)
-        if (same(p, p->g->reserved[i], strlen(p->g->reserved[i]), text, len))
+        if (parse_same(p, p->g->reserved[i], strlen(p->g->reserved[i]), text, len))
             return true;
     return false;
 }
@@ -178,7 +178,7 @@ static Value *slot_value(Parse *p, const GNode *factor, Slots *s, size_t pos)
 /* ------------------------------------------------------------------ */
 /* Evaluating an action
  *
- * The expression itself is evaluated by eval.c, which is the same code a
+ * The expression itself is evaluated by eval.c, which is the parse_same code a
  * stage-2 pass clause runs. All this half provides is what `$2`, `$name` and
  * `$$` mean *here*: the factors of the sequence being built, and the value the
  * enclosing sequence built last.
@@ -259,7 +259,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     size_t pos = at < p->t->n ? p->t->items[at].pos : p->src->size;
 
     for (int i = 0; i < n->nkids; i++) {
-        at = match(p, n->kids[i], at, &slots[i]);
+        at = parse_match(p, n->kids[i], at, &slots[i]);
         if (at < 0) return -1;
         slots_add(p, &gathered, slot_value(p, n->kids[i], &slots[i], pos));
     }
@@ -290,7 +290,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     return at;
 }
 
-static long match(Parse *p, const GNode *n, long at, Slots *out)
+static long parse_match(Parse *p, const GNode *n, long at, Slots *out)
 {
     const Token *toks = p->t->items;
     long         end  = p->t->n;
@@ -298,7 +298,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
     switch (n->kind) {
     case G_LIT: {
         if (at >= end) { note_want(p, at, n->text); return -1; }
-        if (!same(p, toks[at].text, toks[at].len, n->text, (size_t)n->len)) {
+        if (!parse_same(p, toks[at].text, toks[at].len, n->text, (size_t)n->len)) {
             note_want(p, at, n->text);
             return -1;
         }
@@ -331,7 +331,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
         Slots  inner = { 0 };
         size_t pos   = at < end ? toks[at].pos : p->src->size;
 
-        long got = match(p, r->body, at, &inner);
+        long got = parse_match(p, r->body, at, &inner);
         if (got < 0) return -1;
 
         Value *v = inner.n == 1 ? inner.items[0] : NULL;
@@ -350,7 +350,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
 
         int keep = out->n;
         for (int i = 0; i < n->nkids; i++) {
-            at = match(p, n->kids[i], at, out);
+            at = parse_match(p, n->kids[i], at, out);
             if (at < 0) { out->n = keep; return -1; }
         }
         return at;
@@ -359,7 +359,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
     case G_ALT:
         for (int i = 0; i < n->nkids; i++) {
             int  keep = out->n;
-            long got  = match(p, n->kids[i], at, out);
+            long got  = parse_match(p, n->kids[i], at, out);
             if (got >= 0) return got;
             out->n = keep;
         }
@@ -367,7 +367,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
 
     case G_OPT: {
         int  keep = out->n;
-        long got  = match(p, n->kids[0], at, out);
+        long got  = parse_match(p, n->kids[0], at, out);
         if (got >= 0) return got;
         out->n = keep;
         return at;
@@ -376,7 +376,7 @@ static long match(Parse *p, const GNode *n, long at, Slots *out)
     case G_REP:
         for (;;) {
             int  keep = out->n;
-            long got  = match(p, n->kids[0], at, out);
+            long got  = parse_match(p, n->kids[0], at, out);
             if (got < 0)  { out->n = keep; return at; }
             if (got == at) return at;              /* an empty body */
             at = got;
@@ -426,7 +426,7 @@ Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t)
     const Rule *start = &g->rules[g->start];
     Slots       out   = { 0 };
 
-    long got = match(&p, start->body, 0, &out);
+    long got = parse_match(&p, start->body, 0, &out);
     if (got < 0)      { report_failure(&p); return NULL; }
     if (diag_failed()) return NULL;          /* an action went wrong */
 

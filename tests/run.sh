@@ -343,6 +343,79 @@ if [ -n "${PHX_TEST_SOLVEIG:-}" ]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# A description written out as its own compiler. The property being checked is
+# not that it works -- it is that it is **the same**: the generated program runs
+# the same matcher and evaluator phx runs, over frozen tables, so a byte of
+# difference between them would mean two implementations had appeared.
+
+echo "generated compilers"
+
+if "$phx" "$root/examples/calc-c.phx" -o "$tmp0/calc.c" 2>/dev/null; then
+    report pass "calc writes out as C"
+else
+    report fail "calc writes out as C"
+fi
+
+if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
+    report pass "one file, no flags, no headers"
+
+    for f in sum fizz logic; do
+        "$phx" "$root/examples/calc-c.phx" "$root/examples/$f.calc" \
+            > "$tmp0/by-phx" 2>/dev/null
+        "$tmp0/calcc" "$root/examples/$f.calc" > "$tmp0/by-cc" 2>/dev/null
+        if cmp -s "$tmp0/by-phx" "$tmp0/by-cc"; then
+            report pass "$f.calc: identical to phx, byte for byte"
+        else
+            report fail "$f.calc: identical to phx, byte for byte"
+        fi
+    done
+
+    # The generated program is a compiler, so what it writes has to compile.
+    if "$tmp0/calcc" "$root/examples/fizz.calc" > "$tmp0/fizz.c" 2>/dev/null \
+       && cc -Wall -Werror -o "$tmp0/fizz" "$tmp0/fizz.c" 2>/dev/null; then
+        got=$("$tmp0/fizz" | tr '\n' ' ')
+        if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 " ]; then
+            report pass "and what it writes runs"
+        else
+            report fail "and what it writes runs" "got: $got"
+        fi
+    else
+        report fail "and what it writes runs" "it did not compile"
+    fi
+
+    # Diagnostics still point into the description, from a program the
+    # description is no longer beside.
+    msg=$("$tmp0/calcc" "$root/tests/sources/print-a-bool.calc" 2>&1)
+    if printf '%s' "$msg" | grep -qF "(n < 2) is bool"; then
+        report pass "its diagnostics survive the freezing"
+    else
+        report fail "its diagnostics survive the freezing" "$msg"
+    fi
+else
+    report fail "one file, no flags, no headers" "it did not compile"
+fi
+
+# Pascal, the same way round.
+if "$phx" "$root/examples/pascal.phx" -o "$tmp0/pascal.c" 2>/dev/null \
+   && cc -o "$tmp0/pas" "$tmp0/pascal.c" 2>/dev/null; then
+    a=$("$phx" "$root/examples/pascal.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
+    b=$("$tmp0/pas" "$root/tests/pascal/features.pas" 2>/dev/null)
+    if [ "$a" = "$b" ] && printf '%s' "$b" | grep -qF "packed array [1..80] of char"; then
+        report pass "a Pascal compiler, and it agrees with phx"
+    else
+        report fail "a Pascal compiler, and it agrees with phx"
+    fi
+
+    if "$tmp0/pas" "$root/tests/pascal/unclosed.pas" >/dev/null 2>&1; then
+        report fail "and it still refuses a broken program"
+    else
+        report pass "and it still refuses a broken program"
+    fi
+else
+    report fail "a Pascal compiler, and it agrees with phx" "it did not build"
+fi
+
 echo "Pascal, with actions"
 accepts "the description reads" "$root/examples/pascal.phx"
 

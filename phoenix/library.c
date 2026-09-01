@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Value *fail(Eval *e, const Expr *x, const char *fmt, ...)
+static Value *library_fail(Eval *e, const Expr *x, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -96,10 +96,10 @@ Value *eval_call(Eval *e, const Expr *x)
     if (strcmp(f, "bind") == 0) {
         if (!want(e, x, 3, args)) return NULL;
         if (args[0]->kind != V_LIST)
-            return fail(e, x, "'bind' wants an environment, and this is %s",
+            return library_fail(e, x, "'bind' wants an environment, and this is %s",
                         value_kind_name(args[0]));
         if (args[1]->kind != V_TEXT)
-            return fail(e, x, "'bind' wants text for a name, and this is %s",
+            return library_fail(e, x, "'bind' wants text for a name, and this is %s",
                         value_kind_name(args[1]));
 
         int     n     = args[0]->n;
@@ -112,7 +112,7 @@ Value *eval_call(Eval *e, const Expr *x)
     if (strcmp(f, "lookup") == 0 || strcmp(f, "defined") == 0) {
         if (!want(e, x, 2, args)) return NULL;
         if (args[0]->kind != V_LIST)
-            return fail(e, x, "'%s' wants an environment, and this is %s",
+            return library_fail(e, x, "'%s' wants an environment, and this is %s",
                         f, value_kind_name(args[0]));
 
         bool asking = f[0] == 'd';
@@ -143,13 +143,13 @@ Value *eval_call(Eval *e, const Expr *x)
     if (strcmp(f, "quotient") == 0 || strcmp(f, "remainder") == 0) {
         if (!want(e, x, 2, args)) return NULL;
         if (args[0]->kind != V_INT || args[1]->kind != V_INT)
-            return fail(e, x, "'%s' wants two integers, and got %s and %s",
+            return library_fail(e, x, "'%s' wants two integers, and got %s and %s",
                         f, value_kind_name(args[0]), value_kind_name(args[1]));
 
         long long n = args[0]->ival, d = args[1]->ival;
-        if (d == 0) return fail(e, x, "division by zero");
+        if (d == 0) return library_fail(e, x, "division by zero");
         if (n == LLONG_MIN && d == -1)
-            return fail(e, x, "this overflows a 64-bit integer");
+            return library_fail(e, x, "this overflows a 64-bit integer");
 
         return value_int(a, f[0] == 'q' ? n / d : n % d);   /* C truncates */
     }
@@ -160,17 +160,17 @@ Value *eval_call(Eval *e, const Expr *x)
         if (!want(e, x, 1, args)) return NULL;
         if (args[0]->kind == V_INT) return args[0];
         if (args[0]->kind == V_FLOAT)
-            return fail(e, x, "'int' does not narrow a float -- "
+            return library_fail(e, x, "'int' does not narrow a float -- "
                               "say floor, ceiling, round or truncate");
         if (args[0]->kind != V_TEXT)
-            return fail(e, x, "'int' wants text, and this is %s",
+            return library_fail(e, x, "'int' wants text, and this is %s",
                         value_kind_name(args[0]));
 
         char *end;
         char *copy = arena_strndup(a, args[0]->text, args[0]->len);
         long long n = strtoll(copy, &end, 10);
         if (end == copy || *end)
-            return fail(e, x, "\"%s\" is not an integer", copy);
+            return library_fail(e, x, "\"%s\" is not an integer", copy);
         return value_int(a, n);
     }
 
@@ -179,14 +179,14 @@ Value *eval_call(Eval *e, const Expr *x)
         if (args[0]->kind == V_FLOAT) return args[0];
         if (args[0]->kind == V_INT)   return value_float(a, (double)args[0]->ival);
         if (args[0]->kind != V_TEXT)
-            return fail(e, x, "'float' wants text or an integer, and this is %s",
+            return library_fail(e, x, "'float' wants text or an integer, and this is %s",
                         value_kind_name(args[0]));
 
         char *end;
         char *copy = arena_strndup(a, args[0]->text, args[0]->len);
         double d = strtod(copy, &end);
         if (end == copy || *end)
-            return fail(e, x, "\"%s\" is not a number", copy);
+            return library_fail(e, x, "\"%s\" is not a number", copy);
         return value_float(a, d);
     }
 
@@ -195,7 +195,7 @@ Value *eval_call(Eval *e, const Expr *x)
         char  *out;
         size_t len;
         if (!value_format(a, args[0], &out, &len))
-            return fail(e, x, "a %s has no written form", value_kind_name(args[0]));
+            return library_fail(e, x, "a %s has no written form", value_kind_name(args[0]));
         return value_text(a, out, len);
     }
 
@@ -203,7 +203,7 @@ Value *eval_call(Eval *e, const Expr *x)
      || strcmp(f, "round") == 0 || strcmp(f, "truncate") == 0) {
         if (!want(e, x, 1, args)) return NULL;
         if (args[0]->kind != V_FLOAT)
-            return fail(e, x, "'%s' wants a float, and this is %s",
+            return library_fail(e, x, "'%s' wants a float, and this is %s",
                         f, value_kind_name(args[0]));
 
         double d = args[0]->real;
@@ -213,7 +213,7 @@ Value *eval_call(Eval *e, const Expr *x)
                                : __builtin_trunc(d);
 
         if (!(r >= -9223372036854775808.0 && r < 9223372036854775808.0))
-            return fail(e, x, "%g does not fit a 64-bit integer", d);
+            return library_fail(e, x, "%g does not fit a 64-bit integer", d);
         return value_int(a, (long long)r);
     }
 
@@ -226,7 +226,7 @@ Value *eval_call(Eval *e, const Expr *x)
         case V_LIST:
         case V_NODE: return value_int(a, args[0]->n);
         default:
-            return fail(e, x, "'size' wants text, a list or a node, and this is %s",
+            return library_fail(e, x, "'size' wants text, a list or a node, and this is %s",
                         value_kind_name(args[0]));
         }
     }
@@ -234,15 +234,15 @@ Value *eval_call(Eval *e, const Expr *x)
     if (strcmp(f, "at") == 0) {
         if (!want(e, x, 2, args)) return NULL;
         if (args[0]->kind != V_LIST)
-            return fail(e, x, "'at' wants a list, and this is %s",
+            return library_fail(e, x, "'at' wants a list, and this is %s",
                         value_kind_name(args[0]));
         if (args[1]->kind != V_INT)
-            return fail(e, x, "'at' wants an integer index, and this is %s",
+            return library_fail(e, x, "'at' wants an integer index, and this is %s",
                         value_kind_name(args[1]));
 
         long long i = args[1]->ival;         /* one-based, both ends included */
         if (i < 1 || i > args[0]->n)
-            return fail(e, x, "at(%lld) of a list of %d", i, args[0]->n);
+            return library_fail(e, x, "at(%lld) of a list of %d", i, args[0]->n);
         return args[0]->items[i - 1];
     }
 
@@ -253,14 +253,14 @@ Value *eval_call(Eval *e, const Expr *x)
             return NULL;
         }
         if (args[0]->kind != V_LIST)
-            return fail(e, x, "'join' wants a list, and this is %s",
+            return library_fail(e, x, "'join' wants a list, and this is %s",
                         value_kind_name(args[0]));
 
         const char *sep    = "";
         size_t      seplen = 0;
         if (x->nkids == 2) {
             if (args[1]->kind != V_TEXT)
-                return fail(e, x, "'join' wants text between, and this is %s",
+                return library_fail(e, x, "'join' wants text between, and this is %s",
                             value_kind_name(args[1]));
             sep    = args[1]->text;
             seplen = args[1]->len;
@@ -273,7 +273,7 @@ Value *eval_call(Eval *e, const Expr *x)
             char  *piece;
             size_t len;
             if (!value_format(a, args[0]->items[i], &piece, &len))
-                return fail(e, x, "'join' cannot write a %s",
+                return library_fail(e, x, "'join' cannot write a %s",
                             value_kind_name(args[0]->items[i]));
             total += len + (i ? seplen : 0);
         }
@@ -292,5 +292,5 @@ Value *eval_call(Eval *e, const Expr *x)
         return value_text(a, buf, used);
     }
 
-    return fail(e, x, "there is no function called '%s'", f);
+    return library_fail(e, x, "there is no function called '%s'", f);
 }

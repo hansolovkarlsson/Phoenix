@@ -478,4 +478,9 @@ bool pass_run(Arena *a, const Grammar *g, const Source *src,
 /* What a pass worked out about a node, or NULL. */
 Value *pass_attr(const Value *node, const char *name);
 
+/* ------------------------------------------------------------------ */
+/* Writing a description out as its own compiler -- emit.c */
+
+bool emit_compiler(const Grammar *g, const char *name, FILE *out);
+
 #endif /* PHX_H */

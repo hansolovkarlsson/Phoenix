@@ -1,11 +1,11 @@
 /* lex.c -- characters to tokens, using the lexical half of the grammar.
  *
  * The rule is the one every lexer has: at each position, try every token rule
- * and take the **longest** match. Ties go to the rule declared first.
+ * and take the **longest** lex_match. Ties go to the rule declared first.
  *
  * That is deliberately not the ordered choice the syntactic half uses, and the
  * difference is the reason `"<" | "<="` is a question there and not here. A
- * scanner that took the first match would have to be told, by ordering, that
+ * scanner that took the first lex_match would have to be told, by ordering, that
  * `<=` is longer than `<`. One that takes the longest already knows.
  *
  * Within a single rule, though, the alternatives *are* ordered -- `a | b`
@@ -22,23 +22,23 @@ typedef struct {
     const Source  *src;
 } Lex;
 
-static long match(Lex *l, const GNode *n, long pos);
+static long lex_match(Lex *l, const GNode *n, long pos);
 
-static char lower(char c)
+static char lex_lower(char c)
 {
     return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
 }
 
-static bool same(const Lex *l, const char *a, const char *b, size_t len)
+static bool lex_same(const Lex *l, const char *a, const char *b, size_t len)
 {
     if (!l->g->ignorecase) return memcmp(a, b, len) == 0;
     for (size_t i = 0; i < len; i++)
-        if (lower(a[i]) != lower(b[i])) return false;
+        if (lex_lower(a[i]) != lex_lower(b[i])) return false;
     return true;
 }
 
-/* Answers where the match ended, or -1. */
-static long match(Lex *l, const GNode *n, long pos)
+/* Answers where the lex_match ended, or -1. */
+static long lex_match(Lex *l, const GNode *n, long pos)
 {
     const char *s    = l->src->text;
     long        size = (long)l->src->size;
@@ -46,52 +46,52 @@ static long match(Lex *l, const GNode *n, long pos)
     switch (n->kind) {
     case G_LIT:
         if (pos + n->len > size) return -1;
-        return same(l, s + pos, n->text, (size_t)n->len) ? pos + n->len : -1;
+        return lex_same(l, s + pos, n->text, (size_t)n->len) ? pos + n->len : -1;
 
     case G_RANGE: {
         if (pos >= size) return -1;
         char c  = s[pos];
         char lo = n->text[0], hi = n->upto[0];
-        if (l->g->ignorecase) { c = lower(c); lo = lower(lo); hi = lower(hi); }
+        if (l->g->ignorecase) { c = lex_lower(c); lo = lex_lower(lo); hi = lex_lower(hi); }
         return (c >= lo && c <= hi) ? pos + 1 : -1;
     }
 
     case G_NAME:
-        return match(l, l->g->rules[n->ref].body, pos);
+        return lex_match(l, l->g->rules[n->ref].body, pos);
 
     case G_SEQ:
         for (int i = 0; i < n->nkids; i++) {
-            pos = match(l, n->kids[i], pos);
+            pos = lex_match(l, n->kids[i], pos);
             if (pos < 0) return -1;
         }
         return pos;
 
     case G_ALT:
         for (int i = 0; i < n->nkids; i++) {
-            long got = match(l, n->kids[i], pos);
+            long got = lex_match(l, n->kids[i], pos);
             if (got >= 0) return got;
         }
         return -1;
 
     case G_OPT: {
-        long got = match(l, n->kids[0], pos);
+        long got = lex_match(l, n->kids[0], pos);
         return got >= 0 ? got : pos;
     }
 
     case G_REP:
         for (;;) {
-            long got = match(l, n->kids[0], pos);
+            long got = lex_match(l, n->kids[0], pos);
             if (got < 0) return pos;
             if (got == pos) return pos;      /* an empty body would spin here */
             pos = got;
         }
 
     case G_NOT:
-        /* One character, provided the inner factor does not match here. It is
+        /* One character, provided the inner factor does not lex_match here. It is
          * PEG's negative lookahead with a character taken after it, which is
          * the only form anybody writes: `"{" { ! "}" } "}"` is a comment. */
         if (pos >= size) return -1;
-        return match(l, n->kids[0], pos) >= 0 ? -1 : pos + 1;
+        return lex_match(l, n->kids[0], pos) >= 0 ? -1 : pos + 1;
     }
     return -1;
 }
@@ -128,9 +128,9 @@ bool lex_run(Arena *a, const Grammar *g, const Source *src, Tokens *out)
             const Rule *r = &g->rules[i];
             if (!r->lexical || r->fragment || !r->body) continue;
 
-            long got = match(&l, r->body, pos);
+            long got = lex_match(&l, r->body, pos);
 
-            /* A zero-length match is not a token; it would leave the scanner
+            /* A zero-length lex_match is not a token; it would leave the scanner
              * exactly where it was, forever. */
             if (got > pos && got > best) { best = got; best_rule = i; }
         }
@@ -171,7 +171,7 @@ bool lex_produces(const Grammar *g, const char *text, size_t len)
 
         /* The whole of it, and as one token. A rule matching just the `:` of
          * a `:=` has not produced the literal the syntactic half asked for. */
-        if (match(&l, r->body, 0) == (long)len) return true;
+        if (lex_match(&l, r->body, 0) == (long)len) return true;
     }
     return false;
 }

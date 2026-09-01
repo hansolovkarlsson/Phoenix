@@ -538,3 +538,52 @@ keeping: an expression grammar is not one thing. What is shared between calc and
 Pascal is the *shape* — precedence climbing, a fold per level, a hole at the
 bottom — and a shape is not a module. That is a real limit on what `lib/` can
 hold, and it was found by the second language rather than argued about.
+
+## 2026-09-01 — stage 5, and the last decision was the same as the first
+
+`phx desc.phx -o desc.c` writes a description out as a C program that is its
+compiler. One file, `cc desc.c -o prog`, no flags and no headers.
+
+**Tables, not code, and it is the same argument as everything else here.** A
+generator can emit a recursive-descent function per rule and a switch per pass,
+which is faster and is what the yacc family does. Or it can emit the description
+as data and ship the machine that already runs it. The first means a second
+matcher with the same ordered-choice rules, a second evaluator with the same
+floored division, a second pattern matcher — **two implementations of one
+notation, which have to agree.** Avoiding that is why actions are not
+host-language splices, why `docs/semantics.md` exists, and why `phx --run eval`
+and `--run emit-c` are tested against each other.
+
+So a generated compiler is the runtime — `support.c`, `eval.c`, `library.c`,
+`lex.c`, `parse.c`, `run.c` — written into the file verbatim, plus the grammar,
+passes and drivers frozen as static tables, plus a `main`. It cannot disagree
+with `phx` about what a description means, and the test asserts the strong form:
+**byte for byte identical output.**
+
+That also drew a line through the codebase that had not been drawn before. The
+**runtime** runs a description; the **front** — `grammar.c`, `check.c`,
+`expr.c`, `pass.c`, `emit.c` — reads one, and a generated compiler has no use
+for it because it will never see a `.phx` file. The Makefile names both.
+
+**Three things went wrong, and all three were the runtime becoming one
+translation unit.**
+
+*A static initialiser in C may not name a variable.* Emitting
+`static Expr *cv = &x5;` and then using `cv` in an aggregate does not compile.
+The ids are kept and `&x5` written into the aggregate directly.
+
+*Four static functions collided.* `fail` in `eval.c` and `library.c`, and
+`lower`, `match` and `same` in both `lex.c` and `parse.c`. Renamed — which is
+better hygiene than it was before, since the two `match`es do genuinely
+different things.
+
+*And the emitted tables shared a namespace with the runtime.* `reserved` is a
+table here and a function in `parse.c`. Everything emitted is `phx_`-prefixed
+now.
+
+**One bug was worth more than the three.** `emit_gnode` wrote `NULL` for a
+node's `action`. The generated compiler parsed every program correctly and
+answered nothing at all: the grammar was entirely there and every `->` had
+vanished. It is the failure a table emitter is most likely to have — a field
+that is only sometimes present, forgotten in the one place it is written — and
+the symptom points nowhere near the cause.

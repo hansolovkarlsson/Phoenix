@@ -63,6 +63,8 @@ static const char usage[] =
     "  --tokens     print the token stream and stop\n"
     "  --nodes      print the node types the grammar builds, and stop\n"
     "  --imports    list the files the description was assembled from\n"
+    "  -o FILE.c      write this description out as a C program that is its\n"
+    "                 compiler, and stop\n"
     "  --tree         print the tree and stop, whatever drivers there are\n"
     "  --driver NAME  which %driver to run (default: the first declared)\n"
     "  --drivers      list the drivers this description declares\n"
@@ -88,6 +90,7 @@ int main(int argc, char **argv)
     const char *driver_name  = NULL;
     bool        want_drivers = false;
     bool        want_tree    = false;
+    const char *compile_to   = NULL;
     bool        quiet        = false;
 
     for (int i = 1; i < argc; i++) {
@@ -102,6 +105,15 @@ int main(int argc, char **argv)
         if (strcmp(arg, "--imports") == 0) { want_imports = true; continue; }
         if (strcmp(arg, "--drivers") == 0) { want_drivers = true; continue; }
         if (strcmp(arg, "--tree")    == 0) { want_tree    = true; continue; }
+
+        if (strcmp(arg, "-o") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "phx: -o wants a file to write\n");
+                return 2;
+            }
+            compile_to = argv[++i];
+            continue;
+        }
 
         if (strcmp(arg, "--driver") == 0) {
             if (i + 1 >= argc) {
@@ -151,6 +163,33 @@ int main(int argc, char **argv)
     Arena   *a = arena_new();
     Grammar *g = grammar_read(a, grammar_path);
     if (!g) { arena_free(a); return 1; }
+
+    if (compile_to) {
+        if (g->incomplete) {
+            fprintf(stderr, "%s: this description has holes in it, so there is "
+                            "no compiler to write\n", grammar_path);
+            arena_free(a);
+            return 1;
+        }
+        if (g->start < 0) {
+            fprintf(stderr, "%s: there are no syntactic rules, so there is "
+                            "nothing to compile\n", grammar_path);
+            arena_free(a);
+            return 1;
+        }
+
+        FILE *f = fopen(compile_to, "w");
+        if (!f) {
+            fprintf(stderr, "phx: cannot write %s\n", compile_to);
+            arena_free(a);
+            return 1;
+        }
+        bool ok = emit_compiler(g, compile_to, f);
+        fclose(f);
+
+        arena_free(a);
+        return ok ? 0 : 1;
+    }
 
     if (want_drivers) {
         for (int i = 0; i < g->ndrivers; i++) {

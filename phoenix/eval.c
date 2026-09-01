@@ -193,7 +193,7 @@ static bool mod_floored(long long a, long long b, long long *out)
 
 /* ------------------------------------------------------------------ */
 
-static Value *fail(Eval *e, const Expr *x, const char *fmt, ...)
+static Value *eval_fail(Eval *e, const Expr *x, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -216,12 +216,12 @@ static Value *arith(Eval *e, const Expr *x, Value *l, Value *r)
     /* No implicit conversion, anywhere. This is the rule that most protects
      * two backends from disagreeing, so it is checked before anything else. */
     if (l->kind != r->kind)
-        return fail(e, x, "'%s' between %s and %s -- there is no conversion, "
+        return eval_fail(e, x, "'%s' between %s and %s -- there is no conversion, "
                           "so write int() or float()",
                     op, value_kind_name(l), value_kind_name(r));
 
     if (l->kind == V_TEXT && strcmp(op, "+") == 0)
-        return fail(e, x, "'+' does not join text -- write \"{}{}\" of a, b");
+        return eval_fail(e, x, "'+' does not join text -- write \"{}{}\" of a, b");
 
     if (l->kind == V_INT) {
         long long out;
@@ -233,13 +233,13 @@ static Value *arith(Eval *e, const Expr *x, Value *l, Value *r)
         else if (strcmp(op, "div") == 0
               || strcmp(op, "/")   == 0) ok = div_floored(l->ival, r->ival, &out);
         else if (strcmp(op, "mod") == 0) ok = mod_floored(l->ival, r->ival, &out);
-        else return fail(e, x, "'%s' is not arithmetic", op);
+        else return eval_fail(e, x, "'%s' is not arithmetic", op);
 
         if (!ok) {
             if ((strcmp(op, "div") == 0 || strcmp(op, "/") == 0
                  || strcmp(op, "mod") == 0) && r->ival == 0)
-                return fail(e, x, "division by zero");
-            return fail(e, x, "this overflows a 64-bit integer");
+                return eval_fail(e, x, "division by zero");
+            return eval_fail(e, x, "this overflows a 64-bit integer");
         }
         return value_int(e->a, out);
     }
@@ -250,11 +250,11 @@ static Value *arith(Eval *e, const Expr *x, Value *l, Value *r)
         else if (strcmp(op, "-") == 0) out = l->real - r->real;
         else if (strcmp(op, "*") == 0) out = l->real * r->real;
         else if (strcmp(op, "/") == 0) out = l->real / r->real;  /* IEEE: inf */
-        else return fail(e, x, "'%s' is integer arithmetic; this is a float", op);
+        else return eval_fail(e, x, "'%s' is integer arithmetic; this is a float", op);
         return value_float(e->a, out);
     }
 
-    return fail(e, x, "'%s' wants numbers, and this is %s",
+    return eval_fail(e, x, "'%s' wants numbers, and this is %s",
                 op, value_kind_name(l));
 }
 
@@ -271,7 +271,7 @@ static Value *compare(Eval *e, const Expr *x, Value *l, Value *r)
     /* Ordering is within a kind only: across kinds there is no order anyone
      * would agree on, and agreeing is the whole job. */
     if (l->kind != r->kind)
-        return fail(e, x, "'%s' between %s and %s -- there is no order across kinds",
+        return eval_fail(e, x, "'%s' between %s and %s -- there is no order across kinds",
                     op, value_kind_name(l), value_kind_name(r));
 
     int sign;
@@ -288,7 +288,7 @@ static Value *compare(Eval *e, const Expr *x, Value *l, Value *r)
         break;
     }
     default:
-        return fail(e, x, "'%s' does not order a %s", op, value_kind_name(l));
+        return eval_fail(e, x, "'%s' does not order a %s", op, value_kind_name(l));
     }
 
     if (strcmp(op, "<")  == 0) return value_bool(e->a, sign <  0);
@@ -296,7 +296,7 @@ static Value *compare(Eval *e, const Expr *x, Value *l, Value *r)
     if (strcmp(op, "<=") == 0) return value_bool(e->a, sign <= 0);
     if (strcmp(op, ">=") == 0) return value_bool(e->a, sign >= 0);
 
-    return fail(e, x, "'%s' is not a comparison", op);
+    return eval_fail(e, x, "'%s' is not a comparison", op);
 }
 
 /* ------------------------------------------------------------------ */
@@ -310,7 +310,7 @@ static Value *format(Eval *e, const Expr *x)
     if (value_failed(template)) return template;
 
     if (template->kind != V_TEXT)
-        return fail(e, x, "'of' fills text, and this is %s",
+        return eval_fail(e, x, "'of' fills text, and this is %s",
                     value_kind_name(template));
 
     size_t cap  = template->len + 64;
@@ -327,7 +327,7 @@ static Value *format(Eval *e, const Expr *x)
             i++;
         } else if (c == '{' && i + 1 < template->len && template->text[i + 1] == '}') {
             if (next >= x->nkids)
-                return fail(e, x, "this template has more {} than there are values");
+                return eval_fail(e, x, "this template has more {} than there are values");
 
             Value *arg = eval_expr(e, x->kids[next++]);
             if (!arg) return NULL;
@@ -336,7 +336,7 @@ static Value *format(Eval *e, const Expr *x)
             char  *text;
             size_t len;
             if (!value_format(e->a, arg, &text, &len))
-                return fail(e, x->kids[next - 1], "a %s cannot fill a {}",
+                return eval_fail(e, x->kids[next - 1], "a %s cannot fill a {}",
                             value_kind_name(arg));
 
             while (used + len + 1 > cap) {
@@ -361,7 +361,7 @@ static Value *format(Eval *e, const Expr *x)
     }
 
     if (next < x->nkids)
-        return fail(e, x, "this template has %d {} and %d value%s were given",
+        return eval_fail(e, x, "this template has %d {} and %d value%s were given",
                     next - 1, x->nkids - 1, x->nkids == 2 ? "" : "s");
 
     buf[used] = '\0';
@@ -392,18 +392,18 @@ Value *eval_expr(Eval *e, const Expr *x)
 
         if (strcmp(x->name, "not") == 0) {
             if (v->kind != V_BOOL)
-                return fail(e, x, "'not' wants a boolean, and this is %s",
+                return eval_fail(e, x, "'not' wants a boolean, and this is %s",
                             value_kind_name(v));
             return value_bool(e->a, !v->ival);
         }
         if (v->kind == V_INT) {
             long long out;
             if (!sub_checked(0, v->ival, &out))
-                return fail(e, x, "negating this overflows a 64-bit integer");
+                return eval_fail(e, x, "negating this overflows a 64-bit integer");
             return value_int(e->a, out);
         }
         if (v->kind == V_FLOAT) return value_float(e->a, -v->real);
-        return fail(e, x, "'-' wants a number, and this is %s", value_kind_name(v));
+        return eval_fail(e, x, "'-' wants a number, and this is %s", value_kind_name(v));
     }
 
     case X_BINOP: {
@@ -414,7 +414,7 @@ Value *eval_expr(Eval *e, const Expr *x)
             if (!l) return NULL;
             if (value_failed(l)) return l;
             if (l->kind != V_BOOL)
-                return fail(e, x, "'%s' wants booleans, and the left is %s",
+                return eval_fail(e, x, "'%s' wants booleans, and the left is %s",
                             x->name, value_kind_name(l));
 
             bool want = x->name[0] == 'a';
@@ -423,7 +423,7 @@ Value *eval_expr(Eval *e, const Expr *x)
             Value *r = eval_expr(e, x->kids[1]);
             if (!r) return NULL;
             if (r->kind != V_BOOL)
-                return fail(e, x, "'%s' wants booleans, and the right is %s",
+                return eval_fail(e, x, "'%s' wants booleans, and the right is %s",
                             x->name, value_kind_name(r));
             return r;
         }
@@ -515,7 +515,7 @@ Value *eval_expr(Eval *e, const Expr *x)
         return eval_call(e, x);
 
     case X_SPREAD:
-        return fail(e, x, "'...' belongs inside a list");
+        return eval_fail(e, x, "'...' belongs inside a list");
     }
     return NULL;
 }
