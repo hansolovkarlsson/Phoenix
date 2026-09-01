@@ -29,6 +29,8 @@ Value *value_int(Arena *a, long long n)   { Value *v = fresh(a, V_INT);   v->iva
 Value *value_float(Arena *a, double d)    { Value *v = fresh(a, V_FLOAT); v->real = d; return v; }
 Value *value_bool(Arena *a, bool b)       { Value *v = fresh(a, V_BOOL);  v->ival = b; return v; }
 Value *value_nil(Arena *a)                { return fresh(a, V_NIL); }
+Value *value_error(Arena *a)              { return fresh(a, V_ERROR); }
+bool   value_failed(const Value *v)       { return v && v->kind == V_ERROR; }
 
 Value *value_text(Arena *a, const char *text, size_t len)
 {
@@ -48,6 +50,7 @@ const char *value_kind_name(const Value *v)
     case V_FLOAT: return "float";
     case V_BOOL:  return "boolean";
     case V_NIL:   return "nil";
+    case V_ERROR: return "a failure";
     }
     return "value";
 }
@@ -85,6 +88,8 @@ bool value_format(Arena *a, const Value *v, char **out, size_t *len)
     case V_BOOL:  wrote = snprintf(buf, sizeof buf, "%s", v->ival ? "true" : "false"); break;
     case V_FLOAT: wrote = format_float(v->real, buf, sizeof buf);       break;
 
+    case V_ERROR:
+        return false;
     case V_NIL:
         diag_note("nil has no written form -- a pass that wants one says what it is");
         return false;
@@ -113,6 +118,7 @@ static bool equal(const Value *a, const Value *b)
     if (a->kind != b->kind) return false;
 
     switch (a->kind) {
+    case V_ERROR:
     case V_NIL:   return true;
     case V_BOOL:
     case V_INT:   return a->ival == b->ival;
@@ -204,6 +210,9 @@ static Value *arith(Eval *e, const Expr *x, Value *l, Value *r)
 {
     const char *op = x->name;
 
+    if (value_failed(l)) return l;
+    if (value_failed(r)) return r;
+
     /* No implicit conversion, anywhere. This is the rule that most protects
      * two backends from disagreeing, so it is checked before anything else. */
     if (l->kind != r->kind)
@@ -253,6 +262,9 @@ static Value *compare(Eval *e, const Expr *x, Value *l, Value *r)
 {
     const char *op = x->name;
 
+    if (value_failed(l)) return l;
+    if (value_failed(r)) return r;
+
     if (strcmp(op, "=")  == 0) return value_bool(e->a,  equal(l, r));
     if (strcmp(op, "<>") == 0) return value_bool(e->a, !equal(l, r));
 
@@ -295,6 +307,8 @@ static Value *format(Eval *e, const Expr *x)
     Value *template = eval_expr(e, x->kids[0]);
     if (!template) return NULL;
 
+    if (value_failed(template)) return template;
+
     if (template->kind != V_TEXT)
         return fail(e, x, "'of' fills text, and this is %s",
                     value_kind_name(template));
@@ -317,6 +331,7 @@ static Value *format(Eval *e, const Expr *x)
 
             Value *arg = eval_expr(e, x->kids[next++]);
             if (!arg) return NULL;
+            if (value_failed(arg)) return arg;
 
             char  *text;
             size_t len;
@@ -373,6 +388,8 @@ Value *eval_expr(Eval *e, const Expr *x)
         Value *v = eval_expr(e, x->kids[0]);
         if (!v) return NULL;
 
+        if (value_failed(v)) return v;
+
         if (strcmp(x->name, "not") == 0) {
             if (v->kind != V_BOOL)
                 return fail(e, x, "'not' wants a boolean, and this is %s",
@@ -395,6 +412,7 @@ Value *eval_expr(Eval *e, const Expr *x)
         if (strcmp(x->name, "and") == 0 || strcmp(x->name, "or") == 0) {
             Value *l = eval_expr(e, x->kids[0]);
             if (!l) return NULL;
+            if (value_failed(l)) return l;
             if (l->kind != V_BOOL)
                 return fail(e, x, "'%s' wants booleans, and the left is %s",
                             x->name, value_kind_name(l));
@@ -472,7 +490,11 @@ Value *eval_expr(Eval *e, const Expr *x)
     case X_NODE: {
         Value *v = fresh(e->a, V_NODE);
         v->type  = x->name;
-        v->pos   = x->pos;
+        /* Where in the file being compiled this belongs -- not where in the
+         * .phx the action that built it sits. A diagnostic from a later pass
+         * points at the user's program, which is the only place worth
+         * pointing at. */
+        v->pos   = e->pos;
 
         if (x->nkids == 0) return v;
 

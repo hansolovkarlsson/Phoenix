@@ -78,6 +78,10 @@ Value *eval_call(Eval *e, const Expr *x)
     for (int i = 0; i < argc; i++) {
         args[i] = eval_expr(e, x->kids[i]);
         if (!args[i]) return NULL;
+
+        /* A failure passes straight through every function: it has already
+         * been reported once, and once is the right number. */
+        if (value_failed(args[i])) return args[i];
     }
     const char *f = x->name;
 
@@ -234,6 +238,8 @@ Value *eval_call(Eval *e, const Expr *x)
 
         size_t total = 0;
         for (int i = 0; i < args[0]->n; i++) {
+            if (value_failed(args[0]->items[i])) return args[0]->items[i];
+
             char  *piece;
             size_t len;
             if (!value_format(a, args[0]->items[i], &piece, &len))

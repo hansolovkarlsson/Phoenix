@@ -55,6 +55,70 @@ statement = "print" e:expression ";"          -> Print(value: $e)
 expression = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
 term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
 
-factor     = number             -> Number(value: $1)
+factor     = number             -> Number(text: $1)
            | name               -> Variable(name: $1)
            | "(" expression ")" -> $2 .
+
+(* ------------------------------------------------------------------ *)
+(* What a program means.                                              *)
+(*                                                                     *)
+(* A pass is clauses keyed on the vocabulary above. They are tried in   *)
+(* order and the first match wins -- the same rule the syntactic half   *)
+(* uses for `|`, so there is one thing to know about ordering and not   *)
+(* two.                                                                 *)
+
+%pass eval
+
+  (* An environment flows along the tree in document order: it enters a
+   * node, may be changed by it, and leaves to whatever comes next. That
+   * is what a symbol table is, and it is the one shape plain synthesised
+   * and inherited attributes cannot express. *)
+  thread env = empty
+
+  Number   : val = int($text) .
+  Variable : val = lookup($env, $name)
+           ! not defined($env, $name) : "'{}' is not defined" of $name .
+
+  Binary(op: "+") : val = $left.val + $right.val .
+  Binary(op: "-") : val = $left.val - $right.val .
+  Binary(op: "*") : val = $left.val * $right.val .
+  Binary(op: "/") : val = $left.val div $right.val
+                  ! $right.val = 0 : "division by zero" .
+
+  Let      : env = bind($env, $name, $value.val)
+           : out = "" .
+  Print    : out = "{}\n" of $value.val .
+
+  (* `$body` is a list, and reading an attribute of a list reads it from
+   * every element -- so this is the `out` of each statement, joined. *)
+  Program  : out = join($body.out) .
+
+(* ------------------------------------------------------------------ *)
+(* Two compilers, from one description.                                *)
+(*                                                                     *)
+(* Neither pass knows what language Phoenix itself emits. An emit pass  *)
+(* builds a string and nothing cares what is in it, which is the whole  *)
+(* reason a `.phx` can target something other than Solveig.             *)
+
+%pass emit-sol
+  Number   : out = "#{}" of $text .
+  Variable : out = "{}" of $name .
+
+  Binary(op: "/") : out = "{}:div({})" of $left.out, $right.out .
+  Binary          : out = "@expr({} {} {})" of $left.out, $op, $right.out .
+
+  Let      : out = "{} := {}." of $name, $value.out .
+  (* `display` rather than `print`: `print` writes an integer in its
+   * literal form, `#97`, and the answer has to be the same three ways. *)
+  Print    : out = "{}:display. \"\\n\":display." of $value.out .
+  Program  : out = join($body.out, "\n") .
+
+%pass emit-c
+  Number   : out = "{}" of $text .
+  Variable : out = "{}" of $name .
+  Binary   : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  Let      : out = "    long {} = {};" of $name, $value.out .
+  Print    : out = "    printf(\"%ld\\n\", {});" of $value.out .
+  Program  : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
+                     of join($body.out, "\n") .

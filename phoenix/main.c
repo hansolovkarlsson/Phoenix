@@ -22,6 +22,8 @@ static const char usage[] =
     "options:\n"
     "  --tokens     print the token stream and stop\n"
     "  --nodes      print the node types the grammar builds, and stop\n"
+    "  --run PASS   run a %pass over the tree and print what it worked out\n"
+    "  --show ATTR  which attribute --run prints from the root (default: out)\n"
     "  --grammar    print the grammar as it was understood\n"
     "  --quiet      say nothing on success; the exit status is the answer\n"
     "  --help       this\n";
@@ -33,6 +35,8 @@ int main(int argc, char **argv)
     bool        want_tokens  = false;
     bool        want_grammar = false;
     bool        want_nodes   = false;
+    const char *run_pass     = NULL;
+    const char *show_attr    = "out";
     bool        quiet        = false;
 
     for (int i = 1; i < argc; i++) {
@@ -44,6 +48,23 @@ int main(int argc, char **argv)
         }
         if (strcmp(arg, "--tokens")  == 0) { want_tokens  = true; continue; }
         if (strcmp(arg, "--nodes")   == 0) { want_nodes   = true; continue; }
+
+        if (strcmp(arg, "--run") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "phx: --run wants the name of a pass\n");
+                return 2;
+            }
+            run_pass = argv[++i];
+            continue;
+        }
+        if (strcmp(arg, "--show") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "phx: --show wants the name of an attribute\n");
+                return 2;
+            }
+            show_attr = argv[++i];
+            continue;
+        }
         if (strcmp(arg, "--grammar") == 0) { want_grammar = true; continue; }
         if (strcmp(arg, "--quiet")   == 0) { quiet        = true; continue; }
 
@@ -97,6 +118,37 @@ int main(int argc, char **argv)
 
     Value *tree = parse_run(a, g, &src, &toks);
     if (!tree) { arena_free(a); return 1; }
+
+    if (run_pass) {
+        const Pass *pass = pass_find(g, run_pass);
+        if (!pass) {
+            fprintf(stderr, "phx: there is no pass called '%s'\n", run_pass);
+            arena_free(a);
+            return 2;
+        }
+        if (!pass_run(a, g, &src, pass, tree)) { arena_free(a); return 1; }
+
+        Value *answer = pass_attr(tree, show_attr);
+        if (!answer) {
+            fprintf(stderr, "phx: pass '%s' left no '%s' on the root\n",
+                    run_pass, show_attr);
+            arena_free(a);
+            return 1;
+        }
+
+        if (!quiet) {
+            char  *text;
+            size_t len;
+            if (value_format(a, answer, &text, &len)) {
+                fwrite(text, 1, len, stdout);
+                if (len == 0 || text[len - 1] != '\n') fputc('\n', stdout);
+            } else {
+                tree_dump(stdout, answer);
+            }
+        }
+        arena_free(a);
+        return 0;
+    }
 
     if (!quiet) tree_dump(stdout, tree);
 

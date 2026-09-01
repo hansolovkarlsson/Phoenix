@@ -330,7 +330,8 @@ typedef enum {
     V_INT,     /* 64-bit signed                                             */
     V_FLOAT,   /* IEEE 754 binary64                                         */
     V_BOOL,
-    V_NIL      /* absence, and nothing else                                 */
+    V_NIL,     /* absence, and nothing else                                 */
+    V_ERROR    /* internal: a failure already reported, propagating quietly  */
 } VKind;
 
 typedef struct Value Value;
@@ -365,6 +366,7 @@ struct Eval {
     const Grammar *g;
     Value       *(*ref)(Eval *, const Expr *);   /* $n, $name, $$, x.attr   */
     void          *data;                          /* whatever ref needs      */
+    size_t         pos;   /* where in the *source* a node built here belongs */
 };
 
 Value *eval_expr(Eval *e, const Expr *x);
@@ -377,6 +379,12 @@ Value *value_int(Arena *a, long long n);
 Value *value_float(Arena *a, double d);
 Value *value_bool(Arena *a, bool b);
 Value *value_nil(Arena *a);
+
+/* A failure that has already been reported. Every operation on one answers
+ * another, silently -- so one mistake in a pass produces one message rather
+ * than one message and four consequences of it. */
+Value *value_error(Arena *a);
+bool   value_failed(const Value *v);
 Value *value_text(Arena *a, const char *text, size_t len);
 
 /* Writes a value the way `of` writes it -- see docs/semantics.md. Answers
@@ -390,5 +398,17 @@ const char *value_kind_name(const Value *v);
 Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t);
 
 void tree_dump(FILE *out, const Value *root);
+
+/* ------------------------------------------------------------------ */
+/* Running a pass -- run.c */
+
+const Pass *pass_find(const Grammar *g, const char *name);
+
+/* One walk, post-order. Answers false having reported. */
+bool pass_run(Arena *a, const Grammar *g, const Source *src,
+              const Pass *pass, Value *root);
+
+/* What a pass worked out about a node, or NULL. */
+Value *pass_attr(const Value *node, const char *name);
 
 #endif /* PHX_H */

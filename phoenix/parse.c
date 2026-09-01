@@ -238,7 +238,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     }
 
     Build b = { .p = p, .seq = n, .slots = &gathered, .acc = NULL };
-    Eval  e = { .a = p->a, .g = p->g, .ref = build_ref, .data = &b };
+    Eval  e = { .a = p->a, .g = p->g, .ref = build_ref, .data = &b, .pos = pos };
 
     /* `$$` is the value the enclosing sequence built last, and the result
      * takes its place rather than following it. That is the whole of a left
@@ -439,6 +439,10 @@ static void dump(FILE *out, Arena *a, const Value *v, const char *prefix,
     switch (v->kind) {
     case V_TEXT:
         fprintf(out, "\"%.*s\"\n", (int)v->len, v->text);
+        return;
+
+    case V_ERROR:
+        fputs("<failed>\n", out);
         return;
 
     case V_INT: case V_FLOAT: case V_BOOL: case V_NIL: {

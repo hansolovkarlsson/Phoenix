@@ -107,6 +107,68 @@ refuses "a reserved word as a name" "expected"  "$root/examples/calc.phx" "$root
 refuses "a character no rule matches" "nothing here matches" \
         "$root/examples/calc.phx" "$root/tests/sources/bad-token.calc"
 
+echo "passes"
+accepts "the calculator's passes" "$root/examples/calc.phx"
+refuses "an undefined name"  "is not defined" \
+        --run eval "$root/examples/calc.phx" "$root/tests/sources/undefined.calc"
+refuses "division by zero"   "division by zero" \
+        --run eval "$root/examples/calc.phx" "$root/tests/sources/divzero.calc"
+
+# One mistake should produce one message. The cascade this guards against --
+# a check firing, then the arithmetic above it complaining about the nil it
+# left, then every node above that -- is what `checks are guards` is for.
+n=$("$phx" --run eval "$root/examples/calc.phx" \
+        "$root/tests/sources/undefined.calc" 2>&1 | grep -c "error:")
+if [ "$n" -eq 1 ]; then
+    report pass "one mistake, one message"
+else
+    report fail "one mistake, one message" "got $n errors, wanted 1"
+fi
+
+# ---------------------------------------------------------------------------
+# The conformance rule from docs/semantics.md, made a test rather than a hope:
+# one .phx, interpreted and through both backends, must give the same answer.
+
+want=$("$phx" --run eval "$root/examples/calc.phx" "$root/examples/sum.calc" 2>/dev/null)
+if [ "$want" = "97" ]; then
+    report pass "interpreted"
+else
+    report fail "interpreted" "got '$want', wanted 97"
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+if "$phx" --run emit-c "$root/examples/calc.phx" "$root/examples/sum.calc" \
+        > "$tmp/out.c" 2>/dev/null \
+   && cc -o "$tmp/out" "$tmp/out.c" 2>/dev/null; then
+    got=$("$tmp/out")
+    if [ "$got" = "$want" ]; then
+        report pass "through the C backend, same answer"
+    else
+        report fail "through the C backend, same answer" "got '$got', wanted '$want'"
+    fi
+else
+    report fail "through the C backend, same answer" "it did not compile"
+fi
+
+SOL=/Users/hans/Projects/Solveig
+if [ -x "$SOL/bin/solas" ]; then
+    if "$phx" --run emit-sol "$root/examples/calc.phx" "$root/examples/sum.calc" \
+            > "$tmp/out.sol" 2>/dev/null \
+       && "$SOL/bin/solas" "$tmp/out.sol" -o "$tmp/out.sob" >/dev/null 2>&1; then
+        got=$("$SOL/bin/solvm" "$tmp/out.sob")
+        if [ "$got" = "$want" ]; then
+            report pass "through the Solveig backend, same answer"
+        else
+            report fail "through the Solveig backend, same answer" \
+                        "got '$got', wanted '$want'"
+        fi
+    else
+        report fail "through the Solveig backend, same answer" "it did not compile"
+    fi
+fi
+
 # Solveig's Pascal grammar, when it is there: the strongest evidence available
 # that this reads a real published grammar and not just its own examples. Both
 # files it accepts are accepted by `fpc -Miso`.

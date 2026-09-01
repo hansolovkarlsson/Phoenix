@@ -172,3 +172,54 @@ handle both.
 **Unchanged, deliberately.** `pascal.bnf` has no actions and behaves exactly as
 it did at stage 0 — all 22 of that stage's tests still pass untouched. A grammar
 that only wants to be checked never has to learn any of this.
+
+## 2026-09-01 — stage 2, and one thing the sketch got wrong
+
+`%pass` works. The calculator has an `eval` pass that interprets, and `emit-sol`
+and `emit-c` passes that compile, and all three answer 97.
+
+**The sketch proposed demand-driven evaluation with memoisation, JastAdd's
+approach. That was dropped while building it, and the reason is worth keeping.**
+
+A threaded attribute needs a defined traversal order and demand-driven
+evaluation has none. Once a walk has to exist for `thread` to be threaded
+along, computing everything else during that same walk is simpler than being
+lazy: there is no scheduling problem, no dependency analysis, and no cycle to
+detect, because a node's attributes are computed strictly after its children's.
+What it costs is that an attribute cannot refer *forward* to a node the walk has
+not reached — which is what several passes and a `%driver` are for, and how a
+hand-written compiler handles forward references anyway.
+
+So the model is **one walk, post-order, two phases at each node**: `down`
+clauses entering, children, everything else leaving.
+
+**Three things had to be fixed that only appeared once it ran.**
+
+*A built node's position was in the wrong file.* `Value.pos` came from the
+action's position in the `.phx`, so a diagnostic from a pass pointed at the
+compiler description rather than at the program being compiled. It is the
+source position now, which is the only one worth pointing at.
+
+*Checks are guards, not clauses that print.* `Variable`'s undefined-name check
+fired, left `val` as nil, and then the addition above it complained about the
+nil, and then every node above that complained in turn — one mistake, four
+messages. A check now *blocks* its node's attributes: if one fires, they are set
+to a failure rather than computed, and a failure passes through every operator
+and every library function silently. One mistake, one message.
+
+*`$body.out` had to mean something.* `$body` is a list, and there was no way to
+say "that attribute of each element" without a map, a lambda, and a reason.
+Reading an attribute of a list now reads it from every element, which is one
+rule and removes the need for all three.
+
+**The `.` is whitespace-sensitive, and this is the one place in the notation
+where a space changes a meaning.** `$left.val` reads an attribute; `$left .`
+is a reference followed by the terminator that ends a clause. No lookahead can
+separate them — `. Binary(op: "+")` beginning the next clause looks exactly like
+a field access — so adjacency decides, and the README says so.
+
+**What the two emit passes proved.** They were written together, and neither
+knows what language Phoenix itself emits. The conformance rule from
+docs/semantics.md is now a test rather than a hope: the same `.phx`,
+interpreted and through both backends, gives the same answer, and a change that
+breaks one of the three fails the build.

@@ -59,8 +59,9 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**Stage 1 of six.** Phoenix reads a `.phx` file, scans and parses a source file
-with it, and builds the abstract syntax tree the file's `->` clauses describe.
+**Stage 2 of six.** Phoenix reads a `.phx` file, parses a source file with it,
+builds the AST its `->` clauses describe, and runs the `%pass` blocks that say
+what the program *means* — interpreting it, or compiling it.
 
 ```sh
 make
@@ -87,9 +88,9 @@ Nothing yet describes what a program *means*. That is stage 2.
 | --- | --- | --- |
 | **0** | EBNF in, parse tree out | **done** |
 | **1** | `->` names the AST node a production builds | **done** |
-| 2 | `%pass` — attributes over the tree, interpreted | |
+| **2** | `%pass` — attributes over the tree, interpreted | **done** |
 | 3 | `%driver` — several passes, ordered, diagnostics gathered | |
-| 4 | an `emit` pass that writes Solveig source **and C**, from one description | |
+| 4 | an `emit` pass that writes Solveig source **and C** | **done early** |
 | 5 | `phx calc.phx -o calc.sol` — the standalone compiler | |
 
 The emitted target belongs to the `.phx` file, not to Phoenix: an emit pass
@@ -288,7 +289,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 30 checks, including Solveig's pascal.bnf when it is present
+make test       # 37 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies.

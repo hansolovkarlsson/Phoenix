@@ -610,6 +610,10 @@ static bool read_file(Reader *r)
             else if (strcmp(d->text, "ignorecase") == 0) g->ignorecase = true;
             else if (strcmp(d->text, "fragment")   == 0) mark_named(r, d->line, mark_fragment);
             else if (strcmp(d->text, "skip")       == 0) mark_named(r, d->line, mark_skip);
+            else if (strcmp(d->text, "pass")       == 0) {
+                if (!read_passes(r, d)) return false;
+                continue;
+            }
             else if (strcmp(d->text, "start")      == 0) {
                 if (!at(r, T_NAME)) {
                     diag_error(r->src, d->pos, "%%start wants the name of a rule");
@@ -619,7 +623,7 @@ static bool read_file(Reader *r)
             } else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
-                          "%%skip %%start %%ignorecase");
+                          "%%skip %%start %%ignorecase %%pass");
                 return false;
             }
             continue;
