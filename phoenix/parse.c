@@ -148,6 +148,33 @@ static Value *one_of(Parse *p, Slots *s, size_t pos)
     return v;
 }
 
+/* ...except where the grammar already says the count is not fixed.
+ *
+ * `{ statement }` matched once is one value and matched twice is two, and
+ * which of those happened is a property of the file being compiled rather
+ * than of the grammar. Collapsing the single case would make `$body` a node
+ * in a one-statement block and a list in every other, so a `.phx` could not
+ * be written that handled both -- and would only find out on the first
+ * one-statement block anybody wrote.
+ *
+ * So a repetition and an option are lists always, of whatever length they
+ * turned out to be, and everything else collapses as above. The rule is
+ * decidable from the grammar, which is the property that matters. */
+static bool varies(const GNode *factor)
+{
+    return factor->kind == G_REP || factor->kind == G_OPT;
+}
+
+static Value *slot_value(Parse *p, const GNode *factor, Slots *s, size_t pos)
+{
+    if (!varies(factor)) return one_of(p, s, pos);
+
+    Value *v = value_new(p, V_LIST, pos);
+    v->items = s->items;
+    v->n     = s->n;
+    return v;
+}
+
 /* ------------------------------------------------------------------ */
 /* Evaluating an action
  *
@@ -234,7 +261,7 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     for (int i = 0; i < n->nkids; i++) {
         at = match(p, n->kids[i], at, &slots[i]);
         if (at < 0) return -1;
-        slots_add(p, &gathered, one_of(p, &slots[i], pos));
+        slots_add(p, &gathered, slot_value(p, n->kids[i], &slots[i], pos));
     }
 
     Build b = { .p = p, .seq = n, .slots = &gathered, .acc = NULL };

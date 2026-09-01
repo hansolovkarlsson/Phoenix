@@ -22,7 +22,10 @@ digit  = "0" .. "9" .
 name   = letter { letter | digit } .
 number = digit { digit } [ "." digit { digit } ] .
 
-symbol = ":=" | "+" | "-" | "*" | "/" | "(" | ")" | ";" .
+(* Two characters before one, every time: "<" first would leave the "="
+ * of "<=" behind, and the error would surface at the token after it. *)
+symbol = ":=" | "<=" | ">=" | "<>"
+       | "+" | "-" | "*" | "/" | "(" | ")" | ";" | "=" | "<" | ">" .
 
 comment = "#" { ! "\n" } .
 space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
@@ -44,15 +47,30 @@ space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 
 program   = { statement } -> Program(body: $1) .
 
-statement = "print" e:expression ";"          -> Print(value: $e)
-          | "let" n:name ":=" e:expression ";" -> Let(name: $n, value: $e) .
+statement = "print" e:expression ";"           -> Print(value: $e)
+          | "let" n:name ":=" e:expression ";"  -> Let(name: $n, value: $e)
+          | "if" c:expression "then" t:block "else" f:block "end"
+                                                -> IfElse(cond: $c, then: $t, else: $f)
+          | "if" c:expression "then" t:block "end"
+                                                -> If(cond: $c, then: $t)
+          | "while" c:expression "do" b:block "end"
+                                                -> While(cond: $c, body: $b)
+          | n:name ":=" e:expression ";"        -> Assign(name: $n, value: $e) .
+
+block = { statement } -> Block(body: $1) .
 
 (* `$$` is what has been built so far, so an action mentioning it replaces the
  * value before it rather than following it. That is a left fold, and it is how
  * the flat repetition every grammar writes for a binary operator becomes the
  * left-leaning tree it means. *)
 
-expression = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
+(* A comparison does not chain, so it is written as an option rather than
+ * a repetition -- `a < b < c` is not a thing anybody means. *)
+expression = sum [ relation s:sum -> Compare(op: $1, left: $$, right: $s) ] .
+
+relation   = "=" | "<>" | "<=" | ">=" | "<" | ">" .
+
+sum        = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
 term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
 
 factor     = number             -> Number(text: $1)
@@ -60,19 +78,68 @@ factor     = number             -> Number(text: $1)
            | "(" expression ")" -> $2 .
 
 (* ------------------------------------------------------------------ *)
-(* What a program means.                                              *)
+(* Pass one: are the names defined, and do the types line up?          *)
 (*                                                                     *)
-(* A pass is clauses keyed on the vocabulary above. They are tried in   *)
-(* order and the first match wins -- the same rule the syntactic half   *)
-(* uses for `|`, so there is one thing to know about ordering and not   *)
-(* two.                                                                 *)
+(* This is the pass a hand-written compiler spends a visitor class and  *)
+(* a traversal on. Here it is the clauses, and no traversal.            *)
+
+%pass typecheck
+
+  (* A symbol table is a fold over the tree in document order, which is
+   * exactly what a threaded attribute is. *)
+  thread env = empty
+
+  Number   : type = "int" .
+  Variable : type = lookup($env, $name)
+           ! not defined($env, $name) : "'{}' is not defined" of $name .
+
+  Let      : env  = bind($env, $name, $value.type)
+           : type = "void" .
+
+  Assign   : type = "void"
+           ! not defined($env, $name)
+               : "'{}' is assigned before it is declared" of $name
+           ! $value.type <> lookup($env, $name)
+               : "'{}' holds {}, and this assigns {}"
+                   of $name, lookup($env, $name), $value.type .
+
+  Binary   : type = "int"
+           ! $left.type <> "int" or $right.type <> "int"
+               : "'{}' wants two ints, and got {} and {}"
+                   of $op, $left.type, $right.type .
+
+  Compare  : type = "bool"
+           ! $left.type <> $right.type
+               : "'{}' compares {} with {}" of $op, $left.type, $right.type .
+
+  Print    : type = "void"
+           ! $value.type <> "int" : "print wants an int, and got {}" of $value.type .
+
+  If       : type = "void"
+           ! $cond.type <> "bool" : "an if wants a bool, and got {}" of $cond.type .
+  IfElse   : type = "void"
+           ! $cond.type <> "bool" : "an if wants a bool, and got {}" of $cond.type .
+  While    : type = "void"
+           ! $cond.type <> "bool" : "a while wants a bool, and got {}" of $cond.type .
+
+  Block    : type = "void" .
+  Program  : type = "void" .
+
+(* ------------------------------------------------------------------ *)
+(* Pass two: run it, without generating anything.                      *)
+(*                                                                     *)
+(* **This pass works on straight-line programs and cannot work on any   *)
+(* other kind, and the reason is worth understanding rather than        *)
+(* working around.** An attribute is computed once per node, in one     *)
+(* walk. A `while` needs its body evaluated an unknown number of times, *)
+(* and a branch that is not taken must leave the variables alone -- and *)
+(* neither of those is a thing a value computed once per node can say.  *)
+(*                                                                     *)
+(* So interpreting is for checking a language while it is being         *)
+(* designed, and compiling is what Phoenix is for. The clauses below    *)
+(* say so where a program runs into it, rather than failing obscurely.  *)
 
 %pass eval
-
-  (* An environment flows along the tree in document order: it enters a
-   * node, may be changed by it, and leaves to whatever comes next. That
-   * is what a symbol table is, and it is the one shape plain synthesised
-   * and inherited attributes cannot express. *)
   thread env = empty
 
   Number   : val = int($text) .
@@ -82,32 +149,85 @@ factor     = number             -> Number(text: $1)
   Binary(op: "+") : val = $left.val + $right.val .
   Binary(op: "-") : val = $left.val - $right.val .
   Binary(op: "*") : val = $left.val * $right.val .
-  Binary(op: "/") : val = $left.val div $right.val
+  (* `quotient`, not `div`. Phoenix's `div` is floored and C's `/`
+   * truncates, so `0 - 7 / 2` would be -4 interpreted and -3 compiled --
+   * the same program answering two things. **calc's division truncates**,
+   * and saying so once here is what makes the two passes agree.
+   *
+   * This is docs/semantics.md's headline in miniature: Phoenix's
+   * arithmetic is not the target's, and a pass that models a target
+   * writes the model out. *)
+  Binary(op: "/") : val = quotient($left.val, $right.val)
                   ! $right.val = 0 : "division by zero" .
+
+  Compare(op: "=")  : val = $left.val = $right.val .
+  Compare(op: "<>") : val = $left.val <> $right.val .
+  Compare(op: "<")  : val = $left.val < $right.val .
+  Compare(op: ">")  : val = $left.val > $right.val .
+  Compare(op: "<=") : val = $left.val <= $right.val .
+  Compare(op: ">=") : val = $left.val >= $right.val .
 
   Let      : env = bind($env, $name, $value.val)
            : out = "" .
+  Assign   : env = bind($env, $name, $value.val)
+           : out = "" .
   Print    : out = "{}\n" of $value.val .
 
-  (* `$body` is a list, and reading an attribute of a list reads it from
-   * every element -- so this is the `out` of each statement, joined. *)
+  Block    : out = join($body.out) .
   Program  : out = join($body.out) .
 
+  (* An attribute is computed once. These need a node evaluated a number
+   * of times that depends on the program, so they are refused here and
+   * compiled instead. *)
+  While    : out = ""
+           ! true : "a loop cannot be interpreted -- compile it with emit-c" .
+  If       : out = ""
+           ! true : "a branch cannot be interpreted -- compile it with emit-c" .
+  IfElse   : out = ""
+           ! true : "a branch cannot be interpreted -- compile it with emit-c" .
+
 (* ------------------------------------------------------------------ *)
-(* A compiler.                                                         *)
+(* Pass three: C.                                                      *)
 (*                                                                     *)
-(* An emit pass builds a string, and nothing anywhere cares what is in  *)
-(* it -- which is the whole reason the language a compiler *emits* is   *)
-(* this file's business and not Phoenix's. `examples/calc-solveig.phx`  *)
-(* is the same calculator emitting Solveig instead, and the only        *)
-(* difference between them is these clauses.                            *)
+(* An emit pass builds a string and nothing anywhere cares what is in   *)
+(* it, which is why the language a compiler emits is this file's        *)
+(* business and not Phoenix's.                                         *)
 
 %pass emit-c
+
   Number   : out = "{}" of $text .
   Variable : out = "{}" of $name .
   Binary   : out = "({} {} {})" of $left.out, $op, $right.out .
 
-  Let      : out = "    long {} = {};" of $name, $value.out .
-  Print    : out = "    printf(\"%ld\\n\", {});" of $value.out .
-  Program  : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
-                     of join($body.out, "\n") .
+  (* Two spellings differ, and shape matching is how a clause says so
+   * rather than a conditional inside one clause. *)
+  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
+  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  Let    : out = "{}long {} = {};"   of $indent, $name, $value.out .
+  Assign : out = "{}{} = {};"        of $indent, $name, $value.out .
+  (* The cast is not decoration: a C integer literal is an `int`, and
+   * `%ld` wants a `long`. *)
+  Print  : out = "{}printf(\"%ld\\n\", (long)({}));" of $indent, $value.out .
+
+  (* Indentation flows *downward*: a node hands it to its children and to
+   * nothing else, which is what an inherited attribute is for and the one
+   * thing neither a synthesised nor a threaded attribute can say.
+   *
+   * Both of Block's clauses live in this one rule, because clauses are tried
+   * in order and the first match wins -- a second `Block` rule further down
+   * would never be reached, and Phoenix refuses one. *)
+  Block  : down indent = "{}    " of $indent
+         : out = join($body.out, "\n") .
+
+  If     : out = "{}if ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent .
+  IfElse : out = "{}if ({}) {{\n{}\n{}}} else {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent, $else.out, $indent .
+  While  : out = "{}while ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $body.out, $indent .
+
+  Program : down indent = "    "
+          : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
+              of join($body.out, "\n") .

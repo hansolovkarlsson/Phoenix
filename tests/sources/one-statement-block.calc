@@ -1,0 +1,7 @@
+# A block with exactly one statement in it. `{ statement }` matched once must
+# still be a list, or `$body.out` is text and `join` fails on it.
+let n := 1;
+while n < 3 do
+  n := n + 1;
+end
+print n;

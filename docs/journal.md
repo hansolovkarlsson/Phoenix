@@ -264,3 +264,55 @@ suite, so the notation cannot drift out from under it, and
 `PHX_TEST_SOLVEIG=1 make test` runs the round trip. The only place "C only" is a
 genuine narrowing is stage 5's own backend — what a generated compiler is
 *written* in — and that is Phoenix's code rather than anybody's `.phx`.
+
+## 2026-09-01 — exhausting stage 2 on the calculator
+
+The calculator grew comparisons, `if`, `else`, `while`, blocks and assignment,
+plus a `typecheck` pass — which is the first time stage 2 has been asked to do
+one of the four jobs this project exists for. **Five things broke, and every one
+of them was worth the trip.**
+
+**Two clauses for one pattern silently did nothing.** `Block` appeared twice in
+`emit-c` — once for `down indent`, once for `out` — and first-match-wins meant
+the second was never reached. The symptom appeared elsewhere, as a node missing
+an attribute that a perfectly good clause defines. It is the same hazard as
+`"<" | "<="` in the lexical half, one level up, and it now gets the same
+treatment: a subsumption check over each pass's clauses, refusing a general
+pattern written above a specific one. An error rather than a warning, because
+there is no reading under which it was meant.
+
+**A repetition matched once was not a list.** `{ statement }` gave a list for
+zero or two statements and a bare node for exactly one, so `$body.out` was text
+in a one-statement block and `join` failed on it. The `.phx` author cannot know
+how many statements a block will hold — but the *grammar* knows the count is not
+fixed, so a repetition and an option now yield a list always, of whatever length
+they turned out to be. Decidable from the grammar, which is the property that
+matters.
+
+**The interpreter has a boundary, and it is not a bug.** An attribute is
+computed once per node in one walk. A `while` needs its body evaluated a number
+of times that depends on the program, and a branch not taken must leave the
+variables alone. Neither is expressible. So `eval` works on straight-line
+programs and says so where a program runs into it, rather than failing
+obscurely. Interpreting is for checking a language while it is being designed;
+compiling is what Phoenix is for.
+
+*That costs something and it should be said plainly.* When Solveig was parked,
+the claim was that `--run eval` against `--run emit-c` keeps the conformance
+rule honest. It does — for straight-line programs. Anything with a loop is now
+checked by one backend only. `%import` is what makes a second one cheap again,
+which is a better argument for it than the tidiness one.
+
+**And the divergence docs/semantics.md was written to prevent happened anyway,
+in the example.** `0 - 7 / 2` gave -4 interpreted and -3 compiled: `eval` used
+Phoenix's `div`, which is floored, and C's `/` truncates. The bug was in
+`calc.phx` rather than in Phoenix — **the calc language had never said what `/`
+meant**, so each pass borrowed its host's answer, which is precisely the page's
+headline.
+
+Fixing it needed something the library did not have. Truncation cannot be
+written in terms of flooring in a notation with no conditional, so `quotient`
+and `remainder` were added — and they earn their place by the rule at the top of
+`library.c`: target languages disagree with each other about negative division,
+and a pass that models one of them has to be able to say which. There is a test
+with a negative number in it now, so this cannot come back quietly.

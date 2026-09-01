@@ -420,6 +420,101 @@ void grammar_nodes(FILE *out, const Grammar *g)
 }
 
 /* ------------------------------------------------------------------ */
+/* Clauses a pass can never reach
+ *
+ * Clauses are tried in order and the first match wins, so a general pattern
+ * written above a specific one takes every case the specific one was for. The
+ * cost of not saying so is high and the symptom is misleading: the clause is
+ * simply never run, and the message arrives somewhere else, as a node missing
+ * an attribute that a perfectly good clause defines.
+ *
+ * It is the same hazard as `"<" | "<="` in the lexical half, one level up, and
+ * it gets the same treatment -- except that here it is an error rather than a
+ * warning, because there is no reading under which it was meant.
+ */
+
+static bool subsumes(const Pattern *general, const Pattern *specific)
+{
+    if (general->kind == P_ANY || general->kind == P_BIND) return true;
+    if (general->kind != specific->kind) return false;
+
+    switch (general->kind) {
+    case P_TEXT:
+        return general->len == specific->len
+            && memcmp(general->name, specific->name, (size_t)general->len) == 0;
+    case P_INT:
+        return general->ival == specific->ival;
+
+    case P_TYPE: {
+        if (strcmp(general->name, specific->name) != 0) return false;
+
+        /* Every field the general one tests must be tested at least as
+         * loosely by the specific one. A field it does not mention it does
+         * not care about, which is what makes `Binary` catch every `Binary`. */
+        for (int i = 0; i < general->nkids; i++) {
+            const Pattern *mine = NULL;
+            for (int k = 0; k < specific->nkids; k++)
+                if (strcmp(general->fields[i], specific->fields[k]) == 0)
+                    mine = specific->kids[k];
+
+            if (!mine) return false;
+            if (!subsumes(general->kids[i], mine)) return false;
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+static void describe(char *buf, size_t size, const Pattern *p)
+{
+    switch (p->kind) {
+    case P_ANY:  snprintf(buf, size, "_"); return;
+    case P_BIND: snprintf(buf, size, "%s", p->name); return;
+    case P_INT:  snprintf(buf, size, "%lld", p->ival); return;
+    case P_TEXT: snprintf(buf, size, "\"%.*s\"", p->len, p->name); return;
+    case P_TYPE:
+        if (!p->nkids) { snprintf(buf, size, "%s", p->name); return; }
+        snprintf(buf, size, "%s(%s: ...)", p->name, p->fields[0]);
+        return;
+    }
+}
+
+static void check_reachable(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *pass = &g->passes[i];
+
+        for (int b = 1; b < pass->nrules; b++)
+            for (int a = 0; a < b; a++) {
+                if (!subsumes(pass->rules[a].pattern, pass->rules[b].pattern))
+                    continue;
+
+                char above[128], below[128];
+                describe(above, sizeof above, pass->rules[a].pattern);
+                describe(below, sizeof below, pass->rules[b].pattern);
+
+                diag_error(&g->src, pass->rules[b].pos,
+                           "in pass '%s', '%s' can never match -- '%s' above it "
+                           "already takes everything it is for",
+                           pass->name, below, above);
+
+                if (strcmp(above, below) == 0)
+                    diag_note("clauses for one pattern go together in a single "
+                              "rule, not in two");
+                else
+                    diag_note("put the specific pattern above the general one");
+
+                c->ok = false;
+                break;
+            }
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Literals nothing can spell
  *
  * The syntactic half is matched over tokens, so a `","` in it is asking for a
@@ -477,6 +572,8 @@ bool grammar_check(Grammar *g)
 
     for (int i = 0; i < g->nrules; i++)
         if (g->rules[i].body) check_actions(&c, &g->rules[i], g->rules[i].body);
+
+    check_reachable(&c);
 
     for (int i = 0; i < g->nrules; i++)
         if (!g->rules[i].lexical && g->rules[i].body)

@@ -283,6 +283,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | alternatives in the wrong order | `"<" | "<="`, in the lexical half where it matters |
 | a fragment not declared one | the `letter` trap above |
 | a rule nothing reaches | a leftover or a typo |
+| a clause nothing can reach | a general pattern above a specific one takes every case the specific one was for — the ordering hazard again, one level up |
 | `$n` past the last factor | and `$label` naming no factor — yacc's silent drift, made loud |
 | one node type, two shapes | a pass keyed on it would have to handle both |
 
@@ -290,7 +291,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 37 checks, including Solveig's pascal.bnf when it is present
+make test       # 45 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

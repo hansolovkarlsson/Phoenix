@@ -1,0 +1,4 @@
+let n := 1;
+while n < 3 do
+  print n < 2;
+end

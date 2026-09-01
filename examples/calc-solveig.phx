@@ -13,6 +13,13 @@
  *
  *   phx --run emit-sol examples/calc-solveig.phx prog.calc > prog.sol
  *   solas prog.sol -o prog.sob && solvm prog.sob
+ *
+ * **It holds a copy of the grammar, and that copy is the argument for
+ * `%import`.** Change `examples/calc.phx`'s grammar and this file silently
+ * says something else, with nothing to catch it. The right shape is one file
+ * holding the EBNF, the actions and the analysis passes, and one small file
+ * per target holding only its emit clauses -- which is what `%import` is for
+ * and why it is next.
  *)
 
 (* calc.phx -- the smallest language worth having a compiler for.

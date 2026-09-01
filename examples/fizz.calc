@@ -1,0 +1,10 @@
+# Control flow, comparisons, and a loop.
+let n := 1;
+while n <= 15 do
+  if n / 3 * 3 = n then
+    print 300;
+  else
+    print n;
+  end
+  n := n + 1;
+end

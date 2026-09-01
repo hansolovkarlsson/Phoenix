@@ -1,0 +1,4 @@
+let n := 1;
+if n then
+  print 1;
+end

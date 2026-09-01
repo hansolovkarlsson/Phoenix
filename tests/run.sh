@@ -32,24 +32,24 @@ accepts() {
 
 # refuses <what> <expected text> <args...>
 refuses() {
-    what=$1; want=$2; shift 2
+    what=$1; _want=$2; shift 2
     if out=$("$phx" --quiet "$@" 2>&1); then
         report fail "$what" "it was accepted"
-    elif printf '%s' "$out" | grep -qF -- "$want"; then
+    elif printf '%s' "$out" | grep -qF -- "$_want"; then
         report pass "$what"
     else
-        report fail "$what" "wanted '$want', got: $(printf '%s' "$out" | head -1)"
+        report fail "$what" "wanted '$_want', got: $(printf '%s' "$out" | head -1)"
     fi
 }
 
 # warns <what> <expected text> <args...>
 warns() {
-    what=$1; want=$2; shift 2
+    what=$1; _want=$2; shift 2
     out=$("$phx" --quiet "$@" 2>&1)
-    if printf '%s' "$out" | grep -qF -- "$want"; then
+    if printf '%s' "$out" | grep -qF -- "$_want"; then
         report pass "$what"
     else
-        report fail "$what" "no warning matching '$want'"
+        report fail "$what" "no warning matching '$_want'"
     fi
 }
 
@@ -63,6 +63,8 @@ refuses "an unknown rule"   "not a rule"       "$root/tests/grammars/unknown-rul
 refuses "a range over tokens" "asks about characters" "$root/tests/grammars/range-in-syntax.phx"
 refuses "no syntactic half" "no syntactic rules" "$root/tests/grammars/no-syntax.phx"
 refuses "a literal nothing spells" "no token rule spells" "$root/tests/grammars/unspellable.phx"
+refuses "a clause nothing can reach" "can never match" \
+        "$root/tests/grammars/unreachable-clause.phx"
 
 echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
@@ -109,6 +111,12 @@ refuses "a character no rule matches" "nothing here matches" \
 
 echo "passes"
 accepts "the calculator's passes" "$root/examples/calc.phx"
+accepts "typecheck accepts fizz"  --run typecheck --show type \
+        "$root/examples/calc.phx" "$root/examples/fizz.calc"
+refuses "an int used as a condition" "wants a bool" --run typecheck --show type \
+        "$root/examples/calc.phx" "$root/tests/sources/int-as-condition.calc"
+refuses "printing a bool" "print wants an int" --run typecheck --show type \
+        "$root/examples/calc.phx" "$root/tests/sources/print-a-bool.calc"
 refuses "an undefined name"  "is not defined" \
         --run eval "$root/examples/calc.phx" "$root/tests/sources/undefined.calc"
 refuses "division by zero"   "division by zero" \
@@ -138,6 +146,53 @@ fi
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+
+# `{ statement }` matched exactly once must still be a list. The `.phx` author
+# cannot know how many statements a block will hold, so the grammar decides the
+# shape and not the input.
+if "$phx" --quiet --run emit-c "$root/examples/calc.phx" \
+        "$root/tests/sources/one-statement-block.calc" >/dev/null 2>&1; then
+    report pass "a block of exactly one statement"
+else
+    report fail "a block of exactly one statement"
+fi
+
+# docs/semantics.md's headline, as a test: Phoenix's division is floored and
+# C's truncates, so a language that does not say which it means gets two
+# answers from the same program. calc says truncating, in both passes.
+neg_i=$("$phx" --run eval "$root/examples/calc.phx" \
+        "$root/tests/sources/negative-division.calc" 2>/dev/null)
+if "$phx" --run emit-c "$root/examples/calc.phx" \
+        "$root/tests/sources/negative-division.calc" > "$tmp/neg.c" 2>/dev/null \
+   && cc -o "$tmp/neg" "$tmp/neg.c" 2>/dev/null; then
+    neg_c=$("$tmp/neg")
+    if [ "$neg_i" = "-3" ] && [ "$neg_c" = "-3" ]; then
+        report pass "negative division agrees, and truncates"
+    else
+        report fail "negative division agrees, and truncates" \
+                    "interpreted '$neg_i', compiled '$neg_c', wanted -3 both"
+    fi
+else
+    report fail "negative division agrees, and truncates" "it did not compile"
+fi
+
+# Control flow: the compiled program has to actually run and be right.
+if "$phx" --run emit-c "$root/examples/calc.phx" "$root/examples/fizz.calc" \
+        > "$tmp/fizz.c" 2>/dev/null \
+   && cc -Wall -Werror -o "$tmp/fizz" "$tmp/fizz.c" 2>/dev/null; then
+    got=$("$tmp/fizz" | tr '\n' ' ')
+    if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 " ]; then
+        report pass "a loop and a branch, compiled and run"
+    else
+        report fail "a loop and a branch, compiled and run" "got: $got"
+    fi
+else
+    report fail "a loop and a branch, compiled and run" "it did not compile cleanly"
+fi
+
+# The interpreter's boundary, said out loud rather than failing obscurely.
+refuses "a loop refuses to be interpreted" "cannot be interpreted" \
+        --run eval "$root/examples/calc.phx" "$root/examples/fizz.calc"
 
 if "$phx" --run emit-c "$root/examples/calc.phx" "$root/examples/sum.calc" \
         > "$tmp/out.c" 2>/dev/null \

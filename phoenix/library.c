@@ -14,6 +14,7 @@
  */
 #include "phx.h"
 
+#include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,6 +123,35 @@ Value *eval_call(Eval *e, const Expr *x)
                 return asking ? value_bool(a, true) : entry->items[1];
         }
         return asking ? value_bool(a, false) : value_nil(a);
+    }
+
+    /* ---- the other division ----
+     *
+     * `div` and `mod` are floored, which docs/semantics.md fixes and which is
+     * right for Phoenix's own counting. **Target languages disagree with each
+     * other about this**, and a pass that models one of them needs to say
+     * which: C, Java and Pascal truncate toward zero, so `-7 / 2` is -3 there
+     * and -4 here.
+     *
+     * These earn their place by the rule at the top of this file: without
+     * them, an emit pass and an eval pass for the same language quietly
+     * disagree about negative division, and the first anybody hears of it is
+     * a compiled program answering differently from the interpreted one.
+     * There is no way to write truncation in terms of flooring in a notation
+     * with no conditional, which is the other half of why these are here. */
+
+    if (strcmp(f, "quotient") == 0 || strcmp(f, "remainder") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_INT || args[1]->kind != V_INT)
+            return fail(e, x, "'%s' wants two integers, and got %s and %s",
+                        f, value_kind_name(args[0]), value_kind_name(args[1]));
+
+        long long n = args[0]->ival, d = args[1]->ival;
+        if (d == 0) return fail(e, x, "division by zero");
+        if (n == LLONG_MIN && d == -1)
+            return fail(e, x, "this overflows a 64-bit integer");
+
+        return value_int(a, f[0] == 'q' ? n / d : n % d);   /* C truncates */
     }
 
     /* ---- conversions ---- */
