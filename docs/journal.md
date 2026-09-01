@@ -223,3 +223,44 @@ knows what language Phoenix itself emits. The conformance rule from
 docs/semantics.md is now a test rather than a hope: the same `.phx`,
 interpreted and through both backends, gives the same answer, and a change that
 breaks one of the three fails the build.
+
+## 2026-09-01 — Solveig parked, and C is the target
+
+Phoenix began as a generator of Solveig compilers. It is not one now.
+
+**The reasons given were maintenance ones and they are sound.** Solveig is still
+changing, so every release is a chance to break `emit-sol` and the round trip,
+and fixing that buys nothing while the meta-language is itself unstable. And
+once Phoenix had its own value semantics, Solveig had stopped supplying
+anything: it was a second target, not a foundation.
+
+**The reason worth recording is a different one.** The argument for building two
+backends was that two implementations which must agree will catch host
+assumptions leaking into the notation. Dropping to one does not remove that
+risk — it mirrors it, and *C* assumptions can leak in now instead. What makes
+this safe is that the replacement was built first, in the right order:
+
+- `docs/semantics.md` fixes the arithmetic in Phoenix's own terms, and was
+  written *before* this decision rather than after it.
+- The conformance test keeps two legs, and they were always the more valuable
+  pair: `--run eval` is a C interpreter of the notation, `--run emit-c` is
+  generated C, and they are two independent implementations that must both
+  answer 97.
+
+So the discipline moved from *two backends disagree* to *the spec says, and the
+interpreter checks*. Losing the third leg is a real loss and a small one.
+
+**The dependency that actually mattered was not the backend.** `make test` read
+`pascal.bnf` and its fixtures out of a sibling checkout, which is the kind of
+dependency that breaks a test suite for reasons having nothing to do with the
+project being tested — reorganise Solveig, and Phoenix fails. Those are fixtures,
+not a library, so they are vendored into `tests/pascal/` and the suite now passes
+with Solveig absent from disk, which was checked rather than assumed.
+
+**Going back is writing an emit pass, not changing Phoenix.** The language a
+compiler emits was never Phoenix's business; it lives in the `.phx`.
+`examples/calc-solveig.phx` still holds those clauses and is still *read* by the
+suite, so the notation cannot drift out from under it, and
+`PHX_TEST_SOLVEIG=1 make test` runs the round trip. The only place "C only" is a
+genuine narrowing is stage 5's own backend — what a generated compiler is
+*written* in — and that is Phoenix's code rather than anybody's `.phx`.

@@ -1,15 +1,16 @@
 # Phoenix
 
 A compiler generator. You write a language's grammar in EBNF and describe what
-each construct means; Phoenix writes the compiler, in
-[Solveig](https://github.com/hansolovkarlsson/Solveig).
+each construct means; Phoenix writes the compiler.
 
 ```
-pascal.phx  ──phx──▶  pascal.sol  ──solas──▶  pascal.sob
-                                                  │
-myprogram.pas ────────────────────────────────────┴──▶ myprogram.sol
-                                          ──solas──▶ myprogram.sob ──solvm──▶ output
+pascal.phx  ──phx──▶  pascal.c  ──cc──▶  cpas
+                                          │
+myprogram.pas ────────────────────────────┴──▶ myprogram.c ──cc──▶ a program
 ```
+
+C11, no dependencies, and nothing outside this repository is needed to build it
+or to run its tests.
 
 ## The name
 
@@ -292,16 +293,55 @@ make            # bin/phx
 make test       # 37 checks, including Solveig's pascal.bnf when it is present
 ```
 
-C11, no dependencies.
+C11, no dependencies, and the test suite is hermetic — it reads nothing outside
+this repository.
+
+## What Phoenix emits, and what it is not tied to
+
+**The language a generated compiler emits belongs to the `.phx` file, not to
+Phoenix.** An emit pass builds a string and nothing anywhere cares what is in
+it, so targeting C, or assembly, or something else, is a matter of writing
+different clauses:
+
+```
+%pass emit-c
+  Binary : out = "({} {} {})" of $left.out, $op, $right.out .
+```
+
+`examples/calc.phx` emits C. `examples/calc-solveig.phx` is the same calculator
+emitting [Solveig](https://github.com/hansolovkarlsson/Solveig) instead, and the
+only difference between the two files is those clauses.
+
+**Solveig is parked rather than removed.** Phoenix began as a generator of
+Solveig compilers and will likely emit Solveig again. It does not now, for two
+reasons: Solveig is still changing, and keeping a second backend in step with a
+moving language is maintenance spent proving a property that
+[docs/semantics.md](docs/semantics.md) and the conformance test below already
+prove. The parked example is still *read* by the test suite, so the notation
+cannot drift out from under it; `PHX_TEST_SOLVEIG=1 make test` runs the round
+trip for anyone who has `solas` to hand.
+
+### The conformance rule
+
+> The same `.phx`, interpreted and through every backend, produces identical
+> output.
+
+That is a test on every build, and it is what keeps the meta-language honest
+now that there is one target rather than two. `--run eval` and `--run emit-c`
+are **two independent implementations of the same notation** — a C interpreter
+and generated C — and they have to agree on 97. Everything they could disagree
+about is fixed in [docs/semantics.md](docs/semantics.md), in Phoenix's own terms
+rather than any host language's: integers that trap rather than wrap, floored
+division, no implicit conversion, structural equality.
 
 ## Evidence
 
 The strongest available check that this reads real published grammars rather
-than only its own examples: Solveig ships
-[`pascal.bnf`](https://github.com/hansolovkarlsson/Solveig), Wirth's Pascal in
-Wirth's notation, ~200 lines, together with files that `fpc -Miso` accepts and
-files it rejects. Phoenix reads that grammar unmodified, accepts both good
-programs and rejects all four bad ones, each with a line, a column and a caret.
+than only its own examples: [`tests/pascal/pascal.bnf`](tests/pascal/) is
+Wirth's Pascal in Wirth's notation, ~185 lines, together with files that
+`fpc -Miso` accepts and files it rejects. Phoenix reads that grammar unmodified,
+accepts both good programs and rejects all four bad ones, each with a line, a
+column and a caret.
 
 ```
 missing-semicolon.pas:13:3: error: expected else, ; or end, and found "n"

@@ -152,29 +152,44 @@ else
     report fail "through the C backend, same answer" "it did not compile"
 fi
 
-SOL=/Users/hans/Projects/Solveig
-if [ -x "$SOL/bin/solas" ]; then
-    if "$phx" --run emit-sol "$root/examples/calc.phx" "$root/examples/sum.calc" \
-            > "$tmp/out.sol" 2>/dev/null \
-       && "$SOL/bin/solas" "$tmp/out.sol" -o "$tmp/out.sob" >/dev/null 2>&1; then
-        got=$("$SOL/bin/solvm" "$tmp/out.sob")
-        if [ "$got" = "$want" ]; then
-            report pass "through the Solveig backend, same answer"
+# The Solveig backend is parked. Its example is still read, so the notation
+# cannot drift out from under it -- but nothing runs `solas`, and the round
+# trip happens only when it is asked for by name:
+#
+#     PHX_TEST_SOLVEIG=1 make test
+#
+# Auto-detecting a sibling checkout is how a test suite comes to fail for
+# reasons that have nothing to do with the project it is testing.
+accepts "the parked Solveig example" "$root/examples/calc-solveig.phx"
+
+if [ -n "${PHX_TEST_SOLVEIG:-}" ]; then
+    SOL=${SOLVEIG:-/Users/hans/Projects/Solveig}
+    if [ -x "$SOL/bin/solas" ]; then
+        if "$phx" --run emit-sol "$root/examples/calc-solveig.phx" \
+                "$root/examples/sum.calc" > "$tmp/out.sol" 2>/dev/null \
+           && "$SOL/bin/solas" "$tmp/out.sol" -o "$tmp/out.sob" >/dev/null 2>&1; then
+            got=$("$SOL/bin/solvm" "$tmp/out.sob")
+            if [ "$got" = "$want" ]; then
+                report pass "through the Solveig backend, same answer"
+            else
+                report fail "through the Solveig backend, same answer" \
+                            "got '$got', wanted '$want'"
+            fi
         else
-            report fail "through the Solveig backend, same answer" \
-                        "got '$got', wanted '$want'"
+            report fail "through the Solveig backend, same answer" "it did not compile"
         fi
     else
-        report fail "through the Solveig backend, same answer" "it did not compile"
+        report fail "through the Solveig backend, same answer" "no solas at $SOL"
     fi
 fi
 
-# Solveig's Pascal grammar, when it is there: the strongest evidence available
-# that this reads a real published grammar and not just its own examples. Both
-# files it accepts are accepted by `fpc -Miso`.
-S=/Users/hans/Projects/Solveig/programs/check_syntax
+# Wirth's Pascal, vendored into tests/pascal -- the strongest evidence that
+# this reads a real published grammar and not only its own examples. Both files
+# it accepts are accepted by `fpc -Miso`. See tests/pascal/README.md for why
+# these are copies.
+S="$root/tests/pascal"
 if [ -d "$S" ]; then
-    echo "Solveig's pascal.bnf"
+    echo "Wirth's Pascal"
     accepts "the grammar itself" "$S/pascal.bnf"
     accepts "gcd.pas"            "$S/pascal.bnf" "$S/gcd.pas"
     accepts "features.pas"       "$S/pascal.bnf" "$S/features.pas"
