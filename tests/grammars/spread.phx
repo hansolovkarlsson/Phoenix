@@ -1,0 +1,11 @@
+(* `[ $1, ...$2 ]` -- a list built from one value and the opened-out contents
+ * of another, which is what `a { a }` needs to become a flat list. *)
+%fragment digit
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space
+%syntax
+%start line
+line = number { "," number -> $2 } -> Row(cells: [$1, ...$2]) .

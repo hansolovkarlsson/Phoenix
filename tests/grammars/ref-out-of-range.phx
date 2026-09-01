@@ -1,0 +1,8 @@
+%fragment digit
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space
+%syntax
+%start line
+line = number number -> Pair(a: $1, b: $5) .

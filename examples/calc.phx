@@ -39,11 +39,22 @@ space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 %syntax
 %start program
 
-program   = statement { statement } .
+(* `->` says what an alternative *means*, as against what it looks like.
+ * Without one, a rule answers what it matched. *)
 
-statement = "print" expression ";"
-          | "let" name ":=" expression ";" .
+program   = { statement } -> Program(body: $1) .
 
-expression = term { ( "+" | "-" ) term } .
-term       = factor { ( "*" | "/" ) factor } .
-factor     = number | name | "(" expression ")" .
+statement = "print" e:expression ";"          -> Print(value: $e)
+          | "let" n:name ":=" e:expression ";" -> Let(name: $n, value: $e) .
+
+(* `$$` is what has been built so far, so an action mentioning it replaces the
+ * value before it rather than following it. That is a left fold, and it is how
+ * the flat repetition every grammar writes for a binary operator becomes the
+ * left-leaning tree it means. *)
+
+expression = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
+term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
+
+factor     = number             -> Number(value: $1)
+           | name               -> Variable(name: $1)
+           | "(" expression ")" -> $2 .

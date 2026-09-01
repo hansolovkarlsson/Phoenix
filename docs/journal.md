@@ -133,3 +133,42 @@ algorithms wearing a tree costume. Attempting level 2 would say early whether
 It would also be the sharpest available probe of the divergence risk taken on
 knowingly when `phx` was made C rather than Solveig: the two implementations of
 the meta-language must agree, and self-hosting is where disagreement surfaces.
+
+## 2026-09-01 — stage 1
+
+`->` says what an alternative builds. Three decisions, one of which was not
+planned and is the best thing in the stage.
+
+**Positional and named references, both.** `$n` is terse and familiar and is
+yacc's worst ergonomic flaw — `$3` drifts silently when a factor is inserted
+before it. Labels (`e:expression`, then `$e`) survive editing. Rather than
+choose, both are read, and **both are checked when the grammar is read** rather
+than when a file is parsed, which turns yacc's silent wrong tree into a message
+with a caret under the `$5`.
+
+**`$$` folds.** The flat repetition every grammar writes for a binary operator
+— `term { ( "+" | "-" ) term }` — has to become a left-leaning tree, and that is
+the single most common shape in any grammar. If the notation could not say it
+cleanly the notation was wrong. The rule that works: an action mentioning `$$`
+*replaces* the value before it rather than following it. Precedence then comes
+from the grammar and associativity from the fold, and neither had to be
+declared.
+
+**The unplanned one: interior nodes are never built.** The original plan was
+that `->` builds a node and the default is the concrete tree. Making a rule's
+answer depend on *how many values its body produced* — one passes through, any
+other number gets wrapped — turned out to collapse `expression → term → factor
+→ number` down to the number for free. That is the CST-to-AST cleanup every
+hand-written tree-builder exists to perform, and it fell out of a rule chosen
+for a different reason. It is one sentence in `parse.c` and it deleted a
+feature.
+
+**What was not needed.** No `%node` declarations, no separate AST schema. The
+vocabulary is what the actions build, gathered while checking them, printed by
+`--nodes`. Stage 2's passes will be keyed against exactly that, and a type built
+with two different field lists is warned about now because a pass would have to
+handle both.
+
+**Unchanged, deliberately.** `pascal.bnf` has no actions and behaves exactly as
+it did at stage 0 — all 22 of that stage's tests still pass untouched. A grammar
+that only wants to be checked never has to learn any of this.

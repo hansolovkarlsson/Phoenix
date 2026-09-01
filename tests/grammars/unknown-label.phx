@@ -1,0 +1,8 @@
+%fragment digit
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space
+%syntax
+%start line
+line = a:number number -> Pair(x: $a, y: $b) .

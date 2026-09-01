@@ -59,9 +59,8 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**Stage 0 of six.** The grammar half works: Phoenix reads a `.phx` file, scans
-a source file with the lexical rules, matches it against the syntactic rules,
-and prints the tree.
+**Stage 1 of six.** Phoenix reads a `.phx` file, scans and parses a source file
+with it, and builds the abstract syntax tree the file's `->` clauses describe.
 
 ```sh
 make
@@ -69,17 +68,16 @@ bin/phx examples/calc.phx examples/sum.calc
 ```
 
 ```
-program
-|- statement
-|  |- "let"
-|  |- name "width"
-|  |- ":="
-|  |- expression
-|  |  |- term
-|  |  |  `- factor
-|  |  |     `- number "3"
-|  |  |- "+"
-|  |  `- term
+Program
+`- body: [3]
+   |- Let
+   |  |- name: "width"
+   |  `- value: Binary
+   |     |- op: "+"
+   |     |- left: Number
+   |     |  `- value: "3"
+   |     `- right: Number
+   |        `- value: "4"
 ...
 ```
 
@@ -88,16 +86,90 @@ Nothing yet describes what a program *means*. That is stage 2.
 | Stage | | |
 | --- | --- | --- |
 | **0** | EBNF in, parse tree out | **done** |
-| 1 | `->` names the AST node a production builds | |
+| **1** | `->` names the AST node a production builds | **done** |
 | 2 | `%pass` — attributes over the tree, interpreted | |
 | 3 | `%driver` — several passes, ordered, diagnostics gathered | |
-| 4 | an `emit` pass that writes Solveig source | |
+| 4 | an `emit` pass that writes Solveig source **and C**, from one description | |
 | 5 | `phx calc.phx -o calc.sol` — the standalone compiler | |
+
+The emitted target belongs to the `.phx` file, not to Phoenix: an emit pass
+synthesises a string and nothing cares what is in it, so a grammar that wants C
+or assembly out of its compiler writes different emit clauses rather than
+needing a different Phoenix. Stage 4 builds two backends from one `calc.phx`
+specifically to keep that true.
 
 Each stage is useful on its own and tagged in git, so a design that turns out
 wrong can be backed out of to the last stage that was right.
 [docs/journal.md](docs/journal.md) records why each decision was made, which is
 what makes backing out informed rather than archaeological.
+
+## What a production builds
+
+`->` after an alternative says what it *means*, as against what it looks like.
+Without one, a rule answers what it matched and the tree is the concrete one,
+every bracket and semicolon in it.
+
+```ebnf
+program   = { statement } -> Program(body: $1) .
+
+statement = "print" e:expression ";"           -> Print(value: $e)
+          | "let" n:name ":=" e:expression ";" -> Let(name: $n, value: $e) .
+
+factor    = number             -> Number(value: $1)
+          | name               -> Variable(name: $1)
+          | "(" expression ")" -> $2 .
+```
+
+`$n` is the n'th factor, counting from one and counting everything. A factor can
+be given a name instead — `e:expression`, then `$e` — which survives the
+alternative being edited. **Both are checked when the grammar is read**, because
+`$3` drifting after a factor is inserted before it is yacc's most famous silent
+failure: the grammar still builds and the tree is quietly wrong.
+
+### `$$`, and why a fold needs saying only once
+
+`$$` is what has been built so far. An action mentioning it **replaces** the
+value before it rather than following it — which is a left fold, and is how the
+flat repetition every grammar writes for a binary operator becomes the tree it
+means:
+
+```ebnf
+expression = term { ( "+" | "-" ) term -> Binary(op: $1, left: $$, right: $2) } .
+term       = factor { ( "*" | "/" ) factor -> Binary(op: $1, left: $$, right: $2) } .
+```
+
+Precedence comes from the grammar, associativity from the fold, and
+`width * height - 1` comes out as `Binary(-, Binary(*, width, height), 1)`.
+
+### Interior nodes are never built
+
+One rule decides what a production answers, and it has no exceptions:
+
+> **A body that produced one value answers that value. A body that produced any
+> other number answers a node named after the rule, holding them.**
+
+So a chain of rules that each pass one thing along — `expression` to `term` to
+`factor` to a number — collapses to the number, and nobody had to say so. The
+useless interior nodes that every hand-written tree-builder exists to strip are
+not stripped; they are never built.
+
+### The vocabulary
+
+`--nodes` prints the node types a grammar can build and the fields each carries
+— which is the surface a pass will be written against:
+
+```
+$ bin/phx --nodes examples/calc.phx
+Program(body)
+Print(value)
+Let(name, value)
+Binary(op, left, right)
+Number(value)
+Variable(name)
+```
+
+A type built with two different field lists is a warning, since a pass keyed on
+it would have to handle both.
 
 ## The notation
 
@@ -209,12 +281,14 @@ a correct file reported as broken, at a place that is not the mistake.
 | alternatives in the wrong order | `"<" | "<="`, in the lexical half where it matters |
 | a fragment not declared one | the `letter` trap above |
 | a rule nothing reaches | a leftover or a typo |
+| `$n` past the last factor | and `$label` naming no factor — yacc's silent drift, made loud |
+| one node type, two shapes | a pass keyed on it would have to handle both |
 
 ## Building
 
 ```sh
 make            # bin/phx
-make test       # 22 checks, including Solveig's pascal.bnf when it is present
+make test       # 30 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies.

@@ -6,6 +6,7 @@
  */
 #include "phx.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -307,6 +308,118 @@ static void find_reserved(Grammar *g)
 }
 
 /* ------------------------------------------------------------------ */
+/* Actions
+ *
+ * `$3` drifting when a factor is inserted before it is yacc's most famous
+ * silent failure: the grammar still builds, and the tree is quietly wrong.
+ * Every reference is checked against the alternative it sits in, when the
+ * grammar is read.
+ *
+ * The node vocabulary is gathered at the same time -- the set of node types a
+ * grammar can build, and the fields each carries. That is what `--nodes`
+ * prints, and it is what stage 2's passes will be written against, so a type
+ * built with two different field lists is worth saying now.
+ */
+
+static void check_refs(Check *c, const Rule *owner, const GNode *seq, const Expr *x)
+{
+    Grammar *g = c->g;
+
+    if (x->kind == X_REF) {
+        if (x->name) {
+            bool found = false;
+            for (int i = 0; i < seq->nkids; i++)
+                if (seq->kids[i]->label && strcmp(seq->kids[i]->label, x->name) == 0)
+                    found = true;
+            if (!found) {
+                diag_error(&g->src, x->pos,
+                           "no factor in this alternative is named '%s'", x->name);
+                c->ok = false;
+            }
+        } else if (x->index > seq->nkids) {
+            diag_error(&g->src, x->pos,
+                       "$%d, but this alternative of '%s' has %d factor%s",
+                       x->index, owner->name, seq->nkids,
+                       seq->nkids == 1 ? "" : "s");
+            c->ok = false;
+        }
+    }
+    for (int i = 0; i < x->nkids; i++)
+        check_refs(c, owner, seq, x->kids[i]);
+}
+
+/* The node types a grammar can build. Held as a flat list; a grammar has tens
+ * of these, not thousands. */
+typedef struct {
+    const char  *type;
+    char       **fields;
+    int          nfields;
+    size_t       pos;
+} NodeType;
+
+static NodeType *vocabulary;
+static int       nvocabulary;
+
+static void note_node_type(Check *c, const Expr *x)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < nvocabulary; i++) {
+        NodeType *known = &vocabulary[i];
+        if (strcmp(known->type, x->name) != 0) continue;
+
+        bool same = known->nfields == x->nkids;
+        for (int k = 0; same && k < x->nkids; k++)
+            if (strcmp(known->fields[k], x->fields[k]) != 0) same = false;
+
+        if (!same) {
+            diag_warn(&g->src, x->pos,
+                      "'%s' is built here with %d field%s and elsewhere with %d",
+                      x->name, x->nkids, x->nkids == 1 ? "" : "s", known->nfields);
+            diag_note("a pass keyed on '%s' would have to handle both", x->name);
+        }
+        return;
+    }
+
+    vocabulary = realloc(vocabulary, (size_t)(nvocabulary + 1) * sizeof *vocabulary);
+    if (!vocabulary) { fputs("phx: out of memory\n", stderr); exit(2); }
+
+    vocabulary[nvocabulary++] = (NodeType){
+        .type = x->name, .fields = x->fields, .nfields = x->nkids, .pos = x->pos
+    };
+}
+
+static void collect_types(Check *c, const Expr *x)
+{
+    if (x->kind == X_NODE) note_node_type(c, x);
+    for (int i = 0; i < x->nkids; i++) collect_types(c, x->kids[i]);
+}
+
+static void check_actions(Check *c, const Rule *owner, const GNode *n)
+{
+    if (n->kind == G_SEQ && n->action) {
+        check_refs(c, owner, n, n->action);
+        collect_types(c, n->action);
+    }
+    for (int i = 0; i < n->nkids; i++) check_actions(c, owner, n->kids[i]);
+}
+
+void grammar_nodes(FILE *out, const Grammar *g)
+{
+    for (int i = 0; i < nvocabulary; i++) {
+        const NodeType *t = &vocabulary[i];
+        fprintf(out, "%s", t->type);
+        if (t->nfields) {
+            fputs("(", out);
+            for (int k = 0; k < t->nfields; k++)
+                fprintf(out, "%s%s", k ? ", " : "", t->fields[k]);
+            fputs(")", out);
+        }
+        fputc('\n', out);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Literals nothing can spell
  *
  * The syntactic half is matched over tokens, so a `","` in it is asking for a
@@ -336,6 +449,10 @@ bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
 
+    free(vocabulary);
+    vocabulary  = NULL;
+    nvocabulary = 0;
+
     for (int i = 0; i < g->nrules; i++) {
         Rule *r = &g->rules[i];
         if (!r->body) {
@@ -357,6 +474,9 @@ bool grammar_check(Grammar *g)
 
     check_fragments(&c);
     find_reserved(g);
+
+    for (int i = 0; i < g->nrules; i++)
+        if (g->rules[i].body) check_actions(&c, &g->rules[i], g->rules[i].body);
 
     for (int i = 0; i < g->nrules; i++)
         if (!g->rules[i].lexical && g->rules[i].body)

@@ -55,12 +55,19 @@ typedef enum {
     T_LBRACK, T_RBRACK,
     T_LBRACE, T_RBRACE,
     T_BANG,
+    T_ARROW,      /*  ->     */
+    T_DOLLAR,     /*  $      */
+    T_COLON,      /*  :      */
+    T_COMMA,      /*  ,      */
+    T_ELLIPSIS,   /*  ...    */
+    T_NUMBER,
     T_DIRECTIVE   /*  %name  */
 } TKind;
 
 typedef struct {
     TKind   kind;
     char   *text;   /* NAME, DIRECTIVE: the name. LIT: the decoded bytes.   */
+    int     value;  /* NUMBER: what it says                                 */
     size_t  len;    /* LIT may hold a NUL, so the length is carried         */
     size_t  pos;
     int     line;
@@ -227,6 +234,15 @@ static bool scan(Reader *r)
             }
         }
 
+        if (is_digit(c)) {
+            int    v = 0;
+            size_t j = i;
+            while (j < size && is_digit(s[j])) { v = v * 10 + (s[j] - '0'); j++; }
+            push(r, (MToken){ .kind = T_NUMBER, .value = v, .pos = start, .line = line });
+            i = j;
+            continue;
+        }
+
         if (is_start(c)) {
             size_t j = i;
             while (j < size && is_body(s[j])) j++;
@@ -247,8 +263,17 @@ static bool scan(Reader *r)
             continue;
         }
 
-        /* Two characters before one, every time. `.` before `..` would mean
-         * the reader never saw a range. */
+        /* Three characters before two before one, every time. `.` before
+         * `..` would mean the reader never saw a range, and `..` before `...`
+         * would mean it never saw a spread. */
+        if (c == '.' && i + 2 < size && s[i + 1] == '.' && s[i + 2] == '.') {
+            push(r, (MToken){ .kind = T_ELLIPSIS, .pos = start, .line = line });
+            i += 3; continue;
+        }
+        if (c == '-' && i + 1 < size && s[i + 1] == '>') {
+            push(r, (MToken){ .kind = T_ARROW, .pos = start, .line = line });
+            i += 2; continue;
+        }
         if (c == ':' && i + 2 < size && s[i + 1] == ':' && s[i + 2] == '=') {
             push(r, (MToken){ .kind = T_DEFSYM, .pos = start, .line = line });
             i += 3; continue;
@@ -274,6 +299,9 @@ static bool scan(Reader *r)
         case '{': kind = T_LBRACE; break;
         case '}': kind = T_RBRACE; break;
         case '!': kind = T_BANG;   break;
+        case '$': kind = T_DOLLAR;  break;
+        case ':': kind = T_COLON;   break;
+        case ',': kind = T_COMMA;   break;
         default:
             diag_error(r->src, i, "stray '%c' in the grammar", c);
             return false;
@@ -322,6 +350,156 @@ static char *fold(Arena *a, const char *s, size_t len)
 
 static GNode *read_expression(Reader *r);
 
+/* ------------------------------------------------------------------ */
+/* What an alternative builds
+ *
+ *     action = "$" ( number | name | "$" )
+ *            | name [ "(" [ binding { "," binding } ] ")" ]
+ *            | literal
+ *            | "[" [ element { "," element } ] "]" .
+ *     binding = name ":" action .
+ *     element = [ "..." ] action .
+ */
+
+static Expr *expr_new(Reader *r, XKind kind, size_t pos)
+{
+    Expr *x = arena_alloc(r->a, sizeof *x);
+    x->kind = kind;
+    x->pos  = pos;
+    return x;
+}
+
+static void expr_add(Reader *r, Expr *parent, const char *field, Expr *kid)
+{
+    int    n      = parent->nkids;
+    Expr **kids   = arena_alloc(r->a, (size_t)(n + 1) * sizeof *kids);
+    char **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
+
+    memcpy(kids,   parent->kids,   (size_t)n * sizeof *kids);
+    memcpy(fields, parent->fields, (size_t)n * sizeof *fields);
+
+    kids[n]   = kid;
+    fields[n] = (char *)field;
+
+    parent->kids   = kids;
+    parent->fields = fields;
+    parent->nkids  = n + 1;
+}
+
+static Expr *read_action(Reader *r)
+{
+    MToken *t = peek(r);
+
+    switch (t->kind) {
+    case T_DOLLAR: {
+        advance(r);
+
+        if (at(r, T_DOLLAR)) {                    /* $$ -- the accumulator */
+            MToken *d = advance(r);
+            return expr_new(r, X_ACC, d->pos);
+        }
+        if (at(r, T_NUMBER)) {                    /* $2 -- by position     */
+            MToken *n = advance(r);
+            if (n->value < 1) {
+                diag_error(r->src, n->pos, "$0 -- factors are counted from one");
+                return NULL;
+            }
+            Expr *x = expr_new(r, X_REF, n->pos);
+            x->index = n->value;
+            return x;
+        }
+        if (at(r, T_NAME)) {                      /* $e -- by label        */
+            MToken *n = advance(r);
+            Expr *x = expr_new(r, X_REF, n->pos);
+            x->name = n->text;
+            return x;
+        }
+        diag_error(r->src, t->pos, "'$' wants a number, a name, or another '$'");
+        return NULL;
+    }
+
+    case T_LIT: {
+        advance(r);
+        Expr *x = expr_new(r, X_TEXT, t->pos);
+        x->name = t->text;
+        x->len  = (int)t->len;
+        return x;
+    }
+
+    case T_LBRACK: {
+        advance(r);
+        Expr *x = expr_new(r, X_LIST, t->pos);
+
+        while (!at(r, T_RBRACK)) {
+            bool spread = false;
+            size_t pos  = peek(r)->pos;
+            if (at(r, T_ELLIPSIS)) { advance(r); spread = true; }
+
+            Expr *item = read_action(r);
+            if (!item) return NULL;
+
+            if (spread) {
+                Expr *s = expr_new(r, X_SPREAD, pos);
+                expr_add(r, s, NULL, item);
+                item = s;
+            }
+            expr_add(r, x, NULL, item);
+
+            if (at(r, T_COMMA)) { advance(r); continue; }
+            break;
+        }
+        if (!at(r, T_RBRACK)) {
+            diag_error(r->src, peek(r)->pos, "expected ']'");
+            return NULL;
+        }
+        advance(r);
+        return x;
+    }
+
+    case T_NAME: {
+        advance(r);
+        Expr *x = expr_new(r, X_NODE, t->pos);
+        x->name = t->text;
+
+        if (!at(r, T_LPAREN)) return x;           /* a node with no fields */
+        advance(r);
+
+        while (!at(r, T_RPAREN)) {
+            if (!at(r, T_NAME)) {
+                diag_error(r->src, peek(r)->pos, "expected a field name");
+                return NULL;
+            }
+            MToken *field = advance(r);
+
+            if (!at(r, T_COLON)) {
+                diag_error(r->src, peek(r)->pos,
+                           "expected ':' after the field '%s'", field->text);
+                return NULL;
+            }
+            advance(r);
+
+            Expr *value = read_action(r);
+            if (!value) return NULL;
+            expr_add(r, x, field->text, value);
+
+            if (at(r, T_COMMA)) { advance(r); continue; }
+            break;
+        }
+        if (!at(r, T_RPAREN)) {
+            diag_error(r->src, peek(r)->pos, "expected ')'");
+            return NULL;
+        }
+        advance(r);
+        return x;
+    }
+
+    default:
+        diag_error(r->src, t->pos,
+                   "expected what this alternative builds -- a node, a $, or a list");
+        return NULL;
+    }
+}
+
 /* Whether the cursor is at something a factor can begin with -- and, for a
  * name, whether that name is the start of the *next* production rather than
  * part of this one. That test is what makes the trailing `.` optional. */
@@ -330,6 +508,8 @@ static bool starts_factor(Reader *r)
     switch (peek(r)->kind) {
     case T_NAME:
         return peek2(r)->kind != T_DEFSYM;
+    case T_ARROW:
+        return false;
     case T_LIT: case T_LPAREN: case T_LBRACK: case T_LBRACE: case T_BANG:
         return true;
     default:
@@ -340,6 +520,23 @@ static bool starts_factor(Reader *r)
 static GNode *read_factor(Reader *r)
 {
     MToken *t = peek(r);
+
+    /* `e:expression` -- a name for the factor after it, so that an action can
+     * say what it means rather than where it sits. `:=` is one token, so this
+     * cannot be confused with a production. */
+    if (t->kind == T_NAME && peek2(r)->kind == T_COLON) {
+        advance(r);
+        advance(r);
+        GNode *inner = read_factor(r);
+        if (!inner) return NULL;
+        if (inner->label) {
+            diag_error(r->src, t->pos, "'%s' is a second name for one factor",
+                       t->text);
+            return NULL;
+        }
+        inner->label = t->text;
+        return inner;
+    }
 
     switch (t->kind) {
     case T_NAME: {
@@ -420,6 +617,13 @@ static GNode *read_term(Reader *r)
         GNode *f = read_factor(r);
         if (!f) return NULL;
         add_kid(r, seq, f);
+    }
+
+    if (at(r, T_ARROW)) {
+        advance(r);
+        seq->action = read_action(r);
+        if (!seq->action) return NULL;
+        return seq;                 /* the sequence is kept, to hold it */
     }
 
     /* One factor needs no sequence around it. Zero is `empty = .`, which is
@@ -602,6 +806,7 @@ Grammar *grammar_read(Arena *a, const char *path)
 /* Printing a grammar back out */
 
 static void dump_node(FILE *out, const Grammar *g, const GNode *n, GKind outer);
+static void dump_action(FILE *out, const Expr *x);
 
 static void dump_literal(FILE *out, const char *s, int len)
 {
@@ -635,10 +840,16 @@ static void dump_node(FILE *out, const Grammar *g, const GNode *n, GKind outer)
     case G_RANGE: dump_literal(out, n->text, 1);
                   fputs(" .. ", out);
                   dump_literal(out, n->upto, 1); break;
-    case G_NAME:  fputs(n->text, out); break;
+    case G_NAME:
+        if (n->label) fprintf(out, "%s:", n->label);
+        fputs(n->text, out);
+        break;
     case G_SEQ:
-        if (n->nkids == 0) break;                     /* the empty production */
-        dump_kids(out, g, n, " ", G_SEQ);
+        if (n->nkids) dump_kids(out, g, n, " ", G_SEQ);
+        if (n->action) {
+            fputs(" -> ", out);
+            dump_action(out, n->action);
+        }
         break;
     case G_ALT:
         if (outer == G_SEQ) fputs("( ", out);
@@ -648,6 +859,40 @@ static void dump_node(FILE *out, const Grammar *g, const GNode *n, GKind outer)
     case G_OPT:   fputs("[ ", out); dump_node(out, g, n->kids[0], G_ALT); fputs(" ]", out); break;
     case G_REP:   fputs("{ ", out); dump_node(out, g, n->kids[0], G_ALT); fputs(" }", out); break;
     case G_NOT:   fputs("! ", out); dump_node(out, g, n->kids[0], G_SEQ); break;
+    }
+}
+
+static void dump_action(FILE *out, const Expr *x)
+{
+    switch (x->kind) {
+    case X_ACC:  fputs("$$", out); return;
+    case X_REF:
+        if (x->name) fprintf(out, "$%s", x->name);
+        else         fprintf(out, "$%d", x->index);
+        return;
+    case X_TEXT: dump_literal(out, x->name, x->len); return;
+    case X_SPREAD:
+        fputs("...", out);
+        dump_action(out, x->kids[0]);
+        return;
+    case X_LIST:
+        fputs("[", out);
+        for (int i = 0; i < x->nkids; i++) {
+            if (i) fputs(", ", out);
+            dump_action(out, x->kids[i]);
+        }
+        fputs("]", out);
+        return;
+    case X_NODE:
+        fputs(x->name, out);
+        if (!x->nkids) return;
+        fputs("(", out);
+        for (int i = 0; i < x->nkids; i++) {
+            fprintf(out, "%s%s: ", i ? ", " : "", x->fields[i]);
+            dump_action(out, x->kids[i]);
+        }
+        fputs(")", out);
+        return;
     }
 }
 

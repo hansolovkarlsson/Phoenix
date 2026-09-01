@@ -68,10 +68,41 @@ echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
 warns "a fragment not declared one"     "%fragment"       "$root/tests/grammars/fragment-forgotten.phx"
 
+echo "actions"
+accepts "actions on calc.phx"   "$root/examples/calc.phx"
+accepts "a spread into a list"  "$root/tests/grammars/spread.phx"
+refuses "a \$n past the last factor" "but this alternative" \
+        "$root/tests/grammars/ref-out-of-range.phx"
+refuses "a label nothing carries"    "is named" \
+        "$root/tests/grammars/unknown-label.phx"
+warns   "one node type, two shapes"  "elsewhere with" \
+        "$root/tests/grammars/inconsistent-node.phx"
+
+# The vocabulary a pass will be written against.
+nodes=$("$phx" --nodes "$root/examples/calc.phx" 2>/dev/null)
+if printf '%s' "$nodes" | grep -q "^Binary(op, left, right)$"; then
+    report pass "--nodes lists the vocabulary"
+else
+    report fail "--nodes lists the vocabulary" "got: $(printf '%s' "$nodes" | tr '\n' ' ')"
+fi
+
 echo "sources"
 accepts "sum.calc"        "$root/examples/calc.phx" "$root/examples/sum.calc"
 accepts "one.calc"        "$root/examples/calc.phx" "$root/tests/sources/one.calc"
 accepts "an empty tail"   "$root/tests/grammars/empty-production.phx" "$root/tests/sources/list.txt"
+accepts "a spread over a file" "$root/tests/grammars/spread.phx" "$root/tests/sources/list.txt"
+
+# The whole point of stage 1: `width * height - 1` must come out left-leaning,
+# with precedence from the grammar and associativity from the fold. A `-` whose
+# left is a `Binary` and whose right is a `Number` is that shape and no other.
+tree=$("$phx" "$root/examples/calc.phx" "$root/examples/sum.calc" 2>/dev/null)
+if printf '%s' "$tree" | grep -q "op: \"-\"" \
+   && printf '%s' "$tree" | grep -q "left: Binary" \
+   && ! printf '%s' "$tree" | grep -q "expression"; then
+    report pass "the fold associates to the left"
+else
+    report fail "the fold associates to the left"
+fi
 refuses "a reserved word as a name" "expected"  "$root/examples/calc.phx" "$root/tests/sources/reserved.calc"
 refuses "a character no rule matches" "nothing here matches" \
         "$root/examples/calc.phx" "$root/tests/sources/bad-token.calc"

@@ -21,6 +21,7 @@ static const char usage[] =
     "\n"
     "options:\n"
     "  --tokens     print the token stream and stop\n"
+    "  --nodes      print the node types the grammar builds, and stop\n"
     "  --grammar    print the grammar as it was understood\n"
     "  --quiet      say nothing on success; the exit status is the answer\n"
     "  --help       this\n";
@@ -31,6 +32,7 @@ int main(int argc, char **argv)
     const char *source_path  = NULL;
     bool        want_tokens  = false;
     bool        want_grammar = false;
+    bool        want_nodes   = false;
     bool        quiet        = false;
 
     for (int i = 1; i < argc; i++) {
@@ -41,6 +43,7 @@ int main(int argc, char **argv)
             return 0;
         }
         if (strcmp(arg, "--tokens")  == 0) { want_tokens  = true; continue; }
+        if (strcmp(arg, "--nodes")   == 0) { want_nodes   = true; continue; }
         if (strcmp(arg, "--grammar") == 0) { want_grammar = true; continue; }
         if (strcmp(arg, "--quiet")   == 0) { quiet        = true; continue; }
 
@@ -65,6 +68,12 @@ int main(int argc, char **argv)
     Grammar *g = grammar_read(a, grammar_path);
     if (!g) { arena_free(a); return 1; }
 
+    if (want_nodes) {
+        if (!quiet) grammar_nodes(stdout, g);
+        arena_free(a);
+        return diag_failed() ? 1 : 0;
+    }
+
     if (want_grammar || !source_path) {
         if (!quiet) grammar_dump(stdout, g);
         if (!source_path) {
@@ -86,7 +95,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    PNode *tree = parse_run(a, g, &src, &toks);
+    Value *tree = parse_run(a, g, &src, &toks);
     if (!tree) { arena_free(a); return 1; }
 
     if (!quiet) tree_dump(stdout, tree);
