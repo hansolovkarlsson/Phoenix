@@ -1,6 +1,6 @@
 # Phoenix
 
-A compiler-compiler. You write a language's grammar in EBNF and describe what
+A compiler generator. You write a language's grammar in EBNF and describe what
 each construct means; Phoenix writes the compiler, in
 [Solveig](https://github.com/hansolovkarlsson/Solveig).
 
@@ -11,9 +11,45 @@ myprogram.pas ──────────────────────
                                           ──solas──▶ myprogram.sob ──solvm──▶ output
 ```
 
+## The name
+
+**Phoenix is a *compiler-compiler*, and that is a claim rather than a
+description.** The two terms mean the same thing and the literature uses them
+interchangeably; what differs is what each has come to suggest.
+
+The phrase belongs to Brooker and Morris, whose Compiler Compiler ran at
+Manchester around 1960, and it meant something larger than a parser: their
+system had a notation for what constructs *meant*, not only for what they
+looked like.
+
+**yacc borrowed the name and delivered a fraction of it.** *Yet Another
+Compiler-Compiler* is a parser generator. It gives you the front of the problem
+and leaves you at the syntax tree, which is the complaint this project starts
+from -- and because yacc is by far the most famous bearer of the term,
+"compiler-compiler" now reads as "thing like yacc" to most people who meet it.
+
+So the first line of this page says **compiler generator**, which is
+unambiguous and is what the tools Phoenix most resembles -- JastAdd, Silver,
+Eli -- call themselves. The older phrase is kept for the argument it carries:
+describing syntax *and* meaning is what a compiler-compiler was for before it
+was narrowed, and Phoenix has a better claim on the word than yacc ever did.
+
+*Phoenix* is the bird that is rebuilt from what is left of the one before it,
+which is what a compiler generator does to a language description and,
+separately, what this repository is.
+
+A third term, **metacompiler**, carries a narrower sense from META II (Schorre,
+1964): a compiler-writing tool written in its own notation, able to compile
+itself. Phoenix is not one -- `phx` is C, and the `.phx` notation is read by a
+hand-written parser. It could become one; see
+[self-hosting](docs/journal.md#2026-09-01--what-self-hosting-would-and-would-not-prove)
+for what that would and would not prove.
+
 ## Why not lex and yacc
 
-Because they solve the front of the problem and leave you at the AST.
+Because they solve the front of the problem and leave you at the AST -- which
+is the same sentence as above, and is the whole reason for the name section
+preceding it.
 
 After the parser you still hand-write forward-declaration collection, type
 checking, optimisation and code generation — four large modules that are mostly

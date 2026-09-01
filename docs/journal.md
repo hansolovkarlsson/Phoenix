@@ -94,3 +94,42 @@ its *spelling*, not by its name. Warning about those is noise.
 came back as a stream of `letter` and `digit`, because longest-match ties break
 by declaration order. The trap was known before it was walked into, which is the
 whole value of the prior art being in-house.
+
+## 2026-09-01 — what self-hosting would and would not prove
+
+Raised as a question and worth writing down carefully, because the loose answer
+("Phoenix could describe itself") conflates three different things.
+
+**Level 1 — the notation describes its own grammar.** Real, and easy. A `.phx`
+file's format is expressible in `.phx`, which is Wirth's own argument for the
+notation. It would replace the hand-written reader in `grammar.c` and nothing
+else.
+
+**Level 2 — Phoenix generates its own front end.** Real, once stage 5 exists.
+`phoenix.phx` generates a program that reads `.phx` files, with resolution and
+the checks written as `%pass` blocks; `phx` the C binary would then be needed
+only to bootstrap, and a generated `phoenix.sol` would be kept in the repository
+the way every self-hosting compiler keeps a bootstrap artifact.
+
+**Level 3 — Phoenix generates all of itself.** Not real, and not a failure. The
+PEG matcher and the longest-match scanner are the engine that *runs* a grammar
+rather than anything derived from one, so they would ship as a runtime beside
+the generated code. Every compiler generator does this; a self-hosting C
+compiler still links a runtime.
+
+**Self-hosting is a test, not a feature.** A Solveig Phoenix would be slower and
+bound by SolVM's limits — strictly worse as a tool. What it buys is a
+completeness argument: a notation that can describe its own compiler
+demonstrably has enough in it.
+
+**And the place it should be expected to fail is the interesting part.**
+Left-recursion detection is a Warshall closure over a rule *graph*, not a walk
+over a tree. If `%pass` can only express tree traversals it cannot express
+Phoenix's own checks — and that limit is not peculiar to Phoenix. Dataflow
+analysis, call graphs, register interference and alias analysis are all graph
+algorithms wearing a tree costume. Attempting level 2 would say early whether
+`%pass` needs an escape hatch for passes that are not tree walks.
+
+It would also be the sharpest available probe of the divergence risk taken on
+knowingly when `phx` was made C rather than Solveig: the two implementations of
+the meta-language must agree, and self-hosting is where disagreement surfaces.
