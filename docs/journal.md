@@ -399,3 +399,51 @@ that needs `show` to have run before `typecheck` does. There is no way to
 sequence two passes yet, so the module's one pass is written, tested and not yet
 usable for the thing it is for. That is the clearest argument for `%driver` so
 far, and a better one than ordering passes for tidiness.
+
+## 2026-09-01 — stage 3
+
+`%driver` names passes in order and which attribute of the root is the answer.
+The sketch survived, which is the first time that has happened; what it did not
+anticipate were three things that only appeared once passes could actually see
+each other's work.
+
+**A threaded attribute is not a node attribute, and the collision check had to
+learn it.** The first driver written produced a warning that `typecheck` and
+`eval` both define `env` and the later would win. They do not: `thread` is state
+belonging to the *walk*, declared per pass with its own starting value, never
+written where another pass could read it. Two passes threading an `env` each
+have their own. The warning was wrong and the distinction is worth having a name
+for.
+
+**`$x.attr` had to read fields as well as attributes.** The check for a
+misordered driver flagged `$left.text` as a cross-pass read of something nothing
+defines — and it was right that nothing defines it, because `text` is a *field*.
+Reading a child's field is an ordinary thing to want and was not possible: `.`
+read attributes only. It now reads a field first and an attribute second, which
+is the same order `$name` uses on the node being visited, so there is one rule
+rather than two. The driver check skips names that are fields in the vocabulary,
+since reading one is not a claim about order.
+
+**And a pass could not read what an earlier pass left on the node it is
+standing on.** `$name` resolved through bindings, fields, threads and inherited
+values, and not through the node's own attributes — so reading a previous pass's
+work meant going through a child, which is a strange thing to have to do to read
+your own attribute. Added at position three, after fields.
+
+**What the stage was for, working:** `typecheck`'s messages now render the
+offending expression with `show`, a pass that arrived with
+`lib/expression.phx` and knows nothing about calc —
+
+```
+print wants an int, and (n < (2 + n)) is bool
+```
+
+— which is exactly the thing that was written, tested and unreachable when the
+expression module landed.
+
+**One limit of the order check, stated because it is a real one.** It sees
+`$x.name` and not a bare `$name`. A bare one may be a field, a binding, a
+threaded attribute or an inherited one, and deciding which would mean knowing
+what shapes reach the clause. So it catches a pass reading another node's work,
+which is the ordinary case and the one that goes wrong, and stays quiet about a
+pass reading its own.

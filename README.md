@@ -60,9 +60,9 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**Stage 2 of six.** Phoenix reads a `.phx` file, parses a source file with it,
-builds the AST its `->` clauses describe, and runs the `%pass` blocks that say
-what the program *means* — interpreting it, or compiling it.
+**Stage 3 of six.** Phoenix reads a description, parses a source file with it,
+builds the AST its `->` clauses describe, and runs the passes its `%driver`
+names, in order — checking the program, interpreting it, or compiling it.
 
 ```sh
 make
@@ -90,7 +90,7 @@ Nothing yet describes what a program *means*. That is stage 2.
 | **0** | EBNF in, parse tree out | **done** |
 | **1** | `->` names the AST node a production builds | **done** |
 | **2** | `%pass` — attributes over the tree, interpreted | **done** |
-| 3 | `%driver` — several passes, ordered, diagnostics gathered | |
+| **3** | `%driver` — several passes, ordered | **done** |
 | 4 | an `emit` pass that writes Solveig source **and C** | **done early** |
 | 5 | `phx calc.phx -o calc.sol` — the standalone compiler | |
 
@@ -154,6 +154,59 @@ So a chain of rules that each pass one thing along — `expression` to `term` to
 `factor` to a number — collapses to the number, and nobody had to say so. The
 useless interior nodes that every hand-written tree-builder exists to strip are
 not stripped; they are never built.
+
+## Drivers
+
+```
+%driver c     = show, typecheck, emit-c -> out .
+%driver run   = show, typecheck, eval   -> out .
+%driver check = show, typecheck .
+```
+
+Passes in order, and which attribute of the root is the answer. A driver with
+no `->` is a validation run: nothing is printed and the exit status is all it
+says. The first declared is the default, for the same reason the first
+syntactic rule is the default `%start`.
+
+```sh
+phx calc-c.phx prog.calc                # the first driver
+phx calc-c.phx prog.calc --driver run   # by name
+phx --drivers calc-c.phx                # what there is to choose from
+phx --tree    calc-c.phx prog.calc      # the tree, whatever drivers exist
+```
+
+**Attributes stay on the nodes between passes**, which is what makes a sequence
+worth having. `typecheck` can render the expression it is complaining about
+using `show`, a pass that came from [`lib/expression.phx`](lib/expression.phx)
+and knows nothing about calc:
+
+```
+print-a-bool.calc:3:3: error: print wants an int, and (n < 2) is bool
+    print n < 2;
+    ^
+```
+
+**A pass that reports an error stops the ones after it** — not because the
+sequence could not continue but because it should not, since a later pass
+reading what a failed one left produces consequences of the first mistake
+rather than new information.
+
+### A driver is a claim about order, and it is checked
+
+If a pass reads `$left.type` and the driver forgot to run `typecheck`, the
+alternative to catching it here is a message from inside a pass about a missing
+attribute — naming neither the driver that got the order wrong nor the pass
+that would have supplied it. What each pass defines and what it reads are both
+decidable when the description is read:
+
+```
+misordered-driver.phx:20:15: error: driver 'bad' runs 'typecheck', which reads
+                            '.show', and nothing before it defines one
+phx: 'show' defines 'show' — did the driver mean to run it first?
+```
+
+**That message is the reason to declare a driver** rather than to run passes in
+whatever order they were typed.
 
 ### The vocabulary
 
@@ -404,7 +457,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 58 checks, including Solveig's pascal.bnf when it is present
+make test       # 65 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

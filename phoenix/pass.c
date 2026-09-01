@@ -298,6 +298,77 @@ static bool read_one_pass(Reader *r, Pass *p)
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* `%driver c = typecheck, emit-c -> out .` */
+
+bool read_driver(Reader *r, MToken *directive)
+{
+    Grammar *g = r->g;
+
+    if (!at(r, T_NAME)) {
+        diag_error(r->src, directive->pos, "%%driver wants a name");
+        return false;
+    }
+    MToken *name = advance(r);
+
+    if (!at(r, T_DEFSYM)) {
+        diag_error(r->src, peek(r)->pos,
+                   "expected '=' and then the passes '%s' runs", name->text);
+        return false;
+    }
+    advance(r);
+
+    if (g->ndrivers == g->capdrivers) {
+        int     cap = g->capdrivers ? g->capdrivers * 2 : 4;
+        Driver *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+        memcpy(big, g->drivers, (size_t)g->ndrivers * sizeof *big);
+        g->drivers    = big;
+        g->capdrivers = cap;
+    }
+
+    Driver *d = &g->drivers[g->ndrivers++];
+    memset(d, 0, sizeof *d);
+    d->name = name->text;
+    d->pos  = name->pos;
+
+    for (;;) {
+        if (!at(r, T_NAME)) {
+            diag_error(r->src, peek(r)->pos, "expected the name of a pass");
+            return false;
+        }
+        MToken *pass = advance(r);
+
+        char  **names = arena_alloc(r->a, (size_t)(d->npasses + 1) * sizeof *names);
+        size_t *where = arena_alloc(r->a, (size_t)(d->npasses + 1) * sizeof *where);
+        memcpy(names, d->passes,   (size_t)d->npasses * sizeof *names);
+        memcpy(where, d->pass_pos, (size_t)d->npasses * sizeof *where);
+
+        names[d->npasses] = pass->text;
+        where[d->npasses] = pass->pos;
+        d->passes   = names;
+        d->pass_pos = where;
+        d->npasses++;
+
+        if (at(r, T_COMMA)) { advance(r); continue; }
+        break;
+    }
+
+    /* `-> out` names the attribute of the root that is the answer. Without
+     * one, running this driver prints nothing and answers with its status. */
+    if (at(r, T_ARROW)) {
+        advance(r);
+        if (!at(r, T_NAME)) {
+            diag_error(r->src, peek(r)->pos,
+                       "expected the attribute '%s' answers with", d->name);
+            return false;
+        }
+        d->answer = advance(r)->text;
+    }
+
+    if (at(r, T_DOT)) advance(r);
+    return true;
+}
+
 bool read_passes(Reader *r, MToken *directive)
 {
     Grammar *g = r->g;

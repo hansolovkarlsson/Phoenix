@@ -3,31 +3,14 @@
 *What is coming, what is borrowed, and what is deliberately absent. An entry
 here names **why** rather than when.*
 
-Stages 0, 1 and 2 are done; [journal.md](journal.md) records what each one cost
+Stages 0 to 3 are done; [journal.md](journal.md) records what each one cost
 and what it got wrong first.
 
 ---
 
 ## 1. The stages that remain
 
-### 1.1 `%driver` — running passes in order
-
-**The argument for it is now concrete rather than tidy.**
-[`lib/expression.phx`](../lib/expression.phx) ships a `show` pass whose whole
-purpose is to be used from *another* pass's diagnostics —
-
-```
-Binary ! $left.type <> "int" : "cannot add {} and {}" of $left.show, $right.show
-```
-
-— and that needs `show` to have run before `typecheck` does. There is no way to
-sequence two passes, so a written, tested, working pass in `lib/` cannot be used
-for the thing it exists for.
-
-What it needs to say: which passes, in what order, which one produces the
-output, and that a pass reporting errors stops the ones after it.
-
-### 1.2 A standalone compiler
+### 1.1 A standalone compiler
 
 `phx pascal.phx -o pascal.c && cc pascal.c -o cpas && cpas prog.pas`.
 

@@ -30,8 +30,9 @@
  *
  *   1. something the pattern bound
  *   2. a field of the node being visited
- *   3. a threaded attribute's value here
- *   4. an inherited attribute in scope
+ *   3. an attribute of it, from an earlier pass or an earlier clause
+ *   4. a threaded attribute's value here
+ *   5. an inherited attribute in scope
  *
  * The order matters only when a name is used twice, and the innermost thing
  * wins, which is what every language does.
@@ -193,11 +194,12 @@ static Value *run_ref(Eval *e, const Expr *x)
                                x->name, i + 1, value_kind_name(of->items[i]));
                     return NULL;
                 }
-                items[i] = attr_get(of->items[i], x->name);
+                items[i] = field_of(of->items[i], x->name);
+                if (!items[i]) items[i] = attr_get(of->items[i], x->name);
                 if (!items[i]) {
                     if (diag_failed()) return value_error(r->a);
                     diag_error(&r->g->src, x->pos,
-                               "'%s' has no attribute '%s' in pass '%s'",
+                               "'%s' has no field or attribute '%s' in pass '%s'",
                                of->items[i]->type, x->name, r->pass->name);
                     return NULL;
                 }
@@ -215,14 +217,18 @@ static Value *run_ref(Eval *e, const Expr *x)
                        x->name, value_kind_name(of));
             return NULL;
         }
-        Value *got = attr_get(of, x->name);
+        /* A field of it, then what a pass worked out about it -- the same
+         * order `$name` uses on the node being visited, so there is one rule
+         * to know rather than two. */
+        Value *got = field_of(of, x->name);
+        if (!got) got = attr_get(of, x->name);
+
         if (!got) {
             /* Once something has gone wrong, a missing attribute is very
              * likely a consequence of it rather than a mistake of its own. */
             if (diag_failed()) return value_error(r->a);
             diag_error(&r->g->src, x->pos,
-                       "'%s' has no attribute '%s' in pass '%s' -- "
-                       "no clause here defines one",
+                       "'%s' has no field or attribute '%s' in pass '%s'",
                        of->type, x->name, r->pass->name);
             return NULL;
         }
@@ -242,7 +248,14 @@ static Value *run_ref(Eval *e, const Expr *x)
     Value *field = field_of(r->node, x->name);             /* 2. a field */
     if (field) return field;
 
-    for (int i = 0; i < r->pass->nthreads; i++)            /* 3. threaded */
+    /* 3. something a pass worked out about *this* node -- an earlier pass in
+     * the driver, or an earlier clause of this one. Without this, reading
+     * what a previous pass left required going through a child, which is a
+     * strange thing to have to do to read your own attribute. */
+    Value *own = attr_get(r->node, x->name);
+    if (own) return own;
+
+    for (int i = 0; i < r->pass->nthreads; i++)            /* 4. threaded */
         if (strcmp(r->threads[i].name, x->name) == 0) {
             if (!r->threads[i].value) {
                 diag_error(&r->g->src, x->pos,
@@ -253,12 +266,12 @@ static Value *run_ref(Eval *e, const Expr *x)
             return r->threads[i].value;
         }
 
-    for (Scope *s = r->scope; s; s = s->outer)             /* 4. inherited */
+    for (Scope *s = r->scope; s; s = s->outer)             /* 5. inherited */
         if (strcmp(s->name, x->name) == 0) return s->value;
 
     diag_error(&r->g->src, x->pos,
                "nothing here is called '%s' -- not a binding, a field of %s, "
-               "a threaded attribute, or one handed down",
+               "an attribute of it, a threaded attribute, or one handed down",
                x->name, r->node->type ? r->node->type : "this node");
     return NULL;
 }
@@ -426,6 +439,13 @@ const Pass *pass_find(const Grammar *g, const char *name)
 {
     for (int i = 0; i < g->npasses; i++)
         if (strcmp(g->passes[i].name, name) == 0) return &g->passes[i];
+    return NULL;
+}
+
+const Driver *driver_find(const Grammar *g, const char *name)
+{
+    for (int i = 0; i < g->ndrivers; i++)
+        if (strcmp(g->drivers[i].name, name) == 0) return &g->drivers[i];
     return NULL;
 }
 

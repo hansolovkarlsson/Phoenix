@@ -725,6 +725,10 @@ static bool read_file(Reader *r, const char *path)
                 if (!read_passes(r, d)) return false;
                 continue;
             }
+            else if (strcmp(d->text, "driver")     == 0) {
+                if (!read_driver(r, d)) return false;
+                continue;
+            }
             else if (strcmp(d->text, "start")      == 0) {
                 if (!at(r, T_NAME)) {
                     diag_error(r->src, d->pos, "%%start wants the name of a rule");
@@ -735,7 +739,7 @@ static bool read_file(Reader *r, const char *path)
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%import "
-                          "%%require");
+                          "%%require %%driver");
                 return false;
             }
             continue;

@@ -63,8 +63,12 @@ static const char usage[] =
     "  --tokens     print the token stream and stop\n"
     "  --nodes      print the node types the grammar builds, and stop\n"
     "  --imports    list the files the description was assembled from\n"
-    "  --run PASS   run a %pass over the tree and print what it worked out\n"
-    "  --show ATTR  which attribute --run prints from the root (default: out)\n"
+    "  --tree         print the tree and stop, whatever drivers there are\n"
+    "  --driver NAME  which %driver to run (default: the first declared)\n"
+    "  --drivers      list the drivers this description declares\n"
+    "  --run PASS     run one %pass on its own, for looking at it\n"
+    "  --show ATTR    which attribute to print from the root, overriding\n"
+    "                 whatever the driver answers with\n"
     "  --grammar    print the grammar as it was understood\n"
     "  --quiet      say nothing on success; the exit status is the answer\n"
     "  --help       this\n";
@@ -80,7 +84,10 @@ int main(int argc, char **argv)
     bool        want_nodes   = false;
     bool        want_imports = false;
     const char *run_pass     = NULL;
-    const char *show_attr    = "out";
+    const char *show_attr    = NULL;
+    const char *driver_name  = NULL;
+    bool        want_drivers = false;
+    bool        want_tree    = false;
     bool        quiet        = false;
 
     for (int i = 1; i < argc; i++) {
@@ -93,6 +100,17 @@ int main(int argc, char **argv)
         if (strcmp(arg, "--tokens")  == 0) { want_tokens  = true; continue; }
         if (strcmp(arg, "--nodes")   == 0) { want_nodes   = true; continue; }
         if (strcmp(arg, "--imports") == 0) { want_imports = true; continue; }
+        if (strcmp(arg, "--drivers") == 0) { want_drivers = true; continue; }
+        if (strcmp(arg, "--tree")    == 0) { want_tree    = true; continue; }
+
+        if (strcmp(arg, "--driver") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "phx: --driver wants a name\n");
+                return 2;
+            }
+            driver_name = argv[++i];
+            continue;
+        }
 
         if (strcmp(arg, "--run") == 0) {
             if (i + 1 >= argc) {
@@ -133,6 +151,20 @@ int main(int argc, char **argv)
     Arena   *a = arena_new();
     Grammar *g = grammar_read(a, grammar_path);
     if (!g) { arena_free(a); return 1; }
+
+    if (want_drivers) {
+        for (int i = 0; i < g->ndrivers; i++) {
+            const Driver *d = &g->drivers[i];
+            printf("%-12s = ", d->name);
+            for (int k = 0; k < d->npasses; k++)
+                printf("%s%s", k ? ", " : "", d->passes[k]);
+            if (d->answer) printf(" -> %s", d->answer);
+            printf("%s\n", i == 0 ? "        (the default)" : "");
+        }
+        if (!g->ndrivers) fputs("phx: this description declares no drivers\n", stderr);
+        arena_free(a);
+        return diag_failed() ? 1 : 0;
+    }
 
     if (want_imports) {
         for (int i = 0; i < g->map.n; i++) printf("%s\n", g->map.units[i].path);
@@ -194,6 +226,39 @@ int main(int argc, char **argv)
     Value *tree = parse_run(a, g, &src, &toks);
     if (!tree) { arena_free(a); return 1; }
 
+    /* What to run: one pass named on the command line, or a driver -- the one
+     * named, or the first declared, or none at all, in which case the tree is
+     * what there is to show. */
+    if (want_tree) {
+        if (!quiet) tree_dump(stdout, tree);
+        arena_free(a);
+        return 0;
+    }
+
+    const Driver *driver = NULL;
+
+    if (!run_pass) {
+        if (driver_name) {
+            driver = driver_find(g, driver_name);
+            if (!driver) {
+                fprintf(stderr, "phx: there is no driver called '%s'\n",
+                        driver_name);
+                if (g->ndrivers) {
+                    fputs("phx: this description has ", stderr);
+                    for (int i = 0; i < g->ndrivers; i++)
+                        fprintf(stderr, "%s%s", i ? ", " : "", g->drivers[i].name);
+                    fputc('\n', stderr);
+                }
+                arena_free(a);
+                return 2;
+            }
+        } else if (g->ndrivers) {
+            driver = &g->drivers[0];
+        }
+    }
+
+    const char *answer_attr = show_attr;
+
     if (run_pass) {
         const Pass *pass = pass_find(g, run_pass);
         if (!pass) {
@@ -202,30 +267,47 @@ int main(int argc, char **argv)
             return 2;
         }
         if (!pass_run(a, g, &src, pass, tree)) { arena_free(a); return 1; }
+        if (!answer_attr) answer_attr = "out";
 
-        Value *answer = pass_attr(tree, show_attr);
-        if (!answer) {
-            fprintf(stderr, "phx: pass '%s' left no '%s' on the root\n",
-                    run_pass, show_attr);
+    } else if (driver) {
+        /* Each pass is a complete walk, in the order written, and the
+         * attributes stay on the nodes between them -- which is what makes a
+         * sequence worth having. A pass that reports stops the ones after it:
+         * a later pass reading what a failed one left produces consequences of
+         * the first mistake rather than new information. */
+        for (int i = 0; i < driver->npasses; i++) {
+            const Pass *pass = pass_find(g, driver->passes[i]);
+            if (!pass_run(a, g, &src, pass, tree)) { arena_free(a); return 1; }
+        }
+        if (!answer_attr) answer_attr = driver->answer;
+
+        if (!answer_attr) {          /* a validation run says nothing */
             arena_free(a);
-            return 1;
+            return 0;
         }
-
-        if (!quiet) {
-            char  *text;
-            size_t len;
-            if (value_format(a, answer, &text, &len)) {
-                fwrite(text, 1, len, stdout);
-                if (len == 0 || text[len - 1] != '\n') fputc('\n', stdout);
-            } else {
-                tree_dump(stdout, answer);
-            }
-        }
+    } else {
+        if (!quiet) tree_dump(stdout, tree);
         arena_free(a);
         return 0;
     }
 
-    if (!quiet) tree_dump(stdout, tree);
+    Value *answer = pass_attr(tree, answer_attr);
+    if (!answer) {
+        fprintf(stderr, "phx: nothing left a '%s' on the root\n", answer_attr);
+        arena_free(a);
+        return 1;
+    }
+
+    if (!quiet) {
+        char  *text;
+        size_t len;
+        if (value_format(a, answer, &text, &len)) {
+            fwrite(text, 1, len, stdout);
+            if (len == 0 || text[len - 1] != '\n') fputc('\n', stdout);
+        } else {
+            tree_dump(stdout, answer);
+        }
+    }
 
     arena_free(a);
     return 0;

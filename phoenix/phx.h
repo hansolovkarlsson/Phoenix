@@ -193,7 +193,8 @@ typedef struct {
     size_t  pos;
 } Rule;
 
-typedef struct Pass Pass;      /* below -- the Grammar holds them */
+typedef struct Pass   Pass;    /* below -- the Grammar holds them */
+typedef struct Driver Driver;
 
 typedef struct {
     Arena     *arena;
@@ -217,6 +218,10 @@ typedef struct {
     Pass   *passes;
     int     npasses;
     int     cappasses;
+
+    Driver *drivers;
+    int     ndrivers;
+    int     capdrivers;
 
     /* A module may name rules it does not define. Reading one on its own is
      * fine; using one to parse a file is not, and this is what says so. */
@@ -312,6 +317,29 @@ struct Pass {
     PassRule *rules;
     int       nrules;
     size_t    pos;
+};
+
+/* ------------------------------------------------------------------ */
+/* Drivers
+ *
+ *     %driver c = typecheck, emit-c -> out .
+ *
+ * Passes in order, and which attribute of the root is the answer. A driver
+ * with no `->` is a validation run: nothing is printed and the exit status is
+ * the whole of what it says.
+ *
+ * Attributes stay on the nodes between passes, which is what makes a sequence
+ * worth having -- `typecheck` leaves `type` behind and `emit-c` reads it,
+ * without either knowing the other exists.
+ */
+
+struct Driver {
+    char   *name;
+    char  **passes;      /* by name, in the order they run */
+    int     npasses;
+    char   *answer;      /* the root attribute to print, or NULL */
+    size_t  pos;
+    size_t *pass_pos;    /* where each was named, for messages */
 };
 
 /* ------------------------------------------------------------------ */
@@ -438,7 +466,8 @@ void tree_dump(FILE *out, const Value *root);
 /* ------------------------------------------------------------------ */
 /* Running a pass -- run.c */
 
-const Pass *pass_find(const Grammar *g, const char *name);
+const Pass   *pass_find(const Grammar *g, const char *name);
+const Driver *driver_find(const Grammar *g, const char *name);
 
 /* One walk, post-order. Answers false having reported. */
 bool pass_run(Arena *a, const Grammar *g, const Source *src,

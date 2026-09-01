@@ -63,3 +63,14 @@
   Program : down indent = "    "
           : out = "#include <stdio.h>\n\nint main(void)\n{\n{}\n    return 0;\n}"
               of join($body.out, "\n") .
+
+(* ------------------------------------------------------------------ *)
+(* What to run, and in what order.                                     *)
+(*                                                                     *)
+(* `show` before `typecheck` is not decoration: typecheck's messages     *)
+(* read `$left.show`, and Phoenix refuses this driver if the order is    *)
+(* wrong rather than letting a pass complain about a missing attribute.  *)
+
+%driver c     = show, typecheck, emit-c -> out .
+%driver run   = show, typecheck, eval   -> out .
+%driver check = show, typecheck .

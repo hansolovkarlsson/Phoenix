@@ -1,0 +1,20 @@
+(* `typecheck` reads `.show` from a child, and the driver runs `show` after it,
+ * so `.show` is not there yet. *)
+%import "lexical.phx"
+%skip space
+%syntax
+%start line
+
+line = a:atom b:atom -> Pair(left: $a, right: $b) .
+atom = integer       -> N(text: $1) .
+
+%pass show
+  N    : show = "{}" of $text .
+  Pair : show = "{} {}" of $left.show, $right.show .
+
+%pass typecheck
+  N    : type = "int" .
+  Pair : type = "int"
+       ! $left.text = "0" : "no zeroes, and {} is one" of $left.show .
+
+%driver bad = typecheck, show -> type .

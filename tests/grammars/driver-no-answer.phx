@@ -1,0 +1,7 @@
+%import "lexical.phx"
+%skip space
+%syntax
+%start line
+line = integer -> N(text: $1) .
+%pass show N : show = "{}" of $text .
+%driver x = show -> nothing-of-the-sort .

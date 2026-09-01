@@ -76,6 +76,23 @@ primary = integer -> Number(text: $1)
 
 
 (* ------------------------------------------------------------------ *)
+(* `lib/expression.phx` brings a `show` pass that renders an expression  *)
+(* back to something close to what was read, for putting inside a        *)
+(* diagnostic. It covers the nodes the module builds and no others, so   *)
+(* calc adds the statements -- which it needs anyway, because a pass     *)
+(* walks the whole tree and every node it reaches wants a clause.        *)
+
+%pass show
+  Print    : show = "print {};"    of $value.show .
+  Let      : show = "let {} := {};" of $name, $value.show .
+  Assign   : show = "{} := {};"     of $name, $value.show .
+  If       : show = "if {} then ..." of $cond.show .
+  IfElse   : show = "if {} then ... else ..." of $cond.show .
+  While    : show = "while {} do ..." of $cond.show .
+  Block    : show = "..." .
+  Program  : show = "..." .
+
+(* ------------------------------------------------------------------ *)
 (* Pass one: are the names defined, and do the types line up?          *)
 (*                                                                     *)
 (* This is the pass a hand-written compiler spends a visitor class and  *)
@@ -101,10 +118,13 @@ primary = integer -> Number(text: $1)
                : "'{}' holds {}, and this assigns {}"
                    of $name, lookup($env, $name), $value.type .
 
+  (* `$left.show` is `lib/expression.phx`'s doing, and it is readable here
+   * only because a driver runs `show` before `typecheck`. A pass reading
+   * another pass's work is the whole reason a sequence is written down. *)
   Binary   : type = "int"
            ! $left.type <> "int" or $right.type <> "int"
-               : "'{}' wants two ints, and got {} and {}"
-                   of $op, $left.type, $right.type .
+               : "'{}' wants two ints: {} is {} and {} is {}"
+                   of $op, $left.show, $left.type, $right.show, $right.type .
 
   Compare  : type = "bool"
            ! $left.type <> $right.type
@@ -123,14 +143,18 @@ primary = integer -> Number(text: $1)
                    of $op, $left.type, $right.type .
 
   Print    : type = "void"
-           ! $value.type <> "int" : "print wants an int, and got {}" of $value.type .
+           ! $value.type <> "int"
+               : "print wants an int, and {} is {}" of $value.show, $value.type .
 
   If       : type = "void"
-           ! $cond.type <> "bool" : "an if wants a bool, and got {}" of $cond.type .
+           ! $cond.type <> "bool"
+               : "an if wants a bool, and {} is {}" of $cond.show, $cond.type .
   IfElse   : type = "void"
-           ! $cond.type <> "bool" : "an if wants a bool, and got {}" of $cond.type .
+           ! $cond.type <> "bool"
+               : "an if wants a bool, and {} is {}" of $cond.show, $cond.type .
   While    : type = "void"
-           ! $cond.type <> "bool" : "a while wants a bool, and got {}" of $cond.type .
+           ! $cond.type <> "bool"
+               : "a while wants a bool, and {} is {}" of $cond.show, $cond.type .
 
   Block    : type = "void" .
   Program  : type = "void" .

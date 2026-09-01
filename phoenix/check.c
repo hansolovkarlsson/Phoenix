@@ -428,6 +428,210 @@ void grammar_nodes(FILE *out, const Grammar *g)
 }
 
 /* ------------------------------------------------------------------ */
+/* Drivers, and whether their order is right
+ *
+ * **A driver is a claim about order, and a claim about order can be wrong.**
+ * If `emit-c` reads `$left.type` and the driver forgot to run `typecheck`
+ * first, the alternative to checking here is a message from inside a pass
+ * about a missing attribute -- naming neither the driver that got the order
+ * wrong nor the pass that would have supplied it.
+ *
+ * It is decidable when the description is read. A pass **defines** the
+ * attributes on the left of its clauses and **reads** the `.name` of every
+ * `$x.name` it mentions, and everything a pass reads must have been defined by
+ * itself or by something before it.
+ *
+ * This check is the reason to declare a driver rather than to run passes in
+ * whatever order they were typed.
+ *
+ * **It sees `$x.name` and not a bare `$name`.** A bare one may be a field of
+ * the node, a binding, a threaded attribute or an inherited one, and deciding
+ * which would mean knowing what shapes reach this clause. So the check catches
+ * a pass reading another node's work -- which is the ordinary case and the one
+ * that goes wrong -- and stays quiet about a pass reading its own.
+ */
+
+static void expr_reads(const Expr *x, const char **names, int *n, int cap)
+{
+    if (x->kind == X_DOT) {
+        for (int i = 0; i < *n; i++)
+            if (strcmp(names[i], x->name) == 0) goto down;
+        if (*n < cap) names[(*n)++] = x->name;
+    }
+down:
+    for (int i = 0; i < x->nkids; i++) expr_reads(x->kids[i], names, n, cap);
+}
+
+#define MAX_ATTRS 64
+
+static void pass_reads(const Pass *p, const char **names, int *n)
+{
+    for (int i = 0; i < p->nrules; i++)
+        for (int k = 0; k < p->rules[i].nclauses; k++) {
+            const Clause *c = &p->rules[i].clauses[k];
+            if (c->value) expr_reads(c->value, names, n, MAX_ATTRS);
+            if (c->when)  expr_reads(c->when,  names, n, MAX_ATTRS);
+        }
+}
+
+/* Whether a pass leaves this attribute *on a node*, which is what another
+ * pass could later read. Threaded attributes are the walk's, not a node's. */
+static bool attr_on_node(const Pass *p, const char *attr)
+{
+    for (int i = 0; i < p->nrules; i++)
+        for (int k = 0; k < p->rules[i].nclauses; k++) {
+            const Clause *c = &p->rules[i].clauses[k];
+            if (c->kind != C_SYNTH && c->kind != C_DOWN) continue;
+            if (c->attr && strcmp(c->attr, attr) == 0) return true;
+        }
+    return false;
+}
+
+static bool pass_defines(const Pass *p, const char *attr)
+{
+    for (int i = 0; i < p->nthreads; i++)
+        if (strcmp(p->threads[i], attr) == 0) return true;
+
+    for (int i = 0; i < p->nrules; i++)
+        for (int k = 0; k < p->rules[i].nclauses; k++) {
+            const Clause *c = &p->rules[i].clauses[k];
+            if (c->kind != C_ERROR && c->attr && strcmp(c->attr, attr) == 0)
+                return true;
+        }
+    return false;
+}
+
+/* Which pass in the whole description defines this, for the note that says
+ * what the driver probably meant. */
+static const char *who_defines(const Grammar *g, const char *attr)
+{
+    for (int i = 0; i < g->npasses; i++)
+        if (pass_defines(&g->passes[i], attr)) return g->passes[i].name;
+    return NULL;
+}
+
+/* Whether a name is a field on some node type the grammar builds. Reading one
+ * needs no pass to have run, so it is not a claim about order. */
+static bool is_a_field(const char *name)
+{
+    for (int i = 0; i < nvocabulary; i++)
+        for (int k = 0; k < vocabulary[i].nfields; k++)
+            if (strcmp(vocabulary[i].fields[k], name) == 0) return true;
+    return false;
+}
+
+static void check_drivers(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int d = 0; d < g->ndrivers; d++) {
+        const Driver *driver = &g->drivers[d];
+
+        for (int i = 0; i < driver->npasses; i++) {
+            const Pass *pass = pass_find(g, driver->passes[i]);
+            if (!pass) {
+                diag_error(&g->src, driver->pass_pos[i],
+                           "driver '%s' runs '%s', and there is no such pass",
+                           driver->name, driver->passes[i]);
+                c->ok = false;
+                continue;
+            }
+
+            const char *reads[MAX_ATTRS];
+            int         nreads = 0;
+            pass_reads(pass, reads, &nreads);
+
+            for (int k = 0; k < nreads; k++) {
+                if (pass_defines(pass, reads[k])) continue;
+                if (is_a_field(reads[k])) continue;
+
+                bool earlier = false;
+                for (int j = 0; j < i && !earlier; j++) {
+                    const Pass *before = pass_find(g, driver->passes[j]);
+                    if (before && pass_defines(before, reads[k])) earlier = true;
+                }
+                if (earlier) continue;
+
+                diag_error(&g->src, driver->pass_pos[i],
+                           "driver '%s' runs '%s', which reads '.%s', and "
+                           "nothing before it defines one",
+                           driver->name, pass->name, reads[k]);
+
+                const char *supplier = who_defines(g, reads[k]);
+                if (supplier)
+                    diag_note("'%s' defines '%s' -- did the driver mean to run "
+                              "it first?", supplier, reads[k]);
+                else
+                    diag_note("no pass in this description defines '%s'", reads[k]);
+                c->ok = false;
+            }
+        }
+
+        /* The answer has to be something the last pass that touches it left. */
+        if (driver->answer) {
+            bool defined = false;
+            for (int i = 0; i < driver->npasses && !defined; i++) {
+                const Pass *pass = pass_find(g, driver->passes[i]);
+                if (pass && pass_defines(pass, driver->answer)) defined = true;
+            }
+            if (!defined) {
+                diag_error(&g->src, driver->pos,
+                           "driver '%s' answers with '%s', and none of its "
+                           "passes defines one", driver->name, driver->answer);
+                const char *supplier = who_defines(g, driver->answer);
+                if (supplier)
+                    diag_note("'%s' defines '%s'", supplier, driver->answer);
+                c->ok = false;
+            }
+        }
+
+        /* Two passes writing one attribute on a node: the later wins,
+         * silently. That is a legitimate thing to want and a hazard when it
+         * was not meant.
+         *
+         * A **threaded** attribute is not one of those. It is state belonging
+         * to the walk rather than to any node, declared per pass with its own
+         * starting value, and never written where another pass could read it.
+         * Two passes threading an `env` each have their own and cannot
+         * collide -- so they are not counted here. */
+        for (int i = 1; i < driver->npasses; i++) {
+            const Pass *later = pass_find(g, driver->passes[i]);
+            if (!later) continue;
+
+            for (int j = 0; j < i; j++) {
+                const Pass *before = pass_find(g, driver->passes[j]);
+                if (!before) continue;
+
+                for (int k = 0; k < later->nrules; k++)
+                    for (int m = 0; m < later->rules[k].nclauses; m++) {
+                        const Clause *cl = &later->rules[k].clauses[m];
+                        if (cl->kind == C_ERROR || cl->kind == C_THREAD) continue;
+                        if (!cl->attr) continue;
+                        if (!attr_on_node(before, cl->attr)) continue;
+
+                        diag_warn(&g->src, driver->pass_pos[i],
+                                  "in driver '%s', both '%s' and '%s' define "
+                                  "'%s' -- the later one wins",
+                                  driver->name, before->name, later->name,
+                                  cl->attr);
+                        goto next_pair;
+                    }
+            next_pair: ;
+            }
+        }
+    }
+
+    /* Two drivers of one name is a typo, and the second would be unreachable. */
+    for (int i = 1; i < g->ndrivers; i++)
+        for (int j = 0; j < i; j++)
+            if (strcmp(g->drivers[i].name, g->drivers[j].name) == 0) {
+                diag_error(&g->src, g->drivers[i].pos,
+                           "there are two drivers called '%s'", g->drivers[i].name);
+                c->ok = false;
+            }
+}
+
+/* ------------------------------------------------------------------ */
 /* Clauses a pass can never reach
  *
  * Clauses are tried in order and the first match wins, so a general pattern
@@ -587,6 +791,7 @@ bool grammar_check(Grammar *g)
         if (g->rules[i].body) check_actions(&c, &g->rules[i], g->rules[i].body);
 
     check_reachable(&c);
+    check_drivers(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
      * without the token rules that will spell its literals -- `expression.phx`

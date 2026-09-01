@@ -162,7 +162,7 @@ accepts "a spread over a file" "$root/tests/grammars/spread.phx" "$root/tests/so
 # The whole point of stage 1: `width * height - 1` must come out left-leaning,
 # with precedence from the grammar and associativity from the fold. A `-` whose
 # left is a `Binary` and whose right is a `Number` is that shape and no other.
-tree=$("$phx" "$root/examples/calc-c.phx" "$root/examples/sum.calc" 2>/dev/null)
+tree=$("$phx" --tree "$root/examples/calc-c.phx" "$root/examples/sum.calc" 2>/dev/null)
 if printf '%s' "$tree" | grep -q "op: \"-\"" \
    && printf '%s' "$tree" | grep -q "left: Binary" \
    && ! printf '%s' "$tree" | grep -q "expression"; then
@@ -173,6 +173,45 @@ fi
 refuses "a reserved word as a name" "expected"  "$root/examples/calc-c.phx" "$root/tests/sources/reserved.calc"
 refuses "a character no rule matches" "nothing here matches" \
         "$root/examples/calc-c.phx" "$root/tests/sources/bad-token.calc"
+
+echo "drivers"
+refuses "a driver in the wrong order" "nothing before it defines one" \
+        "$root/tests/grammars/misordered-driver.phx"
+refuses "a driver naming no such pass" "there is no such pass" \
+        "$root/tests/grammars/no-such-pass.phx"
+refuses "a driver answering with nothing" "none of its passes defines one" \
+        "$root/tests/grammars/driver-no-answer.phx"
+refuses "two drivers of one name" "two drivers called" \
+        "$root/tests/grammars/duplicate-driver.phx"
+
+# The default driver is the first declared, and it compiles.
+if "$phx" --quiet "$root/examples/calc-c.phx" "$root/examples/sum.calc" \
+        > /dev/null 2>&1; then
+    report pass "the default driver runs"
+else
+    report fail "the default driver runs"
+fi
+
+# A driver with no `->` is a validation run: it says nothing and answers with
+# its status.
+out=$("$phx" --driver check "$root/examples/calc-c.phx" \
+        "$root/examples/fizz.calc" 2>&1)
+if [ -z "$out" ]; then
+    report pass "a check driver says nothing"
+else
+    report fail "a check driver says nothing" "printed: $out"
+fi
+
+# The whole reason stage 3 exists: typecheck's message renders the offending
+# expression with lib/expression.phx's `show`, which is only readable because
+# the driver runs `show` first.
+msg=$("$phx" --quiet "$root/examples/calc-c.phx" \
+        "$root/tests/sources/print-a-bool.calc" 2>&1)
+if printf '%s' "$msg" | grep -qF "(n < 2) is bool"; then
+    report pass "a pass reading another pass's work"
+else
+    report fail "a pass reading another pass's work" "$(printf '%s' "$msg" | head -1)"
+fi
 
 echo "passes"
 accepts "the calculator's passes" "$root/examples/calc-c.phx"
