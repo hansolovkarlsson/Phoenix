@@ -9,7 +9,6 @@
 #include "phx.h"
 #include "reader.h"
 
-#include <unistd.h>
 
 #include <stdlib.h>
 #include <string.h>

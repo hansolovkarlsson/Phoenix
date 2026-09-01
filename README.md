@@ -448,6 +448,19 @@ about is fixed in [docs/semantics.md](docs/semantics.md), in Phoenix's own terms
 rather than any host language's: integers that trap rather than wrap, floored
 division, no implicit conversion, structural equality.
 
+## Where this sits
+
+Every mechanism in Phoenix has prior art and the combination is what is
+unusual. [docs/lineage.md](docs/lineage.md) places it against the metacompilers
+it most resembles (TREE-META's unparse rules are a `%pass emit` in 1967), the
+attribute-grammar systems it borrows from (JastAdd, Silver, Eli — whose LIDO
+already had the threaded attribute, under the name CHAIN), the rewriting systems
+that solved `%rewrite` already (Stratego), and the yacc family it is trying not
+to be.
+
+[docs/ROADMAP.md](docs/ROADMAP.md) says what is coming, what is worth stealing
+from whom, and what is deliberately absent.
+
 ## Evidence
 
 The strongest available check that this reads real published grammars rather
