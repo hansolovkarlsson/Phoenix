@@ -240,30 +240,26 @@ static Expr *read_primary(Reader *r)
     }
 }
 
-/* `$left.val` -- an attribute of another node.
+/* `$left.val` -- an attribute of whatever precedes it.
  *
- * A `.` also ends a production and ends a pass clause, so the two have to be
- * told apart, and **whitespace is what tells them**: `$left.val` is attribute
- * access and `$left .` is a reference followed by a terminator. Nothing else
- * distinguishes them -- a lookahead cannot, because `. Binary(op: "+")` after a
- * clause looks exactly like reading a field of something. This is the one place
- * in the notation where a space changes a meaning, and it is called out in the
- * README for that reason. */
+ * A `.` also ends a production and ends a pass clause, and telling the two
+ * apart used to be a special case here: the reader asked whether whitespace
+ * preceded the dot. It is the scanner's business now -- `.val` is one token
+ * and `. ` cannot be one -- so this loop has nothing to decide.
+ *
+ * It also works where the old rule did not quite: `at($vars, 1).name` is an
+ * attribute of a *call*, and there is no reference for a space to be adjacent
+ * to. */
 static Expr *read_postfix(Reader *r)
 {
     Expr *x = read_primary(r);
     if (!x) return NULL;
 
-    while (at(r, T_DOT) && peek(r)->tight) {
-        MToken *dot = advance(r);
-        if (!at(r, T_NAME)) {
-            diag_error(r->src, peek(r)->pos, "expected an attribute name after '.'");
-            return NULL;
-        }
-        MToken *name = advance(r);
+    while (at(r, T_ATTRIBUTE)) {
+        MToken *attr = advance(r);
 
-        Expr *dotted = expr_new(r, X_DOT, dot->pos);
-        dotted->name = name->text;
+        Expr *dotted = expr_new(r, X_DOT, attr->pos);
+        dotted->name = attr->text;
         expr_add(r, dotted, NULL, x);
         x = dotted;
     }

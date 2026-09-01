@@ -574,6 +574,17 @@ if [ -d "$S" ]; then
 # grammar has demonstrably got enough in it; one that cannot has a hole
 # somewhere it did not know about.
 
+# An attribute is a token: `.val` is one and `. ` cannot be one. That settles
+# the terminator, and it settles a case the old adjacency rule did not quite --
+# `at(xs, 2).show` is an attribute of a call, with no reference before the dot.
+got=$("$phx" "$root/tests/grammars/attributes.phx" \
+        "$root/tests/sources/two-numbers.txt" 2>/dev/null)
+if [ "$got" = "3 4" ]; then
+    report pass "an attribute of a reference, of a call, and a terminator"
+else
+    report fail "an attribute of a reference, of a call, and a terminator" "got: $got"
+fi
+
 echo "the notation, in itself"
 accepts "phoenix.phx reads" "$root/examples/phoenix.phx"
 

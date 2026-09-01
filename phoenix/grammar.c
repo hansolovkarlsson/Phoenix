@@ -220,9 +220,8 @@ bool reader_scan(Reader *r)
 {
     const char *s    = r->src->text;
     size_t      size = r->src->size;
-    size_t      i     = 0;
-    int         line  = 1;
-    size_t      after = 0;      /* where the previous token ended */
+    size_t      i    = 0;
+    int         line = 1;
 
     while (i < size) {
         char c = s[i];
@@ -255,12 +254,9 @@ bool reader_scan(Reader *r)
         }
 
         size_t start = i;
-        bool   tight = (i == after);
 
         if (c == '"' || c == '\'') {
             if (!scan_literal(r, &i, line)) return false;
-            r->toks[r->n - 1].tight = tight;
-            after = i;
             continue;
         }
 
@@ -272,9 +268,7 @@ bool reader_scan(Reader *r)
                 push(r, (MToken){ .kind = T_NAME,
                                   .text = arena_strndup(r->a, s + i + 1, j - i - 1),
                                   .len  = j - i - 1, .pos = start, .line = line });
-                r->toks[r->n - 1].tight = tight;
                 i = j + 1;
-                after = i;
                 continue;
             }
         }
@@ -295,9 +289,7 @@ bool reader_scan(Reader *r)
             } else {
                 push(r, (MToken){ .kind = T_NUMBER, .value = v, .pos = start, .line = line });
             }
-            r->toks[r->n - 1].tight = tight;
             i = j;
-            after = i;
             continue;
         }
 
@@ -307,9 +299,7 @@ bool reader_scan(Reader *r)
             push(r, (MToken){ .kind = T_NAME,
                               .text = arena_strndup(r->a, s + i, j - i),
                               .len  = j - i, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
             i = j;
-            after = i;
             continue;
         }
 
@@ -319,9 +309,7 @@ bool reader_scan(Reader *r)
             push(r, (MToken){ .kind = T_DIRECTIVE,
                               .text = arena_strndup(r->a, s + i + 1, j - i - 1),
                               .len  = j - i - 1, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
             i = j;
-            after = i;
             continue;
         }
 
@@ -330,33 +318,27 @@ bool reader_scan(Reader *r)
          * would mean it never saw a spread. */
         if (c == '.' && i + 2 < size && s[i + 1] == '.' && s[i + 2] == '.') {
             push(r, (MToken){ .kind = T_ELLIPSIS, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 3; after = i; continue;
+            i += 3; continue;
         }
         if (c == '-' && i + 1 < size && s[i + 1] == '>') {
             push(r, (MToken){ .kind = T_ARROW, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '=' && i + 1 < size && s[i + 1] == '>') {
             push(r, (MToken){ .kind = T_FATARROW, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '<' && i + 1 < size && s[i + 1] == '>') {
             push(r, (MToken){ .kind = T_NE, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '<' && i + 1 < size && s[i + 1] == '=') {
             push(r, (MToken){ .kind = T_LE, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '>' && i + 1 < size && s[i + 1] == '=') {
             push(r, (MToken){ .kind = T_GE, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '<') {
             push(r, (MToken){ .kind = T_LT, .pos = start, .line = line });
@@ -368,18 +350,31 @@ bool reader_scan(Reader *r)
         }
         if (c == ':' && i + 2 < size && s[i + 1] == ':' && s[i + 2] == '=') {
             push(r, (MToken){ .kind = T_DEFSYM, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 3; after = i; continue;
+            i += 3; continue;
         }
         if (c == ':' && i + 1 < size && s[i + 1] == '=') {
             push(r, (MToken){ .kind = T_DEFSYM, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
         }
         if (c == '.' && i + 1 < size && s[i + 1] == '.') {
             push(r, (MToken){ .kind = T_DOTDOT, .pos = start, .line = line });
-            r->toks[r->n - 1].tight = tight;
-            i += 2; after = i; continue;
+            i += 2; continue;
+        }
+
+        /* `.val` is an attribute and `. ` is a terminator, and **the dot
+         * being followed immediately by a lower-case letter is the whole of
+         * the difference**. Saying it here makes it a property of the token
+         * rather than a special case in the expression reader -- which is
+         * what `examples/phoenix.phx` had to say to describe this notation,
+         * and it says it better than the reader used to. */
+        if (c == '.' && i + 1 < size && s[i + 1] >= 'a' && s[i + 1] <= 'z') {
+            size_t j = i + 1;
+            while (j < size && is_body(s[j])) j++;
+            push(r, (MToken){ .kind = T_ATTRIBUTE,
+                              .text = arena_strndup(r->a, s + i + 1, j - i - 1),
+                              .len  = j - i - 1, .pos = start, .line = line });
+            i = j;
+            continue;
         }
 
         TKind kind;
@@ -408,8 +403,6 @@ bool reader_scan(Reader *r)
         }
         push(r, (MToken){ .kind = kind, .pos = start, .line = line });
         i++;
-        r->toks[r->n - 1].tight = tight;
-        after = i;
     }
 
     push(r, (MToken){ .kind = T_EOF, .pos = size, .line = line });

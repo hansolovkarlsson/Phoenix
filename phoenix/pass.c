@@ -238,7 +238,7 @@ static bool read_one_pass(Reader *r, Pass *p)
                 initial = read_expr(r);
                 if (!initial) return false;
             }
-            if (at(r, T_DOT) && peek(r)->tight == false) advance(r);
+            if (at(r, T_DOT)) advance(r);
 
             pass_add_thread(r, p, name->text, initial);
             continue;

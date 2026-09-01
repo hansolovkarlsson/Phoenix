@@ -17,6 +17,7 @@ typedef enum {
     T_DEFSYM,     /*  =  :=  ::=  */
     T_DOT,
     T_DOTDOT,
+    T_ATTRIBUTE,  /*  .name  -- a dot with a lower-case letter right after it */
     T_BAR,
     T_LPAREN, T_RPAREN,
     T_LBRACK, T_RBRACK,
@@ -42,7 +43,6 @@ typedef struct {
     size_t     len;    /* LIT may hold a NUL, so the length is carried       */
     size_t     pos;
     int        line;
-    bool       tight;  /* nothing between this token and the one before it */
 } MToken;
 
 typedef struct {

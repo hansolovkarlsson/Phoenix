@@ -1,0 +1,14 @@
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
+line = a:atom b:atom -> Pair(left: $a, right: $b) .
+atom = integer -> N(text: $1) .
+
+%pass p
+  N    : show = "{}" of $text .
+  Pair : one = $left.show
+       : two = at([$left, $right], 2).show
+       : out = "{} {}" of $one, $two .
+
+%driver d = p -> out .

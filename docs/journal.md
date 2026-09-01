@@ -918,3 +918,30 @@ arguments, so `Description(items: $1)` failed on the colon; and `postfix` was
 missing entirely, so `at($vars, 1).name` failed on the dot. Both were places
 where the reader does something so ordinary that writing the grammar down was
 the first time anybody had to notice it was a rule.
+
+## 2026-09-01 — and the reader took the description's advice
+
+`.val` is a token now. The scanner makes one when a dot is immediately followed
+by a lower-case letter, and the expression reader has nothing left to decide.
+
+This is the change `examples/phoenix.phx` argued for by being written: the
+notation could only describe its own attribute access by making it lexical, and
+having done so it was plainly the better rule. **The `tight` flag is gone from
+every token**, along with the stamping that maintained it, and the wart that has
+been in the README since stage 2 with it.
+
+Three things it fixes rather than moves:
+
+**`at($vars, 1).name` was working by accident.** The old rule asked whether a
+space preceded the dot, which is a question about a *reference* — and an
+attribute of a call has no reference before it. It worked because
+`read_postfix` happened to sit after `read_primary`. Now it works because an
+attribute is an attribute.
+
+**The scanner no longer tracks what preceded a token.** Maintaining `tight`
+meant stamping every push site with where the previous token ended, in eleven
+places, and getting one wrong would have been a silent misparse.
+
+**The rule is now written where a rule belongs.** It was a condition in
+`expr.c`, one call deep, in a loop about something else. It is a scanner rule
+about what a token is, which is what it always was.

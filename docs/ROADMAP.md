@@ -159,16 +159,6 @@ arriving rather than as a puzzle.
 
 ## 4. Known warts
 
-**A `.` is whitespace-sensitive.** `$left.val` reads an attribute; `$left .`
-ends a clause. The reader decides by adjacency, which is the one place in the
-notation where a space changes a meaning.
-
-[`examples/phoenix.phx`](../examples/phoenix.phx) shows the better answer:
-**make an attribute a token** — a dot with a lower-case letter immediately
-after it — and the scanner's longest match settles it with no special case.
-That is what the reader should do, and changing it is a small piece of work
-that has not been done because nothing is broken.
-
 **A grammar module imposes reserved words.** Importing
 [`expression.phx`](../lib/expression.phx) means `and`, `or` and `not` cannot be
 identifiers, because every word-shaped literal in the syntactic half is

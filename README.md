@@ -507,7 +507,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 98 checks, including Solveig's pascal.bnf when it is present
+make test       # 99 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -567,7 +567,7 @@ Four things came out of writing it, and three were improvements:
 
 | | |
 | --- | --- |
-| **an attribute should be its own token** | the reader tells `$left.val` from `$left .` by whether a space precedes the dot — the one place whitespace changes a meaning. Described here it is a lexical rule, *a dot with a lower-case letter immediately after*, with no special case — and it covers `at($vars, 1).name`, an attribute of a call, which the reader's rule was never about |
+| **an attribute should be its own token** | the reader used to tell `$left.val` from `$left .` by whether a space preceded the dot — the one place whitespace changed a meaning. The description says it as a lexical rule, *a dot with a lower-case letter immediately after*, and **the reader does that now**: no special case, and it covers `at($vars, 1).name`, an attribute of a call, which the old rule was never about |
 | **a directive can be terminated** | `%fragment letter digit` ended at the end of a line, and a grammar over tokens cannot see one. A `.` after a directive is now accepted, as everything else in the notation already was |
 | **reserved words cannot be opted out of** | every word-shaped literal becomes one, so `of` and `and` and `div` are operators here and good field names elsewhere. A place wanting a plain name has to list them |
 | **the optional production terminator is undescribable** | ending a production without its `.` needs two-token lookahead, and `!` is lexical only. The one real gap |
