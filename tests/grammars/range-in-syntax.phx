@@ -1,0 +1,4 @@
+digit = "0" .. "9" .
+%syntax
+%start expression
+expression = "a" .. "z" .

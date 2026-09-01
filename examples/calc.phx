@@ -1,0 +1,49 @@
+(* calc.phx -- the smallest language worth having a compiler for.
+ *
+ *   bin/phx examples/calc.phx examples/sum.calc
+ *
+ * Stage 0 is the grammar half only: this file says what a `.calc` program
+ * looks like, and Phoenix scans one, parses it and prints the tree. There is
+ * nothing here yet about what a program *means* -- that is stage 2.
+ *)
+
+(* ------------------------------------------------------------------ *)
+(* Characters to tokens.                                              *)
+
+(* `letter` and `digit` are what the token rules are written out of, and are
+ * never tokens themselves. Without this line a file comes back as a stream of
+ * `letter`, because both rules match `x` and ties go to the one declared
+ * first. *)
+%fragment letter digit
+
+letter = "a" .. "z" | "A" .. "Z" | "_" .
+digit  = "0" .. "9" .
+
+name   = letter { letter | digit } .
+number = digit { digit } [ "." digit { digit } ] .
+
+symbol = ":=" | "+" | "-" | "*" | "/" | "(" | ")" | ";" .
+
+comment = "#" { ! "\n" } .
+space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+
+%skip space comment
+
+(* ------------------------------------------------------------------ *)
+(* Tokens to a program.                                               *)
+(*                                                                     *)
+(* Every word-shaped literal below is a reserved word, worked out from  *)
+(* this half rather than declared -- so `print` cannot be a variable,   *)
+(* and nothing here had to say so.                                     *)
+
+%syntax
+%start program
+
+program   = statement { statement } .
+
+statement = "print" expression ";"
+          | "let" name ":=" expression ";" .
+
+expression = term { ( "+" | "-" ) term } .
+term       = factor { ( "*" | "/" ) factor } .
+factor     = number | name | "(" expression ")" .

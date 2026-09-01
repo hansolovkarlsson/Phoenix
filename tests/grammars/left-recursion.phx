@@ -1,0 +1,7 @@
+(* The older notation's way of writing repetition, and an infinite descent
+ * for a matcher that tries alternatives in order. *)
+digit = "0" .. "9" .
+number = digit { digit } .
+%syntax
+%start expression
+expression = expression "+" number | number .

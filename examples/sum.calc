@@ -1,0 +1,4 @@
+# The first program Phoenix ever read.
+let width  := 3 + 4;
+let height := width * 2;
+print width * height - 1;
