@@ -657,7 +657,11 @@ static void check_drivers(Check *c)
                 for (int k = 0; k < later->nrules; k++)
                     for (int m = 0; m < later->rules[k].nclauses; m++) {
                         const Clause *cl = &later->rules[k].clauses[m];
-                        if (cl->kind == C_ERROR || cl->kind == C_THREAD) continue;
+                        /* Only a synthesised clause writes where another pass
+                         * could read. A `down` one pushes a scope that the
+                         * node's own attribute outranks anyway, and a threaded
+                         * one belongs to the walk. */
+                        if (cl->kind != C_SYNTH) continue;
                         if (!cl->attr) continue;
                         if (!attr_on_node(before, cl->attr)) continue;
 
@@ -850,6 +854,18 @@ bool grammar_check(Grammar *g)
             check_actions(&c, &g->rules[i], g->rules[i].body);
             check_folds(&c, &g->rules[i], g->rules[i].body, false);
         }
+
+    /* A pass builds nodes too -- a lookup wants a default and a default has
+     * to be constructed -- and those are as much part of the vocabulary as
+     * the ones a production builds. Leaving them out made the driver check
+     * report a *field* of one as an attribute nothing defines. */
+    for (int i = 0; i < g->npasses; i++)
+        for (int k = 0; k < g->passes[i].nrules; k++)
+            for (int m = 0; m < g->passes[i].rules[k].nclauses; m++) {
+                const Clause *cl = &g->passes[i].rules[k].clauses[m];
+                if (cl->value) collect_types(&c, cl->value);
+                if (cl->when)  collect_types(&c, cl->when);
+            }
 
     check_reachable(&c);
     check_drivers(&c);

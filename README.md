@@ -597,9 +597,10 @@ with `fpc -Miso` byte for byte; the first eight found **six bugs at once**:
 Every one is a place C's obvious answer is not Pascal's, and none would have
 been found by reading the output and thinking it looked right.
 
-Six more programs — the standard functions, chars, enumerations, sets, `case`
-with several labels, a `with` inside a `with` — found **four more**, and two of
-them were in Phoenix rather than in the description:
+Eighteen programs agree now. Six more — the standard functions, chars,
+enumerations, sets, `case` with several labels, a `with` inside a `with` —
+found **four more**, and two of them were in Phoenix rather than in the
+description:
 
 | | |
 | --- | --- |
@@ -607,6 +608,16 @@ them were in Phoenix rather than in the description:
 | **`lookup` compared only text** | an integer key silently never matched, so `lookup([[1, "char"]], size(t), "string")` answered `"string"` for every length. It compares the way `=` does now |
 | Pascal's standard functions | `abs`, `sqr`, `odd`, `ord`, `chr`, `succ`, `pred`, `round`, `trunc` — none is a C function, and `abs` and `succ` depend on their argument's type |
 | a one-character literal is a **char** | `c := 'a'` was a type error, and `ord('A')` took the address of a C string |
+
+And four more after that, of which one is the reason to be careful about what
+an oracle proves:
+
+| | |
+| --- | --- |
+| **an array not starting at 1 wrote outside itself** | `array [5..9]` had one subtracted instead of five, so it wrote indices 4–8 of a five-element array and `[-3..3]` wrote index −4. **The oracle agreed with it**, because the write and the read used the same wrong offset — the answers matched and the memory did not |
+| set operators | `+ - *` on sets are union, difference and intersection, which on a bit per member are `\| &~ &` |
+| a set range | `[2..6]` is a run of bits, and a member is one bit, and a set constructor cannot ask which it has — so a member has a node of its own now |
+| an attribute shadowed by a field | `Subrange` has a field called `low`, so an attribute of that name was invisible from outside. The second time that has happened |
 
 ## Where this sits
 

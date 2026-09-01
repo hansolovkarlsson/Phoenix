@@ -1063,3 +1063,45 @@ front of its fields has to be the *spelled* form of its own variable, not its
 name — inside `with o do with p do ...`, `p` is already `o.p`, so `a` becomes
 `o.p.a`. Looking the prefix up in the very table the clause is extending is the
 whole of it.
+
+## 2026-09-01 — four more oracle programs, and the one an oracle cannot catch
+
+Array bounds, set operators, `for` over chars and enumerations, and
+two-dimensional arrays. Eighteen programs agree with `fpc -Miso` byte for byte.
+
+**One of them agreed while the compiler was corrupting memory, and that is the
+thing worth writing down.** `array [5 .. 9]` had *one* subtracted from every
+index instead of five, so it wrote elements 4 to 8 of a five-element array, and
+`array [-3 .. 3]` wrote element −4. The oracle passed it. It passed because the
+write and the read used the same wrong offset: the answers matched and the
+memory did not.
+
+**An oracle proves agreement, not correctness**, and a program that only reads
+back what it wrote is exactly the shape that hides this. `tests/oracle/run.sh`
+says so at the top now. What found it was reading the emitted C, which is the
+other half of the method and the half that does not scale.
+
+Fixing it properly took the longest chain in the description so far — a
+variable to its type, a named type to what it stands for, and that to where its
+index range starts — and two things had to change underneath.
+
+**A lookup's default has to be constructible**, and a node built in a clause has
+fields but no attributes. So `shape` binds a name to a `Shape(iname:, startsat:,
+node:)` wrapper, and every hop reads fields rather than attributes.
+
+**And a field shadows an attribute of the same name.** `Subrange` has a field
+called `low`, so a computed `low` was invisible from outside — the second time
+this has happened, after `Block.routines`. Renamed to `startsat`. The rule is
+right and worth restating: `$x.name` is a field first and an attribute second,
+and a computed attribute must not take a field's name.
+
+Two smaller things. **A pass builds nodes too**, and the vocabulary was gathered
+only from productions — so the driver's check reported a *field* of one as an
+attribute nothing defines. And **a `down` clause does not overwrite a node
+attribute**, which is the third time the collision check has been wrong the same
+way; it now counts only synthesised clauses, which is the one condition that was
+always meant.
+
+**`Member` is the fifth time an option should have been a choice.** A set
+constructor could not ask whether an element was one bit or a run of them, so it
+shifted a range that was already a mask.

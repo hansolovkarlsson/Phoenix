@@ -12,6 +12,12 @@
 #   tests/oracle/run.sh            all of them
 #   tests/oracle/run.sh reals      one of them
 #
+# **An oracle can agree with a wrong program.** `bounds.pas` passed while the
+# compiler was writing outside its arrays: both the write and the read used the
+# same wrong offset, so the answers matched and the memory did not. Agreement
+# is evidence and not proof, and a program that only reads back what it wrote
+# is the case to be suspicious of.
+#
 # Skipped, not failed, when there is no fpc: it is an oracle and not a
 # dependency.
 

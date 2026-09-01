@@ -289,7 +289,7 @@
    * `each` over two lists pairs the arguments with what goes in front of
    * them. *)
   CallStatement : out = "  {}({});"
-                    of $name, join(each(flatten([...lookup($known, $name, []).addr]),
+                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [])).node.addr]),
                                         $args.out, "{}{}"), ", ") .
 
   (* ---- Pascal's standard functions ----
@@ -329,12 +329,22 @@
   CallExpression(name: "arctan") : out = "atan({})" of at($args, 1).out .
 
   CallExpression : out = "{}({})"
-                    of $name, join(each(flatten([...lookup($known, $name, []).addr]),
+                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [])).node.addr]),
                                         $args.out, "{}{}"), ", ") .
 
   (* ---- expressions ---- *)
 
   Not : out = "(!{})" of $value.out .
+
+  (* `+ - *` on sets are union, difference and intersection, which on a bit
+   * per member are `| &~ &`. Which of the two meanings is wanted is the
+   * operands' type, and the typechecker knows it. *)
+  Binary(op: "+") : out = lookup([["set", "({} | {})"]], $left.type, "({} + {})")
+                            of $left.out, $right.out .
+  Binary(op: "-") : out = lookup([["set", "({} & ~{})"]], $left.type, "({} - {})")
+                            of $left.out, $right.out .
+  Binary(op: "*") : out = lookup([["set", "({} & {})"]], $left.type, "({} * {})")
+                            of $left.out, $right.out .
 
   Binary(op: "div") : out = "({} / {})"  of $left.out, $right.out .
   (* **`mod` is not `%`.** ISO Pascal's `i mod j` is the non-negative
@@ -353,11 +363,16 @@
   Compare(op: "in") : out = "((({}) >> ({})) & 1)" of $right.out, $left.out .
   Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
 
-  (* `[Red, Blue]` is those bits set. The leading `0` is not decoration: it is
-   * what makes the empty set `(0)` rather than `()`, without a second clause
-   * for a case the arithmetic already covers. *)
-  SetOf : out = "(0{})" of join(each($elements.out, " | (1L << ({}))"), "") .
-  Range : out = "0 /* a set range is not compiled */" .
+  (* `[Red, Blue, 2 .. 6]` is those bits set. Each element says what its own
+   * bits are, because a member is one bit and a range is a run of them and a
+   * set cannot ask which it has. The leading `0` is not decoration: it makes
+   * the empty set `(0)` rather than `()`, without a second clause for a case
+   * the arithmetic already covers. *)
+  Member : mask = "(1L << ({}))" of $value.out .
+  SetOf  : out  = "(0{})" of join(each($elements.mask, " | {}"), "") .
+  (* `[2..6]` -- every bit from the low to the high, both included. *)
+  Range : mask = "(((1L << (({}) + 1)) - 1) & ~((1L << ({})) - 1))"
+            of $high.out, $low.out .
 
   (* ---- variables ----
    *
@@ -366,9 +381,14 @@
    * clause for a distinction the table already makes. *)
 
   Variable : out = lookup($spelled, $name, $name) .
-  Accessed : out = "{}{}" of lookup($spelled, $base, $base), join($access.out, "") .
+  Accessed : down lowbound = $lowbound
+           : out = "{}{}" of lookup($spelled, $base, $base), join($access.out, "") .
 
-  Index    : out = "[({}) - 1]" of at($at, 1).out .
+  (* The lower bound is the array's own, worked out by the typechecker and
+   * handed down here. Subtracting one instead is not a wrong answer -- it is
+   * memory written outside the array, and it reads back consistently, which
+   * is why the oracle agreed with it. *)
+  Index    : out = "[({}) - ({})]" of at($at, 1).out, $lowbound .
   FieldOf  : out = ".{}" of $name .
 
   (* ---- the whole ---- *)
