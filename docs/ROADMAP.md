@@ -34,10 +34,16 @@ whose.
 
 ### 2.1 Reference attributes — from JastAdd
 
-**The limit they fix is one stage 2 ran into and worked around.** An attribute
-is computed in one post-order walk, so it cannot refer *forward* to a node the
-walk has not reached. A forward declaration therefore needs two passes: collect,
-then check.
+**No longer speculative.** Two places in `examples/pascal.phx` say nothing
+because they cannot reach sideways to another node:
+
+- `function Area;` repeating a `forward` heading — its parameters belong to the
+  declaration it repeats, and there is no way to find that declaration.
+- `with origin do ... x ...` — the fields come from `origin`'s *type*, and
+  reaching a type's structure from a use of it is the same problem.
+
+An attribute is computed in one post-order walk, so it cannot refer to a node
+the walk has not reached or has already left behind.
 
 A reference attribute lets a `Variable` node hold a pointer to its declaration,
 so the question is asked once and answered directly. JastAddJ is a Java compiler
@@ -66,11 +72,15 @@ folding is the first customer and the reason to want it.
 
 ### 2.3 Scope graphs — from Statix
 
-**Not yet, and the entry exists to say what "not yet" is waiting for.**
-Threading an environment is doing fine on the languages tried so far. When it
-stops — modules, imports, mutually recursive scopes, `with` blocks that reopen a
-record's namespace — the next answer is a scope graph, not a bigger version of
-the current one.
+**Nearly, and the entry now says how nearly.** `with` blocks that reopen a
+record's namespace were named here as the thing that would break threading, and
+Pascal has them: `examples/pascal.phx` does not check names inside a `with`.
+
+That one case is a reference-attribute problem rather than a scope-graph one
+(§2.1 would fix it). But the shape of the next such thing — a table mapping a
+name to a *structure* rather than to another name, and resolution that does not
+depend on the order the walk happened to take — is what a scope graph is for,
+and Pascal has taken the current design as far as it goes without one.
 
 ---
 

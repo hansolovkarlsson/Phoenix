@@ -194,11 +194,12 @@ int main(int argc, char **argv)
     if (want_drivers) {
         for (int i = 0; i < g->ndrivers; i++) {
             const Driver *d = &g->drivers[i];
+            const Driver *def = driver_default(g);
             printf("%-12s = ", d->name);
             for (int k = 0; k < d->npasses; k++)
                 printf("%s%s", k ? ", " : "", d->passes[k]);
             if (d->answer) printf(" -> %s", d->answer);
-            printf("%s\n", i == 0 ? "        (the default)" : "");
+            printf("%s\n", d == def ? "        (the default)" : "");
         }
         if (!g->ndrivers) fputs("phx: this description declares no drivers\n", stderr);
         arena_free(a);
@@ -291,8 +292,8 @@ int main(int argc, char **argv)
                 arena_free(a);
                 return 2;
             }
-        } else if (g->ndrivers) {
-            driver = &g->drivers[0];
+        } else {
+            driver = driver_default(g);
         }
     }
 

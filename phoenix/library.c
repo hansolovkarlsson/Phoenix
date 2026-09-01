@@ -93,24 +93,40 @@ Value *eval_call(Eval *e, const Expr *x)
         return list_of(a, NULL, 0);
     }
 
+    /* `bind` takes a name or a **list** of names, because `var a, b : integer`
+     * binds two things to one type and writing that as two calls needs a fold
+     * the notation has not got. Binding several is the same operation as
+     * binding one, so it is the same function rather than a second. */
     if (strcmp(f, "bind") == 0) {
         if (!want(e, x, 3, args)) return NULL;
         if (args[0]->kind != V_LIST)
             return library_fail(e, x, "'bind' wants an environment, and this is %s",
                         value_kind_name(args[0]));
-        if (args[1]->kind != V_TEXT)
-            return library_fail(e, x, "'bind' wants text for a name, and this is %s",
-                        value_kind_name(args[1]));
+        if (args[1]->kind != V_TEXT && args[1]->kind != V_LIST)
+            return library_fail(e, x, "'bind' wants a name or a list of names, "
+                                      "and this is %s", value_kind_name(args[1]));
 
-        int     n     = args[0]->n;
-        Value **items = arena_alloc(a, (size_t)(n + 1) * sizeof *items);
-        items[0] = pair(a, args[1], args[2]);
-        memcpy(items + 1, args[0]->items, (size_t)n * sizeof *items);
-        return list_of(a, items, n + 1);
+        int     adding = args[1]->kind == V_LIST ? args[1]->n : 1;
+        int     n      = args[0]->n;
+        Value **items  = arena_alloc(a, (size_t)(n + adding) * sizeof *items);
+
+        for (int i = 0; i < adding; i++) {
+            Value *name = args[1]->kind == V_LIST ? args[1]->items[i] : args[1];
+            if (name->kind != V_TEXT)
+                return library_fail(e, x, "'bind' wants text for a name, and one "
+                                          "of these is %s", value_kind_name(name));
+            items[i] = pair(a, name, args[2]);
+        }
+        memcpy(items + adding, args[0]->items, (size_t)n * sizeof *items);
+        return list_of(a, items, n + adding);
     }
 
+    /* `lookup(env, name)` and `lookup(env, name, default)` -- the second is
+     * the same operation with an answer for absence, and a notation with no
+     * conditional needs one. */
     if (strcmp(f, "lookup") == 0 || strcmp(f, "defined") == 0) {
-        if (!want(e, x, 2, args)) return NULL;
+        bool defaulted = strcmp(f, "lookup") == 0 && x->nkids == 3;
+        if (!defaulted && !want(e, x, 2, args)) return NULL;
         if (args[0]->kind != V_LIST)
             return library_fail(e, x, "'%s' wants an environment, and this is %s",
                         f, value_kind_name(args[0]));
@@ -122,7 +138,9 @@ Value *eval_call(Eval *e, const Expr *x)
             if (text_equal(entry->items[0], args[1]))
                 return asking ? value_bool(a, true) : entry->items[1];
         }
-        return asking ? value_bool(a, false) : value_nil(a);
+        if (asking)    return value_bool(a, false);
+        if (defaulted) return args[2];
+        return value_nil(a);
     }
 
     /* ---- the other division ----
@@ -244,6 +262,43 @@ Value *eval_call(Eval *e, const Expr *x)
         if (i < 1 || i > args[0]->n)
             return library_fail(e, x, "at(%lld) of a list of %d", i, args[0]->n);
         return args[0]->items[i - 1];
+    }
+
+    /* ---- flatten ----
+     *
+     * A declaration list is a list of declarations, each naming several
+     * things: `var a, b : integer; c : real` is two nodes and three entries.
+     * Turning that into one list is a fold, and there is no fold in a notation
+     * with no conditional and no recursion -- `[...$vars.entries]` opens one
+     * level and leaves a list of lists.
+     *
+     * It earns its place by the rule at the top of this file: a pass for a
+     * real language needed it, and it could not be written in the notation.
+     * One level only, because a deeper one would be guessing at what was
+     * meant. */
+    if (strcmp(f, "flatten") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return library_fail(e, x, "'flatten' wants a list, and this is %s",
+                                value_kind_name(args[0]));
+
+        int total = 0;
+        for (int i = 0; i < args[0]->n; i++) {
+            const Value *item = args[0]->items[i];
+            total += item->kind == V_LIST ? item->n : 1;
+        }
+
+        Value **items = arena_alloc(a, (size_t)(total ? total : 1) * sizeof *items);
+        int     n     = 0;
+
+        for (int i = 0; i < args[0]->n; i++) {
+            Value *item = args[0]->items[i];
+            if (item->kind == V_LIST)
+                for (int k = 0; k < item->n; k++) items[n++] = item->items[k];
+            else
+                items[n++] = item;
+        }
+        return list_of(a, items, n);
     }
 
     if (strcmp(f, "join") == 0) {

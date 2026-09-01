@@ -397,9 +397,9 @@ else
 fi
 
 # Pascal, the same way round.
-if "$phx" "$root/examples/pascal.phx" -o "$tmp0/pascal.c" 2>/dev/null \
+if "$phx" "$root/examples/pascal-outline.phx" -o "$tmp0/pascal.c" 2>/dev/null \
    && cc -o "$tmp0/pas" "$tmp0/pascal.c" 2>/dev/null; then
-    a=$("$phx" "$root/examples/pascal.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
+    a=$("$phx" "$root/examples/pascal-outline.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
     b=$("$tmp0/pas" "$root/tests/pascal/features.pas" 2>/dev/null)
     if [ "$a" = "$b" ] && printf '%s' "$b" | grep -qF "packed array [1..80] of char"; then
         report pass "a Pascal compiler, and it agrees with phx"
@@ -418,6 +418,28 @@ fi
 
 echo "Pascal, with actions"
 accepts "the description reads" "$root/examples/pascal.phx"
+accepts "the outline description reads" "$root/examples/pascal-outline.phx"
+
+# Two real Pascal programs, checked. A checker that invents an error on a
+# correct program is the worst thing it could do, so this comes first.
+for f in gcd features; do
+    accepts "$f.pas checks clean" --driver check \
+            "$root/examples/pascal-outline.phx" "$root/tests/pascal/$f.pas"
+done
+
+# And one that is wrong in four ways, each of which has to be found.
+errs=$("$phx" --driver check "$root/examples/pascal-outline.phx" \
+        "$root/tests/pascal/type-errors.pas" 2>&1)
+found=0
+printf '%s' "$errs" | grep -qF "cannot assign integer to boolean" && found=$((found+1))
+printf '%s' "$errs" | grep -qF "'nope' is not declared"           && found=$((found+1))
+printf '%s' "$errs" | grep -qF "an if wants a boolean"            && found=$((found+1))
+printf '%s' "$errs" | grep -qF "a while wants a boolean"          && found=$((found+1))
+if [ "$found" -eq 4 ]; then
+    report pass "four Pascal mistakes, all four found"
+else
+    report fail "four Pascal mistakes, all four found" "found $found of 4"
+fi
 
 for f in gcd features; do
     accepts "$f.pas builds a tree" --tree "$root/examples/pascal.phx" \
@@ -439,7 +461,7 @@ else
 fi
 
 # A pass over the whole of it, reading something from most of it.
-out=$("$phx" "$root/examples/pascal.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
+out=$("$phx" "$root/examples/pascal-outline.phx" "$root/tests/pascal/features.pas" 2>/dev/null)
 if printf '%s' "$out" | grep -qF "type      Str = packed array [1..80] of char" \
    && printf '%s' "$out" | grep -qF "procedure Walk(t : Tree; var count : integer)"; then
     report pass "the outline pass reads the whole tree"

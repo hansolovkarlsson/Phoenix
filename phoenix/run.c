@@ -455,6 +455,25 @@ const Driver *driver_find(const Grammar *g, const char *name)
     return NULL;
 }
 
+const Driver *driver_default(const Grammar *g)
+{
+    if (!g->ndrivers) return NULL;
+
+    /* An import is read before the file that imports it, so "the first
+     * declared" would hand the default to the imported description -- and
+     * `pascal-outline.phx` would run `pascal.phx`'s checker instead of its own
+     * outline. The file named on the command line is the first unit. */
+    if (g->map.n) {
+        size_t from = g->map.units[0].start;
+        size_t to   = from + g->map.units[0].size;
+
+        for (int i = 0; i < g->ndrivers; i++)
+            if (g->drivers[i].pos >= from && g->drivers[i].pos < to)
+                return &g->drivers[i];
+    }
+    return &g->drivers[0];
+}
+
 bool pass_run(Arena *a, const Grammar *g, const Source *src,
               const Pass *pass, Value *root)
 {

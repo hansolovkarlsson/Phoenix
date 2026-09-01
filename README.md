@@ -491,7 +491,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 84 checks, including Solveig's pascal.bnf when it is present
+make test       # 88 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -578,9 +578,27 @@ program Features(input, output)
   procedure Walk(t : Tree; var count : integer)
 ```
 
+It also checks programs. A `symbols` pass gathers each block's declarations on
+the way up, and a `typecheck` pass reads them on the way down — two passes,
+because an inherited attribute runs *before* a node's children and gathering
+runs after, so one walk cannot do both:
+
+```
+$ bin/phx --driver check examples/pascal.phx wrong.pas
+wrong.pas:8:3: error: cannot assign integer to boolean
+    ok := n;
+    ^
+wrong.pas:9:21: error: 'nope' is not declared
+    if n then writeln(nope);
+                      ^
+```
+
 The value of doing this to Pascal rather than to another toy is that the grammar
 was written by somebody else, for another purpose, years before Phoenix existed.
-What it could not say is recorded in [the journal](docs/journal.md).
+What it could not say is recorded in [the journal](docs/journal.md) — including
+the two places the checker deliberately says nothing, one of which is the first
+real argument for a [roadmap](docs/ROADMAP.md) item that was until now only a
+good idea from the literature.
 
 When a PEG fails at the top it has usually backtracked a long way from the real
 mistake, so the position reported is the one the match got *furthest*, not the

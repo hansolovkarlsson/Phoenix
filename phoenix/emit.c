@@ -429,7 +429,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    Value *tree = parse_run(a, &phx_grammar, &src, &toks);\n"
         "    if (!tree) return 1;\n"
         "\n"
-        "    const Driver *driver = phx_grammar.ndrivers ? &phx_grammar.drivers[0] : NULL;\n"
+        "    const Driver *driver = driver_default(&phx_grammar);\n"
         "    if (want) {\n"
         "        driver = driver_find(&phx_grammar, want);\n"
         "        if (!driver) {\n"

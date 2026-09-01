@@ -471,6 +471,12 @@ void tree_dump(FILE *out, const Value *root);
 const Pass   *pass_find(const Grammar *g, const char *name);
 const Driver *driver_find(const Grammar *g, const char *name);
 
+/* The driver to run when none is named: the first one declared in the file
+ * that was asked for, and only failing that the first declared anywhere. A
+ * description that imports another must not inherit its default -- the file
+ * you named is the one that says what it is for. */
+const Driver *driver_default(const Grammar *g);
+
 /* One walk, post-order. Answers false having reported. */
 bool pass_run(Arena *a, const Grammar *g, const Source *src,
               const Pass *pass, Value *root);

@@ -276,15 +276,20 @@ set-constructor = "[" e:element { "," f:element -> $f } "]" -> SetOf(elements: [
 element = lo:expression ".." hi:expression -> Range(low: $lo, high: $hi)   (* order *)
         | expression .
 
-(* A variable is a name and then any number of ways of reaching into it. The
- * accessors stay a list rather than a nest, because that is the shape the
- * grammar has, and turning a list into a nest is a decision a pass can make
- * with more context than this rule has. *)
-variable = n:identifier a:{ "[" e:expression { "," f:expression -> $f } "]"
-                              -> Index(at: [$e, ...$3])
-                          | "." f:identifier -> FieldOf(name: $f)
-                          | "^"              -> Deref }
-         -> Variable(name: $n, access: $a) .
+(* A variable is a name, and then possibly ways of reaching into it.
+ *
+ * **Two node types rather than one with a list that is usually empty** -- the
+ * same lesson as `Labelled`, learned again for a different reason. A pass that
+ * wants to treat `x` differently from `x[i].f` has to be able to *ask*, and a
+ * pattern can match a node type but not the emptiness of a list. So the
+ * grammar makes the distinction it already knows and a clause keys on it. *)
+variable = n:identifier a:accessor { b:accessor -> $b }
+             -> Accessed(base: $n, access: [$a, ...$3])           (* order *)
+         | n:identifier -> Variable(name: $n) .
+
+accessor = "[" e:expression { "," f:expression -> $f } "]" -> Index(at: [$e, ...$3])
+         | "." f:identifier                                -> FieldOf(name: $f)
+         | "^"                                             -> Deref .
 
 (* `write(x:8:2)` -- the field widths are part of the call syntax, and they
  * belong to the argument rather than to the call. *)
@@ -331,53 +336,216 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
 
 
 (* ------------------------------------------------------------------ *)
-(* An outline of what a program declares.                              *)
+(* What the names in a program are.                                    *)
 (*                                                                     *)
-(* Not a compiler -- the smallest pass that has to walk the whole of    *)
-(* this tree and read something from most of it, which is what makes it *)
-(* worth having as evidence that the shape above is usable.            *)
+(* A Pascal block declares things and then uses them, and a nested      *)
+(* block sees the enclosing one's names as well as its own. That is an  *)
+(* **inherited** attribute -- a scope is handed down and restored on the *)
+(* way back out -- and an inherited clause runs on the way *in*, before  *)
+(* this node's children have been looked at.                            *)
+(*                                                                     *)
+(* So a block cannot both gather its declarations and hand them down in  *)
+(* one pass: gathering is bottom-up and handing down is top-down. It     *)
+(* takes two passes, and that is not a workaround -- collect, then use,  *)
+(* is how a hand-written compiler does it too, and it is what `%driver`  *)
+(* exists to write down.                                                *)
 
-%pass outline
+%pass symbols
 
-  (* Types, rendered back to something readable. A child's `show` is ready
-   * before its parent's clause runs, because the walk is post-order -- so
-   * one pass does the whole of this and no ordering was declared. *)
-  NamedType : show = "{}" of $name .
-  NoType    : show = "" .
-  Pointer   : show = "^{}" of $to .
-  Packed    : show = "packed {}" of $type.show .
-  ArrayType : show = "array [{}] of {}" of join($indices.show, ", "), $of.show .
-  RecordType: show = "record {}" of join($fields.show, "; ") .
-  FieldDecl : show = "{}: {}" of join($names, ", "), $type.show .
-  SetType   : show = "set of {}" of $of.show .
-  FileType  : show = "file of {}" of $of.show .
-  EnumType  : show = "({})" of join($names, ", ") .
-  Subrange  : show = "{}..{}" of $low.show, $high.show .
+  (* A type, named. Structural checking of records and arrays is not here:
+   * these names are what a later pass compares, so `Small` and `integer`
+   * being both "integer" is the whole of what makes a subrange assignable. *)
+(* Both of a node's clauses go in one rule: clauses are tried in order and
+   * the first match wins, so a second `NamedType` rule further down would
+   * never be reached, and Phoenix refuses one.
+   *
+   * `entries` is what a type *declares* beyond itself, which is nothing for
+   * all of these but an enumeration -- and `TypeDef` reads it from whatever
+   * type it was given, so every one of them has to answer. *)
+  NamedType : tname = $name     : entries = [] .
+  NoType    : tname = "void"    : entries = [] .
+  Subrange  : tname = "integer" : entries = [] .
+  ArrayType : tname = "array"   : entries = [] .
+  RecordType: tname = "record"  : entries = [] .
+  SetType   : tname = "set"     : entries = [] .
+  FileType  : tname = "file"    : entries = [] .
+  Pointer   : tname = "pointer" : entries = [] .
 
-  Integer       : show = "{}" of $text .
-  Real          : show = "{}" of $text .
-  Text          : show = "{}" of $value .
-  Nil           : show = "nil" .
-  NamedConstant : show = "{}" of $name .
-  Signed        : show = "{}{}" of $sign, $value.show .
+  EnumType  : tname = "integer" : entries = bind([], $names, "integer") .
+  Packed    : tname = $type.tname : entries = $type.entries .
 
-  ConstDef  : line = "  const     {} = {}" of $name, $value.show .
-  TypeDef   : line = "  type      {} = {}" of $name, $type.show .
-  VarDecl   : line = "  var       {} : {}" of join($names, ", "), $type.show .
+  Integer       : ctype = "integer" .
+  Real          : ctype = "real" .
+  Text          : ctype = "string" .
+  Nil           : ctype = "pointer" .
+  NamedConstant : ctype = "integer" .
+  Signed        : ctype = $value.ctype .
 
-  (* Two clauses rather than a conditional inside one. There is no `if` in
-   * the notation, and matching on the shape is what stands in for it --
-   * which needs `true` in a pattern to be the value and not a name that
-   * binds anything, and it is. *)
-  Param(byref: true)  : show = "var {} : {}" of join($names, ", "), $type .
-  Param(byref: false) : show = "{} : {}"     of join($names, ", "), $type .
-  Procedure : line = "  procedure {}({})" of $name, join($params.show, "; ") .
-  Function  : line = "  function  {}({}) : {}"
-                of $name, join($params.show, "; "), $returns.show .
+  ConstDef  : entries = bind([], $name, $value.ctype) .
+  TypeDef   : entries = flatten([bind([], $name, $type.tname), $type.entries]) .
+  VarDecl   : entries = bind([], $names, $type.tname) .
+  Param     : entries = bind([], $names, $type) .
 
-  Block     : out = join([...$consts.line, ...$types.line, ...$vars.line,
-                          ...$routines.line], "\n") .
-  Program   : out = "program {}({})\n{}"
-                of $name, join($params, ", "), $body.out .
+  Procedure : entries = bind([], $name, "void")
+            : own     = flatten([...$params.entries]) .
+  Function  : entries = bind([], $name, $returns.tname)
+            : own     = flatten([bind([], $name, $returns.tname),
+                                 ...$params.entries]) .
 
-%driver outline = outline -> out .
+  (* Everything a block declares, in one list. `[...$vars.entries]` opens one
+   * level and leaves a list of lists, because each declaration names several
+   * things -- `flatten` is what there is no way to write in the notation. *)
+  Block : scope = flatten([...$consts.entries, ...$types.entries,
+                           ...$vars.entries, ...$routines.entries]) .
+
+(* ------------------------------------------------------------------ *)
+(* Are the names declared, and do the types line up?                   *)
+
+%pass typecheck
+
+  (* The scope a program starts in. Written out rather than built in, so that
+   * what Phoenix considers standard Pascal is readable and arguable. *)
+  (* `with origin do ... x ...` opens a record's fields into scope, and
+   * knowing which fields those are means knowing the *structure* of `Point`,
+   * not just that `origin` is one. This table maps a name to a type's name
+   * and stops there.
+   *
+   * So inside a `with`, names are not checked. That is the honest version of
+   * the limit: a checker that invented an error on a correct program would be
+   * worse than one that says nothing, and this says nothing exactly where it
+   * does not know. Making it know is a table that carries structures, and it
+   * is written down in the roadmap rather than guessed at here. *)
+  Program : type = "void"
+          : down checking = true
+          : down env =
+      (* A base type is bound to **itself**, so that resolving an alias is
+       * one lookup more and resolving a base type is a fixed point. `Small`
+       * answers `integer` and `integer` answers `integer`, and neither needs
+       * to be asked which of the two it was. *)
+      [["integer","integer"], ["real","real"], ["boolean","boolean"],
+       ["char","char"], ["text","text"],
+       ["array","array"], ["record","record"], ["set","set"],
+       ["file","file"], ["pointer","pointer"], ["string","string"],
+       ["void","void"], ["unknown","unknown"],
+       ["true","boolean"], ["false","boolean"], ["maxint","integer"],
+       ["input","file"], ["output","file"],
+       ["write","void"], ["writeln","void"], ["read","void"], ["readln","void"],
+       ["abs","integer"], ["sqr","integer"], ["odd","boolean"],
+       ["ord","integer"], ["chr","char"], ["succ","integer"], ["pred","integer"],
+       ["round","integer"], ["trunc","integer"],
+       ["sqrt","real"], ["sin","real"], ["cos","real"],
+       ["ln","real"], ["exp","real"], ["arctan","real"],
+       ["eof","boolean"], ["eoln","boolean"],
+       ["new","void"], ["dispose","void"]] .
+
+  (* `$scope` was worked out by the pass before this one, so it is on the node
+   * already and can be read on the way *in* -- which is the whole reason there
+   * are two passes rather than one. *)
+  Block     : type = "void" : down env = [...$scope, ...$env] .
+  Procedure : type = "void" : down env = [...$own, ...$env] .
+
+  (* `function Area;` after a `function Area(r : real) : real; forward;` --
+   * the heading is repeated and the parameters belong to the declaration it
+   * repeats. A function with no result type can only be that, so the pattern
+   * is exact.
+   *
+   * **Finding the earlier declaration is a reference to another node**, which
+   * is what this design cannot do: an attribute is computed in one walk and
+   * cannot reach sideways. So names are not checked in here, and the env is
+   * left alone -- the forward declaration's binding is already in the block's
+   * scope, and shadowing it with this heading's empty one is what produced
+   * `cannot assign real to void`.
+   *
+   * The roadmap says what would fix it: [2.1], reference attributes, which
+   * this is now the first real argument for rather than a speculation. *)
+  Function(returns: NoType)
+            : type = "void" : down checking = false .
+  Function  : type = "void" : down env = [...$own, ...$env] .
+
+  (* Two lookups: the first answers the type this name was declared with, the
+   * second resolves an alias to what it stands for. A base type answers
+   * itself, so the second lookup is harmless where there was no alias. *)
+  Variable : type = lookup($env, lookup($env, $name, "unknown"), "unknown")
+           ! $checking and not defined($env, $name)
+             : "'{}' is not declared" of $name .
+
+  (* Reaching into something -- an index, a field, a dereference -- takes the
+   * checker past what a name can say, so the type is unknown from here down
+   * and comparisons against it pass. Being quiet is right: a checker that
+   * invents an error on a correct program is worse than one that misses. *)
+  Accessed : type = "unknown"
+           ! $checking and not defined($env, $base)
+             : "'{}' is not declared" of $base .
+
+  Integer       : type = "integer" .
+  Real          : type = "real" .
+  Text          : type = "string" .
+  Nil           : type = "pointer" .
+  NamedConstant : type = lookup($env, lookup($env, $name, "unknown"), "unknown") .
+  Signed        : type = $value.type .
+  SetOf         : type = "set" .
+  Range         : type = "integer" .
+  Not           : type = "boolean" .
+  CallExpression: type = lookup($env, lookup($env, $name, "unknown"), "unknown")
+                ! $checking and not defined($env, $name)
+                  : "'{}' is not declared" of $name .
+  Argument      : type = $value.type .
+
+  Compare  : type = "boolean" .
+  Binary(op: "/")   : type = "real" .
+  Binary(op: "div") : type = "integer" .
+  Binary(op: "mod") : type = "integer" .
+  Binary(op: "and") : type = "boolean" .
+  Binary(op: "or")  : type = "boolean" .
+  Binary            : type = $left.type .
+
+(* Written out rather than put in the library, because it *can* be written
+   * out. A checker's rule about what may be assigned to what is the thing a
+   * language description is for saying, and moving it into Phoenix would make
+   * it Phoenix's opinion about Pascal.
+   *
+   * `unknown` on either side passes: it is what reaching into an array or a
+   * record answers, and a checker that invented an error there would be worse
+   * than one that says nothing. Integer to real is Pascal's one widening. *)
+  Assign   : type = "void"
+           ! not ($target.type = $value.type
+                  or $target.type = "unknown" or $value.type = "unknown"
+                  or ($target.type = "real" and $value.type = "integer"))
+             : "cannot assign {} to {}" of $value.type, $target.type .
+
+  If       : type = "void"
+           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+             : "an if wants a boolean, and this is {}" of $cond.type .
+  IfElse   : type = "void"
+           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+             : "an if wants a boolean, and this is {}" of $cond.type .
+  While    : type = "void"
+           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+             : "a while wants a boolean, and this is {}" of $cond.type .
+  Repeat   : type = "void"
+           ! not ($until.type = "boolean" or $until.type = "unknown")
+             : "an until wants a boolean, and this is {}" of $until.type .
+  For      : type = "void"
+           ! $checking and not defined($env, $var)
+                  : "'{}' is not declared" of $var .
+
+  CallStatement : type = "void"
+                ! $checking and not defined($env, $name)
+                  : "'{}' is not declared" of $name .
+
+  (* Everything else a walk reaches, so that a node above it can read a type
+   * without asking which kind of statement it was. *)
+  Goto     : type = "void" .
+  Labelled : type = "void" .
+  Empty    : type = "void" .
+  Compound : type = "void" .
+  Case     : type = "void" .
+  CaseOf   : type = "void" .
+  With     : type = "void" : down checking = false .
+  Forward  : type = "void" .
+
+(* Analysis alone, with nothing asked of it but an answer about whether the
+ * program is sound. A driver with no `->` prints nothing and says what it has
+ * to say with its exit status. *)
+
+%driver check = symbols, typecheck .

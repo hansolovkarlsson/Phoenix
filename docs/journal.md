@@ -587,3 +587,73 @@ answered nothing at all: the grammar was entirely there and every `->` had
 vanished. It is the failure a table emitter is most likely to have — a field
 that is only sometimes present, forgotten in the one place it is written — and
 the symptom points nowhere near the cause.
+
+## 2026-09-01 — Pascal that checks programs
+
+`examples/pascal.phx` now has a `symbols` pass and a `typecheck` pass, and
+`--driver check` reports undeclared names, bad assignments and non-boolean
+conditions on real Pascal. Both fixtures check clean; a program wrong in four
+ways has all four found, each at the right column.
+
+**The two-pass shape was forced rather than chosen, and it is the clearest
+justification `%driver` has had.** A Pascal block declares things and then uses
+them, and a nested block sees the enclosing one's names as well as its own —
+which is an *inherited* attribute, handed down. But an inherited clause runs on
+the way **in**, before this node's children have been looked at, and gathering
+a block's declarations is bottom-up. One walk cannot do both.
+
+Two passes can: `symbols` computes `Block.scope` on the way up, and `typecheck`
+reads it on the way in, because a previous pass's work is on the node before
+this pass arrives. That is collect-then-use, which is what a hand-written
+compiler does, and it is what `%driver` exists to write down.
+
+**I reached for two library functions and needed neither.** `assignable` and
+`condition` are what a checker wants, and both are ordinary expressions:
+
+```
+! not ($target.type = $value.type
+       or $target.type = "unknown" or $value.type = "unknown"
+       or ($target.type = "real" and $value.type = "integer"))
+```
+
+Putting that in `library.c` would have made Pascal's assignment rule *Phoenix's
+opinion about Pascal*, which is exactly what a description is for saying. The
+library did grow by two, and both meet the bar in `library.c`'s header:
+`flatten`, because `[...$vars.entries]` opens one level and a declaration list
+is a list of lists and there is no fold in the notation; and a third argument to
+`lookup`, which is the same operation with an answer for absence.
+
+**Type aliases needed one idea.** `var i : Small` where `type Small = 1..Limit`
+binds `i` to `"Small"`, and the checker compares `"Small"` with `"integer"`.
+Resolving that is a second lookup — and the trick that makes a second lookup
+always safe is binding every base type **to itself**, so `integer` answers
+`integer` and `Small` answers `integer`, and nothing has to ask which it was
+looking at.
+
+### Two places it says nothing, and one of them is the roadmap's first real argument
+
+`with origin do writeln(x, y)` opens a record's fields into scope. Knowing which
+fields those are means knowing the *structure* of `Point` and not just that
+`origin` is one, and this table maps a name to a type's name. So names are not
+checked inside a `with`.
+
+`function Area;` after `function Area(r : real) : real; forward;` repeats the
+heading, and its parameters belong to the declaration it repeats. **Finding that
+declaration is a reference to another node**, and an attribute computed in one
+walk cannot reach sideways. So names are not checked in there either.
+
+That second one is worth more than the checking it costs: it is the first
+concrete argument for [reference attributes](ROADMAP.md#21-reference-attributes--from-jastadd),
+which until now was a thing the literature offered rather than a thing this
+project needed. The rule has been *do not build it speculatively*, and it is no
+longer speculative.
+
+### And composing descriptions found a wart
+
+`pascal-outline.phx` imports `pascal.phx`, and an import is read first — so
+"the first driver declared" handed the default to the imported description, and
+running the outline description ran the checker instead. **A file that says
+nothing must not unsay something** was the rule the last import bug taught; this
+is its other half: *a file that says something must outrank the file it
+imported*. The default driver is now the first one declared in the file that was
+named.

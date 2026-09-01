@@ -1,0 +1,63 @@
+(* pascal-outline.phx -- what a Pascal program declares, listed.
+ *
+ *   phx examples/pascal-outline.phx prog.pas
+ *
+ * The grammar, the tree and the analysis are in `pascal.phx`, which has no
+ * opinion about what anybody wants out of them. This file is one thing
+ * somebody wants.
+ *)
+
+%import "pascal.phx"
+
+(* ------------------------------------------------------------------ *)
+(* An outline of what a program declares.                              *)
+(*                                                                     *)
+(* Not a compiler -- the smallest pass that has to walk the whole of    *)
+(* this tree and read something from most of it, which is what makes it *)
+(* worth having as evidence that the shape above is usable.            *)
+
+%pass outline
+
+  (* Types, rendered back to something readable. A child's `show` is ready
+   * before its parent's clause runs, because the walk is post-order -- so
+   * one pass does the whole of this and no ordering was declared. *)
+  NamedType : show = "{}" of $name .
+  NoType    : show = "" .
+  Pointer   : show = "^{}" of $to .
+  Packed    : show = "packed {}" of $type.show .
+  ArrayType : show = "array [{}] of {}" of join($indices.show, ", "), $of.show .
+  RecordType: show = "record {}" of join($fields.show, "; ") .
+  FieldDecl : show = "{}: {}" of join($names, ", "), $type.show .
+  SetType   : show = "set of {}" of $of.show .
+  FileType  : show = "file of {}" of $of.show .
+  EnumType  : show = "({})" of join($names, ", ") .
+  Subrange  : show = "{}..{}" of $low.show, $high.show .
+
+  Integer       : show = "{}" of $text .
+  Real          : show = "{}" of $text .
+  Text          : show = "{}" of $value .
+  Nil           : show = "nil" .
+  NamedConstant : show = "{}" of $name .
+  Signed        : show = "{}{}" of $sign, $value.show .
+
+  ConstDef  : line = "  const     {} = {}" of $name, $value.show .
+  TypeDef   : line = "  type      {} = {}" of $name, $type.show .
+  VarDecl   : line = "  var       {} : {}" of join($names, ", "), $type.show .
+
+  (* Two clauses rather than a conditional inside one. There is no `if` in
+   * the notation, and matching on the shape is what stands in for it --
+   * which needs `true` in a pattern to be the value and not a name that
+   * binds anything, and it is. *)
+  Param(byref: true)  : show = "var {} : {}" of join($names, ", "), $type .
+  Param(byref: false) : show = "{} : {}"     of join($names, ", "), $type .
+  Procedure : line = "  procedure {}({})" of $name, join($params.show, "; ") .
+  Function  : line = "  function  {}({}) : {}"
+                of $name, join($params.show, "; "), $returns.show .
+
+  Block     : out = join([...$consts.line, ...$types.line, ...$vars.line,
+                          ...$routines.line], "\n") .
+  Program   : out = "program {}({})\n{}"
+                of $name, join($params, ", "), $body.out .
+
+(* Named first, so it is the default: this file exists for the outline. *)
+%driver outline = outline -> out .
