@@ -1,4 +1,4 @@
 digit = "0" .. "9" .
-%syntax
-%start expression
+%syntax .
+%start expression .
 expression = digit "+" trem .

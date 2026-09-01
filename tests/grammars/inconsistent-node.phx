@@ -1,9 +1,9 @@
-%fragment digit
+%fragment digit .
 digit  = "0" .. "9" .
 number = digit { digit } .
 space  = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line = number         -> N(a: $1)
      | number number  -> N(a: $1, b: $2) .

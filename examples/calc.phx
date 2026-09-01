@@ -24,9 +24,9 @@
 (* though -- a layout-sensitive one would keep it -- so `%skip` is      *)
 (* said here and not there.                                            *)
 
-%import "lexical.phx"
-%import "expression.phx"
-%skip space line-comment
+%import "lexical.phx" .
+%import "expression.phx" .
+%skip space line-comment .
 
 (* calc's own punctuation, and all of it. The operators belong to
  * `expression.phx` and live in its own `operator` rule; the scanner takes the
@@ -41,8 +41,8 @@ symbol = ":=" | ";" .
 (* this half rather than declared -- so `print` cannot be a variable,   *)
 (* and nothing here had to say so.                                     *)
 
-%syntax
-%start program
+%syntax .
+%start program .
 
 (* `->` says what an alternative *means*, as against what it looks like.
  * Without one, a rule answers what it matched. *)

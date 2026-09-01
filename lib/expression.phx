@@ -31,7 +31,7 @@
  * say which clause is missing the first time a program reaches for it.
  *)
 
-%require primary
+%require primary .
 
 (* The operators this module reads, as one token rule. An importing language
  * keeps its own rule for its own punctuation -- `:=` and `;` and the rest --
@@ -43,7 +43,7 @@
 operator = "<=" | ">=" | "<>"
          | "+" | "-" | "*" | "/" | "=" | "<" | ">" | "(" | ")" .
 
-%syntax
+%syntax .
 
 (* Loosest first, so that each level is written in terms of the one that binds
  * tighter than it. `$$` is what has been built so far, and an action naming it

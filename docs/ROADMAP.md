@@ -160,14 +160,26 @@ arriving rather than as a puzzle.
 ## 4. Known warts
 
 **A `.` is whitespace-sensitive.** `$left.val` reads an attribute; `$left .`
-ends a clause. No lookahead separates them — `. Binary(op: "+")` beginning the
-next clause looks exactly like a field access — so adjacency decides. It is the
-one place in the notation where a space changes a meaning.
+ends a clause. The reader decides by adjacency, which is the one place in the
+notation where a space changes a meaning.
+
+[`examples/phoenix.phx`](../examples/phoenix.phx) shows the better answer:
+**make an attribute a token** — a dot with a lower-case letter immediately
+after it — and the scanner's longest match settles it with no special case.
+That is what the reader should do, and changing it is a small piece of work
+that has not been done because nothing is broken.
 
 **A grammar module imposes reserved words.** Importing
 [`expression.phx`](../lib/expression.phx) means `and`, `or` and `not` cannot be
 identifiers, because every word-shaped literal in the syntactic half is
 reserved. There is no way to import a grammar and decline its vocabulary.
+
+**There is no syntactic negative lookahead.** `!` is lexical only, refused in a
+syntactic rule because there it would ask about characters where there are only
+tokens. The cost is that the notation cannot describe two things the reader
+does: a production ending without its `.`, and a directive's arguments ending
+at a line. The second was fixed by letting a directive be terminated; the first
+stands, and `examples/phoenix.phx` records it.
 
 **Ordered choice is not revisited.** `a | b` tries `a`, and if `a` succeeds and
 the rule around it fails later, `b` is never tried. It costs nothing on an LL(1)

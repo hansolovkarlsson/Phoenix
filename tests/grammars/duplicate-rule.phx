@@ -1,6 +1,6 @@
 (* `name` comes from lexical.phx too. *)
-%import "lexical.phx"
+%import "lexical.phx" .
 name = "x" .
-%syntax
-%start line
+%syntax .
+%start line .
 line = name .

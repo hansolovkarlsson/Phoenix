@@ -16,7 +16,7 @@
  * `calc.phx` changed.
  *)
 
-%import "calc.phx"
+%import "calc.phx" .
 
 (* ------------------------------------------------------------------ *)
 (* Solveig has no operators and no control-flow syntax. `@expr( )` is a

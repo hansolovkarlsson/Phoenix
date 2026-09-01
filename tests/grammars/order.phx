@@ -1,7 +1,7 @@
 (* "<" before "<=" means the second is never reached. *)
 op = "<" | "<=" .
 space = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line = op .

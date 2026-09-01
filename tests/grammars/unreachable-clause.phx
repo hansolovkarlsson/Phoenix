@@ -1,12 +1,12 @@
 (* A general pattern above a specific one takes every case the specific one
  * was for, because clauses are tried in order. *)
-%fragment digit
+%fragment digit .
 digit  = "0" .. "9" .
 number = digit { digit } .
 space  = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line = number -> N(v: $1) .
 %pass p
   N          : out = "any" .

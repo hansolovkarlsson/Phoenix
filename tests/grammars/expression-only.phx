@@ -1,11 +1,11 @@
 (* The expression module on its own, with the hole filled and nothing else --
  * which is the smallest thing that can exercise it. *)
-%import "lexical.phx"
-%import "expression.phx"
-%skip space
+%import "lexical.phx" .
+%import "expression.phx" .
+%skip space .
 
-%syntax
-%start expression
+%syntax .
+%start expression .
 
 primary = integer -> Number(text: $1)
         | name    -> Variable(name: $1) .

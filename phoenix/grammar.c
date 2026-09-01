@@ -719,14 +719,9 @@ static bool read_file(Reader *r, const char *path)
                 MToken *named = advance(r);
                 if (!read_description(r->a, g, named->text, path, r->src, named->pos))
                     return false;
-                continue;
             }
             else if (strcmp(d->text, "pass")       == 0) {
                 if (!read_passes(r, d)) return false;
-                continue;
-            }
-            else if (strcmp(d->text, "driver")     == 0) {
-                if (!read_driver(r, d)) return false;
                 continue;
             }
             else if (strcmp(d->text, "start")      == 0) {
@@ -735,13 +730,26 @@ static bool read_file(Reader *r, const char *path)
                     return false;
                 }
                 want_start = advance(r)->text;
-            } else {
+            }
+            else if (strcmp(d->text, "driver")     == 0) {
+                if (!read_driver(r, d)) return false;
+                continue;
+            }
+            else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%import "
                           "%%require %%driver");
                 return false;
             }
+
+            /* A directive may be closed with a `.` like everything else. It
+             * was never required, and describing `.phx` in `.phx` is what
+             * asked for it: the names after `%fragment` end at the end of the
+             * line, and a grammar matched over tokens cannot see one. With a
+             * terminator the list is describable, and every other construct in
+             * this notation already ends that way. */
+            if (at(r, T_DOT)) advance(r);
             continue;
         }
 

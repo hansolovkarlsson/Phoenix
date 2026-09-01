@@ -1,0 +1,242 @@
+(* phoenix.phx -- the `.phx` notation, described in itself.
+ *
+ *   bin/phx --tree examples/phoenix.phx examples/phoenix.phx
+ *
+ * **This file parses itself.** That is the whole of what it is for: a
+ * notation that can describe its own grammar has demonstrably got enough in
+ * it, and one that cannot has a hole somewhere it did not know about.
+ *
+ * It is Wirth's own argument for the notation he proposed, and it is why the
+ * grammar at the top of `phoenix/grammar.c` is written in the notation it
+ * defines. This file is that argument carried out rather than asserted.
+ *
+ * ---------------------------------------------------------------------------
+ * What it does *not* replace
+ *
+ * The hand-written reader in `phoenix/grammar.c`, which stays. This describes
+ * the shape of a `.phx` file; it does not build a grammar out of one, and the
+ * PEG machine, the scanner and the evaluator are not derived from any grammar
+ * and never could be. See docs/journal.md on what self-hosting would and would
+ * not prove -- this is level one of three, and the only one that is free.
+ *
+ * ---------------------------------------------------------------------------
+ * What describing it revealed
+ *
+ * **1. An attribute should be its own token, and that is better than what
+ * `grammar.c` does.** The reader tells `$left.val` from `$left .` by whether a
+ * space precedes the dot -- a special case in the scanner, and the one place
+ * in the notation where whitespace changes a meaning. Here an attribute is a
+ * lexical rule: a dot with a lower-case letter *immediately* after it. No
+ * special case, longest match does it, and it covers a thing the reader's rule
+ * was never about -- `at($vars, 1).name`, an attribute of a call, which has no
+ * `$` for a space to be adjacent to.
+ *
+ * **2. A directive's arguments could not end at a line, and now do not have
+ * to.** `%fragment letter digit` ends where the line does, and a grammar
+ * matched over tokens cannot see a line. Phoenix now accepts a `.` after a
+ * directive, which is how everything else in the notation ends.
+ *
+ * **3. Reserved words are automatic and cannot be opted out of.** Every
+ * word-shaped literal in a syntactic rule becomes one, which is a good rule
+ * and one this file trips over: `of`, `and`, `not`, `div`, `thread` and `down`
+ * are operators here and perfectly good field names in `pascal.phx`. The rule
+ * `word` below is what a place that wants a plain name has to say.
+ *
+ * **4. The optional production terminator is the one thing that stays
+ * undescribable.** `grammar.c` lets a production end without its `.` by
+ * looking two tokens ahead for a name followed by a definition symbol. That is
+ * syntactic negative lookahead, and `!` is lexical only. Every `.phx` file
+ * here writes the terminator, so nothing is lost by requiring it -- but it is
+ * a feature of the notation the notation cannot state.
+ *
+ * Two smaller divergences, both from the attribute rule: this accepts
+ * `$x . y` where the reader does not, and refuses `$x.Y` where the reader
+ * allows it. Neither is written anywhere.
+ *)
+
+(* ------------------------------------------------------------------ *)
+(* Characters to tokens.                                              *)
+
+%fragment letter digit hex escape .
+
+letter = "a" .. "z" | "A" .. "Z" | "_" .
+digit  = "0" .. "9" .
+
+name = letter { letter | digit | "-" } .
+
+(* Longest match settles `4.5` against `4..5` without either rule knowing about
+ * the other: a real number wants a digit after its point, so it fails on `4..`
+ * and the integer takes the `4`. *)
+integer = digit { digit } .
+real    = digit { digit } "." digit { digit } .
+
+(* **There is no "any character" in this notation**, and the first attempt at
+ * this rule was `"\\" ! ""` -- a backslash and then anything. It never matches:
+ * `! x` is one character provided `x` does not match here, an empty literal
+ * always matches, so `! ""` always fails. The escapes are enumerated instead,
+ * which is more honest anyway -- these are the ones Phoenix accepts. *)
+hex    = digit | "a" .. "f" | "A" .. "F" .
+escape = "\\" ( "\"" | "\\" | "n" | "t" | "r" | "0" | "'" | "x" hex hex ) .
+
+literal = "\"" { escape | ! "\"" } "\""
+        | "'"  { escape | ! "'"  } "'" .
+
+(* **The two tokens that would otherwise need a whitespace rule.**
+ *
+ * `grammar.c` tells `$left.val` from `$left .` by whether a space precedes
+ * the dot -- a special case in the scanner, and the one place in the notation
+ * where whitespace changes a meaning.
+ *
+ * Here it is a lexical rule and there is no special case: an attribute is a
+ * dot with a **lower-case letter immediately after it**, so `.val` is one
+ * token and `. ` cannot be one. Longest match does the rest. It also works
+ * where the reader's rule was never the point -- `at($vars, 1).name` is an
+ * attribute of a *call*, which has no `$` to be adjacent to. *)
+reference = "$" "$"
+          | "$" digit { digit }
+          | "$" letter { letter | digit | "-" } .
+
+attribute = "." "a" .. "z" { letter | digit | "-" } .
+
+directive = "%" letter { letter } .
+
+(* Three characters before two before one, every time. *)
+symbol = "::=" | "..." | ":=" | "->" | "=>" | ".." | "<=" | ">=" | "<>"
+       | "=" | "." | "|" | "(" | ")" | "[" | "]" | "{" | "}"
+       | "!" | ":" | "," | "+" | "-" | "*" | "/" | "<" | ">" .
+
+comment = "(*" { ! "*)" } "*)"
+        | ";" { ! "\n" } .
+
+space = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+
+%skip space comment .
+
+(* ------------------------------------------------------------------ *)
+(* Tokens to a description.                                           *)
+
+%syntax .
+%start description .
+
+description = { item } -> Description(items: $1) .
+
+item = directive-item | production .
+
+(* ---- directives ---- *)
+
+directive-item = "%tokens" "."     -> Tokens
+               | "%syntax" "."     -> Syntax
+               | "%ignorecase" "." -> IgnoreCase
+               | "%fragment" n:names "." -> Fragment(names: $n)
+               | "%skip"     n:names "." -> Skip(names: $n)
+               | "%require"  n:names "." -> Require(names: $n)
+               | "%start"  n:name    "." -> Start(name: $n)
+               | "%import" p:literal "." -> Import(path: $p)
+               | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)
+               | "%driver" n:name "=" p:name { "," q:name -> $q }
+                   a:answer "." -> Driver(name: $n, passes: [$p, ...$5], answer: $a) .
+
+names  = n:name { m:name -> $m } -> [$n, ...$2] .
+
+(* **Every word-shaped literal in a syntactic rule becomes a reserved word**,
+ * worked out from the grammar rather than declared -- which is a good rule
+ * and one a description of the notation trips over, because `of`, `and`, `or`,
+ * `not`, `div`, `mod`, `thread` and `down` are all operators *here* and all
+ * perfectly good field names *there*. `pascal.phx` writes `of: $t` and means
+ * a field.
+ *
+ * Phoenix itself does not reserve them: its reader knows an operator from a
+ * field name by where it is looking. The notation has no way to say that, so
+ * a place that wants a plain name says which words it will also take. It is
+ * the wart the README calls *a grammar module imposes reserved words*, met in
+ * the one description guaranteed to meet it. *)
+word = name | "of" | "and" | "or" | "not" | "div" | "mod" | "thread" | "down" .
+answer = "->" a:name -> $a
+       | -> NoAnswer .
+
+(* ---- productions ---- *)
+
+production = n:name definition e:expression "." -> Production(name: $n, body: $e) .
+definition = "=" | ":=" | "::=" .
+
+expression = term { "|" t:term -> Choice(first: $$, next: $t) } .
+
+(* A term is factors and then, perhaps, what the alternative builds. *)
+term = f:{ factor } "->" a:action -> Term(factors: $f, builds: $a)
+     | f:{ factor }               -> Term(factors: $f, builds: NoAction) .
+
+factor = l:word ":" f:atom -> Labelled(label: $l, factor: $f)     (* order *)
+       | atom .
+
+atom = lo:literal ".." hi:literal -> Range(low: $lo, high: $hi)   (* order *)
+     | literal                    -> Terminal(text: $1)
+     | name                       -> Reference(name: $1)
+     | "(" e:expression ")"       -> $e
+     | "[" e:expression "]"       -> Optional(body: $e)
+     | "{" e:expression "}"       -> Repeated(body: $e)
+     | "!" f:atom                 -> Negated(body: $f) .
+
+(* ---- passes ---- *)
+
+clause = p:pattern d:{ definition-clause | check-clause } "."
+       -> Clause(pattern: $p, does: $d)
+       | "thread" n:name "=" e:action [ "." ] -> Thread(name: $n, start: $e)
+       | "thread" n:name [ "." ]              -> Thread(name: $n, start: NoAction) .
+
+definition-clause = ":" "down" a:word "=" e:action -> Inherited(attr: $a, value: $e)
+                  | ":" a:word "=" e:action        -> Synthesised(attr: $a, value: $e) .
+
+check-clause = "!" c:action ":" m:action -> Check(when: $c, message: $m) .
+
+pattern = t:name "(" f:field-pattern { "," g:field-pattern -> $g } ")"
+            -> Shape(type: $t, fields: [$f, ...$3])                (* order *)
+        | name    -> Kind(type: $1)
+        | literal -> MatchText(text: $1)
+        | integer -> MatchInteger(text: $1)
+        | "_"     -> Anything .
+
+field-pattern = f:word ":" p:pattern -> FieldPattern(field: $f, is: $p) .
+
+(* ---- the expression language ---- *)
+
+action = disjunction { "of" a:disjunction { "," b:disjunction -> $b }
+                       -> Format(template: $$, values: [$a, ...$3]) } .
+
+disjunction = conjunction { "or"  c:conjunction -> Logic(op: $1, left: $$, right: $c) } .
+conjunction = comparison  { "and" c:comparison  -> Logic(op: $1, left: $$, right: $c) } .
+
+comparison = sum [ o:relation s:sum -> Compared(op: $o, left: $$, right: $s) ] .
+relation   = "=" | "<>" | "<=" | ">=" | "<" | ">" .
+
+sum     = product { o:adding p:product   -> Operation(op: $o, left: $$, right: $p) } .
+product = unary   { o:timing u:unary     -> Operation(op: $o, left: $$, right: $u) } .
+
+adding = "+" | "-" .
+timing = "*" | "/" | "div" | "mod" .
+
+unary = "not" u:unary -> Negation(value: $u)
+      | "-"   u:unary -> Minus(value: $u)
+      | postfix .
+
+postfix = p:primary { a:attribute -> Of(attr: $a) } -> Reach(value: $p, through: $2) .
+
+primary = reference          -> Ref(name: $1)
+        | literal            -> TextValue(text: $1)
+        | real               -> RealValue(text: $1)
+        | integer            -> IntegerValue(text: $1)
+        | n:name "(" a:argument { "," b:argument -> $b } ")"
+            -> Apply(what: $n, values: [$a, ...$3])                (* order *)
+        | n:name "(" ")"     -> Apply(what: $n, values: [])
+        | name               -> Word(name: $1)
+        | "[" e:element { "," f:element -> $f } "]" -> ListOf(items: [$e, ...$3])
+        | "[" "]"            -> ListOf(items: [])
+        | "(" a:action ")"   -> $a .
+
+element = "..." a:action -> Spread(value: $a)
+        | action .
+
+(* A capitalised name builds a node and its arguments are named; a lower-case
+ * one calls a function and its arguments are not. The notation tells them
+ * apart by the capital, so one rule reads both. *)
+argument = f:word ":" a:action -> Field(name: $f, value: $a)      (* order *)
+         | action .

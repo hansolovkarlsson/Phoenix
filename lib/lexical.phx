@@ -16,7 +16,7 @@
  * never tokens of their own. Without this line a file comes back as a stream
  * of `letter`: both rules match `x`, and a longest-match tie goes to the rule
  * declared first. *)
-%fragment letter digit hex-digit escape
+%fragment letter digit hex-digit escape .
 
 letter    = "a" .. "z" | "A" .. "Z" | "_" .
 digit     = "0" .. "9" .

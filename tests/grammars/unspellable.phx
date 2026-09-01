@@ -1,9 +1,9 @@
 (* `;` is named by the syntactic half and no token rule spells it. *)
-%fragment digit
+%fragment digit .
 digit  = "0" .. "9" .
 number = digit { digit } .
 space  = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line = number ";" .

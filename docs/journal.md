@@ -840,3 +840,81 @@ That is the fourth time: `Labelled`, `Packed`, `Signed`, `Accessed`, and now
 these. **An option is not a choice**, and every time the grammar has been asked
 to make a distinction it already knows, the passes have got simpler and a node
 that was usually empty has stopped existing.
+
+## 2026-09-01 — the notation, described in itself
+
+`examples/phoenix.phx` is the `.phx` notation written in `.phx`. It parses
+itself, and it parses every other description in this repository.
+
+This is [level one](#2026-09-01--what-self-hosting-would-and-would-not-prove) of
+the three the earlier entry set out, and the only one that is free: it describes
+the *shape* of a `.phx` file and replaces nothing. The reader in `grammar.c`
+stays, and the PEG machine and the scanner are not derived from any grammar and
+never could be.
+
+**Four things came out of it. Three were improvements to Phoenix and one is a
+gap that stays.**
+
+### An attribute should be its own token
+
+`grammar.c` tells `$left.val` from `$left .` by whether a space precedes the
+dot — a special case in the scanner, and the one place in the notation where
+whitespace changes a meaning. It has been in the README's list of warts since
+stage 2.
+
+Described in the notation it is a lexical rule and there is no special case: an
+attribute is a dot with a **lower-case letter immediately after it**, so `.val`
+is a token and `. ` cannot be one. Longest match does the rest.
+
+**And it is better than the rule it describes**, because it covers something
+the reader's rule was never about. `at($vars, 1).name` is an attribute of a
+*call*, and there is no `$` for a space to be adjacent to; the reader handles
+it by accident of where `read_postfix` sits, and the description handles it by
+saying what an attribute is.
+
+### A directive could not end at a line, and no longer has to
+
+`%fragment letter digit` ends where the line does, and a grammar matched over
+tokens cannot see a line — the scanner threw it away. Phoenix now accepts a `.`
+after a directive, which is how every other construct in the notation already
+ended, and every description here was updated to write one.
+
+### Reserved words are automatic, and this is the file guaranteed to mind
+
+Every word-shaped literal in a syntactic rule becomes a reserved word, worked
+out from the grammar rather than declared. It is a good rule. It is also why
+`of`, `and`, `or`, `not`, `div`, `mod`, `thread` and `down` — all operators in
+this notation — became unusable as field names, and `pascal.phx` writes
+`of: $t` and means a field.
+
+Phoenix does not reserve them: its reader knows an operator from a field name
+by where it is looking. The notation cannot say that, so the description has a
+rule `word` listing the words a plain name will also accept. It is the wart the
+README already called *a grammar module imposes reserved words*, met in the one
+description certain to meet it.
+
+### The optional production terminator stays undescribable
+
+`grammar.c` lets a production end without its `.`, by looking two tokens ahead
+for a name followed by a definition symbol. That is **syntactic negative
+lookahead**, and `!` is lexical only — refused in a syntactic rule on purpose,
+because there it would be asking about characters where there are only tokens.
+
+Nothing is lost by requiring the terminator: every `.phx` file here writes one.
+But it is a feature of the notation that the notation cannot state, and it is
+the answer to the question this exercise was for.
+
+### And two mistakes worth keeping
+
+**`! ""` never matches.** The first attempt at a string escape was `"\\" ! ""` —
+a backslash and then anything — and there is no *anything* in this notation:
+`! x` is one character provided `x` does not match, an empty literal always
+matches, so `! ""` always fails. The escapes are enumerated instead, which is
+more accurate anyway.
+
+**A grammar can describe a call and forget that a call can be reached into.**
+`Name(field: value)` was described as a function call with positional
+arguments, so `Description(items: $1)` failed on the colon; and `postfix` was
+missing entirely, so `at($vars, 1).name` failed on the dot. Both were places
+where the reader does something so ordinary that writing the grammar down was
+the first time anybody had to notice it was a rule.

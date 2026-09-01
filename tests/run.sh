@@ -569,7 +569,34 @@ fi
 # these are copies.
 S="$root/tests/pascal"
 if [ -d "$S" ]; then
-    echo "Wirth's Pascal"
+    # ---------------------------------------------------------------------------
+# The notation, described in itself. A notation that can describe its own
+# grammar has demonstrably got enough in it; one that cannot has a hole
+# somewhere it did not know about.
+
+echo "the notation, in itself"
+accepts "phoenix.phx reads" "$root/examples/phoenix.phx"
+
+if "$phx" --quiet --tree "$root/examples/phoenix.phx" \
+        "$root/examples/phoenix.phx" >/dev/null 2>&1; then
+    report pass "and parses itself"
+else
+    report fail "and parses itself"
+fi
+
+# Every description in the repository, read by the description of them.
+bad=0
+for d in "$root"/lib/*.phx "$root"/examples/*.phx; do
+    "$phx" --quiet --tree "$root/examples/phoenix.phx" "$d" >/dev/null 2>&1 \
+        || bad=$((bad + 1))
+done
+if [ "$bad" -eq 0 ]; then
+    report pass "and every other description here"
+else
+    report fail "and every other description here" "$bad did not parse"
+fi
+
+echo "Wirth's Pascal"
     accepts "the grammar itself" "$S/pascal.bnf"
     accepts "gcd.pas"            "$S/pascal.bnf" "$S/gcd.pas"
     accepts "features.pas"       "$S/pascal.bnf" "$S/features.pas"

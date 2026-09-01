@@ -38,7 +38,7 @@
 (* Helpers, not tokens. Without this line `T` comes out as a `letter`: both
  * rules match it, longest match ties are broken by declaration order, and
  * `letter` is declared first. *)
-%fragment letter digit
+%fragment letter digit .
 
 letter = "a" .. "z" .
 digit  = "0" .. "9" .
@@ -70,7 +70,7 @@ symbol = ":=" | "<=" | ">=" | "<>" | ".."                    (* order *)
        | "+" | "-" | "*" | "/" | "=" | "<" | ">"
        | "(" | ")" | "[" | "]" | "," | ";" | ":" | "." | "^" | "@" .
 
-%skip space comment
+%skip space comment .
 
 (* ------------------------------------------------------------------ *)
 (* The syntactic half: tokens to a program.                           *)
@@ -79,9 +79,9 @@ symbol = ":=" | "<=" | ">=" | "<>" | ".."                    (* order *)
 (* this half of the file rather than declared -- so `begin` cannot be  *)
 (* used as a variable, and nothing here had to say so.                 *)
 
-%syntax
-%ignorecase
-%start program
+%syntax .
+%ignorecase .
+%start program .
 
 (* ------------------------------------------------------------------ *)
 (* Three habits run through everything below, and each was learned by   *)

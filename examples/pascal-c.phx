@@ -47,7 +47,7 @@
  * because the notation could not say it.
  *)
 
-%import "pascal.phx"
+%import "pascal.phx" .
 
 (* ------------------------------------------------------------------ *)
 (* What a `var` parameter is called inside the routine.                *)

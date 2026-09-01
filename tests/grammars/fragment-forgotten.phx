@@ -3,7 +3,7 @@
 letter = "a" .. "z" .
 name = letter { letter } .
 space = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line = name .

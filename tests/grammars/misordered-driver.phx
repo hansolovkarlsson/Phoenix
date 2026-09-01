@@ -1,9 +1,9 @@
 (* `typecheck` reads `.show` from a child, and the driver runs `show` after it,
  * so `.show` is not there yet. *)
-%import "lexical.phx"
-%skip space
-%syntax
-%start line
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
 
 line = a:atom b:atom -> Pair(left: $a, right: $b) .
 atom = integer       -> N(text: $1) .

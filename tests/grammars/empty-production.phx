@@ -1,13 +1,13 @@
 (* An empty alternative -- `empty = .` is a real production that matches
  * nothing, and the older notation is full of them. *)
-%fragment digit
+%fragment digit .
 digit  = "0" .. "9" .
 number = digit { digit } .
 comma  = "," .
 space  = " " { " " } .
-%skip space
-%syntax
-%start line
+%skip space .
+%syntax .
+%start line .
 line  = number tail .
 tail  = "," number tail | empty .
 empty = .

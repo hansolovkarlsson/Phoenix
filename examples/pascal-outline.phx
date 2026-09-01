@@ -7,7 +7,7 @@
  * somebody wants.
  *)
 
-%import "pascal.phx"
+%import "pascal.phx" .
 
 (* ------------------------------------------------------------------ *)
 (* An outline of what a program declares.                              *)

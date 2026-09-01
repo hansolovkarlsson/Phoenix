@@ -507,7 +507,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 95 checks, including Solveig's pascal.bnf when it is present
+make test       # 98 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -550,6 +550,27 @@ and generated C — and they have to agree on 97. Everything they could disagree
 about is fixed in [docs/semantics.md](docs/semantics.md), in Phoenix's own terms
 rather than any host language's: integers that trap rather than wrap, floored
 division, no implicit conversion, structural equality.
+
+## The notation, described in itself
+
+[`examples/phoenix.phx`](examples/phoenix.phx) is the `.phx` notation written in
+`.phx`, and it **parses itself** — along with every other description in this
+repository. That is Wirth's own argument for the notation he proposed, carried
+out rather than asserted: a notation that can describe its own grammar has
+demonstrably got enough in it.
+
+It does not replace the hand-written reader, and could not: the PEG machine and
+the scanner are not derived from any grammar. It describes the *shape* of a
+`.phx` file, which is [level one of three](docs/journal.md).
+
+Four things came out of writing it, and three were improvements:
+
+| | |
+| --- | --- |
+| **an attribute should be its own token** | the reader tells `$left.val` from `$left .` by whether a space precedes the dot — the one place whitespace changes a meaning. Described here it is a lexical rule, *a dot with a lower-case letter immediately after*, with no special case — and it covers `at($vars, 1).name`, an attribute of a call, which the reader's rule was never about |
+| **a directive can be terminated** | `%fragment letter digit` ended at the end of a line, and a grammar over tokens cannot see one. A `.` after a directive is now accepted, as everything else in the notation already was |
+| **reserved words cannot be opted out of** | every word-shaped literal becomes one, so `of` and `and` and `div` are operators here and good field names elsewhere. A place wanting a plain name has to list them |
+| **the optional production terminator is undescribable** | ending a production without its `.` needs two-token lookahead, and `!` is lexical only. The one real gap |
 
 ## Where this sits
 
