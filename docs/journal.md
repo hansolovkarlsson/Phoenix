@@ -657,3 +657,63 @@ nothing must not unsay something** was the rule the last import bug taught; this
 is its other half: *a file that says something must outrank the file it
 imported*. The default driver is now the first one declared in the file that was
 named.
+
+## 2026-09-01 — the reference attributes that were already there
+
+The two places the Pascal checker said nothing — `with origin do ... x ...` and
+`function Area;` repeating a `forward` heading — were filed as needing
+[reference attributes](ROADMAP.md#21-reference-attributes--from-jastadd), a
+JastAdd feature that would have brought demand-driven evaluation back with it
+and undone a decision stage 2 made deliberately.
+
+**Both are now solved, and nothing was added.**
+
+The realisation is that a Phoenix value can *be* a node. `bind(env, name, node)`
+stores one and `$x.field` reads one wherever it came from, so an environment
+that binds a name to the thing it was *declared as*, rather than to the name of
+its type, is an ordinary list of pairs and was always expressible. Following a
+`with` is then four hops:
+
+```
+origin   -> NamedType(name: "Point")     the variable's declared type
+"Point"  -> RecordType(fields: [...])    what that type is
+fields   -> what each FieldDecl declares
+```
+
+**They work because every hop points backwards** — at a node the one post-order
+walk has already visited and finished with, whose attributes are therefore
+computed and sitting on it. That is the whole of what made them look hard and
+the whole of why they were not.
+
+The `forward` case is the same shape: a routine binds its name to its parameter
+*list*, the repeated heading looks that name up, and `lookup` answers the first
+match — which is the earlier declaration, because the routines are in document
+order.
+
+### What this does to the roadmap
+
+§2.1 shrinks to one sentence: what is missing is a reference that points
+**forward**, to a node the walk has not reached. Pascal barely has one —
+`forward` exists precisely so that it does not — and a language that did would
+be one with mutually recursive types and no forward declaration, or one where a
+method may be used above where it is defined.
+
+Two things are worth taking from that. **The discipline paid.** The rule has
+been *do not build a roadmap item speculatively*, and the item that finally
+looked justified turned out to be four-fifths unnecessary; building it when it
+was first written down would have added demand-driven evaluation to solve a
+problem that a list of pairs solves.
+
+And **§2.3 should be read more sceptically now.** Scope graphs were filed
+against `with` blocks specifically, and `with` turned out to need nothing. A
+mechanism named in advance against a difficulty nobody has met yet is a
+prediction, and this project has now had one prediction fail in the useful
+direction.
+
+### One thing Phoenix caught that I had wrong
+
+`symbols` computed `Block.shapes` on the way up and `typecheck` handed down
+something different under the same name. The driver's collision check said so —
+*both 'symbols' and 'typecheck' define 'shapes', the later one wins* — which is
+a check written for a hazard that had not yet happened, catching the first time
+it did.

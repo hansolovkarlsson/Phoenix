@@ -381,14 +381,43 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   NamedConstant : ctype = "integer" .
   Signed        : ctype = $value.ctype .
 
-  ConstDef  : entries = bind([], $name, $value.ctype) .
-  TypeDef   : entries = flatten([bind([], $name, $type.tname), $type.entries]) .
-  VarDecl   : entries = bind([], $names, $type.tname) .
-  Param     : entries = bind([], $names, $type) .
+  (* Two things per declaration, in one rule because clauses for one pattern
+   * cannot be split across two: `entries` binds a name to its type's *name*,
+   * which is what type checking compares, and `shape` binds it to the type
+   * *node*, which is what following a record's fields needs. *)
+  ConstDef  : entries = bind([], $name, $value.ctype)
+            : shape   = [] .
+  TypeDef   : entries = flatten([bind([], $name, $type.tname), $type.entries])
+            : shape   = bind([], $name, $type) .
+  VarDecl   : entries = bind([], $names, $type.tname)
+            : shape   = bind([], $names, $type) .
+  Param     : entries = bind([], $names, $type)
+            : shape   = bind([], $names, NamedType(name: $type)) .
+  FieldDecl : entries = bind([], $names, $type.tname)
+            : shape   = bind([], $names, $type) .
 
+
+
+  (* ---- names bound to *nodes* rather than to type names ----
+   *
+   * A value in this notation can be a node, and reading `.field` of one works
+   * wherever the value came from. So an environment binding a name to the
+   * thing it was declared as is already expressible, and a pass can follow it:
+   * `origin` to its `NamedType`, that to `Point`, `Point` to its `RecordType`,
+   * and that to the fields.
+   *
+   * **Every one of those steps points backwards** -- at a node the walk has
+   * already visited and finished with -- which is why this needs nothing that
+   * was not already here. *)
+  (* A routine binds its name to its **parameter list**, so that a heading
+   * repeated after a `forward` can find the parameters it is repeating. That
+   * declaration comes earlier in the same list, and `lookup` answers the first
+   * match, so the forward one is what a repeat finds. *)
   Procedure : entries = bind([], $name, "void")
+            : shape   = bind([], $name, $params)
             : own     = flatten([...$params.entries]) .
   Function  : entries = bind([], $name, $returns.tname)
+            : shape   = bind([], $name, $params)
             : own     = flatten([bind([], $name, $returns.tname),
                                  ...$params.entries]) .
 
@@ -396,7 +425,9 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * level and leaves a list of lists, because each declaration names several
    * things -- `flatten` is what there is no way to write in the notation. *)
   Block : scope = flatten([...$consts.entries, ...$types.entries,
-                           ...$vars.entries, ...$routines.entries]) .
+                           ...$vars.entries, ...$routines.entries])
+        : shapes = flatten([...$consts.shape, ...$types.shape,
+                            ...$vars.shape, ...$routines.shape]) .
 
 (* ------------------------------------------------------------------ *)
 (* Are the names declared, and do the types line up?                   *)
@@ -416,6 +447,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * does not know. Making it know is a table that carries structures, and it
    * is written down in the roadmap rather than guessed at here. *)
   Program : type = "void"
+          : down known = []
           : down checking = true
           : down env =
       (* A base type is bound to **itself**, so that resolving an alias is
@@ -441,7 +473,13 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   (* `$scope` was worked out by the pass before this one, so it is on the node
    * already and can be read on the way *in* -- which is the whole reason there
    * are two passes rather than one. *)
-  Block     : type = "void" : down env = [...$scope, ...$env] .
+  (* `shapes` is what this block declares, worked out by the pass before.
+   * `known` is everything visible here, handed down. Two names, because they
+   * are two things -- Phoenix warns when one pass overwrites another's
+   * attribute, and it was right to. *)
+  Block     : type = "void"
+            : down env   = [...$scope, ...$env]
+            : down known = [...$shapes, ...$known] .
   Procedure : type = "void" : down env = [...$own, ...$env] .
 
   (* `function Area;` after a `function Area(r : real) : real; forward;` --
@@ -458,8 +496,23 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    *
    * The roadmap says what would fix it: [2.1], reference attributes, which
    * this is now the first real argument for rather than a speculation. *)
+(* `function Area;` after `function Area(r : real) : real; forward;` --
+   * the heading is repeated, and its parameters belong to the declaration it
+   * repeats. A function with no result type can only be that, so the pattern
+   * is exact.
+   *
+   * The earlier declaration bound its name to its parameter list, and it is
+   * earlier in the same list, so `lookup` finds it. **A backward reference,
+   * which the walk has already finished with** -- which is why this needs
+   * nothing beyond what was here.
+   *
+   * The env is otherwise left alone: the forward declaration's `Area -> real`
+   * is already in the block's scope, and shadowing it with this heading's
+   * empty result type is what produced `cannot assign real to void`. *)
   Function(returns: NoType)
-            : type = "void" : down checking = false .
+            : type = "void"
+            : down env = [...flatten([...lookup($known, $name, []).entries]),
+                          ...$env] .
   Function  : type = "void" : down env = [...$own, ...$env] .
 
   (* Two lookups: the first answers the type this name was declared with, the
@@ -541,7 +594,24 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   Compound : type = "void" .
   Case     : type = "void" .
   CaseOf   : type = "void" .
-  With     : type = "void" : down checking = false .
+  (* `with origin do ... x ...` -- the fields of `origin`'s record come into
+   * scope, and finding them is three lookups through nodes:
+   *
+   *     origin  ->  NamedType(name: "Point")   the variable's declared type
+   *     "Point" ->  RecordType(fields: [...])  what that type is
+   *     fields  ->  the entries `symbols` left on each FieldDecl
+   *
+   * All three point backwards, at nodes the walk has already finished with.
+   * That is why this needs nothing that was not already here.
+   *
+   * Only the first of `with a, b do` is followed: taking all of them is a
+   * fold, and there is no fold in the notation. *)
+  With     : type = "void"
+           : down env = [...flatten([...lookup($known,
+                                              lookup($known, at($vars, 1).name,
+                                                     NamedType(name: "?")).name,
+                                              RecordType(fields: [])).fields.entries]),
+                         ...$env] .
   Forward  : type = "void" .
 
 (* Analysis alone, with nothing asked of it but an answer about whether the

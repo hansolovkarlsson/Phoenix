@@ -441,6 +441,32 @@ else
     report fail "four Pascal mistakes, all four found" "found $found of 4"
 fi
 
+# `with origin do ... x ...` brings a record's fields into scope, which means
+# following `origin` to its type, that type to its declaration, and that to its
+# fields -- three hops through nodes the walk has already finished with. The
+# test is that a real field passes and an invented one does not.
+errs=$("$phx" --driver check "$root/examples/pascal.phx" \
+        "$root/tests/pascal/with-fields.pas" 2>&1)
+if printf '%s' "$errs" | grep -qF "'zzz' is not declared" \
+   && ! printf '%s' "$errs" | grep -qE "'[xy]' is not declared"; then
+    report pass "a record's fields, through a with"
+else
+    report fail "a record's fields, through a with" \
+                "$(printf '%s' "$errs" | head -1)"
+fi
+
+# `function Area;` repeating a forward heading: its parameters come from the
+# declaration it repeats, which is earlier in the same list.
+sed 's/Area := Pi \* r \* r/Area := Pi * rr * r/' \
+    "$root/tests/pascal/features.pas" > "$tmp0/fwd.pas"
+errs=$("$phx" --driver check "$root/examples/pascal.phx" "$tmp0/fwd.pas" 2>&1)
+if printf '%s' "$errs" | grep -qF "'rr' is not declared" \
+   && ! printf '%s' "$errs" | grep -qF "'r' is not declared"; then
+    report pass "a forward heading's parameters"
+else
+    report fail "a forward heading's parameters" "$(printf '%s' "$errs" | head -1)"
+fi
+
 for f in gcd features; do
     accepts "$f.pas builds a tree" --tree "$root/examples/pascal.phx" \
             "$root/tests/pascal/$f.pas"

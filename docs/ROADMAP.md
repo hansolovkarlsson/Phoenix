@@ -34,26 +34,38 @@ whose.
 
 ### 2.1 Reference attributes — from JastAdd
 
-**No longer speculative.** Two places in `examples/pascal.phx` say nothing
-because they cannot reach sideways to another node:
+**Most of this turned out to be already here, and the entry is much smaller
+than it was.**
 
-- `function Area;` repeating a `forward` heading — its parameters belong to the
-  declaration it repeats, and there is no way to find that declaration.
-- `with origin do ... x ...` — the fields come from `origin`'s *type*, and
-  reaching a type's structure from a use of it is the same problem.
+Both cases that motivated it — `with origin do ... x ...` needing a record's
+fields, and `function Area;` needing the `forward` heading it repeats — are
+solved in `examples/pascal.phx` with nothing that was not already in the
+notation. A value can *be* a node, `.field` reads one wherever it came from,
+and an environment binding a name to the thing it was declared as is an
+ordinary list of pairs. Following `origin` to its `NamedType`, that to `Point`,
+`Point` to its `RecordType` and that to its fields is four hops and no new
+mechanism.
 
-An attribute is computed in one post-order walk, so it cannot refer to a node
-the walk has not reached or has already left behind.
+**They work because every hop points backwards** — at a node the one post-order
+walk has already visited and finished with, whose attributes are therefore
+computed. That is the whole of what made them look hard and the whole of why
+they were not.
 
-A reference attribute lets a `Variable` node hold a pointer to its declaration,
-so the question is asked once and answered directly. JastAddJ is a Java compiler
-built on this, so the idea carries a real language.
+So what is actually missing is narrower than the literature's version:
 
-The cost is that demand-driven evaluation comes back with it, along with the
-cycle detection that was avoided by walking once —
+> **A reference that points *forward*** — to a node the walk has not reached —
+> which is the only case a backward lookup cannot serve.
+
+Pascal barely has one; `forward` exists precisely so that it does not.
+Mutually recursive types in a language without a forward declaration would, and
+so would a language where a method may be used above where it is defined. Until
+one of those is being described, this stays unbuilt, and the reason is now
+evidence rather than policy.
+
+If it is ever built, the cost is that demand-driven evaluation comes back with
+it, along with the cycle detection that walking once avoided —
 [journal.md](journal.md#2026-09-01--stage-2-and-one-thing-the-sketch-got-wrong)
-records why that was dropped, and this is the thing that would justify
-revisiting it.
+records why that was dropped.
 
 ### 2.2 Strategies — from Stratego
 
@@ -72,15 +84,17 @@ folding is the first customer and the reason to want it.
 
 ### 2.3 Scope graphs — from Statix
 
-**Nearly, and the entry now says how nearly.** `with` blocks that reopen a
-record's namespace were named here as the thing that would break threading, and
-Pascal has them: `examples/pascal.phx` does not check names inside a `with`.
+**Further off than it looked.** `with` blocks that reopen a record's namespace
+were named here as the thing that would break threading, and Pascal has them —
+and they turned out to need nothing but an environment that binds names to
+nodes, which was already expressible.
 
-That one case is a reference-attribute problem rather than a scope-graph one
-(§2.1 would fix it). But the shape of the next such thing — a table mapping a
-name to a *structure* rather than to another name, and resolution that does not
-depend on the order the walk happened to take — is what a scope graph is for,
-and Pascal has taken the current design as far as it goes without one.
+A scope graph earns its place when resolution stops being a search through a
+list that the walk built in order: modules that import each other, scopes that
+are visible from more than one place, a name whose meaning depends on which
+path you reached it by. Pascal has none of those. Nothing has yet asked for
+this, and after the `with` case it is worth being sceptical that the next thing
+will either.
 
 ---
 

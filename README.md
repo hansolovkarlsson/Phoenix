@@ -491,7 +491,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 88 checks, including Solveig's pascal.bnf when it is present
+make test       # 90 checks, including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -595,10 +595,23 @@ wrong.pas:9:21: error: 'nope' is not declared
 
 The value of doing this to Pascal rather than to another toy is that the grammar
 was written by somebody else, for another purpose, years before Phoenix existed.
-What it could not say is recorded in [the journal](docs/journal.md) — including
-the two places the checker deliberately says nothing, one of which is the first
-real argument for a [roadmap](docs/ROADMAP.md) item that was until now only a
-good idea from the literature.
+What it could not say is recorded in [the journal](docs/journal.md).
+
+The checker follows records and forward declarations, which took no mechanism
+beyond what was there. A value can *be* a node, so an environment that binds a
+name to the thing it was declared as is an ordinary list of pairs — and
+`with origin do ... x ...` is four hops through it:
+
+```
+origin   → NamedType(name: "Point")     the variable's declared type
+"Point"  → RecordType(fields: [...])    what that type is
+fields   → what each FieldDecl declares
+```
+
+**Every hop points backwards**, at a node the single post-order walk has
+already finished with. That is why it needed nothing, and it is why the
+[roadmap's](docs/ROADMAP.md) entry on reference attributes is now about
+*forward* references only.
 
 When a PEG fails at the top it has usually backtracked a long way from the real
 mistake, so the position reported is the one the match got *furthest*, not the
