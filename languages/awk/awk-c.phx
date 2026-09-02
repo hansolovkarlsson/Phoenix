@@ -1,0 +1,515 @@
+(* awk-c.phx -- awk compiled to C, stage one.
+ *
+ *   bin/phx --driver c languages/awk/awk-c.phx prog.awk > prog.c
+ *   cc prog.c -o prog && ./prog < input
+ *
+ * ---------------------------------------------------------------------------
+ * The first target here where a value is not a machine word
+ *
+ * `languages/pascal/pascal-c.phx` has no runtime worth the name: its whole
+ * preamble is four `#include`s, because Pascal's types *are* C's types and a
+ * `long` does the work. `languages/solveig/solveig-sob.phx` emits opcodes for a
+ * machine that already knows what a value is.
+ *
+ * **awk has one type and it is not C's.** Every value is a string and a number
+ * at once; `$1 == "10"` and `$1 == 10` differ by whether the field *looks*
+ * numeric; an unset variable is both `""` and `0`. None of that is optional --
+ * it is what awk programs are written against -- so a compiled awk program
+ * carries a runtime, and this file is mostly that runtime.
+ *
+ * ---------------------------------------------------------------------------
+ * What stage one is
+ *
+ * Values, fields, the main loop, `print` and `printf`, arithmetic, comparison
+ * and concatenation, with control flow because it costs nothing in C.
+ * **Everything else is refused with a position**, which is the Pascal
+ * precedent: a subset that says so beats a subset that guesses. Arrays,
+ * functions, regular expressions, `getline` and redirection are stage two, and
+ * each has a clause below saying so by name.
+ *
+ * The oracle is `/usr/bin/awk`: `tests/backend/` holds programs and input, and
+ * what this compiles has to print what awk prints, byte for byte.
+ *
+ * ---------------------------------------------------------------------------
+ * The runtime is a literal, and that is worth looking at
+ *
+ * Two hundred lines of C, held as a list of one-line literals and joined. It
+ * is the same thing `pascal-c.phx` does with its four `#include`s and it is
+ * fifty times the size, which is the first time the shape has been big enough
+ * to argue about. Nothing in the notation reads a file at emit time; a
+ * `%prelude "awk.c"` would be the obvious answer and there is exactly one
+ * customer for it, so it is written down rather than built -- see
+ * `docs/ROADMAP.md`.
+ *)
+
+%import "awk.phx" .
+
+(* ------------------------------------------------------------------ *)
+(* Which variables the program has
+ *
+ * awk declares nothing: a variable exists because it was mentioned. So the
+ * names have to be collected before anything can be emitted, and the
+ * declarations are accumulated as text rather than as a list -- the same
+ * append-if-absent the Solveig backend uses for its name table, and for the
+ * same reason.
+ *)
+%pass globals
+
+  thread names = []
+  thread decls = ""
+  thread inits = ""
+
+  (* The ones the runtime owns. A program that mentions `NR` is not declaring
+   * anything. *)
+  Var : special = defined([["NR", true], ["NF", true], ["FS", true],
+                           ["OFS", true], ["ORS", true], ["CONVFMT", true],
+                           ["OFMT", true]], $name)
+      : known   = $special or defined($names, $name)
+      : decls   = lookup([[true, $decls]], $known,
+                         "{}static Cell v_{};\n" of $decls, $name)
+      : inits   = lookup([[true, $inits]], $known,
+                         "{}  v_{} = uninit();\n" of $inits, $name)
+      : names   = lookup([[true, $names]], $known, [...$names, [$name, true]]) .
+
+  Program : declarations = $decls
+          : initialisers = $inits .
+
+(* ------------------------------------------------------------------ *)
+(* The code                                                             *)
+
+%pass emit-c
+
+  (* ---- what stage one does not do, said by name ---- *)
+
+  Index     ! true : "an array is stage two" .
+  In        ! true : "'in' is stage two" .
+  Delete    ! true : "'delete' is stage two" .
+  DeleteAll ! true : "'delete' is stage two" .
+  ForIn     ! true : "'for (k in a)' is stage two" .
+  Function  ! true : "a function definition is stage two" .
+  Apply     ! true : "a call to a function is stage two" .
+  Regex     ! true : "a regular expression is stage two" .
+  Match     ! true : "'~' is stage two" .
+  Range     ! true : "a range pattern is stage two" .
+  Append    ! true : "redirecting output is stage two" .
+  Write     ! true : "redirecting output is stage two" .
+  Pipe      ! true : "a pipe is stage two" .
+  Exit      ! true : "'exit' is stage two -- it has to run the END rules" .
+  Next      ! true : "'next' is stage two" .
+  Return    ! true : "a function is stage two, so a return is too" .
+
+  (* ---- expressions: every one answers a C expression of type `Cell` ---- *)
+
+  Number : out = "mknum({})" of $text .
+  Str    : out = "mkstr({})" of $text .
+
+  (* A special is the runtime's own; everything else is a declared global. *)
+  Var(name: "NR")      : out = "mknum(NR)" .
+  Var(name: "NF")      : out = "mknum(NF)" .
+  Var(name: "FS")      : out = "mkstr(FS)" .
+  Var(name: "OFS")     : out = "mkstr(OFS)" .
+  Var(name: "ORS")     : out = "mkstr(ORS)" .
+  Var(name: "CONVFMT") : out = "mkstr(CONVFMT)" .
+  Var(name: "OFMT")    : out = "mkstr(OFMT)" .
+  Var                  : out = "v_{}" of $name .
+
+  Field : out = "fld_of({})" of $index.out .
+  Group : out = "({})" of join($items.out, ", ") .
+
+  Binary(op: "+") : out = "mknum(num_of({}) + num_of({}))" of $left.out, $right.out .
+  Binary(op: "-") : out = "mknum(num_of({}) - num_of({}))" of $left.out, $right.out .
+  Binary(op: "*") : out = "mknum(num_of({}) * num_of({}))" of $left.out, $right.out .
+  Binary(op: "/") : out = "mknum(div_by(num_of({}), num_of({})))"
+                            of $left.out, $right.out .
+  Binary(op: "%") : out = "mknum(mod_by(num_of({}), num_of({})))"
+                            of $left.out, $right.out .
+  Binary(op: "^") : out = "mknum(pow(num_of({}), num_of({})))"
+                            of $left.out, $right.out .
+
+  Concat  : out = "cat_of({}, {})" of $left.out, $right.out .
+  Compare : out = "mknum(cmp_of({}, {}) {} 0)" of $left.out, $right.out, $op .
+
+  (* C short-circuits where awk does, so the operator carries the meaning. *)
+  Logical : out = "mknum(truth_of({}) {} truth_of({}))"
+                    of $left.out, $op, $right.out .
+
+  Not      : out = "mknum(!truth_of({}))" of $value.out .
+  Negate   : out = "mknum(-num_of({}))" of $value.out .
+  Positive : out = "mknum(num_of({}))" of $value.out .
+  Cond     : out = "(truth_of({}) ? {} : {})"
+                     of $cond.out, $then.out, $otherwise.out .
+
+  (* A step is a statement in C and an expression in awk, so the runtime
+   * answers the value and the emitter never has to name a temporary. *)
+  PostIncr : out = "post_step(&{}, 1)"  of $target.out .
+  PostDecr : out = "post_step(&{}, -1)" of $target.out .
+  PreIncr  : out = "pre_step(&{}, 1)"   of $target.out .
+  PreDecr  : out = "pre_step(&{}, -1)"  of $target.out .
+
+  (* Assigning `FS` and its kind writes the runtime's string, not a Cell. *)
+  Assign(target: Var(name: "FS"), op: "=")  : out = "assign_str(&FS, {})"  of $value.out .
+  Assign(target: Var(name: "OFS"), op: "=") : out = "assign_str(&OFS, {})" of $value.out .
+  Assign(target: Var(name: "ORS"), op: "=") : out = "assign_str(&ORS, {})" of $value.out .
+
+  Assign(target: Field) ! true : "assigning a field is stage two" .
+  Assign(op: "=")  : out = "({} = {})" of $target.out, $value.out .
+  Assign(op: "+=") : out = "({} = mknum(num_of({}) + num_of({})))"
+                             of $target.out, $target.out, $value.out .
+  Assign(op: "-=") : out = "({} = mknum(num_of({}) - num_of({})))"
+                             of $target.out, $target.out, $value.out .
+  Assign(op: "*=") : out = "({} = mknum(num_of({}) * num_of({})))"
+                             of $target.out, $target.out, $value.out .
+  Assign(op: "/=") : out = "({} = mknum(div_by(num_of({}), num_of({}))))"
+                             of $target.out, $target.out, $value.out .
+  Assign(op: "%=") : out = "({} = mknum(mod_by(num_of({}), num_of({}))))"
+                             of $target.out, $target.out, $value.out .
+  Assign(op: "^=") : out = "({} = mknum(pow(num_of({}), num_of({}))))"
+                             of $target.out, $target.out, $value.out .
+
+  (* The two builtins stage one has. `length` with no argument is the record. *)
+  Call(name: "int")    : out = "mknum((double)(long long)num_of({}))"
+                                 of join($args.out, "") .
+  (* `length` with no argument is the length of the record, so the record is
+   * put after the arguments and the first of them is taken -- which is how a
+   * notation with no conditional says "this, or that when there is no this". *)
+  Call(name: "length") : out = "mknum((double)strlen(str_of({})))"
+                                 of at([...$args.out, "fld_of(mknum(0))"], 1) .
+  Call ! true : "'{}' is stage two" of $name .
+
+  (* ---- statements ----
+   *
+   * **An expression is a statement too**, and the tree cannot say which it is:
+   * `x = 1` is an `Assign` whether it stands alone or sits inside another
+   * expression. So every node answers a `stmt` as well as an `out`, and the
+   * default -- what a node answers when its own rule works nothing out -- is
+   * the expression with a semicolon after it.
+   *
+   * That is `otherwise` doing exactly what it was added for: the statement
+   * kinds override it and the twenty-odd expression kinds do not have to say
+   * anything at all.
+   *)
+  otherwise stmt = "  {};\n" of $out
+
+  Block    : out = "  {{\n{}  }}\n" of join($body.stmt, "") : stmt = $out .
+  Break    : out = "  break;\n"    : stmt = $out .
+  Continue : out = "  continue;\n" : stmt = $out .
+
+  If(otherwise: nil) : out = "  if (truth_of({})) {{\n{}  }}\n"
+                               of $cond.out, $then.stmt
+                     : stmt = $out .
+  If      : out = "  if (truth_of({})) {{\n{}  }} else {{\n{}  }}\n"
+                    of $cond.out, $then.stmt, $otherwise.stmt
+          : stmt = $out .
+  While   : out = "  while (truth_of({})) {{\n{}  }}\n" of $cond.out, $body.stmt
+          : stmt = $out .
+  DoWhile : out = "  do {{\n{}  }} while (truth_of({}));\n"
+                    of $body.stmt, $cond.out
+          : stmt = $out .
+
+  (* A `for` part left out is nil, and C wants nothing there either. *)
+  (* A `for` part that was left out is a `Nothing`, which answers nothing, so
+   * the three parts are emitted the same way whether they are there or not.
+   * Only the condition needs asking about, because C wants no `truth_of` round
+   * an empty one -- and the question is whether it wrote anything.
+   *
+   * The attribute is not called `cond`, because the node's *field* is and a
+   * field is read before an attribute. The checks say so when a description
+   * tries it, which is how this one found out. *)
+  Nothing : out = "" .
+  For : test = lookup([[true, ""]], $cond.out = "", "truth_of({})" of $cond.out)
+      : out  = "  for ({}; {}; {}) {{\n{}  }}\n"
+                 of $init.out, $test, $step.out, $body.stmt
+      : stmt = $out .
+
+  (* `print` with nothing after it prints the record. Otherwise the values go
+   * into an array a counter fills, which is how an emitter with no way to
+   * count a list writes one out. *)
+  Print(args: [])  : out = "  {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
+                   : stmt = $out .
+  Print            : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_print(a, {}); }}\n"
+                             of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
+                                size($args)
+                   : stmt = $out .
+  Printf           : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_printf(&a[0], a + 1, {}); }}\n"
+                             of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
+                                size($args) - 1
+                   : stmt = $out .
+
+  (* ---- the shape of the program ----
+   *
+   * Each item answers three things and two of them are empty, which is how a
+   * list of mixed items is sorted into three places without asking what kind
+   * each one is.
+   *)
+  Begin : begins = join($body.stmt, "") : rules = "" : ends = "" : reads = ""
+        : stmt = "" .
+  End   : begins = "" : rules = "" : ends = join($body.stmt, "") : reads = "y"
+        : stmt = "" .
+
+  Rule(pattern: nil) : begins = "" : ends = "" : reads = "y" : stmt = ""
+                     : rules  = join($body.stmt, "") .
+  Rule(body: nil)    : begins = "" : ends = "" : reads = "y" : stmt = ""
+                     : rules  = "  if (truth_of({})) {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
+                                  of $pattern.out .
+  Rule               : begins = "" : ends = "" : reads = "y" : stmt = ""
+                     : rules  = "  if (truth_of({})) {{\n{}  }}\n"
+                                  of $pattern.out, join($body.stmt, "") .
+
+  (* A program of nothing but `BEGIN` does not read its input, which is what
+   * lets `awk 'BEGIN {{ print 1 }}' < /dev/tty` answer rather than wait. *)
+  Program : loop = lookup([[true, ""]], join($items.reads, "") = "",
+                          "  while (next_record()) {{\n{}  }}\n"
+                            of join($items.rules, ""))
+          : out = join([
+      "/* ---- the awk runtime, emitted by languages/awk/awk-c.phx ---- */",
+      "#include <stdio.h>",
+      "#include <stdlib.h>",
+      "#include <string.h>",
+      "#include <ctype.h>",
+      "#include <math.h>",
+      "",
+      "/* A value is a string and a number at once, which is the whole of awk's type",
+      "   system. `isnum` says the number is the one to use; `strnum` says the string",
+      "   came from input and looked like a number, so a comparison treats it as one. */",
+      "typedef struct { char *s; double n; int isnum, strnum; } Cell;",
+      "",
+      "static void *xmalloc(size_t n) {",
+      "    void *p = malloc(n);",
+      "    if (!p) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "    return p;",
+      "}",
+      "static char *dup_str(const char *s) { char *p = xmalloc(strlen(s)+1); strcpy(p, s); return p; }",
+      "",
+      "static Cell mkstr(const char *s) { Cell c; c.s = dup_str(s); c.n = 0; c.isnum = 0; c.strnum = 0; return c; }",
+      "static Cell mknum(double d)      { Cell c; c.s = 0; c.n = d; c.isnum = 1; c.strnum = 0; return c; }",
+      "static Cell uninit(void)         { Cell c; c.s = dup_str(\"\"); c.n = 0; c.isnum = 1; c.strnum = 1; return c; }",
+      "",
+      "/* Does this text look like a number all the way through? That is what makes a",
+      "   field compare as a number rather than as text. */",
+      "static int looks_numeric(const char *s, double *out) {",
+      "    char *end; const char *p = s;",
+      "    while (isspace((unsigned char)*p)) p++;",
+      "    if (!*p) return 0;",
+      "    double d = strtod(p, &end);",
+      "    if (end == p) return 0;",
+      "    while (isspace((unsigned char)*end)) end++;",
+      "    if (*end) return 0;",
+      "    if (out) *out = d;",
+      "    return 1;",
+      "}",
+      "",
+      "static Cell mkinput(const char *s) {",
+      "    Cell c = mkstr(s);",
+      "    double d;",
+      "    if (looks_numeric(s, &d)) { c.n = d; c.strnum = 1; }",
+      "    return c;",
+      "}",
+      "",
+      "static char *CONVFMT = \"%.6g\";",
+      "static char *OFMT    = \"%.6g\";",
+      "",
+      "/* A number's text: an integer has no decimal point whatever CONVFMT says,",
+      "   which is the rule that makes `print 1+1` say 2. */",
+      "static char *num_to_str(double d, const char *fmt) {",
+      "    char buf[64];",
+      "    if (d == (long long)d && fabs(d) < 1e18) snprintf(buf, sizeof buf, \"%lld\", (long long)d);",
+      "    else snprintf(buf, sizeof buf, fmt, d);",
+      "    return dup_str(buf);",
+      "}",
+      "static const char *to_str(Cell *c) {",
+      "    if (!c->s) c->s = num_to_str(c->n, CONVFMT);",
+      "    return c->s;",
+      "}",
+      "static const char *to_out(Cell *c) {   /* what `print` writes: OFMT, not CONVFMT */",
+      "    if (c->isnum && !c->strnum) return num_to_str(c->n, OFMT);",
+      "    return to_str(c);",
+      "}",
+      "static double to_num(Cell *c) {",
+      "    if (c->isnum || c->strnum) return c->n;",
+      "    double d = 0; looks_numeric(c->s, &d);",
+      "    if (!d) { char *e; d = strtod(c->s ? c->s : \"\", &e); }",
+      "    return d;",
+      "}",
+      "static int truthy(Cell *c) {",
+      "    if (c->isnum || c->strnum) return to_num(c) != 0;",
+      "    return c->s && c->s[0];",
+      "}",
+      "",
+      "/* POSIX: numeric when both sides are numbers, or came from input looking like",
+      "   one, or were never set. Otherwise the strings are compared. */",
+      "static int numericish(Cell *c) { return c->isnum || c->strnum; }",
+      "static int cmp_cells(Cell *a, Cell *b) {",
+      "    if (numericish(a) && numericish(b)) {",
+      "        double x = to_num(a), y = to_num(b);",
+      "        return x < y ? -1 : x > y ? 1 : 0;",
+      "    }",
+      "    return strcmp(to_str(a), to_str(b));",
+      "}",
+      "static Cell cat_cells(Cell *a, Cell *b) {",
+      "    const char *x = to_str(a), *y = to_str(b);",
+      "    char *p = xmalloc(strlen(x) + strlen(y) + 1);",
+      "    strcpy(p, x); strcat(p, y);",
+      "    Cell c; c.s = p; c.n = 0; c.isnum = 0; c.strnum = 0; return c;",
+      "}",
+      "",
+      "/* ---- the record, and its fields ---- */",
+      "",
+      "static char  *RECORD = 0;",
+      "static Cell  *FIELD  = 0;",
+      "static int    NFIELD = 0, FIELDCAP = 0;",
+      "static double NR = 0, NF = 0;",
+      "static char  *FS = \" \", *OFS = \" \", *ORS = \"\\n\";",
+      "",
+      "static void split_record(void) {",
+      "    NFIELD = 0;",
+      "    const char *p = RECORD;",
+      "    if (FS[0] == ' ' && FS[1] == 0) {",
+      "        for (;;) {",
+      "            while (*p == ' ' || *p == '\\t' || *p == '\\n') p++;",
+      "            if (!*p) break;",
+      "            const char *start = p;",
+      "            while (*p && *p != ' ' && *p != '\\t' && *p != '\\n') p++;",
+      "            if (NFIELD == FIELDCAP) {",
+      "                FIELDCAP = FIELDCAP ? FIELDCAP * 2 : 16;",
+      "                FIELD = realloc(FIELD, (size_t)FIELDCAP * sizeof *FIELD);",
+      "                if (!FIELD) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "            }",
+      "            char *t = xmalloc((size_t)(p - start) + 1);",
+      "            memcpy(t, start, (size_t)(p - start)); t[p - start] = 0;",
+      "            FIELD[NFIELD++] = mkinput(t);",
+      "        }",
+      "    } else {",
+      "        for (;;) {",
+      "            const char *start = p;",
+      "            while (*p && *p != FS[0]) p++;",
+      "            if (NFIELD == FIELDCAP) {",
+      "                FIELDCAP = FIELDCAP ? FIELDCAP * 2 : 16;",
+      "                FIELD = realloc(FIELD, (size_t)FIELDCAP * sizeof *FIELD);",
+      "                if (!FIELD) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "            }",
+      "            char *t = xmalloc((size_t)(p - start) + 1);",
+      "            memcpy(t, start, (size_t)(p - start)); t[p - start] = 0;",
+      "            FIELD[NFIELD++] = mkinput(t);",
+      "            if (!*p) break;",
+      "            p++;",
+      "        }",
+      "    }",
+      "    NF = NFIELD;",
+      "}",
+      "",
+      "static int next_record(void) {",
+      "    static char *line = 0; static size_t cap = 0;",
+      "    size_t len = 0;",
+      "    int ch;",
+      "    for (;;) {",
+      "        ch = getchar();",
+      "        if (ch == EOF && len == 0) return 0;",
+      "        if (ch == '\\n' || ch == EOF) break;",
+      "        if (len + 1 >= cap) { cap = cap ? cap * 2 : 128; line = realloc(line, cap); }",
+      "        line[len++] = (char)ch;",
+      "    }",
+      "    if (len + 1 >= cap) { cap = cap ? cap * 2 : 128; line = realloc(line, cap); }",
+      "    line[len] = 0;",
+      "    RECORD = dup_str(line);",
+      "    NR++;",
+      "    split_record();",
+      "    return 1;",
+      "}",
+      "",
+      "static Cell get_field(double which) {",
+      "    int i = (int)which;",
+      "    if (i == 0) return mkinput(RECORD ? RECORD : \"\");",
+      "    if (i < 1 || i > NFIELD) return uninit();",
+      "    return FIELD[i - 1];",
+      "}",
+      "",
+      "/* ---- output ---- */",
+      "",
+      "static void awk_print(Cell *a, int n) {",
+      "    for (int i = 0; i < n; i++) {",
+      "        if (i) fputs(OFS, stdout);",
+      "        fputs(to_out(&a[i]), stdout);",
+      "    }",
+      "    fputs(ORS, stdout);",
+      "}",
+      "",
+      "/* awk's printf: the format is walked and each conversion takes the next value",
+      "   as whatever that conversion wants. */",
+      "static void awk_printf(Cell *fmt, Cell *a, int n) {",
+      "    const char *f = to_str(fmt);",
+      "    int at = 0;",
+      "    char spec[64];",
+      "    while (*f) {",
+      "        if (*f != '%') { putchar(*f++); continue; }",
+      "        if (f[1] == '%') { putchar('%'); f += 2; continue; }",
+      "        size_t k = 0;",
+      "        spec[k++] = *f++;",
+      "        while (*f && !strchr(\"diouxXeEfgGcs\", *f) && k < sizeof spec - 2) spec[k++] = *f++;",
+      "        if (!*f) break;",
+      "        char conv = *f++;",
+      "        spec[k++] = conv; spec[k] = 0;",
+      "        Cell nothing = uninit();",
+      "        Cell *v = at < n ? &a[at++] : &nothing;",
+      "        switch (conv) {",
+      "        case 'd': case 'i': {",
+      "            spec[k - 1] = 'l'; spec[k] = 'l'; spec[k + 1] = 'd'; spec[k + 2] = 0;",
+      "            printf(spec, (long long)to_num(v)); break;",
+      "        }",
+      "        case 'o': case 'u': case 'x': case 'X': {",
+      "            spec[k - 1] = 'l'; spec[k] = 'l'; spec[k + 1] = conv; spec[k + 2] = 0;",
+      "            printf(spec, (long long)to_num(v)); break;",
+      "        }",
+      "        case 'e': case 'E': case 'f': case 'g': case 'G':",
+      "            printf(spec, to_num(v)); break;",
+      "        case 'c': {",
+      "            if (numericish(v) && !v->s) { spec[k - 1] = 'c'; spec[k] = 0; printf(spec, (int)to_num(v)); }",
+      "            else { const char *s = to_str(v); spec[k - 1] = 'c'; spec[k] = 0; printf(spec, s[0] ? s[0] : ' '); }",
+      "            break;",
+      "        }",
+      "        case 's': printf(spec, to_str(v)); break;",
+      "        }",
+      "    }",
+      "}",
+      "",
+      "/* ---- what emitted code calls ----",
+      "   Every expression in a compiled program is a `Cell`, and these take one by",
+      "   value so that the emitter never has to name a temporary. */",
+      "static double      num_of(Cell c)         { return to_num(&c); }",
+      "static const char *str_of(Cell c)         { return to_str(&c); }",
+      "static int         truth_of(Cell c)       { return truthy(&c); }",
+      "static int         cmp_of(Cell a, Cell b) { return cmp_cells(&a, &b); }",
+      "static Cell        cat_of(Cell a, Cell b) { return cat_cells(&a, &b); }",
+      "static Cell        fld_of(Cell i)         { return get_field(to_num(&i)); }",
+      "",
+      "static double div_by(double a, double b) {",
+      "    if (b == 0) { fputs(\"awk: division by zero\\n\", stderr); exit(2); }",
+      "    return a / b;",
+      "}",
+      "static double mod_by(double a, double b) {",
+      "    if (b == 0) { fputs(\"awk: division by zero in %\\n\", stderr); exit(2); }",
+      "    return fmod(a, b);",
+      "}",
+      "",
+      "static Cell post_step(Cell *v, double by) {",
+      "    double old = to_num(v);",
+      "    *v = mknum(old + by);",
+      "    return mknum(old);",
+      "}",
+      "static Cell pre_step(Cell *v, double by) {",
+      "    *v = mknum(to_num(v) + by);",
+      "    return *v;",
+      "}",
+      "static Cell assign_str(char **slot, Cell v) { *slot = dup_str(to_str(&v)); return v; }",
+              "",
+              $declarations,
+              "int main(void)",
+              "{",
+              $initialisers,
+              join($items.begins, ""),
+              $loop,
+              join($items.ends, ""),
+              "  return 0;",
+              "}"
+            ], "\n") .
+
+%driver c = functions, calls, globals, emit-c -> out .

@@ -96,19 +96,26 @@ program = { optnl i:item -> $i } optnl -> Program(items: $1) .
  * between two of anything. *)
 optnl = { newline | ";" } .
 
+(* **And a line break alone**, where a `;` means something. Inside a `for`
+ * header the semicolons are the header's own -- `for (;;)` has two and no
+ * statements -- so a rule that ate them would leave the second one looking for
+ * a third. POSIX writes `newline_opt` in exactly these places and this is the
+ * same distinction under a shorter name. *)
+nl = { newline } .
+
 item = "BEGIN" a:action -> Begin(body: $a)
      | "END"   a:action -> End(body: $a)
-     | "function" n:name "(" p:params ")" optnl a:action
+     | "function" n:name "(" p:params ")" nl a:action
          -> Function(name: $n, params: $p, body: $a)
      | p:pattern a:action -> Rule(pattern: $p, body: $a)
      | p:pattern          -> Rule(pattern: $p, body: nil)
      | a:action           -> Rule(pattern: nil, body: $a) .
 
-params = n:name { "," optnl m:name -> $m } -> [$n, ...$2]
+params = n:name { "," nl m:name -> $m } -> [$n, ...$2]
        | -> [] .
 
 (* `/from/,/to/` is a range: every line from one match to the next. *)
-pattern = a:expr "," optnl b:expr -> Range(from: $a, to: $b)
+pattern = a:expr "," nl b:expr -> Range(from: $a, to: $b)
         | e:expr                  -> $e .
 
 action = "{" s:statements "}" -> $s .
@@ -127,21 +134,29 @@ statement = "if" "(" c:expr ")" optnl t:statement optnl "else" optnl e:statement
               -> DoWhile(body: $b, cond: $c)
           | "for" "(" v:name "in" a:name ")" optnl b:statement
               -> ForIn(var: $v, array: $a, body: $b)
-          | "for" "(" i:forpart ";" optnl c:forpart ";" optnl u:forpart ")"
+          | "for" "(" i:forpart ";" nl c:forpart ";" nl u:forpart ")"
               optnl b:statement
               -> For(init: $i, cond: $c, step: $u, body: $b)
           | "break"    -> Break
           | "continue" -> Continue
           | "next"     -> Next
-          | "exit"   e:forpart -> Exit(value: $e)
-          | "return" e:forpart -> Return(value: $e)
+          | "exit"   e:optexpr -> Exit(value: $e)
+          | "return" e:optexpr -> Return(value: $e)
           | "delete" n:name "[" x:exprlist "]" -> Delete(array: $n, index: $x)
           | "delete" n:name -> DeleteAll(array: $n)
           | a:action -> Block(body: $a)
           | s:simple -> $s .
 
-(* The three places awk lets an expression be left out. *)
-forpart = e:expr -> $e | -> nil .
+(* A `for` header's three parts may each be left out, and an omitted one is a
+ * **node** rather than a nil: `lookup` is how this notation writes a
+ * conditional and it evaluates both answers, so a nil there would have to be
+ * asked about before it could be skipped. A node that renders as nothing is
+ * asked about by rendering it. *)
+forpart = e:expr -> $e | -> Nothing .
+
+(* `exit` and `return` are different: nothing follows them at all, and there is
+ * no third thing to render. *)
+optexpr = e:expr -> $e | -> nil .
 
 simple = "print"  a:printargs r:redirect -> Print(args: $a, to: $r)
        | "printf" a:printargs r:redirect -> Printf(args: $a, to: $r)
@@ -162,19 +177,19 @@ redirect = ">>" e:concat -> Append(file: $e)
  * parameterises a rule. awk's own grammar does exactly this, under the names
  * `unary_expr` and `non_unary_expr`; this is the same split with the same
  * cost, said once instead of twice. *)
-printargs = e:printitem { "," optnl f:printitem -> $f } -> [$e, ...$2]
+printargs = e:printitem { "," nl f:printitem -> $f } -> [$e, ...$2]
           | -> [] .
 
 printitem = t:lvalue o:assignop v:printitem -> Assign(target: $t, op: $o, value: $v)
           | pternary .
 
-pternary = c:pdisjunction "?" optnl t:pternary ":" optnl e:pternary
+pternary = c:pdisjunction "?" nl t:pternary ":" nl e:pternary
              -> Cond(cond: $c, then: $t, otherwise: $e)
          | pdisjunction .
 
-pdisjunction = pconjunction { "||" optnl a:pconjunction
+pdisjunction = pconjunction { "||" nl a:pconjunction
                                 -> Logical(op: "||", left: $$, right: $a) } .
-pconjunction = pmembership  { "&&" optnl a:pmembership
+pconjunction = pmembership  { "&&" nl a:pmembership
                                 -> Logical(op: "&&", left: $$, right: $a) } .
 pmembership  = pmatching { "in" a:name -> In(index: $$, array: $a) } .
 pmatching    = concat { o:matchop r:concat
@@ -188,13 +203,13 @@ expr = t:lvalue o:assignop v:expr -> Assign(target: $t, op: $o, value: $v)
 
 assignop = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" .
 
-ternary = c:disjunction "?" optnl t:ternary ":" optnl e:ternary
+ternary = c:disjunction "?" nl t:ternary ":" nl e:ternary
             -> Cond(cond: $c, then: $t, otherwise: $e)
         | disjunction .
 
-disjunction = conjunction { "||" optnl a:conjunction
+disjunction = conjunction { "||" nl a:conjunction
                               -> Logical(op: "||", left: $$, right: $a) } .
-conjunction = membership  { "&&" optnl a:membership
+conjunction = membership  { "&&" nl a:membership
                               -> Logical(op: "&&", left: $$, right: $a) } .
 
 membership = matching { "in" a:name -> In(index: $$, array: $a) } .
@@ -257,9 +272,9 @@ builtin = "length" | "substr" | "index" | "split" | "sub" | "gsub" | "match"
         | "int" | "rand" | "srand" | "tolower" | "toupper" | "system"
         | "close" | "fflush" .
 
-exprlist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2] .
+exprlist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2] .
 
-arglist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2]
+arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
         | -> [] .
 
 (* ------------------------------------------------------------------ *)
@@ -314,6 +329,7 @@ arglist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2]
   ForIn     : show = "for ({} in {}) {}" of $var, $array, $body.show .
   For       : show = "for ({}; {}; {}) {}"
                        of $init.show, $cond.show, $step.show, $body.show .
+  Nothing   : show = "" .
   Break     : show = "break" .
   Continue  : show = "continue" .
   Next      : show = "next" .

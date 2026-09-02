@@ -184,6 +184,36 @@ position is a line *and* a column at both ends or at neither. It is the second
 field on that node nothing has asked for yet, and both are there for the same
 reason: a shape that is right is cheaper to keep than a shape that is minimal.
 
+### 1.5 A runtime that is not a literal
+
+**Found by writing an awk backend**, and the first entry here that is about the
+*size* of something rather than about whether it can be said at all.
+
+`languages/pascal/pascal-c.phx` emits four `#include`s and Pascal's own types
+do the rest. `languages/awk/awk-c.phx` emits **two hundred lines of C** —
+awk's value model is a string and a number at once, and a compiled awk program
+has to carry it — held as a list of one-line literals and joined:
+
+```
+: runtime = join([
+    "typedef struct { char *s; double n; int isnum, strnum; } Cell;",
+    ...
+  ], "\n")
+```
+
+That works, it is readable line by line, and it is fifty times the size of the
+thing it is imitating. Nothing in the notation reads a file at emit time, so
+there is nowhere else to put it.
+
+**`%prelude "awk-runtime.c"` is the obvious answer and there is exactly one
+customer for it**, which is why this is written down rather than built. What to
+weigh when there is a second: a description that names a file it does not
+contain stops being one thing, and `-o` writing a compiler that needs a file
+beside it would be the end of *one file, no headers, no library*. A `%prelude`
+would have to be read and **frozen in** at emit time, like `%import` already
+is, which is a small mechanism with a sharp edge — the file is read when the
+description is, so a change to it is a change to the description.
+
 ---
 
 ## 2. Borrowed, and worth borrowing
@@ -451,6 +481,26 @@ arriving rather than as a puzzle.
 backend — three-way choices between a local, an outer slot and a global, an
 append-if-absent on four tables at once — without wanting an `if`. What gave
 way first was something else entirely: see 3.6.
+
+**But it has a shape, and awk found it.** `lookup` is a function, so **both
+answers are worked out** before it chooses. That is fine when both can be, and
+it is not when one of them cannot:
+
+```
+lookup([[true, ""]], $init = nil, "{};" of $init.out)    (* fails on the nil *)
+```
+
+A conditional would have skipped the branch it did not take. What was done
+instead is worth more than the `if` would have been: the **grammar** changed so
+that there is no nil. An omitted `for` part builds a `Nothing` node that renders
+as nothing, every part is emitted the same way whether it is there or not, and
+the question disappears rather than being answered.
+
+That is the third time the answer to "the notation cannot say this" has been
+"say something else earlier" — see [1.3](#13-a-way-for-a-description-to-share-a-computation)
+and [2.4](#24-inlining-a-block--from-solas). It is not proof that an `if` is
+never wanted. It is one more case where wanting one was a sign that a tree had
+the wrong shape.
 
 ### 3.6 Threaded and inherited wanted to be one thing
 

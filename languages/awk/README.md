@@ -125,13 +125,70 @@ builtin that POSIX awk has not got.
 So the entry that was waiting for this language got its answer, and the answer
 is no: what reference attributes would have bought is one walk instead of two.
 
+## The backend, stage one
+
+[`awk-c.phx`](awk-c.phx) compiles awk to C. It is **the first target here where
+a value is not a machine word**: `pascal-c.phx` emits four `#include`s and lets
+C's types do the work, and `solveig-sob.phx` emits opcodes for a machine that
+already knows what a value is. awk has one type and it is not C's, so a
+compiled awk program carries a runtime — 200 lines of it, held as a list of
+one-line literals in the description.
+
+```
+typedef struct { char *s; double n; int isnum, strnum; } Cell;
+```
+
+A string and a number at once, which is the whole of awk's type system.
+`isnum` says the number is the one to use; `strnum` says the string came from
+input and looked like a number, so a comparison treats it as one. That is what
+makes `$1 == 10` true for a field of ` 10 ` and `x == 0` *and* `x == ""` both
+true for a variable never set — and it is checked, against awk, in
+[`tests/backend/values.awk`](tests/backend/values.awk).
+
+**Stage one is** values, fields, the main loop, `print` and `printf`,
+arithmetic, comparison, concatenation and control flow. Arrays, functions,
+regular expressions, redirection, `getline`, `exit` and `next` are **refused by
+name** — [`tests/stage-two/`](tests/stage-two/) holds four programs that are
+valid awk and say which.
+
+```
+ok    6 awk programs compiled to C print what awk prints, 0 do not
+```
+
+That is the conformance rule with a third language under it: compiled by
+`awk-c.phx`, built by `cc`, and compared byte for byte with `/usr/bin/awk` on
+the same input.
+
+### Two things the backend taught the front end
+
+Writing it found two bugs in `awk.phx` that reading 800 lines of other people's
+awk had not:
+
+| | |
+| --- | --- |
+| `for (;;)` would not parse | the rule for "any number of newlines or semicolons between two things" was being used inside a `for` header, where the semicolons belong to the header. POSIX writes `newline_opt` there and this now has a separate `nl` for exactly that |
+| `For` shadowed its own fields | the emit pass named attributes `init`, `cond` and `step`, which are the node's *fields* — so nothing outside the pass could have seen them. Phoenix's own check said so |
+
+**A backend is the test a front end cannot be given any other way**, which is
+the argument for building one at all.
+
+### And one thing it taught the notation
+
+`lookup` is a function, so **both answers are worked out** before it chooses —
+which is fine until one of them cannot be. An omitted `for` part was a nil, and
+`"{};" of $init.out` on a nil is an error however the condition comes out.
+
+The fix was in the *grammar*, not the pass: an omitted part now builds a
+`Nothing` node that renders as nothing, so every part is emitted the same way
+whether it is there or not and the question disappears. See
+[ROADMAP 3.5](../../docs/ROADMAP.md).
+
 ## What it does not do
 
-**Compile anything.** This is a front end: a grammar, a tree, a check and a way
-to write it back out. `languages/solveig/` was built the same way round — a conformance
-suite, then a description that reads every program there is, then a backend —
-and the reason is that a backend for a language whose parse is wrong is a
-backend that has to be written twice.
+**Compile all of awk.** This is stage one: a grammar, a tree, a check, a way to
+write it back out, and a compiler for the part of the language that does not
+need a hash table or a regular expression engine. `languages/solveig/` was built the same way round, and the reason is
+that a backend for a language whose parse is wrong is a backend written twice.
 
 **`getline`**, which is refused rather than mis-read: it is the one construct
 in awk whose grammar depends on where it appears, and it appears nowhere in the

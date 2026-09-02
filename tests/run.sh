@@ -1093,6 +1093,28 @@ else
     printf '%s\n' "$orc" | sed 's/^/        /' | head -12
 fi
 
+# The conformance rule with a third language under it: awk compiled to C, run,
+# and compared with what `/usr/bin/awk` prints on the same input.
+if be=$("$root/languages/awk/tests/backend/run.sh" 2>&1); then
+    report pass "$(printf '%s' "$be" | tail -1)"
+else
+    report fail "awk compiled to C prints what awk prints"
+    printf '%s\n' "$be" | sed 's/^/        /' | head -12
+fi
+
+# Stage one is a subset, and what is outside it is refused **by name** rather
+# than mis-compiled. All four of these are valid awk.
+c="$root/languages/awk/awk-c.phx"
+t="$root/languages/awk/tests/stage-two"
+refuses "an array, which stage one does not have" "an array is stage two" \
+        --driver c "$c" "$t/arrays.awk"
+refuses "a function, likewise"                    "is stage two" \
+        --driver c "$c" "$t/functions.awk"
+refuses "a regular expression, likewise"          "a regular expression is stage two" \
+        --driver c "$c" "$t/regex.awk"
+refuses "output sent somewhere, likewise"         "redirecting output is stage two" \
+        --driver c "$c" "$t/redirect.awk"
+
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

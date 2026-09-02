@@ -445,7 +445,9 @@ static bool checks_fired(Run *r, Value *v, const PassRule *rule, Eval *e)
     return fired;
 }
 
-static void run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
+/* Answers whether a check on this node fired, so that what runs after it can
+ * stop too -- the same reason the rule's own clauses do. */
+static bool run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
 {
     Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r };
 
@@ -517,6 +519,7 @@ static void run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
             break;
         }
     }
+    return blocked;
 }
 
 /* Whether the rule a node matched has a clause for this attribute. That is
@@ -538,7 +541,7 @@ static bool rule_defines(const PassRule *rule, const char *attr)
  * reads a field before an attribute -- which is the reading that makes
  * `otherwise` mean "unless the node says otherwise" rather than "unless a
  * clause says otherwise". */
-static void run_defaults(Run *r, Value *v, const PassRule *rule)
+static void run_defaults(Run *r, Value *v, const PassRule *rule, bool blocked)
 {
     const Pass *p = r->pass;
     if (!p->ndefaults) return;
@@ -550,7 +553,10 @@ static void run_defaults(Run *r, Value *v, const PassRule *rule)
         const Clause *c = &p->defaults[i];
         if (rule_defines(rule, c->attr)) continue;
 
-        Value *got = eval_expr(&e, c->value);
+        /* A node whose check fired gets a failure here too. Working the
+         * default out would report consequences of the mistake already
+         * reported, which is the thing `checks_fired` exists to stop. */
+        Value *got = blocked ? value_error(r->a) : eval_expr(&e, c->value);
         if (!got) got = value_error(r->a);
 
         if (c->kind == C_THREAD) {
@@ -582,7 +588,7 @@ static void walk(Run *r, Value *v)
     const PassRule *rule = find_rule(r, v);
     r->node = v;
 
-    if (rule) run_clauses(r, v, rule, true);      /* entering: `down` */
+    if (rule) (void)run_clauses(r, v, rule, true);    /* entering: `down` */
 
     /* The bindings belong to this node; its children rebind for themselves. */
     const char **mine   = r->bound;
@@ -596,8 +602,9 @@ static void walk(Run *r, Value *v)
     r->bounds = minev;
     r->nbound = minen;
 
-    if (rule) run_clauses(r, v, rule, false);     /* leaving: everything else */
-    run_defaults(r, v, rule);
+    bool blocked = false;
+    if (rule) blocked = run_clauses(r, v, rule, false);  /* leaving: the rest */
+    run_defaults(r, v, rule, blocked);
 
     r->node   = outer_node;
     r->bound  = outer_bound;

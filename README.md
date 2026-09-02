@@ -687,7 +687,7 @@ lib/          modules any description may import
 languages/    one directory per language described
   pascal/       the grammar, a typechecker, a compiler to C, and its tests
   solveig/      a front end and a bytecode backend, against that project's own
-  awk/          pattern-action rules, checked against /usr/bin/awk
+  awk/          pattern-action rules, and a compiler to C, against /usr/bin/awk
   calc/         the smallest language worth having a compiler for
   phx/          the notation described in itself
 tests/        tests of Phoenix rather than of any language
@@ -705,12 +705,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 166 checks, covering 35 Pascal programs against fpc
+make test       # 171 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 164 of the 166 need only what is vendored here, and the two
+repository** — 169 of the 171 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -933,6 +933,7 @@ this description rewrites them:
 ```
 ok    14 awk programs parse, render, and parse to the same tree, 0 do not
 ok    7 awk programs and 6 other people wrote do the same thing rendered, 0 do not
+ok    6 awk programs compiled to C print what awk prints, 0 do not
 ```
 
 The second line is the one that earns its place. The first was green while two

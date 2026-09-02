@@ -2465,3 +2465,107 @@ mechanisms already there, used in an order nobody had tried.
 
 Three for three. The next entry that asks for a mechanism deserves the same
 question first: *what does the walk already know, and when does it know it?*
+
+## 2026-09-02 — awk compiled, and the first value that is not a machine word
+
+`languages/pascal/pascal-c.phx` has no runtime worth the name. Its entire
+preamble is four `#include`s, because Pascal's types *are* C's types: an
+`integer` becomes a `long` and C does the work. `languages/solveig/solveig-sob.phx`
+emits opcodes for a machine that already knows what a value is.
+
+**awk has one type and it is not C's.** Every value is a string and a number at
+once; `$1 == "10"` and `$1 == 10` differ by whether the field *looks* numeric;
+a variable never set is both `""` and `0`. None of that is optional — it is
+what awk programs are written against — so a compiled awk program carries a
+runtime, and `awk-c.phx` is mostly that runtime.
+
+```c
+typedef struct { char *s; double n; int isnum, strnum; } Cell;
+```
+
+Two hundred lines of C, written and checked against awk *before* being embedded,
+which is the only reason the rest went quickly. The subtle pair — a field of
+` 10 ` comparing equal to the number 10, and an unset variable comparing equal
+to both `0` and `""` — was right in the second attempt and has been right since.
+
+```
+ok    6 awk programs compiled to C print what awk prints, 0 do not
+```
+
+That is the conformance rule with a **third** language under it.
+
+### What the backend taught the front end
+
+Two bugs in `awk.phx` that reading 800 lines of other people's awk had not
+found:
+
+**`for (;;)` would not parse.** `optnl` — "any number of newlines or
+semicolons" — is right between statements and wrong inside a `for` header,
+where the semicolons belong to the header: the rule ate the second one and then
+the grammar wanted a third. POSIX writes `newline_opt` in exactly those places,
+and there is now an `nl` for exactly that. Fourteen awk programs had
+round-tripped without touching it, because none of them writes an empty `for`.
+
+**`For` shadowed its own fields.** The emit pass named attributes `init`,
+`cond` and `step`, which are that node's *fields* — a field is read before an
+attribute, so nothing outside the pass could ever have seen them. Phoenix's own
+check said so the first time the description was read, which is the check
+earning its place a second time.
+
+**A backend is the test a front end cannot be given any other way.** That is
+the argument for building one rather than admiring the tree.
+
+### The conditional that evaluates both answers
+
+`lookup` is a function, so both answers are worked out before it chooses. That
+is fine until one of them cannot be:
+
+```
+lookup([[true, ""]], $init = nil, "{};" of $init.out)
+```
+
+An omitted `for` part was a nil, and `.out` of a nil is an error however the
+condition comes out. [3.5](ROADMAP.md) says there is no `if` and that the first
+thing it cannot express should be recognised as a decision arriving. This is
+not that. The fix was in the **grammar**: an omitted part now builds a
+`Nothing` node that renders as nothing, so every part is emitted the same way
+whether it is there or not and the question stops being asked.
+
+Third time the answer to *"the notation cannot say this"* has been *"say
+something else, earlier"*. 1.3 wanted a map and got an attribute; 2.4 wanted a
+special case and got a rewrite; this wanted a conditional and got a node.
+
+### And a second customer for `otherwise`
+
+An expression is a statement too, and the tree cannot say which: `x = 1` is an
+`Assign` whether it stands alone or sits inside something. So every node
+answers a `stmt` as well as an `out`, and the default is *the expression with a
+semicolon after it*:
+
+```
+otherwise stmt = "  {};\n" of $out
+```
+
+Nine statement kinds override it; the twenty-odd expression kinds say nothing.
+That is `otherwise` in a second language, doing the thing it was added for, and
+it is the strongest evidence yet that [1.3](ROADMAP.md) landed on the right
+mechanism.
+
+It also found a rough edge in it: a node whose **check fired** was still having
+its defaults worked out, so a refused node reported its refusal and then a
+consequence of it. `run_defaults` takes the block now, for the same reason
+`run_clauses` always has — one mistake, one message.
+
+### The two hundred lines, and where they live
+
+The runtime is a list of one-line literals joined with newlines. It is exactly
+what `pascal-c.phx` does with its four `#include`s and it is fifty times the
+size, which is the first time the shape has been big enough to argue about.
+Nothing in the notation reads a file at emit time, so there is nowhere else to
+put it.
+
+[1.5](ROADMAP.md) is the entry for that, and it is written down rather than
+built because there is **one** customer. What it would cost is on the page: a
+description that names a file it does not contain stops being one thing, and
+`-o` writing a compiler that needs a file beside it would be the end of *one
+file, no headers, no library*.
