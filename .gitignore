@@ -5,3 +5,6 @@ bin/
 # scratch/ is Hans's own: test files and notes, not part of the repository.
 # Nothing here reads it.
 scratch/
+
+# Where the oracle scripts run programs and put what they produce.
+build/

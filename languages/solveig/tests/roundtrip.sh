@@ -22,7 +22,7 @@ phx="$root/bin/phx"
 desc="$root/languages/solveig/solveig.phx"
 sol=${SOLVEIG:-$root/../Solveig}
 
-tmp=$(mktemp -d)
+tmp="$root/build/roundtrip"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 files="$here/conformance/*.sol"

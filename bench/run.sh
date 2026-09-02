@@ -11,7 +11,7 @@
 set -u
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 phx="$root/bin/phx"
-tmp=$(mktemp -d)
+tmp="$root/build/bench"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 grammar=${1:-"$root/languages/pascal/pascal.phx"}

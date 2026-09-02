@@ -21,6 +21,7 @@
 
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 sol=${SOLVEIG:-$here/../../../../../Solveig}
 
 if [ ! -x "$sol/bin/solas" ] || [ ! -x "$sol/bin/solvm" ]; then
@@ -28,7 +29,7 @@ if [ ! -x "$sol/bin/solas" ] || [ ! -x "$sol/bin/solvm" ]; then
     exit 0
 fi
 
-tmp=$(mktemp -d)
+tmp="$root/build/conformance"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 accept=no

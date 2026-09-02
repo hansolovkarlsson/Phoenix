@@ -86,7 +86,9 @@ echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
 warns "a fragment not declared one"     "%fragment"       "$root/tests/grammars/fragment-forgotten.phx"
 
-tmp0=$(mktemp -d)
+# Scratch lives **inside this repository**, not in /var and never beside a
+# source file somewhere else: a test that writes has to write here.
+tmp0="$root/build/suite"; rm -rf "$tmp0"; mkdir -p "$tmp0"
 trap 'rm -rf "$tmp0" "${tmp:-}"' EXIT
 
 echo "imports"
@@ -262,7 +264,7 @@ else
     report fail "interpreted" "got '$want', wanted 97"
 fi
 
-tmp=$(mktemp -d)
+tmp="$root/build/suite-2"; rm -rf "$tmp"; mkdir -p "$tmp"
 
 # `{ statement }` matched exactly once must still be a list. The `.phx` author
 # cannot know how many statements a block will hold, so the grammar decides the

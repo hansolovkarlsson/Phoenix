@@ -32,7 +32,7 @@ if ! command -v fpc >/dev/null 2>&1; then
     exit 0
 fi
 
-tmp=$(mktemp -d)
+tmp="$root/build/pascal-oracle"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 pass=0
