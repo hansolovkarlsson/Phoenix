@@ -1348,7 +1348,7 @@ me rather than `solas`.
 ## 2026-09-01 — the Solveig front end, and what a second language proved
 
 `languages/solveig/solveig.phx` is the published grammar with `->` clauses
-added. **Eighteen node types where Pascal needed fifty-one**, because Solveig
+added. **Fifteen node types where Pascal needed fifty-one**, because Solveig
 has one thing that happens and Pascal has many.
 
 Every `.sol` file there is — 75 of them, including a 2,800-line compiler

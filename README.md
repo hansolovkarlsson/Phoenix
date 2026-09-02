@@ -60,12 +60,15 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**All six stages are done.** Phoenix reads a description, and either runs it —
+**All seven stages are done.** Phoenix reads a description, and either runs it —
 parsing a file, checking it, compiling it — or writes it out as a C program
-that does the same thing without Phoenix.
+that does the same thing without Phoenix. What a description compiles *to* is
+its own business: C, another language, or a binary — Solveig's `.sob` bytecode
+is emitted by [a description](languages/solveig/solveig-sob.phx), not by
+Phoenix.
 
 ```sh
-phx languages/pascal/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 7,400 lines
+phx languages/pascal/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 10,000 lines
 cc pasc.c -o pasc                     # no flags, no headers, no library
 ./pasc prog.pas > prog.c && cc prog.c -o prog && ./prog
 ```
@@ -535,11 +538,15 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 112 checks (35 against fpc, 12 against Solveig), including Solveig's pascal.bnf when it is present
+make test       # 113 checks, covering 35 Pascal programs against fpc
+                #   and 50 Solveig programs against solas
 ```
 
-C11, no dependencies, and the test suite is hermetic — it reads nothing outside
-this repository.
+C11 and no dependencies. **The suite passes with nothing outside this
+repository** — 111 of the 113 need only what is vendored here, and the two
+that drive `solas` and `solvm` over the Solveig repository report themselves
+skipped when it is absent rather than failing. `SOLVEIG=` says where to find
+it.
 
 ## What Phoenix emits, and what it is not tied to
 
@@ -687,11 +694,14 @@ again:
 
 ### And what a second oracle found
 
-`solas` and `solvm` do for Solveig what `fpc` does for Pascal, and the test is
-stronger: not "does the output read correctly" but "does the compiled program
-print the same thing". It found two bugs in the front end and one in Phoenix
-itself, and **none of the three was reachable by rendering the tree back to
-source**:
+Thirty-five Pascal programs agree with `fpc` now, and five more that are
+outside the subset are refused loudly rather than mistranslated.
+
+`solas` and `solvm` do the same for Solveig, and the test is stronger: not
+"does the output read correctly" but "does the compiled program print the same
+thing". Fifty programs compile to bytecode that prints what `solas`'s does. It
+found two bugs in the front end and one in Phoenix itself, and **none of the
+three was reachable by rendering the tree back to source**:
 
 | | |
 | --- | --- |

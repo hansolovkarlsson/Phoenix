@@ -86,7 +86,7 @@ test only ever asks about the middle.
 
 [`solveig.phx`](solveig.phx) is the published grammar —
 `programs/check_syntax/solum.bnf`, kept unmodified in
-[`tests/grammar/`](tests/grammar/) — with `->` clauses added. **Eighteen node
+[`tests/grammar/`](tests/grammar/) — with `->` clauses added. **Fifteen node
 types**, where Pascal needed fifty-one, because Solveig has one thing that
 happens and Pascal has many.
 

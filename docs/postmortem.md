@@ -6,7 +6,7 @@ evidence. A prediction that held is worth as little as one that failed unless
 both are written down; this file is where the scoring happens.*
 
 Phoenix is ~10,000 lines of C11 with no dependencies. The descriptions written
-against it come to ~2,900 lines: Pascal in 780 (53 node types, a checker and
+against it come to ~2,900 lines: Pascal in 780 (51 node types, a checker and
 two backends), Solveig in 312 (15 node types) with a 372-line bytecode
 backend, and Phoenix's own notation in 242.
 
