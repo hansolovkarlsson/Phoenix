@@ -1,0 +1,39 @@
+(* A rewrite: the roadmap's first customer for one, and the smallest thing
+ * that shows why a strategy has to be said out loud.
+ *
+ * `2 + 3 * 4 + 1` folds to `15` bottom-up and to `((2 + 12) + 1)` top-down,
+ * because top-down asks about the outside of an expression before its inside
+ * and stops one level short of an answer. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+op     = "+" | "*" .
+space  = " " { " " } .
+%skip space .
+
+%syntax .
+%start expression .
+
+expression = term { "+" t:term -> Binary(op: "+", left: $$, right: $t) } .
+term       = factor { "*" f:factor -> Binary(op: "*", left: $$, right: $f) } .
+factor     = number -> Number(text: $1) .
+
+%rewrite fold bottomup
+  Binary(op: "+", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) + int($b))) .
+  Binary(op: "*", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) * int($b))) .
+
+%rewrite outside-in topdown
+  Binary(op: "+", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) + int($b))) .
+  Binary(op: "*", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) * int($b))) .
+
+%pass show
+  Number : out = "{}" of $text .
+  Binary : out = "({} {} {})" of $left.out, $op, $right.out .
+
+%driver plain   = show -> out .
+%driver folded  = fold, show -> out .
+%driver partial = outside-in, show -> out .

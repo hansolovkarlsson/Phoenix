@@ -104,11 +104,11 @@ for Solveig.
 
 ### What the numbers are
 
-- 135 tests, 0 failing
+- 147 tests, 0 failing
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
 - every `.sol` file in the Solveig repository round-trips to an identical tree
-- 66 Solveig programs compile to bytecode that prints what `solas`'s does, byte
+- 68 Solveig programs compile to bytecode that prints what `solas`'s does, byte
   for byte, tracebacks included
 
 ---
@@ -130,10 +130,11 @@ sharper: **a value computed for every element of a list**. `each` applies a
 template, and a template can only write an element out.
 
 `sizes` and `bytes`-over-a-list are two cases of that answered one at a time,
-and a third — a `lookup` per element, which a chunk holding two files needs —
-is still open, so the file table is written only when a chunk is about one
-file. Three cases in one stage is what a missing mechanism looks like from the
-inside, and it is why roadmap 1.3 is now the entry to read again.
+and two are still open — a `lookup` per element, which a chunk holding two
+files needs for its file table, and a run per element, which a statement
+holding an inlined block needs for its line table. **They are the only thing
+left between `languages/solveig/` and an oracle it agrees with on every byte**,
+which is as concrete as this gets. Roadmap 1.3 is the entry to read again.
 
 **No forward references.** An attribute cannot refer to a node the walk has
 not reached. Several passes and a `%driver` are the answer, which is what a

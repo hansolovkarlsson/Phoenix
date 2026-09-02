@@ -776,11 +776,15 @@ static bool read_file(Reader *r, const char *path)
             else if (strcmp(d->text, "include")    == 0) {
                 if (!read_include(r, d)) return false;
             }
+            else if (strcmp(d->text, "rewrite")    == 0) {
+                if (!read_rewrite(r, d)) return false;
+                continue;
+            }
             else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
-                          "%%skip %%start %%ignorecase %%pass %%import "
-                          "%%require %%driver %%include");
+                          "%%skip %%start %%ignorecase %%pass %%rewrite "
+                          "%%import %%require %%driver %%include");
                 return false;
             }
 

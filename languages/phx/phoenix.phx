@@ -134,6 +134,8 @@ directive-item = "%tokens" "."     -> Tokens
                | "%import" p:literal "." -> Import(path: $p)
                | "%include" t:name f:name "." -> Include(type: $t, field: $f)
                | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)
+               | "%rewrite" n:name h:name r:{ rewrite-rule }
+                   -> RewriteBlock(name: $n, how: $h, rules: $r)
                | "%driver" n:name "=" p:name { "," q:name -> $q }
                    a:answer "." -> Driver(name: $n, passes: [$p, ...$5], answer: $a) .
 
@@ -191,12 +193,20 @@ check-clause = "!" c:action ":" m:action -> Check(when: $c, message: $m) .
 
 pattern = t:name "(" f:field-pattern { "," g:field-pattern -> $g } ")"
             -> Shape(type: $t, fields: [$f, ...$4])                (* order *)
+        | "[" "]" -> MatchList(items: [])
+        | "[" p:pattern { "," q:pattern -> $q } "]"
+            -> MatchList(items: [$p, ...$3])
         | name    -> Kind(type: $1)
         | literal -> MatchText(text: $1)
         | integer -> MatchInteger(text: $1)
         | "_"     -> Anything .
 
 field-pattern = f:word ":" p:pattern -> FieldPattern(field: $f, is: $p) .
+
+(* A rewrite rule is the two halves a pass clause already had -- a pattern that
+ * tests and binds, and an expression that builds -- with `=>` between them
+ * rather than an attribute's name. *)
+rewrite-rule = p:pattern "=>" a:action "." -> Rewriting(pattern: $p, to: $a) .
 
 (* ---- the expression language ---- *)
 

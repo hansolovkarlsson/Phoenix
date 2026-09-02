@@ -120,27 +120,31 @@ cannot express *at all*:
 > say "for each of these, this expression of it".
 
 Two library entries covered the cases the `.sob` line table needed — the size
-of each element, and each of a column of numbers as fixed-width bytes — and one
-case is still open, because it is a `lookup` per element: a chunk holding code
-from two files needs a run per statement naming a row of a table of the
-distinct files, and a description cannot compute that column. The `.sob` file
-table is therefore written only when a chunk is about one file, which is the
-honest answer rather than a wrong file name.
+of each element, and each of a column of numbers as fixed-width bytes — and two
+are still open, both of them the reason this backend is not byte-for-byte with
+`solas`:
 
-That the fix was **two library entries and then a third case it did not
-cover** is the argument for reading this entry again. A map with an expression
-would have covered all three at once, and it is the mechanism this page keeps
-warning about.
+| | |
+| --- | --- |
+| a **`lookup` per element** | the file table of a chunk holding code from two files: a run per statement naming a row of a table of the distinct files |
+| a **run per element** | the line table of a chunk whose statement holds an inlined block, which holds several lines |
 
-Still worth waiting for a second *language* before deciding, but the evidence
-has moved: it is no longer only about repetition.
+**This is now the only entry between `languages/solveig/` and an oracle it
+agrees with on every byte**, which is as concrete as this page gets about
+anything. Three stages have each ended at it, and the fix each time was either
+a library entry or the same line of notation once per node type.
+
+Still worth waiting for a second *language* before deciding what the mechanism
+is. But the evidence has moved twice: it is no longer only about repetition,
+and it is no longer only about tidiness.
 
 ---
 
 ## 2. Borrowed, and worth borrowing
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
-whose.
+whose. Two of the four are done, and the two that are not are the two this page
+has twice said to be sceptical about.
 
 ### 2.1 Reference attributes — from JastAdd
 
@@ -177,20 +181,40 @@ it, along with the cycle detection that walking once avoided —
 [journal.md](journal.md#2026-09-01--stage-2-and-one-thing-the-sketch-got-wrong)
 records why that was dropped.
 
-### 2.2 Strategies — from Stratego
+### 2.2 Strategies — from Stratego — **done**
 
-The `%rewrite` deferred on day one, with the vocabulary already worked out:
-`topdown`, `bottomup`, `innermost`.
+The `%rewrite` deferred on day one, with the vocabulary this entry had already
+worked out and kept: `topdown`, `bottomup`, `innermost`.
 
 ```
 %rewrite fold bottomup
   Binary(op: "+", left: Number(text: a), right: Number(text: b))
-    => Number(text: text(int(a) + int(b))) .
+    => Number(text: text(int($a) + int($b))) .
 ```
 
-**Most of the machinery is already built.** Patterns match on shape and bind, so
-what is missing is a traversal that replaces rather than decorates. Constant
-folding is the first customer and the reason to want it.
+**"Most of the machinery is already built" was right**, which is the rarer kind
+of prediction on this page. Patterns match on shape and bind, the evaluator
+builds nodes; what was missing was a traversal that puts the answer back, and
+`run.c` grew about a hundred lines and a second entry point. There is one
+matcher and one evaluator, so a rewrite and a pass cannot disagree about what a
+pattern means.
+
+Constant folding was named here as the first customer.
+[`tests/grammars/fold.phx`](../tests/grammars/fold.phx) is that, and it is
+where the strategy earns being a word rather than a default: `2 + 3 * 4 + 1`
+folds to `15` bottom-up and stops at `((2 + 12) + 1)` top-down.
+
+**The customer that mattered was [2.4](#24-inlining-a-block--from-solas)**, and
+it is the argument for this being a rewrite rather than another kind of pass. A
+clause answers *about* a node. Some things are answered by there being a
+different node, and inlining is one: the block in the way is not something to
+compile differently, it is something that should not be there.
+
+One thing this entry did not anticipate: it needed **list patterns**. A value
+can be a list and a pattern could not be one, so `Send(args: [Block(params:
+[])])` — which is exactly the shape an optimisation asks about — was not
+sayable. Patterns now cover every value kind, which is what they should always
+have done.
 
 ### 2.3 Scope graphs — from Statix
 
@@ -206,34 +230,44 @@ path you reached it by. Pascal has none of those. Nothing has yet asked for
 this, and after the `with` case it is worth being sceptical that the next thing
 will either.
 
-### 2.4 Inlining a block — from `solas`
+### 2.4 Inlining a block — from `solas` — **done**
 
-**Found by 1.0 rather than by design**, which is why it is here rather than in
-the warts: `@include` made 24 more programs compilable, and two of them cross a
-line the others never reach. [1.1](#11-a-nodes-position-reachable-from-a-clause)
-then made it the *only* remaining disagreement about a traceback, which is what
-turns this from a curiosity into the next thing worth doing.
+`solas` compiles the block of an `ifTrue:`, an `ifFalse:`, an `ifElse:`, an
+`and:`, an `or:`, a `whileTrue:` and a `doUntil:` **into the enclosing chunk**,
+behind a jump, whenever every block is written right there with no parameters
+and no temporaries. `languages/solveig/solveig-sob.phx` now does the same, and
+the whole of it is a `%rewrite` of seven rules and a clause for each node it
+builds.
 
-`solas` compiles the block of an `ifTrue:`, a `whileTrue:`, an `and:` and an
-`or:` **into the enclosing chunk**, behind a jump. `languages/solveig/solveig-sob.phx`
-compiles every block as a block. The bytes differ and what a program prints does
-not — the two agree over sixty-six programs byte for byte — except in three
-places where a block that is really a block is visible:
+**The rewrite is what made it small, and the size of the alternative is the
+point.** Written as clauses on the existing tree, an inlined block would still
+be a `Block` node — which opens a chunk, starts fresh name and constant tables,
+and pushes a frame's worth of slots. Every one of those would have had to
+become a `lookup` on whether the parent inlined it: about thirty of them, in
+the most intricate rule in the description. Taking the node *out of the tree*
+costs nothing instead: what is left is a list of statements where the send was,
+and it compiles in the enclosing frame because that is the frame it is in.
+`OP_OUTER` depths come out right without anything adjusting them, for the
+reason `solas` gives for the same thing.
+
+What it fixed, measured against the oracle:
 
 | | |
 | --- | --- |
-| a traceback | an inlined block is a frame that is not there, and the frame around it points at the statement the block is written in rather than at the send inside it. **Since [1.1](#11-a-nodes-position-reachable-from-a-clause) this is the only thing left that a traceback disagrees about**, and it is counted rather than normalised: seven programs differ in a traceback line and in nothing else |
-| the format's nesting limit | `.sob` allows blocks 16 deep. `programs/pascal.sol` nests 19 and `solas` inlines its way under; this backend cannot, and the loader refuses what it writes |
-| the call depth | `programs/basic.sol` is a BASIC interpreter whose own suite calls something recursive until the machine stops it, and prints what happened. One extra frame per level means it stops one test earlier |
+| the format's nesting limit | `programs/pascal.sol` nested blocks 19 deep where `.sob` allows 16, and the loader refused what this backend wrote. It compiles and agrees now |
+| the call depth | `programs/basic.sol` calls something recursive until the machine stops it and prints what happened; one extra frame per level stopped it a test earlier. It agrees now |
+| the frames in a traceback | an inlined block is a frame that is not there, and there are no longer any extra ones |
 
-**It is not a miscompile and it is not urgent.** What makes it worth an entry is
-that it is the first thing the `.sob` backend cannot express rather than has not
-got round to: an inlined block needs a jump over code that is *in the middle of
-the chunk being built*, and every clause so far has answered with bytes that are
-complete when the clause runs. Whether that is a gap in the notation or in that
-description is exactly the question [1.3](#13-a-way-for-a-description-to-share-a-computation)
-says to wait for a second example before answering, and this is a second
-example of a different thing.
+**Sixty-eight programs print exactly what `solas`'s bytecode prints.** Seven
+still differ, and *the cause is no longer this entry* — see
+[1.3](#13-a-way-for-a-description-to-share-a-computation), which is now the
+only thing between this backend and an oracle it agrees with on every byte:
+
+- **six lose the file name.** Their top-level chunk holds code from more than
+  one file, and the file table for that is a `lookup` per element of a list.
+- **the line is the enclosing statement's.** A chunk's line table is a run per
+  statement, and a statement holding an inlined block holds several lines.
+  Splitting it is a run computed per element of a list.
 
 ---
 
@@ -357,6 +391,14 @@ else can be called that, so a field or an attribute of that name is refused.
 The cost of a reserved word is real and is the kind this project prefers to
 state rather than to hide — [5](#5-known-warts) already says so about `and`
 and `or`.
+
+`%rewrite` brought three more, and all three are about a **stage**: a driver
+names one by its name, so two rewrites of one name, or a rewrite sharing a
+pass's, is refused; and a rewrite reading `.something` a pass computes is
+refused, because a rewrite runs to change the tree rather than to answer about
+one and the walk it would be reading has not happened. The ordering hazard is
+checked in a rewrite exactly as it is in a pass, since both try their rules in
+order and the first match wins.
 
 The first is a warning and the other two are errors, because the first is legal
 and merely almost never meant.

@@ -284,10 +284,42 @@ refuses "a field called 'pos'" "what every node says its position with" \
 refuses "a clause defining 'pos'" "a clause cannot define one" \
         "$root/tests/grammars/pos-is-an-attribute.phx"
 
+echo "patterns over lists"
+# A pattern for every value kind. A value can be a list, so a pattern has to be
+# able to be one -- and without it there is no way to ask about a field holding
+# several things, which is exactly the question an optimisation asks.
+lp="$root/tests/grammars/list-patterns.phx"
+prints "a list of one"        "one: 5"        "$lp" "$root/tests/sources/one.txt"
+prints "a list of two"        "two: 3 5"      "$lp" "$root/tests/sources/two-cells.txt"
+prints "a value inside one"   "seven and 3"   "$lp" "$root/tests/sources/pair.txt"
+prints "a longer list"        "many"          "$lp" "$root/tests/sources/three-cells.txt"
+refuses "a list pattern above a narrower one" "can never match" \
+        "$root/tests/grammars/list-pattern-order.phx"
+
+echo "rewrites"
+# A pass decorates; a rewrite replaces. Both halves were already here --
+# patterns match on shape and bind, the evaluator builds nodes -- so what this
+# adds is a traversal that puts the answer back.
+fold="$root/tests/grammars/fold.phx"
+arith="$root/tests/sources/arithmetic.txt"
+prints "the tree as it was read" "((2 + (3 * 4)) + 1)" --driver plain   "$fold" "$arith"
+prints "folded bottom-up"        "15"                  --driver folded  "$fold" "$arith"
+# Top-down asks about the outside before the inside, and stops one level short.
+# Which is why the strategy is a word rather than a default.
+prints "and top-down, which is not the same" "((2 + 12) + 1)" \
+       --driver partial "$fold" "$arith"
+
+refuses "an innermost rewrite that never settles" "and is still going" \
+        "$root/tests/grammars/rewrite-runaway.phx" "$root/tests/sources/one.txt"
+refuses "a rewrite reading an attribute" "rather than what a pass worked out" \
+        "$root/tests/grammars/rewrite-reads-attribute.phx"
+refuses "a rewrite named like a pass" "is a pass as well as a rewrite" \
+        "$root/tests/grammars/rewrite-named-twice.phx"
+
 echo "drivers"
 refuses "a driver in the wrong order" "nothing before it defines one" \
         "$root/tests/grammars/misordered-driver.phx"
-refuses "a driver naming no such pass" "there is no such pass" \
+refuses "a driver naming no such stage" "no pass or rewrite of that name" \
         "$root/tests/grammars/no-such-pass.phx"
 refuses "a driver answering with nothing" "none of its passes defines one" \
         "$root/tests/grammars/driver-no-answer.phx"
@@ -502,6 +534,21 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
     fi
 else
     report fail "one file, no flags, no headers" "it did not compile"
+fi
+
+# A rewrite is frozen into a generated compiler like everything else, and a
+# driver names its stages without caring which kind each one is.
+if "$phx" "$root/tests/grammars/fold.phx" -o "$tmp0/fold.c" 2>/dev/null \
+   && cc -o "$tmp0/foldc" "$tmp0/fold.c" 2>/dev/null; then
+    a=$("$phx" --driver folded "$root/tests/grammars/fold.phx" "$arith" 2>/dev/null)
+    b=$("$tmp0/foldc" --driver folded "$arith" 2>/dev/null)
+    if [ "$a" = "$b" ] && [ "$a" = "15" ]; then
+        report pass "a generated compiler runs a rewrite"
+    else
+        report fail "a generated compiler runs a rewrite" "phx '$a', it '$b'"
+    fi
+else
+    report fail "a generated compiler runs a rewrite" "it did not build"
 fi
 
 # A generated compiler follows includes too, and has to: whether one file

@@ -213,6 +213,48 @@ of that name is refused when it is read.
 `.` over a list already means "that of each", so `$body.pos.line` is a column
 of line numbers — which is what a table in a binary format is written out of.
 
+## Patterns
+
+A pattern tests and binds at once, and there is one for every kind a value can
+be:
+
+| | |
+| --- | --- |
+| `Binary`, `Binary(op: "+")` | a node of that type; a field written with a value tests it, with a name binds it, left out is not looked at |
+| `[ a, b ]`, `[]` | a list of **exactly** that many, each element matching |
+| `"text"`, `45`, `true`, `nil` | that value |
+| `name` | anything, bound to that name |
+| `_` | anything |
+
+Rules are tried **in order and the first match wins**, in a pass and in a
+rewrite alike — which is why a general pattern above a specific one is refused
+rather than silently taking every case the specific one was for.
+
+## Rewriting
+
+A `%pass` works out attributes and leaves the tree as it is. A `%rewrite`
+replaces a node with what its `=>` builds:
+
+```
+%rewrite fold bottomup
+  Binary(op: "+", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) + int($b))) .
+```
+
+It sees what its pattern bound, `$pos`, and the fields of the node it matched —
+and nothing a pass worked out, because it runs to change the tree rather than
+to answer about one. The built node takes the position of the node it replaces,
+so a later diagnostic points at the program rather than at the rule.
+
+| | |
+| --- | --- |
+| `bottomup` | children first, then this node, once |
+| `topdown` | this node first, then the children of whatever it became |
+| `innermost` | bottom-up, and again on the result until nothing matches |
+
+`innermost` is the only one that can fail to settle, and it stops with a
+message rather than running forever.
+
 ## Attributes, and when each one runs
 
 One walk, post-order, two phases at each node:

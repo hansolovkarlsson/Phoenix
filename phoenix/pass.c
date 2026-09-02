@@ -97,6 +97,29 @@ static Pattern *read_pattern(Reader *r)
         return p;
     }
 
+    /* `[ a, b ]`, and `[]` for the empty one. Exactly that many: a pattern
+     * that matched a *prefix* would be a second rule about lists to know, and
+     * every question asked of one so far is about all of it. */
+    case T_LBRACK: {
+        advance(r);
+        Pattern *p = pat_new(r, P_LIST, t->pos);
+
+        while (!at(r, T_RBRACK)) {
+            Pattern *kid = read_pattern(r);
+            if (!kid) return NULL;
+            pat_add(r, p, NULL, kid);
+
+            if (at(r, T_COMMA)) { advance(r); continue; }
+            break;
+        }
+        if (!at(r, T_RBRACK)) {
+            diag_error(r->src, peek(r)->pos, "expected ']' or ',' in a list pattern");
+            return NULL;
+        }
+        advance(r);
+        return p;
+    }
+
     case T_MINUS: {
         advance(r);
         if (!at(r, T_NUMBER)) {
@@ -310,6 +333,91 @@ static bool read_one_pass(Reader *r, Pass *p)
 
 /* ------------------------------------------------------------------ */
 /* `%driver c = typecheck, emit-c -> out .` */
+
+/* ------------------------------------------------------------------ */
+/* `%rewrite name strategy` and then `pattern => action .` until the next
+ * directive -- the same shape `%pass` has, because it is the same two halves:
+ * a pattern that tests and binds, and an expression that builds.
+ *
+ * The strategy is a word rather than a default, because which one a rewrite
+ * wants is a property of the rewrite and getting it wrong is silent: a
+ * constant fold written top-down folds the outside of an expression before its
+ * inside and stops one level short.
+ */
+bool read_rewrite(Reader *r, MToken *directive)
+{
+    Grammar *g = r->g;
+
+    if (!at(r, T_NAME)) {
+        diag_error(r->src, directive->pos, "%%rewrite wants a name");
+        return false;
+    }
+    MToken *name = advance(r);
+
+    if (!at(r, T_NAME) || peek(r)->line != directive->line) {
+        diag_error(r->src, name->pos,
+                   "%%rewrite wants a strategy after '%s'", name->text);
+        diag_note("they are bottomup, topdown and innermost");
+        return false;
+    }
+    MToken *how = advance(r);
+
+    RStrategy strategy;
+    if      (strcmp(how->text, "bottomup")  == 0) strategy = R_BOTTOMUP;
+    else if (strcmp(how->text, "topdown")   == 0) strategy = R_TOPDOWN;
+    else if (strcmp(how->text, "innermost") == 0) strategy = R_INNERMOST;
+    else {
+        diag_error(r->src, how->pos, "there is no strategy called '%s'", how->text);
+        diag_note("they are bottomup, topdown and innermost");
+        return false;
+    }
+
+    if (at(r, T_DOT)) advance(r);
+
+    if (g->nrewrites == g->caprewrites) {
+        int      cap = g->caprewrites ? g->caprewrites * 2 : 4;
+        Rewrite *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+        memcpy(big, g->rewrites, (size_t)g->nrewrites * sizeof *big);
+        g->rewrites    = big;
+        g->caprewrites = cap;
+    }
+
+    Rewrite *w = &g->rewrites[g->nrewrites++];
+    memset(w, 0, sizeof *w);
+    w->name = name->text;
+    w->how  = strategy;
+    w->pos  = name->pos;
+
+    for (;;) {
+        MToken *t = peek(r);
+        if (t->kind == T_EOF || t->kind == T_DIRECTIVE) return true;
+
+        RewriteRule rule = { .pos = t->pos };
+        rule.pattern = read_pattern(r);
+        if (!rule.pattern) return false;
+
+        if (!at(r, T_FATARROW)) {
+            diag_error(r->src, peek(r)->pos,
+                       "expected '=>' and then what this becomes");
+            return false;
+        }
+        advance(r);
+
+        rule.to = read_expr(r);
+        if (!rule.to) return false;
+
+        if (at(r, T_DOT)) advance(r);
+
+        if (w->nrules == w->caprules) {
+            int          cap = w->caprules ? w->caprules * 2 : 8;
+            RewriteRule *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+            memcpy(big, w->rules, (size_t)w->nrules * sizeof *big);
+            w->rules    = big;
+            w->caprules = cap;
+        }
+        w->rules[w->nrules++] = rule;
+    }
+}
 
 bool read_driver(Reader *r, MToken *directive)
 {

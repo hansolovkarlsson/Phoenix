@@ -284,6 +284,47 @@ Variable(name)
 A type built with two different field lists is a warning, since a pass keyed on
 it would have to handle both.
 
+## `%rewrite`: when the answer is a different node
+
+A `%pass` **decorates**: it works out attributes and leaves the tree alone. A
+`%rewrite` **replaces**:
+
+```
+%rewrite fold bottomup
+  Binary(op: "+", left: Number(text: a), right: Number(text: b))
+    => Number(text: text(int($a) + int($b))) .
+```
+
+Both halves were already here — a pattern tests and binds, and the evaluator
+builds nodes — so what this adds is a traversal that puts the answer back. It
+is the same matcher and the same evaluator a pass uses, so the two cannot
+disagree about what a pattern means.
+
+The strategy is a word and not a default, because getting it wrong is silent:
+`2 + 3 * 4 + 1` folds to `15` bottom-up and stops at `((2 + 12) + 1)`
+top-down, which asks about the outside of an expression before its inside.
+
+| | |
+| --- | --- |
+| `bottomup` | children first, then this node, once |
+| `topdown` | this node first, then the children of whatever it became |
+| `innermost` | bottom-up, and again on the result until nothing matches |
+
+**What it is for is the thing a clause cannot say.** A clause answers *about* a
+node; some things are answered by there being a different node. Solveig's
+`x:ifTrue({ ... })` compiles to a jump rather than to a block, and written as
+clauses that would mean conditioning thirty of `Block`'s on whether its parent
+inlined it. Written as a rewrite it is one rule: the block is not something to
+compile differently, it is something that should not be there.
+
+```
+Send(to: c, message: "ifTrue", args: [Block(params: [], temps: [], body: b)])
+  => IfTrue(cond: $c, body: $b) .
+```
+
+A rewrite is a stage of a `%driver` like a pass, and is named the same way:
+`%driver sob = inline, sob -> out`.
+
 ## What a `.phx` file is called
 
 Worth settling, because the docs say it on every page.
@@ -588,6 +629,8 @@ a correct file reported as broken, at a place that is not the mistake.
 | a check reading the attributes it guards | a check runs first, by design |
 | `%include` naming a node nothing builds | or a field that node has not got — the mechanism would then do nothing, quietly, and every include would reach a pass as a node it has no clause for |
 | a field or an attribute called `pos` | the name every node says its position with, so it has to mean one thing everywhere |
+| a rewrite named like a pass | a driver names a stage by its name, so which one it meant has to be one stage |
+| a rewrite reading an attribute | it runs to change the tree, so the walk it would be reading has not happened |
 
 ## The layout
 
@@ -613,12 +656,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 135 checks, covering 35 Pascal programs against fpc
-                #   and 66 Solveig programs against solas, byte for byte
+make test       # 147 checks, covering 35 Pascal programs against fpc
+                #   and 68 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 133 of the 135 need only what is vendored here, and the two
+repository** — 145 of the 147 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -783,11 +826,11 @@ outside the subset are refused loudly rather than mistranslated.
 
 `solas` and `solvm` do the same for Solveig, and the test is stronger: not
 "does the output read correctly" but "does the compiled program print the same
-thing". Sixty-six programs compile to bytecode that prints what `solas`'s does,
-**byte for byte, tracebacks included** — the file and the line a message points
-at are compared rather than normalised away. It found two bugs in the front end
-and one in Phoenix itself, and **none of the three was reachable by rendering
-the tree back to source**:
+thing". Sixty-eight programs compile to bytecode that prints what `solas`'s
+does, **byte for byte, tracebacks included** — the file and the line a message
+points at are compared rather than normalised away. It found two bugs in the
+front end and one in Phoenix itself, and **none of the three was reachable by
+rendering the tree back to source**:
 
 | | |
 | --- | --- |

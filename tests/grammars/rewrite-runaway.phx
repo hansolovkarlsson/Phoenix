@@ -1,0 +1,16 @@
+(* An innermost rewrite whose answer its own pattern matches. It never settles,
+ * and a cap is what turns a program that does not finish into a message with a
+ * position. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%rewrite spin innermost
+  Number(text: t) => Number(text: "{}0" of $t) .
+%pass show
+  Number : out = "{}" of $text .
+%driver d = spin, show -> out .

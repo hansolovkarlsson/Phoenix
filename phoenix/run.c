@@ -67,9 +67,15 @@ typedef struct {
     const Grammar *g;
     const Source  *src;      /* the file being compiled, for messages */
     const Pass    *pass;
+    const char    *stage;    /* its name, whichever kind of stage it is */
 
     Threaded      *threads;
     Scope         *scope;
+
+    /* A rewrite sees bindings, `$pos` and fields, and nothing a pass worked
+     * out: it runs to change the tree rather than to answer about it, and an
+     * attribute read here would be reading a walk that has not happened. */
+    bool           rewriting;
 
     /* the node being visited, and what its pattern bound */
     Value         *node;
@@ -152,6 +158,12 @@ static bool match_pattern(Run *r, const Pattern *p, Value *v)
 
     case P_NIL:
         return v->kind == V_NIL;
+
+    case P_LIST:
+        if (v->kind != V_LIST || v->n != p->nkids) return false;
+        for (int i = 0; i < p->nkids; i++)
+            if (!match_pattern(r, p->kids[i], v->items[i])) return false;
+        return true;
 
     case P_TYPE: {
         if (v->kind != V_NODE || !v->type || strcmp(v->type, p->name) != 0)
@@ -251,12 +263,14 @@ static Value *run_ref(Eval *e, const Expr *x)
                     continue;
                 }
                 items[i] = field_of(of->items[i], x->name);
-                if (!items[i]) items[i] = attr_get(of->items[i], x->name);
+                if (!items[i] && !r->rewriting)
+                    items[i] = attr_get(of->items[i], x->name);
                 if (!items[i]) {
                     if (diag_failed()) return value_error(r->a);
                     diag_error(&r->g->src, x->pos,
-                               "'%s' has no field or attribute '%s' in pass '%s'",
-                               of->items[i]->type, x->name, r->pass->name);
+                               "'%s' has no field or attribute '%s' in %s '%s'",
+                               of->items[i]->type, x->name,
+                               r->rewriting ? "rewrite" : "pass", r->stage);
                     return NULL;
                 }
             }
@@ -279,15 +293,16 @@ static Value *run_ref(Eval *e, const Expr *x)
          * order `$name` uses on the node being visited, so there is one rule
          * to know rather than two. */
         Value *got = field_of(of, x->name);
-        if (!got) got = attr_get(of, x->name);
+        if (!got && !r->rewriting) got = attr_get(of, x->name);
 
         if (!got) {
             /* Once something has gone wrong, a missing attribute is very
              * likely a consequence of it rather than a mistake of its own. */
             if (diag_failed()) return value_error(r->a);
             diag_error(&r->g->src, x->pos,
-                       "'%s' has no field or attribute '%s' in pass '%s'",
-                       of->type, x->name, r->pass->name);
+                       "'%s' has no field or attribute '%s' in %s '%s'",
+                       of->type, x->name,
+                       r->rewriting ? "rewrite" : "pass", r->stage);
             return NULL;
         }
         return got;
@@ -311,6 +326,14 @@ static Value *run_ref(Eval *e, const Expr *x)
 
     Value *field = field_of(r->node, x->name);             /* 2. a field */
     if (field) return field;
+
+    if (r->rewriting) {
+        diag_error(&r->g->src, x->pos,
+                   "nothing here is called '%s' -- a rewrite sees what its "
+                   "pattern bound and the fields of the node it matched, and "
+                   "nothing a pass worked out", x->name);
+        return NULL;
+    }
 
     /* 3. something a pass worked out about *this* node -- an earlier pass in
      * the driver, or an earlier clause of this one. Without this, reading
@@ -562,7 +585,7 @@ const Driver *driver_default(const Grammar *g)
 bool pass_run(Arena *a, const Grammar *g, const Source *src,
               const Pass *pass, Value *root)
 {
-    Run r = { .a = a, .g = g, .src = src, .pass = pass };
+    Run r = { .a = a, .g = g, .src = src, .pass = pass, .stage = pass->name };
 
     r.threads = arena_alloc(a, (size_t)(pass->nthreads ? pass->nthreads : 1)
                                 * sizeof *r.threads);
@@ -587,4 +610,133 @@ bool pass_run(Arena *a, const Grammar *g, const Source *src,
 Value *pass_attr(const Value *node, const char *name)
 {
     return attr_get(node, name);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rewriting
+ *
+ * A pass answers *about* a node. Some things are answered by there being a
+ * different node, and that is what this is for -- the same patterns, the same
+ * evaluator, and a traversal that puts the answer back where the node was.
+ *
+ * The tree is edited in place, which is what lets a rewrite replace a node
+ * inside a list without the list's owner knowing. The root has no owner, so it
+ * comes back through `*root` instead.
+ */
+
+/* A node that reached itself, or a rule whose right-hand side matches its own
+ * left. `innermost` is the only strategy that can, and a cap is what turns a
+ * program that never finishes into a message with a position. */
+#define REWRITE_ROUNDS 100
+
+/* Tries every rule, in order, and answers what the first match builds -- or
+ * the node itself when none matches. */
+static Value *rewrite_once(Run *r, const Rewrite *rw, Value *v, bool *changed)
+{
+    *changed = false;
+    if (!v) return v;
+
+    for (int i = 0; i < rw->nrules; i++) {
+        r->nbound = 0;
+        r->node   = v;
+        if (!match_pattern(r, rw->rules[i].pattern, v)) continue;
+
+        /* Where the built node belongs is where the one it replaces was, so
+         * that a diagnostic from a later pass points at the program rather
+         * than at the rule that rewrote it. */
+        Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r, .pos = v->pos };
+
+        Value *to = eval_expr(&e, rw->rules[i].to);
+        if (!to) return NULL;
+
+        *changed = true;
+        return to;
+    }
+    r->nbound = 0;
+    return v;
+}
+
+static Value *rewrite_value(Run *r, const Rewrite *rw, Value *v);
+
+/* Every child, in place. A node's fields and a list's elements are the same
+ * array, so this is one loop. */
+static bool rewrite_kids(Run *r, const Rewrite *rw, Value *v)
+{
+    if (!v || (v->kind != V_NODE && v->kind != V_LIST)) return true;
+
+    for (int i = 0; i < v->n; i++) {
+        Value *kid = rewrite_value(r, rw, v->items[i]);
+        if (!kid) return false;
+        v->items[i] = kid;
+    }
+    return true;
+}
+
+static Value *rewrite_value(Run *r, const Rewrite *rw, Value *v)
+{
+    bool changed;
+
+    if (rw->how == R_TOPDOWN) {
+        Value *now = rewrite_once(r, rw, v, &changed);
+        if (!now) return NULL;
+        if (!rewrite_kids(r, rw, now)) return NULL;
+        return now;
+    }
+
+    if (!rewrite_kids(r, rw, v)) return NULL;
+
+    Value *now = rewrite_once(r, rw, v, &changed);
+    if (!now) return NULL;
+    if (rw->how == R_BOTTOMUP || !changed) return now;
+
+    /* innermost: what a rule built is itself something a rule may be about,
+     * and so are the children it built. */
+    for (int round = 0; changed; round++) {
+        if (round >= REWRITE_ROUNDS) {
+            diag_error(r->src, now->pos,
+                       "'%s' has rewritten this %d times and is still going",
+                       rw->name, REWRITE_ROUNDS);
+            diag_note("an innermost rewrite stops when nothing matches, so a "
+                      "rule whose answer its own pattern matches never does");
+            return NULL;
+        }
+        if (!rewrite_kids(r, rw, now)) return NULL;
+        now = rewrite_once(r, rw, now, &changed);
+        if (!now) return NULL;
+    }
+    return now;
+}
+
+const Rewrite *rewrite_find(const Grammar *g, const char *name)
+{
+    for (int i = 0; i < g->nrewrites; i++)
+        if (strcmp(g->rewrites[i].name, name) == 0) return &g->rewrites[i];
+    return NULL;
+}
+
+bool rewrite_run(Arena *a, const Grammar *g, const Source *src,
+                 const Rewrite *rw, Value **root)
+{
+    Run r = { .a = a, .g = g, .src = src, .stage = rw->name, .rewriting = true };
+
+    Value *now = rewrite_value(&r, rw, *root);
+    if (!now) return false;
+
+    *root = now;
+    return !diag_failed();
+}
+
+/* ------------------------------------------------------------------ */
+
+bool driver_stage(Arena *a, const Grammar *g, const Source *src,
+                  const char *name, Value **root)
+{
+    const Pass *pass = pass_find(g, name);
+    if (pass) return pass_run(a, g, src, pass, *root);
+
+    const Rewrite *rw = rewrite_find(g, name);
+    if (rw) return rewrite_run(a, g, src, rw, root);
+
+    diag_error(&g->src, 0, "there is no pass or rewrite called '%s'", name);
+    return false;
 }

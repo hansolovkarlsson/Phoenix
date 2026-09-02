@@ -46,6 +46,71 @@
 
 %import "solveig.phx" .
 
+(* ---- inlined control flow ----
+ *
+ * `ifTrue`, `ifFalse`, `ifElse`, `and`, `or`, `whileTrue` and `doUntil` are
+ * ordinary messages and a program may still send them that way -- through
+ * `perform`, or with a block held in a variable. Written **literally**,
+ * which is how they are almost always written, `solas` emits jumps around
+ * the bodies rather than allocating a block and entering a frame per branch
+ * or per pass, and this is where that is said.
+ *
+ * It is a rewrite rather than a clause, and the reason is what makes the
+ * whole thing eight lines instead of a rewritten `Block`. A clause answers
+ * *about* a node, and the node in the way here is the `Block`: it opens a
+ * chunk, starts fresh name and constant tables, and pushes a frame's worth
+ * of slots. Conditioning all of that on who the parent is would be thirty
+ * `lookup`s. **Taking the node out of the tree instead costs nothing**: what
+ * is left is a list of statements sitting where the send was, and it
+ * compiles in the enclosing frame because that is the frame it is in.
+ * `OP_OUTER` depths come out right without anything adjusting them, for the
+ * same reason.
+ *
+ * The restrictions are `solas`'s and they are in the patterns: **every block
+ * has to be written right there, with no parameters and no temporaries.** A
+ * block with parameters is an arity error when `ifElse` calls it with none,
+ * and inlining would quietly make it work; a block's temporaries belong to
+ * its own frame, and inlining would declare them in the enclosing one, where
+ * they could collide with a name already there. Anything else falls through
+ * to the ordinary `Send` clause, so the slow path stays correct rather than
+ * merely unused.
+ *
+ * Bottom-up, so a block inside a block is inlined before the send around it
+ * is looked at.
+ *)
+%rewrite inline bottomup
+
+  Send(to: c, message: "ifTrue", args: [Block(params: [], temps: [], body: b)])
+    => IfTrue(cond: $c, body: $b) .
+  Send(to: c, message: "ifFalse", args: [Block(params: [], temps: [], body: b)])
+    => IfFalse(cond: $c, body: $b) .
+  Send(to: c, message: "ifElse",
+       args: [Block(params: [], temps: [], body: y),
+              Block(params: [], temps: [], body: n)])
+    => IfElse(cond: $c, yes: $y, no: $n) .
+
+  (* `and` and `or` short-circuit through a block exactly as `ifTrue` does,
+   * which is why they take one. What differs is the answer: `ifTrue` answers
+   * nil on the path it does not take, and these answer a boolean either way --
+   * so the block's answer is the reply and has to be one, which is what
+   * `OP_CHECK_BOOL` says. The shortcut's answer is a **constant** rather than
+   * the global `true` or `false`, which a program can rebind: reading it would
+   * make the two paths disagree about what `and` answers. *)
+  Send(to: c, message: "and", args: [Block(params: [], temps: [], body: b)])
+    => AndThen(cond: $c, body: $b) .
+  Send(to: c, message: "or", args: [Block(params: [], temps: [], body: b)])
+    => OrElse(cond: $c, body: $b) .
+
+  (* The two loops, where the **receiver** is a block as well. `whileTrue`
+   * tests before each pass and `doUntil` after, which is the whole of the
+   * difference between them. *)
+  Send(to: Block(params: [], temps: [], body: c), message: "whileTrue",
+       args: [Block(params: [], temps: [], body: b)])
+    => WhileTrue(cond: $c, body: $b) .
+  Send(to: Block(params: [], temps: [], body: b), message: "doUntil",
+       args: [Block(params: [], temps: [], body: c)])
+    => DoUntil(body: $b, cond: $c) .
+
 %pass sob
 
   (* ---- the tables, threaded ----
@@ -244,6 +309,150 @@
           : code = "{}{}{}{}" of $to.code, $value.code,
                                  bytes(12, 1), bytes($idx, 2) .
 
+  (* ---- what an inlined block became ----
+   *
+   * Seven nodes the grammar never builds: `%rewrite inline` above puts them
+   * where a send used to be, and each is the jumps `solas` emits for that
+   * send. The body is a **list of statements** rather than a block, so it
+   * compiles into the chunk being built -- joined with `POP` and the last one
+   * left, which is what a block body answers with.
+   *
+   * The offsets are the one arithmetic here, and every one of them is the
+   * number of bytes between the end of the jump and where it lands. That is
+   * `solas`'s rule and it is why an offset can be worked out at all: the code
+   * being jumped over is a value this clause is holding, so its size is a
+   * question rather than a fixup.
+   *
+   * An empty block answers nil, which is `OP_NIL` and not nothing -- the code
+   * after a branch expects a value on the stack whichever way it went.
+   *)
+  IfTrue : idx      = lookup($names, "ifTrue", size($names))
+         : nametext = lookup([[true, $nametext]], defined($names, "ifTrue"),
+                             "{}{}{}" of $nametext, bytes(6, 2), "ifTrue")
+         : names    = lookup([[true, $names]], defined($names, "ifTrue"),
+                             [...$names, ["ifTrue", size($names)]])
+         : joined   = join(each($body.code, "{}\x12"), "")
+         : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                             slice($joined, 1, size($joined) - 1))
+         : code = join([$cond.code,
+                        bytes(14, 1), bytes(size($bodycode) + 3, 2), bytes($idx, 2),
+                        $bodycode,
+                        bytes(13, 1), bytes(1, 2),
+                        bytes(1, 1)], "") .
+
+  (* Inverted: the branch that *is* taken runs the body, so falling through is
+   * the true case and answers nil. *)
+  IfFalse : idx      = lookup($names, "ifFalse", size($names))
+          : nametext = lookup([[true, $nametext]], defined($names, "ifFalse"),
+                              "{}{}{}" of $nametext, bytes(7, 2), "ifFalse")
+          : names    = lookup([[true, $names]], defined($names, "ifFalse"),
+                              [...$names, ["ifFalse", size($names)]])
+          : joined   = join(each($body.code, "{}\x12"), "")
+          : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                              slice($joined, 1, size($joined) - 1))
+          : code = join([$cond.code,
+                         bytes(14, 1), bytes(4, 2), bytes($idx, 2),
+                         bytes(1, 1),
+                         bytes(13, 1), bytes(size($bodycode), 2),
+                         $bodycode], "") .
+
+  IfElse : idx      = lookup($names, "ifElse", size($names))
+         : nametext = lookup([[true, $nametext]], defined($names, "ifElse"),
+                             "{}{}{}" of $nametext, bytes(6, 2), "ifElse")
+         : names    = lookup([[true, $names]], defined($names, "ifElse"),
+                             [...$names, ["ifElse", size($names)]])
+         : yjoined  = join(each($yes.code, "{}\x12"), "")
+         : yescode  = lookup([[0, bytes(1, 1)]], size($yes),
+                             slice($yjoined, 1, size($yjoined) - 1))
+         : njoined  = join(each($no.code, "{}\x12"), "")
+         : nocode   = lookup([[0, bytes(1, 1)]], size($no),
+                             slice($njoined, 1, size($njoined) - 1))
+         : code = join([$cond.code,
+                        bytes(14, 1), bytes(size($yescode) + 3, 2), bytes($idx, 2),
+                        $yescode,
+                        bytes(13, 1), bytes(size($nocode), 2),
+                        $nocode], "") .
+
+  (* The shortcut answers a constant -- tag 3 and a byte -- so that rebinding
+   * the global `false` cannot make the two paths disagree. *)
+  AndThen : idx      = lookup($names, "and", size($names))
+          : nametext = lookup([[true, $nametext]], defined($names, "and"),
+                              "{}{}{}" of $nametext, bytes(3, 2), "and")
+          : names    = lookup([[true, $names]], defined($names, "and"),
+                              [...$names, ["and", size($names)]])
+          : cidx     = $nconsts
+          : consts   = "{}{}{}" of $consts, bytes(3, 1), bytes(0, 1)
+          : nconsts  = $nconsts + 1
+          : joined   = join(each($body.code, "{}\x12"), "")
+          : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                              slice($joined, 1, size($joined) - 1))
+          : code = join([$cond.code,
+                         bytes(14, 1), bytes(size($bodycode) + 6, 2), bytes($idx, 2),
+                         $bodycode,
+                         bytes(16, 1), bytes($idx, 2),
+                         bytes(13, 1), bytes(3, 2),
+                         bytes(0, 1), bytes($cidx, 2)], "") .
+
+  OrElse : idx      = lookup($names, "or", size($names))
+         : nametext = lookup([[true, $nametext]], defined($names, "or"),
+                             "{}{}{}" of $nametext, bytes(2, 2), "or")
+         : names    = lookup([[true, $names]], defined($names, "or"),
+                             [...$names, ["or", size($names)]])
+         : cidx     = $nconsts
+         : consts   = "{}{}{}" of $consts, bytes(3, 1), bytes(1, 1)
+         : nconsts  = $nconsts + 1
+         : joined   = join(each($body.code, "{}\x12"), "")
+         : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                             slice($joined, 1, size($joined) - 1))
+         : code = join([$cond.code,
+                        bytes(14, 1), bytes(6, 2), bytes($idx, 2),
+                        bytes(0, 1), bytes($cidx, 2),
+                        bytes(13, 1), bytes(size($bodycode) + 3, 2),
+                        $bodycode,
+                        bytes(16, 1), bytes($idx, 2)], "") .
+
+  (* `OP_EXIT_IF_FALSE` is `OP_JUMP_IF_FALSE` without the name: it carries no
+   * selector because a loop's condition failing is not a message anybody
+   * sent. `OP_LOOP` is the only jump that goes backwards, and its offset is
+   * measured the same way -- from the end of the instruction. *)
+  WhileTrue : cjoined  = join(each($cond.code, "{}\x12"), "")
+            : condcode = lookup([[0, bytes(1, 1)]], size($cond),
+                                slice($cjoined, 1, size($cjoined) - 1))
+            : bjoined  = join(each($body.code, "{}\x12"), "")
+            : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                                slice($bjoined, 1, size($bjoined) - 1))
+            : back = size($condcode) + 3 + size($bodycode) + 1 + 3
+            : code = join([$condcode,
+                           bytes(15, 1), bytes(size($bodycode) + 4, 2),
+                           $bodycode,
+                           bytes(18, 1),
+                           bytes(17, 1), bytes($back, 2),
+                           bytes(1, 1)], "") .
+
+  (* The body first and the test after it, so a `doUntil` always runs once.
+   * The condition has to answer a boolean, and unlike `whileTrue` there is a
+   * selector to say so with when it does not. *)
+  DoUntil : idx      = lookup($names, "doUntil", size($names))
+          : nametext = lookup([[true, $nametext]], defined($names, "doUntil"),
+                              "{}{}{}" of $nametext, bytes(7, 2), "doUntil")
+          : names    = lookup([[true, $names]], defined($names, "doUntil"),
+                              [...$names, ["doUntil", size($names)]])
+          : bjoined  = join(each($body.code, "{}\x12"), "")
+          : bodycode = lookup([[0, bytes(1, 1)]], size($body),
+                              slice($bjoined, 1, size($bjoined) - 1))
+          : cjoined  = join(each($cond.code, "{}\x12"), "")
+          : condcode = lookup([[0, bytes(1, 1)]], size($cond),
+                              slice($cjoined, 1, size($cjoined) - 1))
+          : back = size($bodycode) + 1 + size($condcode) + 3 + 3 + 3 + 3
+          : code = join([$bodycode,
+                         bytes(18, 1),
+                         $condcode,
+                         bytes(16, 1), bytes($idx, 2),
+                         bytes(15, 1), bytes(3, 2),
+                         bytes(13, 1), bytes(3, 2),
+                         bytes(17, 1), bytes($back, 2),
+                         bytes(1, 1)], "") .
+
   (* ---- a block ----
    *
    * The one construct that opens a **chunk of its own**, and the reason
@@ -418,4 +627,4 @@
               bytes($nmethods, 4), $methods
             ], "") .
 
-%driver sob = sob -> out .
+%driver sob = inline, sob -> out .

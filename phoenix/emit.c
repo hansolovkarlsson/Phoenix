@@ -284,6 +284,40 @@ static void emit_passes(Emit *e)
     fputs("};\n", e->out);
 }
 
+static void emit_rewrites(Emit *e)
+{
+    const Grammar *g = e->g;
+
+    for (int i = 0; i < g->nrewrites; i++) {
+        const Rewrite *w = &g->rewrites[i];
+
+        int *pat = arena_alloc(g->arena,
+                               (size_t)(w->nrules ? w->nrules : 1) * sizeof *pat);
+        int *to  = arena_alloc(g->arena,
+                               (size_t)(w->nrules ? w->nrules : 1) * sizeof *to);
+
+        for (int k = 0; k < w->nrules; k++) {
+            pat[k] = emit_pattern(e, w->rules[k].pattern);
+            to[k]  = emit_expr(e, w->rules[k].to);
+        }
+
+        fprintf(e->out, "static RewriteRule rr%d[] = {", i);
+        for (int k = 0; k < w->nrules; k++)
+            fprintf(e->out, "{&p%d,&x%d,%zu},", pat[k], to[k], w->rules[k].pos);
+        fputs("};\n", e->out);
+    }
+
+    fputs("\nstatic Rewrite phx_rewrites[] = {\n", e->out);
+    for (int i = 0; i < g->nrewrites; i++) {
+        const Rewrite *w = &g->rewrites[i];
+        fputs("  {", e->out);
+        emit_string(e, w->name);
+        fprintf(e->out, ",%d,rr%d,%d,%d,%zu},\n",
+                (int)w->how, i, w->nrules, w->nrules, w->pos);
+    }
+    fputs("};\n", e->out);
+}
+
 static void emit_drivers(Emit *e)
 {
     const Grammar *g = e->g;
@@ -337,6 +371,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
 
     emit_rules(&e);
     emit_passes(&e);
+    emit_rewrites(&e);
     emit_drivers(&e);
 
     /* The description's own text, so that a fault in a pass still reports
@@ -376,7 +411,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "  %d, %d,\n"
         "  phx_reserved, %d,\n"
         "  phx_passes, %d, %d,\n"
-        "  phx_drivers, %d, %d,\n",
+        "  phx_drivers, %d, %d,\n"
+        "  phx_rewrites, %d, %d,\n",
         g->map.n, g->map.n,
         g->map.n ? g->map.units[0].path : "",
         g->map.n, g->map.n,
@@ -384,7 +420,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         g->start, g->ignorecase,
         g->nreserved,
         g->npasses, g->npasses,
-        g->ndrivers, g->ndrivers);
+        g->ndrivers, g->ndrivers,
+        g->nrewrites, g->nrewrites);
 
     /* `%include`, which the generated compiler needs as much as `phx` does:
      * a target file that includes another does so whoever is compiling it. */
@@ -460,10 +497,9 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    }\n"
         "    if (!driver) { tree_dump(stdout, tree); return 0; }\n"
         "\n"
-        "    for (int i = 0; i < driver->npasses; i++) {\n"
-        "        const Pass *pass = pass_find(&phx_grammar, driver->passes[i]);\n"
-        "        if (!pass_run(a, &phx_grammar, &src, pass, tree)) return 1;\n"
-        "    }\n"
+        "    for (int i = 0; i < driver->npasses; i++)\n"
+        "        if (!driver_stage(a, &phx_grammar, &src, driver->passes[i],\n"
+        "                          &tree)) return 1;\n"
         "    if (!driver->answer) return 0;\n"
         "\n"
         "    Value *answer = pass_attr(tree, driver->answer);\n"

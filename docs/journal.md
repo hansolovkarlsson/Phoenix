@@ -1798,3 +1798,122 @@ twice back to back — which nearly always agrees — before running this backen
 moment later, on the other side of a second boundary. The two oracle runs now
 *bracket* the one under test, so a clock that ticks anywhere in the window is
 reported as a program that does not repeat itself, which is what it is.
+
+## 2026-09-02 — the block that should not be there
+
+[ROADMAP 2.4](ROADMAP.md) said inlining was "the first thing the `.sob` backend
+cannot express rather than has not got round to", and left open whether that
+was a gap in the notation or in that description. It was neither, quite. It was
+a gap in what a **pass** is.
+
+`solas` compiles the block of an `ifTrue:`, an `ifFalse:`, an `ifElse:`, an
+`and:`, an `or:`, a `whileTrue:` and a `doUntil:` into the enclosing chunk,
+behind a jump, whenever the block is written right there with no parameters and
+no temporaries. This backend compiled every block as a block, and three things
+followed: an extra frame in every traceback, `programs/pascal.sol` nesting 19
+deep where the format allows 16, and `programs/basic.sol` running out of call
+depth one test early.
+
+### The thirty lookups that were not written
+
+The obvious way in was a clause: match the send, and emit jumps instead. Two
+things were in the way.
+
+**A pattern could not ask the question.** `Send(args: [Block(params: [])])` is
+exactly the shape, and a pattern could not be a list — it covered nodes, text,
+integers, booleans, nil and anything, which is every kind a value can be except
+the one that holds several things. That is not a special case for an
+optimisation, it is a hole, and it is filled: `[ a, b ]` and `[]` match a list
+of exactly that many, each element matching.
+
+**And the block would still have been there.** A `Block` node opens a chunk,
+starts fresh name and constant tables, and pushes a frame's worth of slots. An
+inlined one must do none of that: its body belongs to the enclosing frame.
+Conditioning it on who the parent is meant threading a flag down and turning
+about thirty clauses into `lookup([[true, ...]], $inlined, ...)` — in the rule
+the journal already calls the thread that had to nest.
+
+### What a pass cannot do
+
+So the answer was [2.2](ROADMAP.md), deferred on day one and waiting for a
+customer better than constant folding:
+
+```
+Send(to: c, message: "ifTrue", args: [Block(params: [], temps: [], body: b)])
+  => IfTrue(cond: $c, body: $b) .
+```
+
+**A clause answers *about* a node. Some things are answered by there being a
+different node.** The block is not something to compile differently; it is
+something that should not be there. Take it out and what is left is a list of
+statements sitting where the send was — and it compiles in the enclosing frame
+because that *is* the frame it is in. `OP_OUTER` depths come out right with
+nothing adjusting them, for the reason `solas` gives for the same thing.
+
+That is the same argument `%include` made a day earlier from the other end. A
+pass is a walk over one tree; there are things to be done to a tree that are
+not walks over it, and each one has turned out to want its own mechanism rather
+than a longer clause.
+
+`%rewrite` cost about a hundred lines in `run.c` and no second implementation
+of anything: the same `match_pattern`, the same `eval_expr`, with a traversal
+that puts the answer back. A rewrite and a pass cannot disagree about what a
+pattern means, because there is one of each.
+
+**The strategy is a word rather than a default**, which the roadmap's sketch
+already had right and which the fold test is there to show: `2 + 3 * 4 + 1`
+folds to `15` bottom-up and stops at `((2 + 12) + 1)` top-down, because
+top-down asks about the outside of an expression before its inside.
+
+### The arithmetic that was not a fixup
+
+The one thing a jump needs is an offset, and this is where the entry's worry
+about "a jump over code in the middle of the chunk being built" turned out to
+be about the wrong tool. `solas` writes `0xffff`, keeps the slot, and patches it
+when it knows. A clause does not have a slot to patch — and does not need one:
+**the code being jumped over is a value the clause is holding**, so its size is
+a question rather than a fixup.
+
+```
+: code = join([$cond.code,
+               bytes(14, 1), bytes(size($bodycode) + 3, 2), bytes($idx, 2),
+               $bodycode,
+               bytes(13, 1), bytes(1, 2),
+               bytes(1, 1)], "") .
+```
+
+Every offset in all seven forms is that: the number of bytes between the end of
+the jump and where it lands, which is a `size` of something already built. A
+backwards `OP_LOOP` is the same arithmetic with the terms rearranged.
+
+### What it fixed, and what it did not
+
+| | |
+| --- | --- |
+| `programs/pascal.sol` | nested 19 deep and the loader refused what this wrote. It compiles and agrees now |
+| `programs/basic.sol` | stopped one recursion test early. It agrees now |
+| every traceback's *frames* | an inlined block is a frame that is not there, and there are no longer any extra ones |
+
+**Sixty-eight programs print exactly what `solas`'s bytecode prints**, up from
+sixty-six, and the two categories the test kept for this gap are gone.
+
+Seven still differ, in a traceback line and nothing else, and the useful part
+is that **the cause is no longer this entry**. Six lose the file name, because
+their top-level chunk holds code from more than one file and the file table for
+that is a `lookup` per element of a list. The seventh names the enclosing
+statement's line where `solas` names the inlined statement's, because a chunk's
+line table is a run per statement and splitting one is a run per element of a
+list.
+
+Both are [1.3](ROADMAP.md), which three stages in a row have now ended at, and
+which is the only thing left between this backend and an oracle it agrees with
+on every byte. That is a much better sentence than the one this stage started
+with, and it was worth two mechanisms to be able to write it.
+
+### And one more flaky test
+
+Comparing tracebacks exactly means comparing everything exactly, and
+`programs/system.sol` prints how long a loop took. The oracle's two runs
+happened to agree while this backend's, a moment later, did not. Both are now
+asked again — but only when they differ, which is two extra runs on the few
+that get there rather than on all seventy-five.

@@ -1,0 +1,15 @@
+(* A driver names a stage by its name, so the answer to which one it meant has
+ * to be one stage. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%rewrite tidy bottomup
+  Number(text: t) => Number(text: $t) .
+%pass tidy
+  Number : out = "{}" of $text .
+%driver d = tidy -> out .

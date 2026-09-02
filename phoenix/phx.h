@@ -193,8 +193,9 @@ typedef struct {
     size_t  pos;
 } Rule;
 
-typedef struct Pass   Pass;    /* below -- the Grammar holds them */
-typedef struct Driver Driver;
+typedef struct Pass    Pass;   /* below -- the Grammar holds them */
+typedef struct Driver  Driver;
+typedef struct Rewrite Rewrite;
 
 typedef struct {
     Arena     *arena;
@@ -222,6 +223,10 @@ typedef struct {
     Driver *drivers;
     int     ndrivers;
     int     capdrivers;
+
+    Rewrite *rewrites;
+    int      nrewrites;
+    int      caprewrites;
 
     /* `%include Include path` -- which node stands for a target file's own
      * include, and which of its fields holds the name of the file. NULL when
@@ -272,6 +277,12 @@ int grammar_find(const Grammar *g, const char *name, size_t len);
  * A pattern tests and binds at once: `Number(text: t)` matches a `Number` and
  * binds `t`. A field written with a value tests it; a field written with a
  * name binds it; a field left out is not looked at.
+ *
+ * A **list** is written `[ a, b ]` and matches a list of exactly that many,
+ * each element matching. A value can be a list, so a pattern has to be able to
+ * be one -- without it there is no way to ask about a field that holds several
+ * things, and `Send(args: [Block(params: [])])`, which is exactly the
+ * question an optimisation asks, cannot be written at all.
  */
 
 typedef enum {
@@ -281,6 +292,7 @@ typedef enum {
     P_INT,    /* 45                                                         */
     P_BOOL,   /* true, false                                                */
     P_NIL,    /* nil                                                        */
+    P_LIST,   /* [ a, b ] -- a list of exactly that many, each matching     */
     P_ANY     /* _                                                          */
 } PKind;
 
@@ -326,6 +338,51 @@ struct Pass {
     PassRule *rules;
     int       nrules;
     size_t    pos;
+};
+
+/* ------------------------------------------------------------------ */
+/* Rewrites
+ *
+ *     %rewrite fold bottomup
+ *       Binary(op: "+", left: Number(text: a), right: Number(text: b))
+ *         => Number(text: text(int(a) + int(b))) .
+ *
+ * A pass **decorates**: it works out attributes and leaves the tree alone. A
+ * rewrite **replaces**: a node whose shape matches becomes what the `=>` says,
+ * and the walk carries on. The two halves were already here -- patterns match
+ * on shape and bind, and the evaluator builds nodes -- so what this adds is a
+ * traversal that puts the answer back.
+ *
+ * It is what a pass cannot do, and the reason is the same one that made
+ * `%include` a reader's job rather than a clause's: a pass answers *about* a
+ * node, and some things are answered by there being a different node.
+ *
+ * The strategy says when a node is tried against its children:
+ *
+ *   bottomup   children first, then this node, once
+ *   topdown    this node first, then the children of whatever it became
+ *   innermost  bottom-up, and again on the result until nothing matches
+ */
+
+typedef enum {
+    R_BOTTOMUP,
+    R_TOPDOWN,
+    R_INNERMOST
+} RStrategy;
+
+typedef struct {
+    Pattern *pattern;
+    Expr    *to;
+    size_t   pos;
+} RewriteRule;
+
+struct Rewrite {
+    char        *name;
+    RStrategy    how;
+    RewriteRule *rules;
+    int          nrules;
+    int          caprules;
+    size_t       pos;
 };
 
 /* ------------------------------------------------------------------ */
@@ -543,6 +600,18 @@ bool pass_run(Arena *a, const Grammar *g, const Source *src,
 
 /* What a pass worked out about a node, or NULL. */
 Value *pass_attr(const Value *node, const char *name);
+
+const Rewrite *rewrite_find(const Grammar *g, const char *name);
+
+/* One walk, replacing. The root itself may be replaced, which is why the tree
+ * arrives by reference. Answers false having reported. */
+bool rewrite_run(Arena *a, const Grammar *g, const Source *src,
+                 const Rewrite *rw, Value **root);
+
+/* One stage of a driver, whichever kind it is. Answers false having reported;
+ * `*root` is what the next stage should walk. */
+bool driver_stage(Arena *a, const Grammar *g, const Source *src,
+                  const char *name, Value **root);
 
 /* ------------------------------------------------------------------ */
 /* Writing a description out as its own compiler -- emit.c */

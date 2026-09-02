@@ -1,0 +1,22 @@
+(* A pattern for every value kind. A value can be a list, so a pattern has to
+ * be able to be one -- otherwise there is no way to ask about a field holding
+ * several things, and `Send(args: [Block(params: [])])`, which is the question
+ * an optimisation asks, cannot be written at all. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number { "," number -> $2 } -> Row(cells: [$1, ...$2]) .
+
+%pass p
+  Row(cells: ["7", b]) : out = "seven and {}" of $b .
+  Row(cells: [a])      : out = "one: {}" of $a .
+  Row(cells: [a, b])   : out = "two: {} {}" of $a, $b .
+  Row(cells: [])       : out = "none" .
+  Row                  : out = "many" .
+
+%driver p = p -> out .

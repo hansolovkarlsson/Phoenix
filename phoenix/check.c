@@ -717,10 +717,17 @@ static void check_drivers(Check *c)
         const Driver *driver = &g->drivers[d];
 
         for (int i = 0; i < driver->npasses; i++) {
+            /* A stage is a pass or a rewrite. A rewrite defines no attribute
+             * and so cannot be what a later stage was waiting for; it is
+             * checked where it is declared instead. */
+            if (rewrite_find(g, driver->passes[i]) && !pass_find(g, driver->passes[i]))
+                continue;
+
             const Pass *pass = pass_find(g, driver->passes[i]);
             if (!pass) {
                 diag_error(&g->src, driver->pass_pos[i],
-                           "driver '%s' runs '%s', and there is no such pass",
+                           "driver '%s' runs '%s', and there is no pass or "
+                           "rewrite of that name",
                            driver->name, driver->passes[i]);
                 c->ok = false;
                 continue;
@@ -854,6 +861,12 @@ static bool subsumes(const Pattern *general, const Pattern *specific)
     case P_NIL:
         return true;
 
+    case P_LIST:
+        if (general->nkids != specific->nkids) return false;
+        for (int i = 0; i < general->nkids; i++)
+            if (!subsumes(general->kids[i], specific->kids[i])) return false;
+        return true;
+
     case P_TYPE: {
         if (strcmp(general->name, specific->name) != 0) return false;
 
@@ -885,11 +898,46 @@ static void describe(char *buf, size_t size, const Pattern *p)
     case P_BOOL: snprintf(buf, size, "%s", p->ival ? "true" : "false"); return;
     case P_NIL:  snprintf(buf, size, "nil"); return;
     case P_TEXT: snprintf(buf, size, "\"%.*s\"", p->len, p->name); return;
+    case P_LIST: snprintf(buf, size, "%s", p->nkids ? "[...]" : "[]"); return;
     case P_TYPE:
         if (!p->nkids) { snprintf(buf, size, "%s", p->name); return; }
         snprintf(buf, size, "%s(%s: ...)", p->name, p->fields[0]);
         return;
     }
+}
+
+/* One kind of stage's rules, checked for the ordering hazard. A rewrite is
+ * tried in order and the first match wins, exactly as a pass is, so the same
+ * question is asked of both. */
+static void check_order_of(Check *c, const char *kind, const char *name,
+                           const Pattern **pats, const size_t *where, int n)
+{
+    Grammar *g = c->g;
+
+    for (int b = 1; b < n; b++)
+        for (int a = 0; a < b; a++) {
+            if (!subsumes(pats[a], pats[b])) continue;
+
+            char above[128], below[128];
+            describe(above, sizeof above, pats[a]);
+            describe(below, sizeof below, pats[b]);
+
+            diag_error(&g->src, where[b],
+                       "in %s '%s', '%s' can never match -- '%s' above it "
+                       "already takes everything it is for",
+                       kind, name, below, above);
+
+            if (strcmp(above, below) == 0)
+                diag_note(kind[0] == 'p'
+                          ? "clauses for one pattern go together in a single "
+                            "rule, not in two"
+                          : "two rules for one pattern: the second never runs");
+            else
+                diag_note("put the specific pattern above the general one");
+
+            c->ok = false;
+            break;
+        }
 }
 
 static void check_reachable(Check *c)
@@ -899,29 +947,29 @@ static void check_reachable(Check *c)
     for (int i = 0; i < g->npasses; i++) {
         const Pass *pass = &g->passes[i];
 
-        for (int b = 1; b < pass->nrules; b++)
-            for (int a = 0; a < b; a++) {
-                if (!subsumes(pass->rules[a].pattern, pass->rules[b].pattern))
-                    continue;
+        const Pattern **pats  = arena_alloc(g->arena,
+                                    (size_t)(pass->nrules ? pass->nrules : 1) * sizeof *pats);
+        size_t         *where = arena_alloc(g->arena,
+                                    (size_t)(pass->nrules ? pass->nrules : 1) * sizeof *where);
+        for (int k = 0; k < pass->nrules; k++) {
+            pats[k]  = pass->rules[k].pattern;
+            where[k] = pass->rules[k].pos;
+        }
+        check_order_of(c, "pass", pass->name, pats, where, pass->nrules);
+    }
 
-                char above[128], below[128];
-                describe(above, sizeof above, pass->rules[a].pattern);
-                describe(below, sizeof below, pass->rules[b].pattern);
+    for (int i = 0; i < g->nrewrites; i++) {
+        const Rewrite *w = &g->rewrites[i];
 
-                diag_error(&g->src, pass->rules[b].pos,
-                           "in pass '%s', '%s' can never match -- '%s' above it "
-                           "already takes everything it is for",
-                           pass->name, below, above);
-
-                if (strcmp(above, below) == 0)
-                    diag_note("clauses for one pattern go together in a single "
-                              "rule, not in two");
-                else
-                    diag_note("put the specific pattern above the general one");
-
-                c->ok = false;
-                break;
-            }
+        const Pattern **pats  = arena_alloc(g->arena,
+                                    (size_t)(w->nrules ? w->nrules : 1) * sizeof *pats);
+        size_t         *where = arena_alloc(g->arena,
+                                    (size_t)(w->nrules ? w->nrules : 1) * sizeof *where);
+        for (int k = 0; k < w->nrules; k++) {
+            pats[k]  = w->rules[k].pattern;
+            where[k] = w->rules[k].pos;
+        }
+        check_order_of(c, "rewrite", w->name, pats, where, w->nrules);
     }
 }
 
@@ -1035,6 +1083,53 @@ static void check_position_name(Check *c)
         }
 }
 
+/* A rewrite reads what its pattern bound and the fields of what it matched,
+ * and nothing else -- it runs to change the tree rather than to answer about
+ * one, so an attribute it read would be a walk that has not happened.
+ *
+ * Two of one name, or one sharing a pass's name, is the other thing worth
+ * saying here: a driver names a stage by its name, and the answer to which one
+ * it meant has to be one stage.
+ */
+static void check_rewrites(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->nrewrites; i++) {
+        const Rewrite *w = &g->rewrites[i];
+
+        for (int k = 0; k < i; k++)
+            if (strcmp(g->rewrites[k].name, w->name) == 0) {
+                diag_error(&g->src, w->pos, "two rewrites called '%s'", w->name);
+                c->ok = false;
+            }
+
+        if (pass_find(g, w->name)) {
+            diag_error(&g->src, w->pos,
+                       "'%s' is a pass as well as a rewrite, and a driver "
+                       "names a stage by its name", w->name);
+            c->ok = false;
+        }
+
+        const char *reads[MAX_ATTRS];
+        int         nreads = 0;
+        for (int k = 0; k < w->nrules; k++)
+            expr_reads(w->rules[k].to, reads, &nreads, MAX_ATTRS);
+
+        for (int k = 0; k < nreads; k++) {
+            if (is_a_field(reads[k]) || is_intrinsic(reads[k])) continue;
+            diag_error(&g->src, w->pos,
+                       "rewrite '%s' reads '.%s', and a rewrite sees fields "
+                       "rather than what a pass worked out", w->name, reads[k]);
+            const char *supplier = who_defines(g, reads[k]);
+            if (supplier)
+                diag_note("'%s' defines '%s' -- a clause is where that can be "
+                          "read", supplier, reads[k]);
+            c->ok = false;
+        }
+    }
+}
+
 bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
@@ -1090,11 +1185,19 @@ bool grammar_check(Grammar *g)
                 if (cl->when)  collect_types(&c, cl->when);
             }
 
+    /* A rewrite builds nodes and is the whole reason some node types exist --
+     * `--nodes` has to say so, and a clause keyed on one has to be checked
+     * against the shape the rewrite gives it. */
+    for (int i = 0; i < g->nrewrites; i++)
+        for (int k = 0; k < g->rewrites[i].nrules; k++)
+            collect_types(&c, g->rewrites[i].rules[k].to);
+
     check_reachable(&c);
     check_clause_order(&c);
     check_drivers(&c);
     check_include(&c);
     check_position_name(&c);
+    check_rewrites(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
      * without the token rules that will spell its literals -- `expression.phx`

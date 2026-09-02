@@ -152,10 +152,11 @@ to nest — see [the journal](../../docs/journal.md).
 
 [`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
 Solveig repository twice — once with `solas`, once with this description —
-runs both under `solvm`, and requires the same output. **Sixty-six programs
+runs both under `solvm`, and requires the same output. **Sixty-eight programs
 print exactly the same bytes, tracebacks included**: the file and the line a
 message points at are compared rather than normalised away, which they were
-until `$pos` gave a clause the position it needed.
+until `$pos` gave a clause the position it needed and `%rewrite inline` made
+the frames themselves agree.
 
 It found two bugs in the front end, neither of them findable by rendering: the
 `-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
@@ -199,23 +200,39 @@ format's own answer for that is no file table and a bare line, so that is what
 is written. A line number naming a file nobody said is worse than no file name
 at all — see [ROADMAP 1.3](../../docs/ROADMAP.md).
 
+### Inlined control flow
+
+`solas` compiles the block of an `ifTrue:`, an `ifFalse:`, an `ifElse:`, an
+`and:`, an `or:`, a `whileTrue:` and a `doUntil:` into the enclosing chunk,
+behind a jump, whenever every block is written right there with no parameters
+and no temporaries. So does this, and it is a `%rewrite` of seven rules:
+
+```
+Send(to: c, message: "ifTrue", args: [Block(params: [], temps: [], body: b)])
+  => IfTrue(cond: $c, body: $b) .
+```
+
+**A rewrite rather than clauses, and the size of the alternative is why.** An
+inlined block that stayed a `Block` node would still open a chunk, start fresh
+name and constant tables, and push a frame's worth of slots — and every one of
+those would have had to become a `lookup` on whether its parent inlined it,
+about thirty of them, in the most intricate rule here. Taking the node out of
+the tree costs nothing: what is left is a list of statements where the send
+was, and it compiles in the enclosing frame because that is the frame it is in.
+`OP_OUTER` depths come out right without anything adjusting them.
+
+The restrictions are `solas`'s and they are in the patterns. A block with
+parameters is an arity error when `ifElse` calls it with none, and inlining
+would quietly make it work; a block's temporaries belong to its own frame, and
+inlining would declare them in the enclosing one, where they could collide.
+Anything else falls through to the ordinary `Send` clause, so the slow path
+stays correct rather than merely unused.
+
 ### What it does not do
 
-**Inline a block.** `ifTrue`, `whileTrue`, `and` and `or` are real methods on
-real objects here, so a block and a send are correct where `solas` emits a jump
-over code in the enclosing chunk. The programs agree and the bytecode is
-longer — and longer is visible three ways:
-
-- seven programs differ in **a traceback line and nothing else**: a block that
-  is really a block is a frame `solas` has not got, and the frame around it
-  points at the statement the block is written in rather than at the send
-  inside it. Since the line table became exact this is the only thing left that
-  a traceback disagrees about.
-- `programs/pascal.sol` nests blocks 19 deep and the `.sob` format allows 16.
-  `solas` inlines its way under the limit; this does not, and the loader
-  refuses what it writes.
-- `programs/basic.sol` calls something recursive until the machine stops it and
-  prints what happened, so one extra frame per level stops it a test earlier.
-
-All three are counted apart in the test rather than compared, and none of them
-is a miscompile. See [ROADMAP 2.4](../../docs/ROADMAP.md).
+**Say which file a line is in, when a chunk holds two.** Six programs' `in
+script` frames print a bare line for that reason, and one more prints the
+enclosing statement's line where `solas` prints the inlined statement's. Both
+need a value computed for every element of a list, which the notation cannot
+say — see [ROADMAP 1.3](../../docs/ROADMAP.md). They are the only seven
+programs left that do not agree with the oracle on every byte.

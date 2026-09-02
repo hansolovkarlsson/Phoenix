@@ -98,9 +98,14 @@ an attribute cannot refer *forward* to a node the walk has not reached, so a
 forward declaration needs two passes where a reference attribute would need
 none.
 
-**Stratego's strategies** are the ready-made design for the `%rewrite` that was
-deferred at the start of this project. `bottomup` and `innermost` are the words
-for the thing, and there is no reason to invent others.
+**Stratego's strategies** were the ready-made design for the `%rewrite` that
+was deferred at the start of this project, and they were used as they stand:
+`topdown`, `bottomup` and `innermost` are the words for the thing, and there
+was no reason to invent others. What Phoenix adds is nothing — the traversal
+puts a built node back where the matched one was, and that is all a `%rewrite`
+is. The customer that made it worth building was not the term rewriting the
+name suggests but an **optimisation**: an inlined block is a node that should
+not be there, and no clause about a node can say that.
 
 **Statix's scope graphs**, if symbol tables ever get painful enough that
 threading an environment stops feeling adequate. Not yet — `thread` is doing

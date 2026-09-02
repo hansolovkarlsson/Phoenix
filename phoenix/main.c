@@ -365,10 +365,11 @@ int main(int argc, char **argv)
          * sequence worth having. A pass that reports stops the ones after it:
          * a later pass reading what a failed one left produces consequences of
          * the first mistake rather than new information. */
-        for (int i = 0; i < driver->npasses; i++) {
-            const Pass *pass = pass_find(g, driver->passes[i]);
-            if (!pass_run(a, g, &src, pass, tree)) { arena_free(a); return 1; }
-        }
+        for (int i = 0; i < driver->npasses; i++)
+            if (!driver_stage(a, g, &src, driver->passes[i], &tree)) {
+                arena_free(a);
+                return 1;
+            }
         if (!answer_attr) answer_attr = driver->answer;
 
         if (!answer_attr) {          /* a validation run says nothing */

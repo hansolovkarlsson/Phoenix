@@ -1,0 +1,15 @@
+(* A rewrite runs to change the tree rather than to answer about one, so an
+ * attribute it read would be a walk that has not happened. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass show
+  Number : out = "{}" of $text .
+%rewrite r bottomup
+  Number(text: t) => Number(text: $1.out) .
+%driver d = show, r -> out .

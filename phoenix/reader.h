@@ -73,6 +73,7 @@ void    expr_add(Reader *r, Expr *parent, const char *field, Expr *kid);
 /* the pass half, in pass.c */
 bool    read_passes(Reader *r, MToken *directive);
 bool    read_driver(Reader *r, MToken *directive);
+bool    read_rewrite(Reader *r, MToken *directive);
 
 /* reading one file into a grammar, in grammar.c -- recursive, for %import */
 bool    read_description(Arena *a, Grammar *g, const char *named, const char *by,
