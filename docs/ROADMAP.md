@@ -458,14 +458,22 @@ over every program ever compiled with it, so a fault found while reading it is
 found before anybody else sees it. That is the whole argument for a check
 existing at all, and the reason to prefer one over a comment.
 
-**And one thing no check can reach.** A description is checked when it is read;
-what `-o` writes out is checked by *comparing* it with `phx`, and that is only
-as strong as the widest thing compared. Text was compared for a year and the
-one backend emitting **bytes** was never written out as a compiler at all, so
-nothing noticed that a literal holding a NUL was frozen with `strlen` and
+**And two things no check can reach.** A description is checked when it is
+read; what `-o` writes out is checked by *comparing* it with `phx`, and that is
+only as strong as the widest thing compared. Text was compared for a year and
+the one backend emitting **bytes** was never written out as a compiler at all,
+so nothing noticed that a literal holding a NUL was frozen with `strlen` and
 arrived short while the length beside it still said otherwise. The two
 disagreed, silently, about a description they were both running. The suite
 compares `.sob` files now.
+
+The second is the **notation itself**. Every check on this page is about a
+description; [semantics.md](semantics.md) is about the language descriptions
+are written in, and nothing asked whether that page and `eval.c` still agreed.
+They could have drifted a claim at a time with the whole suite green. Every
+claim it makes is a check now, and every refusal it names is a clause, run
+through `phx` and through a compiler `phx` wrote — which has to complain in the
+same words. **A specification nothing runs is a document about a program.**
 
 ## 5. Known warts
 

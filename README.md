@@ -703,12 +703,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 153 checks, covering 35 Pascal programs against fpc
+make test       # 157 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 151 of the 153 need only what is vendored here, and the two
+repository** — 155 of the 157 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -774,6 +774,21 @@ and generated C — and they have to agree on 97. Everything they could disagree
 about is fixed in [docs/semantics.md](docs/semantics.md), in Phoenix's own terms
 rather than any host language's: integers that trap rather than wrap, floored
 division, no implicit conversion, structural equality.
+
+**And that page is executable.** Every claim it makes is a check in
+[`tests/grammars/semantics.phx`](tests/grammars/semantics.phx) and every
+refusal is a clause in `semantics-refused.phx`, run through `phx` and through a
+compiler `phx` wrote — which has to produce the same complaints byte for byte.
+
+```
+ok    44 claims from docs/semantics.md hold
+ok    and every refusal it names
+ok    and hold in a compiler phx wrote
+ok    with the same complaints, byte for byte
+```
+
+A specification nothing runs is a document about a program, and drifts from it
+one sentence at a time.
 
 ## The notation, described in itself
 

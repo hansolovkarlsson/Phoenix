@@ -1,0 +1,100 @@
+(* docs/semantics.md, made executable.
+ *
+ * That page is the specification: it says what the meta-language's arithmetic,
+ * comparison, text and formatting *are*, in Phoenix's own terms rather than
+ * any host language's, "so that a second backend has something exact to agree
+ * with". `eval.c`'s header says the two are changed together or not at all.
+ *
+ * Nothing checked that. The page and the code could drift a claim at a time
+ * and every test in this repository would still pass, because every one of
+ * them asks about a language being described rather than about the notation
+ * describing it.
+ *
+ * So: one check per claim, in the order the page makes them. A check that
+ * fires names the sentence it came from. Run through `phx` and through a
+ * compiler `phx` wrote, because the conformance rule is about those two
+ * agreeing and this is the page they agree *on*.
+ *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%pass claims
+
+  (* ---- integers: division and modulo are floored ---- *)
+  Case ! not ( 7 div  2 =  3) : "7 div 2"
+       ! not (-7 div  2 = -4) : "-7 div 2"
+       ! not ( 7 div -2 = -4) : "7 div -2"
+       ! not (-7 div -2 =  3) : "-7 div -2"
+       ! not ( 7 mod  2 =  1) : "7 mod 2"
+       ! not (-7 mod  2 =  1) : "-7 mod 2"
+       ! not ( 7 mod -2 = -1) : "7 mod -2"
+       ! not (-7 mod -2 = -1) : "-7 mod -2"
+
+         (* "The identity (a div b) * b + (a mod b) = a holds for every pair." *)
+       ! not (( 7 div  2) *  2 + ( 7 mod  2) =  7) : "the identity, 7 and 2"
+       ! not ((-7 div  2) *  2 + (-7 mod  2) = -7) : "the identity, -7 and 2"
+       ! not (( 7 div -2) * -2 + ( 7 mod -2) =  7) : "the identity, 7 and -2"
+       ! not ((-7 div -2) * -2 + (-7 mod -2) = -7) : "the identity, -7 and -2"
+
+         (* And the library's truncating pair, which exists because target
+          * languages disagree and truncation cannot be written in terms of
+          * flooring without a conditional. *)
+       ! not (quotient(-7, 2)  = -3) : "quotient truncates"
+       ! not (remainder(-7, 2) = -1) : "remainder truncates"
+
+  (* ---- floats: IEEE 754, and they do not trap ---- *)
+       ! not (("{}" of 1.0 / 0.0) = "infinity")  : "a float divided by zero"
+       ! not (("{}" of (0.0 - 1.0) / 0.0) = "-infinity") : "and the other way"
+       ! not (("{}" of 0.0 / 0.0) = "nan")       : "zero over zero"
+       ! not ((0.0 / 0.0) <> (0.0 / 0.0))        : "a nan is unequal to itself"
+
+         (* "the shortest decimal that reads back as the same value" *)
+       ! not (("{}" of 0.1) = "0.1")             : "0.1 writes as 0.1"
+       ! not (("{}" of 1.0) = "1")               : "1.0 writes as 1"
+
+  (* ---- text: bytes, one-based, both ends included ---- *)
+       ! not (size("hello") = 5)                 : "size counts bytes"
+       ! not (slice("abcdef", 2, 4) = "bcd")     : "slice is one-based and inclusive"
+       ! not (slice("abcdef", 1, 1) = "a")       : "a slice of one"
+       ! not ("abc" < "abd")                     : "text compares bytewise"
+       ! not ("Z" < "a")                         : "and orders ASCII by its encoding"
+
+  (* ---- comparison: structural, and across kinds unequal rather than an error ---- *)
+       ! not ([1, 2] = [1, 2])                   : "two lists are equal when their elements are"
+       ! not ([1, 2] <> [2, 1])                  : "and unequal when they are not"
+       ! not (1 <> "1")                          : "an integer is not text"
+       ! not (nil <> false)                      : "nil is not false"
+       ! not (nil <> 0)                          : "nil is not zero"
+       ! not (nil = nil)                         : "nil equals only itself"
+
+  (* ---- booleans: and and or short-circuit, left to right ----
+   *
+   * Asserted by **not failing**: the right-hand side of each of these divides
+   * by zero, which is an error the moment it is evaluated. *)
+       ! (false and (1 div 0 = 0))               : "and short-circuits"
+       ! not (true or (1 div 0 = 0))             : "or short-circuits"
+       ! not (not false)                         : "not"
+
+  (* ---- precedence, tightest first ---- *)
+       ! not (1 + 2 * 3 = 7)                     : "* binds tighter than +"
+       ! not (0 - 2 * 3 = 0 - 6)                 : "and unary minus is not part of the literal"
+       ! not ((not true and false) = false)      : "not binds tighter than and"
+       ! not (1 = 1 and 2 = 2)                   : "= binds tighter than and"
+
+  (* ---- formatting ---- *)
+       ! not (("{}" of 0 - 5) = "-5")            : "an integer, no padding and never a plus"
+       ! not (("{}" of true) = "true")           : "a boolean"
+       ! not (("{}{}" of "a", "b") = "ab")       : "two holes, left to right"
+       ! not (("{{}}{}" of 1) = "{}1")           : "doubled braces are literal"
+
+  (* ---- lists ---- *)
+       ! not (size([1, 2, 3]) = 3)               : "size of a list is its length"
+       ! not ([1, ...[2, 3]] = [1, 2, 3])        : "... spreads"
+       ! not (at([7, 8], 1) = 7)                 : "at is one-based" .
+
+%driver check = claims .

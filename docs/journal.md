@@ -2171,3 +2171,99 @@ The Solveig oracle has nothing left to say. That is worth noticing: it has been
 the sharpest instrument in this repository for five stages, and it has run out
 of disagreements. **The next real evidence has to come from a language nobody
 here has described yet.**
+
+## 2026-09-02 — the specification, made to run
+
+Two commits ago a bug turned up by asking a question nobody had asked: *what
+happens if the description that emits bytes is written out as a compiler?* The
+answer was that `phx` and the compiler it wrote disagreed, silently, and the
+lesson written down at the time was that **a claim about the code is only as
+strong as the tests that compare it**.
+
+So: what else is claimed and not compared?
+
+[`docs/semantics.md`](semantics.md) is the specification. It says what the
+meta-language's arithmetic, comparison, text and formatting *are*, in Phoenix's
+own terms, "so that a second backend has something exact to agree with", and
+`eval.c`'s header says the two are changed together or not at all.
+
+**Nothing checked that.** Every test in this repository asks about a language
+being *described* — Pascal against `fpc`, Solveig against `solas`, calc through
+two backends. None of them asks about the notation doing the describing. The
+page and `eval.c` could have drifted a claim at a time and the suite would have
+stayed green the whole way.
+
+### The page as a description
+
+```
+Case ! not ( 7 div  2 =  3) : "7 div 2"
+     ! not (-7 div  2 = -4) : "-7 div 2"
+     ...
+     ! not ((-7 div -2) * -2 + (-7 mod -2) = -7) : "the identity, -7 and -2"
+```
+
+Forty-four checks, in the order the page makes its claims, and a check that
+fires names the sentence it came from. There is nothing new in the notation
+here — a check is what a description already uses to refuse a program, pointed
+at the tool instead.
+
+Two of them are asserted by **not failing**, which is the only way to observe a
+short circuit from inside:
+
+```
+! (false and (1 div 0 = 0))   : "and short-circuits"
+```
+
+The right-hand side divides by zero. If `and` ever stopped short-circuiting,
+this would not report *"and short-circuits"* — it would report *"division by
+zero"*, which is a better message than the one written for it.
+
+### And the half a specification usually leaves out
+
+A page that says only what works is half a page, and the half it leaves out is
+the one two backends drift apart in: an implicit conversion one of them makes
+and the other does not is exactly the silent disagreement the page exists to
+prevent. So `semantics-refused.phx` is thirteen clauses that must not work —
+`1 + 1.0`, `"a" + "b"`, `int(1.5)`, overflow, `div` by zero, negating the most
+negative integer, `nil + 1`, `1 < "1"`, `not 1`, formatting a nil or a list,
+`...` of a non-list.
+
+A clause whose value cannot be worked out reports and leaves a failure behind,
+and the clauses after it still run — so one description asks for all thirteen
+at once, and the test checks that every message the page promises is among
+them.
+
+### The conformance rule, applied to the page it is about
+
+Both halves run through `phx` **and** through a compiler `phx` wrote. The
+assertions have to hold in both. The refusals have to produce **the same
+complaints, byte for byte** — which they do, and which is the strongest form
+the rule takes anywhere in this repository, because the thing being compared is
+the tool's own account of what it means.
+
+```
+ok    44 claims from docs/semantics.md hold
+ok    and every refusal it names
+ok    and hold in a compiler phx wrote
+ok    with the same complaints, byte for byte
+```
+
+### Checked, rather than assumed
+
+Deleting one line from `div_floored` — the correction that makes division
+floored rather than truncating — makes four claims fire and two tests fail,
+each naming the sentence on the page that stopped being true:
+
+```
+error: -7 div 2
+error: 7 div -2
+error: the identity, -7 and 2
+error: the identity, 7 and -2
+```
+
+That was run rather than reasoned about, which is the same discipline the NUL
+tests got and for the same reason: a regression test nobody has seen fail is a
+regression test nobody has tested.
+
+**A specification nothing runs is a document about a program**, and it drifts
+from it one sentence at a time. This one runs.

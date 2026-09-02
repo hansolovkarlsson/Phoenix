@@ -16,6 +16,19 @@ and a backend that cannot honour them is wrong.
 > identical output. A backend disagreeing with this page is a defect in the
 > backend.
 
+**And this page is executable.**
+[`tests/grammars/semantics.phx`](../tests/grammars/semantics.phx) is every
+claim below as a check, in the order they are made, and
+[`semantics-refused.phx`](../tests/grammars/semantics-refused.phx) is every
+refusal. Both are run by `make test`, through `phx` *and* through a compiler
+`phx` wrote — which has to produce the same complaints byte for byte, since
+that is what the rule above says.
+
+A check that fires names the sentence it came from. Editing a claim here
+without editing `eval.c` fails the suite, and so does the reverse, which is
+what "the two are changed together or not at all" has to mean if it is to mean
+anything.
+
 ---
 
 ## The most important thing on this page

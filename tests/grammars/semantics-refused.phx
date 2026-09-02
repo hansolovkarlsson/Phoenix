@@ -1,0 +1,52 @@
+(* The other half of docs/semantics.md: the things it says are **errors**.
+ *
+ * A specification that only says what works is half a specification, and the
+ * half it leaves out is the one two backends drift apart in -- an implicit
+ * conversion that one of them makes and the other does not is exactly the
+ * silent disagreement that page exists to prevent.
+ *
+ * One clause per refusal. A clause whose value cannot be worked out reports
+ * and leaves a failure behind, and the clauses after it still run, so this
+ * asks for all of them at once.
+ *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%pass refused
+  Case
+       (* "No implicit conversion, anywhere. `1 + 1.0` is an error, not 2.0." *)
+       : mixed      = 1 + 1.0
+       (* "`+` does not join text" *)
+       : joined     = "a" + "b"
+       (* "int(x) on a float is refused -- narrowing has a direction" *)
+       : narrowed   = int(1.5)
+
+       (* "Overflow is an error, not a wrap." *)
+       : overflowed = 9223372036854775807 + 1
+       (* "Division by zero is an error. So is div or mod by zero" *)
+       : divided    = 1 div 0
+       : modded     = 1 mod 0
+       (* "and so is negating the most negative integer" *)
+       : negated    = 0 - (0 - 9223372036854775807 - 1)
+
+       (* "Arithmetic on nil is an error rather than a silent zero" *)
+       : nilled     = nil + 1
+       (* "< > <= >= work only within a kind. Across kinds they are an error" *)
+       : ordered    = 1 < "1"
+       (* "not takes a boolean ... Nothing else converts to a boolean." *)
+       : notted     = not 1
+
+       (* "nil: an error. node, list: an error." -- a default rendering for a
+        * node is a thing that would silently appear in generated code *)
+       : written    = "{}" of nil
+       : listed     = "{}" of [1, 2]
+
+       (* "`...` of anything that is not a list is an error" *)
+       : spread     = [1, ...2] .
+
+%driver refuse = refused .

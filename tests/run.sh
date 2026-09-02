@@ -402,6 +402,75 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# docs/semantics.md itself.
+#
+# That page is the specification -- what the meta-language's arithmetic,
+# comparison, text and formatting *are*, in Phoenix's own terms, "so that a
+# second backend has something exact to agree with". `eval.c`'s header says the
+# two are changed together or not at all, and nothing checked that: every other
+# test here asks about a language being described rather than about the
+# notation describing it, so the page and the code could have drifted a claim
+# at a time with the suite still green.
+
+echo "the specification, claim by claim"
+
+claims=$(grep -c '^ *! ' "$root/tests/grammars/semantics.phx")
+accepts "$claims claims from docs/semantics.md hold" \
+        "$root/tests/grammars/semantics.phx" "$root/tests/sources/one-node.txt"
+
+# The half a specification that only says what works leaves out -- and the half
+# two backends drift apart in, because an implicit conversion one of them makes
+# and the other does not is exactly the silent disagreement that page is for.
+refusals="$root/tests/grammars/semantics-refused.phx"
+out=$("$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>&1)
+missing=""
+for want in "there is no conversion" \
+            "does not join text" \
+            "does not narrow a float" \
+            "overflows a 64-bit integer" \
+            "division by zero" \
+            "no order across kinds" \
+            "wants a boolean" \
+            "nil has no written form" \
+            "a list has no written form" \
+            "'...' wants a list"; do
+    printf '%s' "$out" | grep -qF -- "$want" || missing="$missing '$want'"
+done
+if [ -n "$missing" ]; then
+    report fail "and every refusal it names" "no message matching$missing"
+elif "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+    report fail "and every refusal it names" "the description was accepted"
+else
+    report pass "and every refusal it names"
+fi
+
+# The conformance rule, applied to the page the rule is *about*: the same
+# claims, and the same complaints about breaking them, from `phx` and from a
+# compiler `phx` wrote.
+if "$phx" "$root/tests/grammars/semantics.phx" -o "$tmp0/sem.c" 2>/dev/null \
+   && cc -o "$tmp0/semc" "$tmp0/sem.c" 2>/dev/null \
+   && "$phx" "$refusals" -o "$tmp0/semr.c" 2>/dev/null \
+   && cc -o "$tmp0/semrc" "$tmp0/semr.c" 2>/dev/null; then
+
+    if "$tmp0/semc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+        report pass "and hold in a compiler phx wrote"
+    else
+        report fail "and hold in a compiler phx wrote"
+    fi
+
+    "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-phx" >/dev/null
+    "$tmp0/semrc" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-cc" >/dev/null
+    if cmp -s "$tmp0/sem-phx" "$tmp0/sem-cc"; then
+        report pass "with the same complaints, byte for byte"
+    else
+        report fail "with the same complaints, byte for byte" \
+                    "$(diff "$tmp0/sem-phx" "$tmp0/sem-cc" | head -2 | tr '\n' ' ')"
+    fi
+else
+    report fail "and hold in a compiler phx wrote" "it did not build"
+fi
+
+# ---------------------------------------------------------------------------
 # The conformance rule from docs/semantics.md, made a test rather than a hope:
 # one .phx, interpreted and through both backends, must give the same answer.
 
