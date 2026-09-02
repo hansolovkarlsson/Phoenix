@@ -732,6 +732,61 @@ static bool read_include(Reader *r, MToken *d)
     return true;
 }
 
+/* `%embed runtime "awk-runtime.c"` -- see the comment on `Embed` in phx.h.
+ *
+ * Looked for beside the description and then in the library, which is exactly
+ * where `%import` looks, because it is the same question about the same kind
+ * of neighbour.
+ */
+static bool read_embed(Reader *r, MToken *d, const char *path)
+{
+    Grammar *g = r->g;
+
+    if (!at(r, T_NAME) || peek(r)->line != d->line) {
+        diag_error(r->src, d->pos, "%%embed wants a name and then a file");
+        diag_note("as in `%%embed runtime \"awk-runtime.c\" .`");
+        return false;
+    }
+    MToken *name = advance(r);
+
+    if (!at(r, T_LIT)) {
+        diag_error(r->src, name->pos,
+                   "%%embed names '%s' and then no file to put in it", name->text);
+        return false;
+    }
+    MToken *file = advance(r);
+
+    for (int i = 0; i < g->nembeds; i++)
+        if (strcmp(g->embeds[i].name, name->text) == 0) {
+            diag_error(r->src, name->pos, "'%s' is already embedded", name->text);
+            return false;
+        }
+
+    char  *where = path_beside(r->a, path, file->text);
+    Source got;
+    if (!source_try(r->a, where, &got)) {
+        char *shared = path_beside(r->a, phx_library_path(r->a), file->text);
+        if (!source_try(r->a, shared, &got)) {
+            diag_error(r->src, file->pos, "cannot read '%s'", file->text);
+            diag_note("looked at %s and at %s", where, shared);
+            return false;
+        }
+        where = shared;
+    }
+
+    if (g->nembeds == g->capembeds) {
+        int    cap = g->capembeds ? g->capembeds * 2 : 4;
+        Embed *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+        memcpy(big, g->embeds, (size_t)g->nembeds * sizeof *big);
+        g->embeds    = big;
+        g->capembeds = cap;
+    }
+    g->embeds[g->nembeds++] = (Embed){ .name = name->text, .text = got.text,
+                                       .len = got.size, .path = where,
+                                       .pos = name->pos };
+    return true;
+}
+
 static bool read_file(Reader *r, const char *path)
 {
     Grammar *g       = r->g;
@@ -776,6 +831,9 @@ static bool read_file(Reader *r, const char *path)
             else if (strcmp(d->text, "include")    == 0) {
                 if (!read_include(r, d)) return false;
             }
+            else if (strcmp(d->text, "embed")      == 0) {
+                if (!read_embed(r, d, path)) return false;
+            }
             else if (strcmp(d->text, "rewrite")    == 0) {
                 if (!read_rewrite(r, d)) return false;
                 continue;
@@ -784,7 +842,7 @@ static bool read_file(Reader *r, const char *path)
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%rewrite "
-                          "%%import %%require %%driver %%include");
+                          "%%import %%embed %%require %%driver %%include");
                 return false;
             }
 

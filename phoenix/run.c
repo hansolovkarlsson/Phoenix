@@ -369,9 +369,17 @@ static Value *run_ref(Eval *e, const Expr *x)
     for (Scope *s = r->scope; s; s = s->outer)             /* 5. inherited */
         if (strcmp(s->name, x->name) == 0) return s->value;
 
+    /* 6. a file the description embedded. Last, so that a node answering to
+     * that name always wins -- an embed is a constant of the whole
+     * description and the least local thing there is. */
+    for (int i = 0; i < r->g->nembeds; i++)
+        if (strcmp(r->g->embeds[i].name, x->name) == 0)
+            return value_text(r->a, r->g->embeds[i].text, r->g->embeds[i].len);
+
     diag_error(&r->g->src, x->pos,
                "nothing here is called '%s' -- not a binding, a field of %s, "
-               "an attribute of it, a threaded attribute, or one handed down",
+               "an attribute of it, a threaded attribute, one handed down, or "
+               "a file this description embeds",
                x->name, r->node->type ? r->node->type : "this node");
     if (strcmp(x->name, "line") == 0 || strcmp(x->name, "file") == 0
         || strcmp(x->name, "column") == 0)

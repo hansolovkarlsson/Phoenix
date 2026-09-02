@@ -1,7 +1,7 @@
 # What it costs
 
-*Measured, on this machine, with `bench/run.sh`. Every number here is
-reproducible; the step counts are exact and the times are not.*
+*Measured, on this machine, with `bench/run.sh` and with `phx --stats`. Every
+number here is reproducible; the step counts are exact and the times are not.*
 
 The question worth asking was never *how fast*. It was **whether the work grows
 in proportion to the input** — because a PEG with no memoisation need not, and
@@ -10,7 +10,7 @@ complexity is a defect.
 
 ---
 
-## It is linear, in all four shapes
+## It is linear, in all four shapes of Pascal
 
 A step is one attempt to match one grammar node at one position. Steps are
 deterministic, so this is the shape of the curve exactly rather than a
@@ -30,6 +30,35 @@ The constant is about **24 match-steps per token** — the price of ordered
 choice, most of it `factor` trying an identifier three ways before settling.
 Memoisation would cut it and cost a table per position; nothing yet suggests
 that trade is worth making.
+
+## And in awk, which is the grammar that ought to have broken it
+
+Pascal's grammar is a shallow ladder and an LL(1) shape. awk's is neither:
+fourteen rungs from `expr` down to `primary`, **concatenation with no
+operator** — two things beside each other are joined, which is why its grammar
+is not LL(1) — and a `print` whose arguments need six of those rungs duplicated
+because `print a > b` writes to a file.
+
+| shape | steps per token |
+| --- | --- |
+| `width`, *n* statements, n = 50 → 800 | 372.2 → 368.5 |
+| `expr`, one *n*-term expression, n = 25 → 200 | 244.7 → 206.8 |
+| the corpus (awk other people wrote) | 365 – 2,594 |
+
+**Sixteen times the input, the same work per token**, and the expression shape
+gets *cheaper* per token as it grows. The curve is the same as Pascal's.
+
+The constant is not: **370 to 2,600 match-steps per token against Pascal's 24**.
+That is what a deep ladder and a greedy juxtaposition cost, and it is the
+honest number for a grammar that a hand-written parser would use precedence
+climbing for.
+
+It does not matter, which is the point of measuring it. The largest program in
+the corpus is `et_c.awk` — 269 lines, 1,452 tokens, 2.9 million match-steps —
+and it reaches **running C in 50 ms**. The node count is the more surprising
+figure: 70,204 values built for 1,452 tokens, most of them made and dropped
+inside alternatives that failed, which is what ordered choice costs and what
+memoisation would save.
 
 ## What it takes in time
 

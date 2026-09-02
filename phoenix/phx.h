@@ -197,6 +197,33 @@ typedef struct Pass    Pass;   /* below -- the Grammar holds them */
 typedef struct Driver  Driver;
 typedef struct Rewrite Rewrite;
 
+/* ------------------------------------------------------------------ */
+/* Embedded files
+ *
+ *     %embed runtime "awk-runtime.c" .
+ *
+ * The bytes of another file, under a name a clause reads like any other value.
+ *
+ * **A backend that emits a language needs that language's runtime**, and a
+ * description has nowhere to put one: `languages/pascal/pascal-c.phx` gets
+ * away with four `#include`s because Pascal's types are C's, and
+ * `languages/awk/awk-c.phx` needs seven hundred lines because awk's are not.
+ * Held as literals they are unreadable and, worse, **untestable** -- the C
+ * cannot be compiled or run except through a program generated from it.
+ *
+ * The file is read when the description is, and its bytes are frozen into
+ * whatever `-o` writes, so *one file, no headers, no library* still holds. A
+ * change to the embedded file is a change to the description, which is the
+ * sharp edge and is the same one `%import` has.
+ */
+typedef struct {
+    char   *name;
+    char   *text;
+    size_t  len;
+    char   *path;   /* where it came from, for --imports */
+    size_t  pos;    /* where it was named, for the checks */
+} Embed;
+
 typedef struct {
     Arena     *arena;
     Source     src;         /* every imported file, joined */
@@ -227,6 +254,13 @@ typedef struct {
     Rewrite *rewrites;
     int      nrewrites;
     int      caprewrites;
+
+    /* `%embed runtime "awk-runtime.c"` -- a file's bytes, under a name a
+     * clause can read. Frozen when the description is read, so a compiler
+     * written out with `-o` still needs nothing beside it. */
+    Embed   *embeds;
+    int      nembeds;
+    int      capembeds;
 
     /* `%include Include path` -- which node stands for a target file's own
      * include, and which of its fields holds the name of the file. NULL when

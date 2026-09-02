@@ -332,6 +332,31 @@ static void emit_passes(Emit *e)
     fputs("};\n", e->out);
 }
 
+static void emit_embeds(Emit *e)
+{
+    const Grammar *g = e->g;
+
+    for (int i = 0; i < g->nembeds; i++) {
+        fprintf(e->out, "static char em%d[] =\n  ", i);
+        for (size_t k = 0; k < g->embeds[i].len; k += 60) {
+            size_t n = g->embeds[i].len - k < 60 ? g->embeds[i].len - k : 60;
+            emit_text(e, g->embeds[i].text + k, n);
+            fputs("\n  ", e->out);
+        }
+        fputs(";\n", e->out);
+    }
+
+    fputs("\nstatic Embed phx_embeds[] = {\n", e->out);
+    for (int i = 0; i < g->nembeds; i++) {
+        fputs("  {", e->out);
+        emit_string(e, g->embeds[i].name);
+        fprintf(e->out, ",em%d,%zu,", i, g->embeds[i].len);
+        emit_string(e, g->embeds[i].path);
+        fprintf(e->out, ",%zu},\n", g->embeds[i].pos);
+    }
+    fputs("};\n", e->out);
+}
+
 static void emit_rewrites(Emit *e)
 {
     const Grammar *g = e->g;
@@ -420,6 +445,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
     emit_rules(&e);
     emit_passes(&e);
     emit_rewrites(&e);
+    emit_embeds(&e);
     emit_drivers(&e);
 
     /* The description's own text, so that a fault in a pass still reports
@@ -460,7 +486,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "  phx_reserved, %d,\n"
         "  phx_passes, %d, %d,\n"
         "  phx_drivers, %d, %d,\n"
-        "  phx_rewrites, %d, %d,\n",
+        "  phx_rewrites, %d, %d,\n"
+        "  phx_embeds, %d, %d,\n",
         g->map.n, g->map.n,
         g->map.n ? g->map.units[0].path : "",
         g->map.n, g->map.n,
@@ -469,7 +496,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         g->nreserved,
         g->npasses, g->npasses,
         g->ndrivers, g->ndrivers,
-        g->nrewrites, g->nrewrites);
+        g->nrewrites, g->nrewrites,
+        g->nembeds, g->nembeds);
 
     /* `%include`, which the generated compiler needs as much as `phx` does:
      * a target file that includes another does so whoever is compiling it. */

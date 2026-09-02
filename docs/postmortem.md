@@ -104,7 +104,7 @@ for Solveig.
 
 ### What the numbers are
 
-- 170 tests, 0 failing
+- 176 tests, 0 failing
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
 - 6 awk programs other people wrote, and 7 written here, doing the same thing

@@ -2732,3 +2732,80 @@ its input loop, none of which C brings.
 The ratio is the argument for the whole project: **the awk in the corpus is
 800 lines, the description that compiles it is 1,600, and the description
 works on awk nobody has written yet.**
+
+## 2026-09-02 — measuring awk, and the seven hundred lines that could not be compiled
+
+The roadmap was down to entries it says not to do, so the next thing was to
+measure rather than to build — which is what
+[1.2](ROADMAP.md) rests on and what it had only ever been told about Pascal.
+
+### awk is the grammar that ought to have broken it
+
+Pascal's is a shallow ladder and an LL(1) shape. awk's is neither: fourteen
+rungs from `expr` down to `primary`, **concatenation with no operator**, and a
+`print` whose arguments need six of those rungs duplicated because `print a > b`
+writes to a file.
+
+| | |
+| --- | --- |
+| Pascal | 24 match-steps per token |
+| awk, simple statements | **370**, flat from 705 tokens to 11,205 |
+| awk, the corpus | 365 – 2,594 |
+
+**A hundred times the constant and the same curve.** Sixteen times the input,
+the same work per token; the expression shape gets *cheaper* per token as it
+grows. And the constant does not matter: `et_c.awk` is 269 lines, 1,452 tokens
+and 2.9 million match-steps, and it reaches running C in **50 ms**.
+
+The figure that surprised me was the node count: **70,204 values built for
+1,452 tokens**, nearly all of them made and dropped inside alternatives that
+failed. That is what ordered choice costs and what memoisation would save, and
+neither is worth a table per position at 50 ms.
+
+So 1.2 is refused a third time, and this time by the hardest grammar tried
+rather than by the easiest.
+
+### And what the measuring actually found
+
+682 of `awk-c.phx`'s 1,187 lines were **quoted C** — 58% of the biggest
+description in the repository, held as one-line string literals.
+
+[1.5](ROADMAP.md) was the entry for that, and it said to wait for a second
+customer. **That was the wrong test.** There is still only one customer. What
+made the case is a cost the entry had not noticed:
+
+> Seven hundred lines of C inside a `.phx` **cannot be compiled**.
+
+The runtime was written as a standalone file and checked against awk before
+being embedded — twice, once for each stage — and both times the file was
+thrown away and only the transcription survived. The artefact that had been
+tested was not the artefact in the repository. Nothing would have caught a
+change to the literals; `make test` compiled the runtime only as part of a
+program generated from it, which is a much weaker thing to compile.
+
+```
+%embed runtime "awk-runtime.c" .
+```
+
+The file is read when the description is read and frozen into whatever `-o`
+writes, so *one file, no headers, no library* still holds. It is looked for
+beside the description and then in `lib/`, which is where `%import` looks;
+`--imports` names it; and there is a test that the bytes survive being written
+into a generated compiler, which is the lesson of the NUL bug applied in
+advance.
+
+**`awk-c.phx` went from 1,187 lines to 510**, and the 682 lines that came out
+are byte-identical to the C that was tested — checked, rather than assumed,
+because that was the whole problem.
+
+### The rule this changes
+
+3.4 says a library entry has to be something a real pass needed and could not
+be written in the notation. 1.5 said to wait for a second customer. Both are
+rules about *how many* — and the thing that decided this was **what the cost
+was**, which neither rule asks about.
+
+The cost here was not repetition and not size. It was that a tested artefact
+and a shipped artefact had drifted apart with nothing able to notice. That is
+worth adding to the questions a mechanism has to answer: not only *who else
+wants this*, but *what can no longer be checked without it*.

@@ -132,6 +132,7 @@ directive-item = "%tokens" "."     -> Tokens
                | "%require"  n:names "." -> Require(names: $n)
                | "%start"  n:name    "." -> Start(name: $n)
                | "%import" p:literal "." -> Import(path: $p)
+               | "%embed" n:name p:literal "." -> Embed(name: $n, path: $p)
                | "%include" t:name f:name "." -> Include(type: $t, field: $f)
                | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)
                | "%rewrite" n:name h:name r:{ rewrite-rule }

@@ -1,0 +1,9 @@
+(* A file that is not there. Looked for beside the description and then in the
+ * library, which is where `%import` looks, and the message says both. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%embed nothing "no-such-file.c" .

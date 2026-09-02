@@ -42,6 +42,17 @@ refuses() {
     fi
 }
 
+# prints <what> <expected> <args...> -- what phx writes, exactly.
+prints() {
+    what=$1; _want=$2; shift 2
+    got=$("$phx" "$@" 2>&1)
+    if [ "$got" = "$_want" ]; then
+        report pass "$what"
+    else
+        report fail "$what" "wanted '$_want', got '$got'"
+    fi
+}
+
 # warns <what> <expected text> <args...>
 warns() {
     what=$1; _want=$2; shift 2
@@ -190,6 +201,49 @@ refuses "a reserved word as a name" "expected"  "$root/languages/calc/calc-c.phx
 refuses "a character no rule matches" "nothing here matches" \
         "$root/languages/calc/calc-c.phx" "$root/languages/calc/tests/bad-token.calc"
 
+echo "a file a description embeds"
+# A backend that emits a language needs that language's runtime, and a
+# description has nowhere to put one but a string literal.
+# `languages/awk/awk-c.phx` had seven hundred lines of C that way -- unreadable,
+# and **untestable**, because the C could not be compiled except through a
+# program generated from it. `%embed` reads the file when the description is
+# read and freezes it into whatever `-o` writes, so one file, no headers, no
+# library still holds.
+# Compared as bytes rather than as a shell string, because the file's own
+# trailing newline is part of what was embedded.
+"$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
+       > "$tmp0/embedded.out" 2>/dev/null
+{ cat "$root/tests/grammars/embedded.c"; printf 'int main(void) { return 0; }\n'; } \
+       > "$tmp0/embedded.want"
+if cmp -s "$tmp0/embedded.out" "$tmp0/embedded.want"; then
+    report pass "the bytes of another file, under a name"
+else
+    report fail "the bytes of another file, under a name" \
+                "$(diff "$tmp0/embedded.want" "$tmp0/embedded.out" | head -3 | tr '\n' ' ')"
+fi
+refuses "a file that is not there" "cannot read" \
+        "$root/tests/grammars/embed-missing.phx"
+refuses "two files under one name" "is already embedded" \
+        "$root/tests/grammars/embed-twice.phx"
+
+# The embedded file is a file the description was assembled from, so a Makefile
+# that rebuilds on a change wants it listed.
+if "$phx" --imports "$root/languages/awk/awk-c.phx" 2>/dev/null \
+   | grep -q 'awk-runtime\.c'; then
+    report pass "--imports names it"
+else
+    report fail "--imports names it"
+fi
+
+# And the point of the whole thing: the runtime is a C file now, so it can be
+# compiled on its own -- which is how it was written and how it was checked
+# against awk before anything embedded it.
+if cc -fsyntax-only -xc "$root/languages/awk/awk-runtime.c" 2>/dev/null; then
+    report pass "and awk's runtime compiles on its own"
+else
+    report fail "and awk's runtime compiles on its own"
+fi
+
 echo "what a source includes"
 # `%include` is `%import` one level down: for the language being described
 # rather than for the description. It cannot be a pass -- a pass walks one tree
@@ -197,17 +251,6 @@ echo "what a source includes"
 # these are the four new ways a reader that follows files can fail.
 inc="$root/tests/grammars/includes.phx"
 src="$root/tests/sources/includes"
-
-# prints <what> <expected> <args...> -- what phx writes, exactly.
-prints() {
-    what=$1; _want=$2; shift 2
-    got=$("$phx" "$@" 2>&1)
-    if [ "$got" = "$_want" ]; then
-        report pass "$what"
-    else
-        report fail "$what" "wanted '$_want', got '$got'"
-    fi
-}
 
 # shows <what> <expected> <args...> -- the `show` pass over the spliced tree.
 shows() {
@@ -686,6 +729,23 @@ if "$phx" "$root/tests/grammars/fold.phx" -o "$tmp0/fold.c" 2>/dev/null \
     fi
 else
     report fail "a generated compiler runs a rewrite" "it did not build"
+fi
+
+# An embedded file has to survive the freezing like anything else -- and it is
+# the one thing here most likely to hold a byte that does not survive being
+# written as a C literal.
+if "$phx" "$root/tests/grammars/embed.phx" -o "$tmp0/emb.c" 2>/dev/null \
+   && cc -o "$tmp0/embc" "$tmp0/emb.c" 2>/dev/null; then
+    "$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
+           > "$tmp0/emb-phx" 2>/dev/null
+    "$tmp0/embc" --raw "$root/tests/sources/zero.txt" > "$tmp0/emb-cc" 2>/dev/null
+    if cmp -s "$tmp0/emb-phx" "$tmp0/emb-cc"; then
+        report pass "an embedded file survives the freezing"
+    else
+        report fail "an embedded file survives the freezing"
+    fi
+else
+    report fail "an embedded file survives the freezing" "it did not build"
 fi
 
 # A generated compiler follows includes too, and has to: whether one file

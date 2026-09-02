@@ -1,0 +1,25 @@
+(* `%embed` -- a file's bytes, under a name a clause reads.
+ *
+ * A backend that emits a language needs that language's runtime, and a
+ * description has nowhere to put one but a string literal.
+ * `languages/awk/awk-c.phx` had seven hundred lines of C that way: unreadable,
+ * and worse, **untestable** -- the C could not be compiled except through a
+ * program generated from it.
+ *
+ * The file is read when the description is and frozen into whatever `-o`
+ * writes, so *one file, no headers, no library* still holds. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+
+%embed prelude "embedded.c" .
+
+%pass emit
+  Number : out = "{}int main(void) {{ return {}; }}\n" of $prelude, $text .
+
+%driver c = emit -> out .

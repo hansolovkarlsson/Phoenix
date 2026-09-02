@@ -13,9 +13,10 @@ predictions made here against what the evidence turned out to say.
 
 All but one are done, and are kept here rather than deleted, because what an
 entry predicted and what it cost is the only way to tell whether this page is
-worth writing — and two of them predicted wrong, which is the more useful half.
-What is left is [1.2](#12-compiling-the-tables-to-code), which this page has
-said twice is not worth doing.
+worth writing — and three of them predicted wrong, which is the more useful
+half. What is left is [1.2](#12-compiling-the-tables-to-code), which this page
+has now said three times is not worth doing, the third time with awk's numbers
+behind it.
 
 ### 1.0 A reader-level mechanism, for a target language's imports — **done**
 
@@ -86,12 +87,23 @@ of there being **one** implementation of the notation rather than two — see
 [the README](../README.md#writing-a-compiler-out) for why that trade was made
 deliberately.
 
-**Measured, and the case for doing it is weak.** [performance.md](performance.md)
-has the numbers: the matcher is linear in all four shapes tried, at about 24
-match-steps per token, and 20,000 lines of Pascal reach running C in 238 ms.
-Memoisation would cut the constant and cost a table per position; generating
-code would cut it further and cost a second implementation of the notation.
-Nothing has asked for either.
+**Measured three times now, and the case is weaker each time.**
+[performance.md](performance.md) has the numbers. The matcher is linear in
+every shape tried — Pascal's four, and awk's two — and 20,000 lines of Pascal
+reach running C in 238 ms.
+
+**awk is the interesting third measurement**, because it is the grammar that
+ought to have broken this: fourteen rungs of expression ladder, concatenation
+with no operator, and a `print` whose arguments need six of those rungs
+duplicated. It costs **370 to 2,600 match-steps per token** where Pascal costs
+24 — and it is still flat, at 369 per token from 705 tokens to 11,205. A
+hundred times the constant and the same curve.
+
+And the constant does not matter: the largest program in the awk corpus is 269
+lines and reaches running C in **50 ms**. Memoisation would cut it and cost a
+table per position; generating code would cut it further and cost a second
+implementation of the notation. The hardest grammar tried has not asked for
+either.
 
 If it is ever done, the order is what makes it safe: the tables pin the
 definition down first, and code generated against them can be checked against
@@ -184,36 +196,40 @@ position is a line *and* a column at both ends or at neither. It is the second
 field on that node nothing has asked for yet, and both are there for the same
 reason: a shape that is right is cheaper to keep than a shape that is minimal.
 
-### 1.5 A runtime that is not a literal
+### 1.5 A runtime that is not a literal — **done**
 
-**Found by writing an awk backend**, and the first entry here that is about the
-*size* of something rather than about whether it can be said at all.
+**Found by writing an awk backend**, and the only entry here that was about the
+*size* of something rather than about whether it could be said at all.
 
 `languages/pascal/pascal-c.phx` emits four `#include`s and Pascal's own types
-do the rest. `languages/awk/awk-c.phx` emits **seven hundred lines of C** —
-awk's value model is a string and a number at once, and its one aggregate is a
-hash table, and a compiled awk program has to carry both — held as a list of
-one-line literals and joined:
+do the rest. `languages/awk/awk-c.phx` needs **seven hundred lines** — awk's
+value model is a string and a number at once, its one aggregate is a hash
+table, and neither is C's — and they were held as seven hundred string
+literals, which was 58% of the description.
 
 ```
-: runtime = join([
-    "typedef struct { char *s; double n; int isnum, strnum; } Cell;",
-    ...
-  ], "\n")
+%embed runtime "awk-runtime.c" .
+...
+: out = join([$runtime, ...], "\n") .
 ```
 
-That works, it is readable line by line, and it is fifty times the size of the
-thing it is imitating. Nothing in the notation reads a file at emit time, so
-there is nowhere else to put it.
+The file is read when the description is read and its bytes are frozen into
+whatever `-o` writes, so *one file, no headers, no library* still holds. It is
+looked for beside the description and then in the library, which is where
+`%import` looks, because it is the same question about the same kind of
+neighbour. `--imports` names it, because a Makefile that rebuilds on a change
+wants it.
 
-**`%prelude "awk-runtime.c"` is the obvious answer and there is exactly one
-customer for it**, which is why this is written down rather than built. What to
-weigh when there is a second: a description that names a file it does not
-contain stops being one thing, and `-o` writing a compiler that needs a file
-beside it would be the end of *one file, no headers, no library*. A `%prelude`
-would have to be read and **frozen in** at emit time, like `%import` already
-is, which is a small mechanism with a sharp edge — the file is read when the
-description is, so a change to it is a change to the description.
+**This entry said to wait for a second customer, and that was the wrong test.**
+There is still only one. What made the case was the other half of the cost,
+which the entry had not noticed: seven hundred lines of C in a `.phx` cannot be
+**compiled**. The runtime was written as a standalone file and checked against
+awk before being embedded — and then that file was thrown away and only the
+transcription survived, so the artefact that had been tested was not the
+artefact in the repository. It is now, and `make test` compiles it.
+
+The sharp edge is the one `%import` already has: a change to the embedded file
+is a change to the description, and nothing says so at the point of use.
 
 ---
 

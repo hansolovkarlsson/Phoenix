@@ -235,6 +235,9 @@ int main(int argc, char **argv)
 
     if (want_imports) {
         for (int i = 0; i < g->map.n; i++) printf("%s\n", g->map.units[i].path);
+        /* A file the description embeds was assembled into it as surely as one
+         * it imported, and a Makefile that rebuilds on a change wants both. */
+        for (int i = 0; i < g->nembeds; i++) printf("%s\n", g->embeds[i].path);
         arena_free(a);
         return diag_failed() ? 1 : 0;
     }

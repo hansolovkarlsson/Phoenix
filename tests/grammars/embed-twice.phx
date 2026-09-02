@@ -1,0 +1,10 @@
+(* Two files under one name. Which one `$prelude` meant would be the order they
+ * were written in, and nothing about the notation says that is meaningful. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%embed prelude "embedded.c" .
+%embed prelude "embedded.c" .

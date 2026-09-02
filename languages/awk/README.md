@@ -131,8 +131,13 @@ is no: what reference attributes would have bought is one walk instead of two.
 a value is not a machine word**: `pascal-c.phx` emits four `#include`s and lets
 C's types do the work, and `solveig-sob.phx` emits opcodes for a machine that
 already knows what a value is. awk has one type and it is not C's, so a
-compiled awk program carries a runtime — 300 lines of it, held as a list of
-one-line literals in the description.
+compiled awk program carries a runtime — 682 lines of it, in
+[`awk-runtime.c`](awk-runtime.c), which the description `%embed`s.
+
+That file is **compiled by `make test` on its own**, which is the point of it
+being a file: it was written and checked against awk before anything embedded
+it, and for two stages the artefact that had been tested was not the artefact
+in the repository.
 
 ```
 typedef struct { char *s; double n; int isnum, strnum; Map *map; } Cell;

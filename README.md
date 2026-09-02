@@ -325,6 +325,32 @@ whatever every node answers. `$body.runs` is the line table of a chunk and
 `$body.fileidx` is its file table, and neither needed a way to map over a list —
 they needed an attribute every node has.
 
+## `%embed`: a file's bytes, under a name
+
+A backend that emits a language needs that language's **runtime**, and a
+description has nowhere to put one. `languages/pascal/pascal-c.phx` gets away
+with four `#include`s because Pascal's types are C's types.
+`languages/awk/awk-c.phx` needs seven hundred lines, because awk's value model
+is a string and a number at once and its one aggregate is a hash table.
+
+```
+%embed runtime "awk-runtime.c" .
+...
+: out = join([$runtime, $declarations, ...], "\n") .
+```
+
+The file is read when the description is read, and its bytes are frozen into
+whatever `-o` writes — so **one file, no headers, no library** still holds. It
+is looked for beside the description and then in `lib/`, which is where
+`%import` looks; `--imports` names it, because a Makefile that rebuilds on a
+change wants it.
+
+**The reason is not that the literals were ugly.** Seven hundred lines of C
+inside a `.phx` cannot be *compiled*. That runtime was written as a standalone
+file and checked against awk before being embedded — and then the file was
+thrown away, so the artefact that had been tested was not the artefact in the
+repository. Now it is one, and `make test` compiles it on its own.
+
 ## `%rewrite`: when the answer is a different node
 
 A `%pass` **decorates**: it works out attributes and leaves the tree alone. A
@@ -705,12 +731,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 170 checks, covering 35 Pascal programs against fpc
+make test       # 176 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 168 of the 170 need only what is vendored here, and the two
+repository** — 174 of the 176 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
