@@ -285,26 +285,31 @@ set-constructor = "[" e:element { "," f:element -> $f } "]" -> SetOf(elements: [
 element = lo:expression ".." hi:expression -> Range(low: $lo, high: $hi)  (* order *)
         | e:expression                     -> Member(value: $e) .
 
-(* A variable is a name, and then possibly ways of reaching into it.
+(* A variable is a name and then ways of reaching into it, and **each way
+ * wraps what came before it**: `b.corners[2].x` is a field of an element of a
+ * field of `b`.
  *
- * **Two node types rather than one with a list that is usually empty** -- the
- * same lesson as `Labelled`, learned again for a different reason. A pass that
- * wants to treat `x` differently from `x[i].f` has to be able to *ask*, and a
- * pattern can match a node type but not the emptiness of a list. So the
- * grammar makes the distinction it already knows and a clause keys on it. *)
-variable = n:identifier a:accessor { b:accessor -> $b }
-             -> Accessed(base: $n, access: [$a, ...$3])           (* order *)
-         | n:identifier -> Variable(name: $n) .
+ * It was a name and a *list* of accessors, which is the shape the grammar
+ * has -- and the comment then said turning the list into a nest was "a
+ * decision a pass can make with more context than this rule has". It was not.
+ * A pass has to know the type of `b.corners[2]` before it can say what `.x`
+ * is, and with a flat list there is nothing to hang that on: every step lost
+ * the type and `b.name` came out as a number where Pascal writes a letter.
+ *
+ * Nested, each step asks the step below what it is. `$$` is what has been
+ * built so far, which is exactly the thing being reached into. *)
+variable = base { "[" e:expression { "," f:expression -> $f } "]"
+                    -> Indexed(of: $$, at: [$e, ...$3])
+                | "." f:identifier -> FieldOf(of: $$, name: $f)
+                | "^"              -> Deref(of: $$) } .
 
-accessor = "[" e:expression { "," f:expression -> $f } "]" -> Index(at: [$e, ...$3])
-         | "." f:identifier                                -> FieldOf(name: $f)
-         | "^"                                             -> Deref .
+base = n:identifier -> Variable(name: $n) .
 
 (* `write(x:8:2)` -- the field widths are part of the call syntax, and they
  * belong to the argument rather than to the call. *)
 (* Three shapes rather than one with fields that are usually nil: a pattern
  * can tell node types apart and cannot ask whether a field is nil, which is
- * the same lesson `Labelled` and `Accessed` taught. *)
+ * the same lesson `Labelled` and the accessors taught. *)
 actual-parameter = v:expression ":" w:expression ":" p:expression            (* order *)
                      -> Rounded(value: $v, width: $w, places: $p)
                  | v:expression ":" w:expression
@@ -378,17 +383,18 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * answers with its own name, so that one more lookup in the table resolves
    * it -- which is what lets `Vector = array [Small] of integer` find what
    * `Small` starts at. *)
-  NamedType : tname = $name     : entries = [] : iname = $name : startsat = $name : span = 0 .
-  NoType    : tname = "void"    : entries = [] : iname = "" : startsat = "1" : span = 0 .
-  Subrange  : tname = "integer" : entries = [] : iname = "" : startsat = $low.ctext : span = $high.num - $low.num + 1 .
-  ArrayType : tname = "array"   : entries = [] : iname = "" : startsat = at($indices, 1).startsat : span = 0 .
-  RecordType: tname = "record"  : entries = [] : iname = "" : startsat = "1" : span = 0 .
-  SetType   : tname = "set"     : entries = [] : iname = "" : startsat = "1" : span = 0 .
-  FileType  : tname = "file"    : entries = [] : iname = "" : startsat = "1" : span = 0 .
-  Pointer   : tname = "pointer" : entries = [] : iname = "" : startsat = "1" : span = 0 .
+  NamedType : tname = $name     : entries = [] : iname = $name : startsat = $name : span = 0 : elemname = "" : fieldentries = [] .
+  NoType    : tname = "void"    : entries = [] : iname = "" : startsat = "1" : span = 0 : elemname = "" : fieldentries = [] .
+  Subrange  : tname = "integer" : entries = [] : iname = "" : startsat = $low.ctext : span = $high.num - $low.num + 1 : elemname = "" : fieldentries = [] .
+  ArrayType : tname = "array"   : entries = [] : iname = "" : startsat = at($indices, 1).startsat : span = 0 : elemname = $of.tname : fieldentries = [] .
+  RecordType: tname = "record"  : entries = [] : iname = "" : startsat = "1" : span = 0
+            : elemname = "" : fieldentries = flatten([...$fields.entries]) .
+  SetType   : tname = "set"     : entries = [] : iname = "" : startsat = "1" : span = 0 : elemname = "" : fieldentries = [] .
+  FileType  : tname = "file"    : entries = [] : iname = "" : startsat = "1" : span = 0 : elemname = "" : fieldentries = [] .
+  Pointer   : tname = "pointer" : entries = [] : iname = "" : startsat = "1" : span = 0 : elemname = "" : fieldentries = [] .
 
-  EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" : startsat = "0" : span = size($names) .
-  Packed    : tname = $type.tname : entries = $type.entries : iname = "" : startsat = $type.startsat : span = $type.span .
+  EnumType  : tname = "integer" : entries = bind([], $names, "integer") : iname = "" : startsat = "0" : span = size($names) : elemname = "" : fieldentries = [] .
+  Packed    : tname = $type.tname : entries = $type.entries : iname = "" : startsat = $type.startsat : span = $type.span : elemname = $type.elemname : fieldentries = $type.fieldentries .
 
   (* A Pascal string literal arrives with its quotes on and its doubled
    * quotes undoubled. `plain` is what it actually says, and **a literal
@@ -424,8 +430,10 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   ConstDef  : entries = bind([], $name, $value.ctype)
             : shape   = [] .
   TypeDef   : entries = flatten([bind([], $name, $type.tname), $type.entries])
-            : lowentry  = bind([], $name, $type.startsat)
-            : spanentry = bind([], $name, $type.span)
+            : lowentry   = bind([], $name, $type.startsat)
+            : spanentry  = bind([], $name, $type.span)
+            : elementry  = bind([], $name, $type.elemname)
+            : fieldentry = bind([], $name, $type.fieldentries)
             : shape   = bind([], $name, Shape(iname: $type.iname,
                                               startsat: $type.startsat, node: $type)) .
   VarDecl   : entries = bind([], $names, $type.tname)
@@ -473,8 +481,10 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
 
         (* Type names to where their indices start, so that `a : Low` can be
          * asked what `Low` starts at. *)
-        : lowmap  = flatten([...$types.lowentry])
-        : spanmap = flatten([...$types.spanentry]) .
+        : lowmap   = flatten([...$types.lowentry])
+        : spanmap  = flatten([...$types.spanentry])
+        : elemmap  = flatten([...$types.elementry])
+        : fieldmap = flatten([...$types.fieldentry]) .
 
 (* ------------------------------------------------------------------ *)
 (* Are the names declared, and do the types line up?                   *)
@@ -496,7 +506,9 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   Program : type = "void"
           : down known = []
           : down lows  = []
-          : down spans = []
+          : down spans  = []
+          : down elems  = []
+          : down fields = []
           : down checking = true
           : down env =
       (* A base type is bound to **itself**, so that resolving an alias is
@@ -528,7 +540,9 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * attribute, and it was right to. *)
   Block     : type = "void"
             : down lows  = [...$lowmap, ...$lows]
-            : down spans = [...$spanmap, ...$spans]
+            : down spans  = [...$spanmap, ...$spans]
+            : down elems  = [...$elemmap, ...$elems]
+            : down fields = [...$fieldmap, ...$fields]
             : down env   = [...$scope, ...$env]
             : down known = [...$shapes, ...$known] .
   Procedure : type = "void" : down env = [...$own, ...$env] .
@@ -568,41 +582,47 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
                           ...$env] .
   Function  : type = "void" : down env = [...$own, ...$env] .
 
-  (* Two lookups: the first answers the type this name was declared with, the
-   * second resolves an alias to what it stands for. A base type answers
-   * itself, so the second lookup is harmless where there was no alias. *)
-  Variable : type = lookup($env, lookup($env, $name, "unknown"), "unknown")
+
+  (* ---- reaching into a value ----
+   *
+   * Each step asks the step below it what it is, and the answers are **type
+   * names** rather than type nodes. A node would need a default wherever a
+   * lookup might miss, and a node built in a clause has fields but no
+   * attributes -- so every default would be a wrong answer waiting. Text has
+   * no such trouble.
+   *
+   * `named` is the type as written, which is what the tables are keyed by;
+   * `type` is that resolved, which is what a check compares. `Path` and
+   * `array` are the two, and both are needed: one to look an element up by,
+   * the other to say what it is. *)
+
+  Variable : named = lookup($env, $name, "unknown")
+           : type  = lookup($env, $named, $named)
            ! $checking and not defined($env, $name)
              : "'{}' is not declared" of $name .
 
-  (* Reaching into something -- an index, a field, a dereference -- takes the
-   * checker past what a name can say, so the type is unknown from here down
-   * and comparisons against it pass. Being quiet is right: a checker that
-   * invents an error on a correct program is worse than one that misses. *)
-(* **Where this array's indices start.** Pascal indexes from wherever the
-   * declaration says, and C from nought, so every index has its lower bound
-   * subtracted -- and getting that wrong is not a wrong answer but memory
-   * written outside the array. `array [5..9]` with one subtracted writes past
-   * the end and reads it back consistently, which is how the oracle agreed
-   * with itself while the program was corrupting memory.
-   *
-   * Two hops: the variable to its type, and a named type to what it stands
-   * for. `iname` is "" for a type written out, which no scope binds, so the
-   * lookup falls through to that type's own answer. *)
-  Accessed : low1 =
-        lookup($lows,
-               lookup($known, $base,
-                      Shape(iname: "", startsat: "1", node: NoType)).iname,
-               lookup($known, $base,
-                      Shape(iname: "", startsat: "1", node: NoType)).startsat)
+  FieldOf  : named = lookup(lookup($fields, $of.named, []), $name, "unknown")
+           : type  = lookup($env, $named, $named)
+             (* Quiet where the type is not known -- a dereference answers
+              * `unknown`, and a checker that invents an error on a correct
+              * program is worse than one that misses. *)
+           ! $checking and $of.named <> "unknown"
+                       and not defined(lookup($fields, $of.named, []), $name)
+             : "'{}' is not a field of {}" of $name, $of.named .
 
-           (* Twice, because a named type answers with its name: `Vector`
-            * answers `Small` and `Small` answers `1`. A number answers
-            * itself, since no type is called `5`. *)
-           : lowbound = lookup($lows, $low1, $low1)
-           : type = "unknown"
-           ! $checking and not defined($env, $base)
-             : "'{}' is not declared" of $base .
+  Indexed  : named = lookup($elems, $of.named, "unknown")
+           : type  = lookup($env, $named, $named)
+
+             (* Where this array's indices start -- its own, not one. Pascal
+              * indexes from wherever the declaration says and C from nought,
+              * and getting it wrong is not a wrong answer but memory written
+              * outside the array. *)
+           : lowbound = lookup($lows, lookup($lows, $of.named, "1"),
+                               lookup($lows, $of.named, "1"))
+           ! $checking and $of.type <> "array" and $of.type <> "unknown"
+             : "this is {}, and only an array is indexed" of $of.type .
+
+  Deref    : named = "unknown" : type = "unknown" .
 
   Integer       : type = "integer" .
   Real          : type = "real" .

@@ -510,7 +510,7 @@ a correct file reported as broken, at a place that is not the mistake.
 
 ```sh
 make            # bin/phx
-make test       # 105 checks (18 of them against fpc), including Solveig's pascal.bnf when it is present
+make test       # 106 checks (24 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -597,7 +597,7 @@ with `fpc -Miso` byte for byte; the first eight found **six bugs at once**:
 Every one is a place C's obvious answer is not Pascal's, and none would have
 been found by reading the output and thinking it looked right.
 
-Eighteen programs agree now. Six more — the standard functions, chars,
+Twenty-four programs agree now. Six more — the standard functions, chars,
 enumerations, sets, `case` with several labels, a `with` inside a `with` —
 found **four more**, and two of them were in Phoenix rather than in the
 description:
@@ -632,6 +632,15 @@ what an oracle proves:
 | set operators | `+ - *` on sets are union, difference and intersection, which on a bit per member are `\| &~ &` |
 | a set range | `[2..6]` is a run of bits, and a member is one bit, and a set constructor cannot ask which it has — so a member has a node of its own now |
 | an attribute shadowed by a field | `Subrange` has a field called `low`, so an attribute of that name was invisible from outside. The second time that has happened |
+
+And six more, of which two agreed with fpc while being wrong:
+
+| | |
+| --- | --- |
+| **comparing text compared pointers** | `'abc' < 'abd'` became `("abc" < "abd")`, which C leaves undefined — and which **agreed with fpc**, because the compiler had pooled the literals and laid them out in order. `strcmp` now |
+| **reaching into a record lost the type** | `b.name` is a `char` and printed as `66`. The accessors were a *list*, so nothing could ask what `b.corners[2]` was before saying what `.x` is. They nest now, and each step asks the step below it |
+| a set range double-shifted | `[2..6]` is a run of bits and a member is one bit; a set constructor could not ask which it had |
+| Pascal's `mod`, widths, formats | as above |
 
 ## Where this sits
 

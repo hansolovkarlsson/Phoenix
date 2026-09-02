@@ -401,10 +401,28 @@
   Binary(op: "/")   : out = "((double)({}) / (double)({}))" of $left.out, $right.out .
   Binary            : out = "({} {} {})" of $left.out, $op, $right.out .
 
-  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
-  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+(* **Comparing text is `strcmp`, not `<`.** C compares two string literals by
+   * address, which is undefined and *happened to agree with fpc* -- the
+   * compiler had pooled the literals and laid them out in order. That is the
+   * same way the array bounds agreed while writing outside themselves: an
+   * accident that looks like a pass.
+   *
+   * Every comparison gets a clause of its own rather than one with the
+   * operator in a hole, because the two templates want their operands in
+   * different places. *)
+  Compare(op: "=")  : out = lookup([["string", "(strcmp({}, {}) == 0)"]],
+                                   $left.type, "({} == {})") of $left.out, $right.out .
+  Compare(op: "<>") : out = lookup([["string", "(strcmp({}, {}) != 0)"]],
+                                   $left.type, "({} != {})") of $left.out, $right.out .
+  Compare(op: "<")  : out = lookup([["string", "(strcmp({}, {}) < 0)"]],
+                                   $left.type, "({} < {})")  of $left.out, $right.out .
+  Compare(op: ">")  : out = lookup([["string", "(strcmp({}, {}) > 0)"]],
+                                   $left.type, "({} > {})")  of $left.out, $right.out .
+  Compare(op: "<=") : out = lookup([["string", "(strcmp({}, {}) <= 0)"]],
+                                   $left.type, "({} <= {})") of $left.out, $right.out .
+  Compare(op: ">=") : out = lookup([["string", "(strcmp({}, {}) >= 0)"]],
+                                   $left.type, "({} >= {})") of $left.out, $right.out .
   Compare(op: "in") : out = "((({}) >> ({})) & 1)" of $right.out, $left.out .
-  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
 
   (* `[Red, Blue, 2 .. 6]` is those bits set. Each element says what its own
    * bits are, because a member is one bit and a range is a run of them and a
@@ -423,16 +441,14 @@
    * up to itself, because that is the default. No conditional, and no second
    * clause for a distinction the table already makes. *)
 
+  (* Each step wraps what it reaches into, so each one emits what is below it
+   * and then its own part. The lower bound is the array's own -- the
+   * typechecker worked it out on this very node, which is why the accessors
+   * had to nest: with a flat list there was nowhere to put it. *)
   Variable : out = lookup($spelled, $name, $name) .
-  Accessed : down lowbound = $lowbound
-           : out = "{}{}" of lookup($spelled, $base, $base), join($access.out, "") .
-
-  (* The lower bound is the array's own, worked out by the typechecker and
-   * handed down here. Subtracting one instead is not a wrong answer -- it is
-   * memory written outside the array, and it reads back consistently, which
-   * is why the oracle agreed with it. *)
-  Index    : out = "[({}) - ({})]" of at($at, 1).out, $lowbound .
-  FieldOf  : out = ".{}" of $name .
+  FieldOf  : out = "{}.{}"           of $of.out, $name .
+  Deref    : out = "(*{})"           of $of.out .
+  Indexed  : out = "{}[({}) - ({})]" of $of.out, at($at, 1).out, $lowbound .
 
   (* ---- the whole ---- *)
 
@@ -533,7 +549,7 @@
               "    printf(\"%*s\", width, out);",
               "}"], "\n")
 
-          : out = "#include <stdio.h>\n#include <stdlib.h>\n#include <math.h>\n\n{}\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
+          : out = "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <math.h>\n\n{}\n\n{}\n{}\nint main(void)\n{{\n{}\n  return 0;\n}}\n"
               of $helpers, $body.decls, $body.routinecode, $body.code .
 
 %driver c = symbols, typecheck, prepare, emit-c -> out .

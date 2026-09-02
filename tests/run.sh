@@ -652,15 +652,11 @@ for src in "$root"/tests/refused/*.pas; do
     code=$?
     if [ "$code" -eq 0 ]; then
         report fail "$name is refused" "it compiled"
-    elif printf '%s' "$out" | grep -q "error:.*not compiled\|error:.*does not fit"; then
-        # The message has to name the feature and point into the *Pascal*,
-        # not report a missing attribute in the description.
-        if printf '%s' "$out" | grep -q "$(basename "$src")"; then
-            report pass "$name is refused, at a position in the Pascal"
-        else
-            report fail "$name is refused, at a position in the Pascal" \
-                        "the message points at the description"
-        fi
+    elif printf '%s' "$out" | grep -q "$(basename "$src"):[0-9]*:[0-9]*: error:"; then
+        # Refused *and* pointing into the Pascal. A message about a missing
+        # attribute in the description is a true sentence and no use at all to
+        # somebody holding a Pascal program, so it counts as a failure.
+        report pass "$name is refused, at a position in the Pascal"
     else
         report fail "$name is refused" "$(printf '%s' "$out" | head -1)"
     fi

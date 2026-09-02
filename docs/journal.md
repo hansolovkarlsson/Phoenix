@@ -1142,3 +1142,41 @@ the false positive was on every top-level routine in the suite.
 **And a check is introduced by `!` alone, not by `: !`.** I wrote the latter
 twice. The message — *expected the name of an attribute* — is accurate and
 points at the `!`, which is not where a person would look.
+
+## 2026-09-01 — six more oracle programs, and a second thing that agreed while wrong
+
+Strings, mixed arithmetic, partial lines, a dangling `else`, records inside
+arrays inside records, and enumerations ordered against each other.
+Twenty-four programs agree with `fpc -Miso`.
+
+**Two of the six were wrong in ways the oracle had already been passing.**
+
+`'abc' < 'abd'` compiled to `("abc" < "abd")`, which compares two *addresses*
+and is undefined — and it **agreed with fpc**, because the compiler had pooled
+the identical literals and laid the others out in order. That is the second time
+an accident has looked like a pass, after the array bounds; both were found by
+reading the emitted C rather than by the oracle. `strcmp` now, and each
+comparison has a clause of its own because the two templates want their operands
+in different places.
+
+`b.name` is a `char` and was printed as `66`. **The accessors were a flat list**,
+and the comment written at the time said turning that list into a nest was "a
+decision a pass can make with more context than this rule has". It was not: a
+pass has to know what `b.corners[2]` *is* before it can say what `.x` is, and a
+flat list has nowhere to hang that. They nest now — `Indexed(of:)`,
+`FieldOf(of:)`, `Deref(of:)` — and each step asks the step below it.
+
+**The chain works in type names, not type nodes, and that was the second
+attempt.** Nodes needed a default wherever a lookup might miss, and a node built
+in a clause has fields but no attributes — so `$tnode.iname` failed on every
+name the scope did not hold, which is every enumeration constant and every
+built-in. Text has no such trouble: `named` is the type as written and `type` is
+that resolved, both plain strings, and a default is just another string.
+
+That also deleted the `down lowbound` hack. An array's lower bound belongs to
+the `Indexed` node that uses it, and with a nest there is finally an `Indexed`
+node to put it on.
+
+**And a check cannot read an attribute its own rule defines.** A check is a
+guard and runs *before* them. `FieldOf`'s check asks the child instead, which is
+where the answer was anyway.
