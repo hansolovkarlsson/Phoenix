@@ -170,6 +170,52 @@ static bool match_pattern(Run *r, const Pattern *p, Value *v)
 }
 
 /* ------------------------------------------------------------------ */
+/* Where a node came from
+ *
+ * `$pos` is the one name in a pass that is not a field, an attribute or a
+ * binding: every node has one and nothing in the notation could reach it.
+ * That is why a `.sob` written by `languages/solveig/` carried one line run
+ * for a whole chunk and no file table at all.
+ *
+ * **It answers a node rather than a number**, and that is the whole of the
+ * design. A byte offset would have been smaller and would have meant nothing
+ * to a description -- every use a description has for a position is a line or
+ * the name of a file. A node makes reading part of one an ordinary field read,
+ * so the notation needs no new syntax and no library function:
+ *
+ *     $pos.line     $pos.column     $pos.file
+ *
+ * and a fourth thing later is a field rather than a second reserved name.
+ * `$body.pos` over a list is a list of these, because `.` over a list already
+ * means that -- so a table with a row per statement is written the way every
+ * other list is.
+ *
+ * The file is the one an `@include` put the node in, not the one the command
+ * line named, because that is what the joined source already knows.
+ */
+static Value *position_of(Run *r, const Value *v)
+{
+    int line, col;
+    source_position(r->src, v->pos, &line, &col);
+
+    const char *path = source_path_at(r->src, v->pos);
+    if (!path) path = "";
+
+    Value *p = arena_alloc(r->a, sizeof *p);
+    p->kind   = V_NODE;
+    p->type   = "Position";
+    p->pos    = v->pos;
+    p->n      = 3;
+    p->items  = arena_alloc(r->a, 3 * sizeof *p->items);
+    p->fields = arena_alloc(r->a, 3 * sizeof *p->fields);
+
+    p->fields[0] = "line";   p->items[0] = value_int(r->a, line);
+    p->fields[1] = "column"; p->items[1] = value_int(r->a, col);
+    p->fields[2] = "file";   p->items[2] = value_text(r->a, path, strlen(path));
+    return p;
+}
+
+/* ------------------------------------------------------------------ */
 /* What a name means here */
 
 static Value *run_ref(Eval *e, const Expr *x)
@@ -200,6 +246,10 @@ static Value *run_ref(Eval *e, const Expr *x)
                                x->name, i + 1, value_kind_name(of->items[i]));
                     return NULL;
                 }
+                if (strcmp(x->name, "pos") == 0) {
+                    items[i] = position_of(r, of->items[i]);
+                    continue;
+                }
                 items[i] = field_of(of->items[i], x->name);
                 if (!items[i]) items[i] = attr_get(of->items[i], x->name);
                 if (!items[i]) {
@@ -223,6 +273,8 @@ static Value *run_ref(Eval *e, const Expr *x)
                        x->name, value_kind_name(of));
             return NULL;
         }
+        if (strcmp(x->name, "pos") == 0) return position_of(r, of);
+
         /* A field of it, then what a pass worked out about it -- the same
          * order `$name` uses on the node being visited, so there is one rule
          * to know rather than two. */
@@ -247,6 +299,12 @@ static Value *run_ref(Eval *e, const Expr *x)
                    "nodes -- name the field instead", x->index);
         return NULL;
     }
+
+    /* 0. the position, before everything, so that `$pos` means one thing in
+     * every clause of every pass. A description that had a field of that name
+     * is refused when it is read, rather than getting a different answer here
+     * from the one it gets three clauses down. */
+    if (strcmp(x->name, "pos") == 0) return position_of(r, r->node);
 
     for (int i = r->nbound - 1; i >= 0; i--)               /* 1. bound */
         if (strcmp(r->bound[i], x->name) == 0) return r->bounds[i];
@@ -279,6 +337,9 @@ static Value *run_ref(Eval *e, const Expr *x)
                "nothing here is called '%s' -- not a binding, a field of %s, "
                "an attribute of it, a threaded attribute, or one handed down",
                x->name, r->node->type ? r->node->type : "this node");
+    if (strcmp(x->name, "line") == 0 || strcmp(x->name, "file") == 0
+        || strcmp(x->name, "column") == 0)
+        diag_note("`$pos.%s` is where a node says that", x->name);
     return NULL;
 }
 

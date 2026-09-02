@@ -363,6 +363,7 @@ typedef struct {
     char       **fields;
     int          nfields;
     size_t       pos;
+    bool         seeded;   /* Position, which every node has and none builds */
 } NodeType;
 
 static NodeType *vocabulary;
@@ -375,6 +376,12 @@ static void note_node_type(Check *c, const Expr *x)
     for (int i = 0; i < nvocabulary; i++) {
         NodeType *known = &vocabulary[i];
         if (strcmp(known->type, x->name) != 0) continue;
+
+        /* A description is free to have a node type of its own called
+         * `Position`; that it is spelled like the one every node's `$pos`
+         * answers is a coincidence and not two shapes of one thing. Both
+         * stay, and `--nodes` says so. */
+        if (known->seeded) continue;
 
         bool same = known->nfields == x->nkids;
         for (int k = 0; same && k < x->nkids; k++)
@@ -395,6 +402,25 @@ static void note_node_type(Check *c, const Expr *x)
     vocabulary[nvocabulary++] = (NodeType){
         .type = x->name, .fields = x->fields, .nfields = x->nkids, .pos = x->pos
     };
+}
+
+/* Every node has a position, so `Position` is part of the vocabulary a pass is
+ * written against whether or not a description mentions one. Seeding it here
+ * is what makes `$pos.line` an ordinary field read all the way down: the
+ * driver check finds `line` on a node type it knows, and `--nodes` says so. */
+static void seed_position_type(Check *c)
+{
+    static char *fields[] = { "line", "column", "file" };
+    Expr         shape    = { 0 };
+
+    shape.kind   = X_NODE;
+    shape.name   = "Position";
+    shape.fields = fields;
+    shape.nkids  = 3;
+    shape.pos    = 0;
+
+    note_node_type(c, &shape);
+    vocabulary[nvocabulary - 1].seeded = true;
 }
 
 static void collect_types(Check *c, const Expr *x)
@@ -666,6 +692,13 @@ static const char *who_defines(const Grammar *g, const char *attr)
     return NULL;
 }
 
+/* `$pos` is on every node and no pass computes it, so reading one is not a
+ * claim about order either. */
+static bool is_intrinsic(const char *name)
+{
+    return strcmp(name, "pos") == 0;
+}
+
 /* Whether a name is a field on some node type the grammar builds. Reading one
  * needs no pass to have run, so it is not a claim about order. */
 static bool is_a_field(const char *name)
@@ -699,7 +732,7 @@ static void check_drivers(Check *c)
 
             for (int k = 0; k < nreads; k++) {
                 if (pass_defines(pass, reads[k])) continue;
-                if (is_a_field(reads[k])) continue;
+                if (is_a_field(reads[k]) || is_intrinsic(reads[k])) continue;
 
                 bool earlier = false;
                 for (int j = 0; j < i && !earlier; j++) {
@@ -957,6 +990,51 @@ static void check_include(Check *c)
     c->ok = false;
 }
 
+/* `pos` is taken.
+ *
+ * Every node has a position and `$pos` is what reads it, in every clause of
+ * every pass. That only holds if the name means one thing everywhere -- a
+ * description with a field or an attribute of that name would get the position
+ * in one clause and its own value in the next, which is the shape of quiet
+ * wrongness this project keeps checks for.
+ *
+ * So the name is reserved, and the cost is stated rather than discovered: one
+ * word a grammar may not call a field. That is the same bargain a grammar
+ * module makes when it reserves `and` and `or`, and it is refused here with a
+ * message rather than found later with a puzzle.
+ */
+static void check_position_name(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < nvocabulary; i++)
+        for (int k = 0; k < vocabulary[i].nfields; k++)
+            if (vocabulary[i].fields[k]
+                && strcmp(vocabulary[i].fields[k], "pos") == 0) {
+                diag_error(&g->src, vocabulary[i].pos,
+                           "'%s' has a field called 'pos', and that name is "
+                           "what every node says its position with",
+                           vocabulary[i].type);
+                diag_note("`$pos` answers Position(line, column, file); call "
+                          "the field something else");
+                c->ok = false;
+            }
+
+    for (int i = 0; i < g->npasses; i++)
+        for (int r = 0; r < g->passes[i].nrules; r++) {
+            const PassRule *rule = &g->passes[i].rules[r];
+            for (int a = 0; a < rule->nclauses; a++) {
+                const Clause *cl = &rule->clauses[a];
+                if (!cl->attr || strcmp(cl->attr, "pos") != 0) continue;
+                diag_error(&g->src, cl->pos,
+                           "'pos' is what every node says its position with, "
+                           "so a clause cannot define one");
+                diag_note("`$pos` answers Position(line, column, file)");
+                c->ok = false;
+            }
+        }
+}
+
 bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
@@ -964,6 +1042,8 @@ bool grammar_check(Grammar *g)
     free(vocabulary);
     vocabulary  = NULL;
     nvocabulary = 0;
+
+    seed_position_type(&c);
 
     for (int i = 0; i < g->nrules; i++) {
         Rule *r = &g->rules[i];
@@ -1014,6 +1094,7 @@ bool grammar_check(Grammar *g)
     check_clause_order(&c);
     check_drivers(&c);
     check_include(&c);
+    check_position_name(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
      * without the token rules that will spell its literals -- `expression.phx`

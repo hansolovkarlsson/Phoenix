@@ -11,9 +11,10 @@ predictions made here against what the evidence turned out to say.
 
 ## 1. The stages
 
-The first of these is done and is kept here rather than deleted, because what
-an entry predicted and what it cost is the only way to tell whether this page
-is worth writing. The rest remain.
+The first two are done and are kept here rather than deleted, because what an
+entry predicted and what it cost is the only way to tell whether this page is
+worth writing — and one of them predicted wrong, which is the more useful
+half. The rest remain.
 
 ### 1.0 A reader-level mechanism, for a target language's imports — **done**
 
@@ -43,16 +44,39 @@ both are where a tool of this shape has to say so rather than pick.
 found nothing wrong with the backend — which is the useful negative result. It
 did surface something already there; see [2.4](#24-inlining-a-block--from-solas).
 
-### 1.1 A node's position, reachable from a clause
+### 1.1 A node's position, reachable from a clause — **done**
 
-`$pos` does not exist. A node carries its position, every diagnostic uses it,
-and nothing in the notation can read it. That is why the `.sob` backend emits
-one line run per chunk and no file table, and why a traceback from bytecode it
-produced says `[line 1]` where `solas` names the file and the line.
+The question this entry posed was *what a position is to a description*: a
+line, a line and a column, or an opaque value only the diagnostics understand.
+The answer is **none of the three** — it is a node:
 
-Everything needed is already there, which is what makes this small. What has
-to be decided is what a position *is* to a description: a line, or a line and
-a column, or an opaque value that only the diagnostics understand.
+```
+Position(line, column, file)
+```
+
+which makes reading part of one an ordinary field read, needs no new syntax and
+no library function, and takes a fourth thing later as a field rather than as a
+second reserved name. `$pos` resolves before bindings, fields and attributes so
+that it means one thing everywhere, and the cost is stated rather than
+discovered: `pos` is a word a grammar may not call a field, refused when the
+description is read.
+
+`.` over a list already means "that of each", so `$body.pos.line` is a column
+of line numbers, and that is the shape a table in a binary format wants.
+
+**"Everything needed is already there, which is what makes this small" was
+wrong**, and the way it was wrong is the useful part. *Reading* a position is
+small — thirty lines. *Using* one is not: a `.sob` line table is a run per
+statement, and building it needs a value computed for every element of a list,
+which the notation cannot do. Two things closed that gap and both are listed in
+[3.4](#34-a-library-that-grows-without-deciding); what it could not close is
+[1.3](#13-a-way-for-a-description-to-share-a-computation), which now has its
+second example.
+
+What it bought: the line table is exact, the file table is written whenever a
+chunk is about one file, and the Solveig oracle stopped normalising locations
+away. Sixty-six programs now agree on every byte of their output, tracebacks
+included.
 
 ### 1.2 Compiling the tables to code
 
@@ -86,8 +110,30 @@ other rules call. Each one would be the first thing in the notation that is
 not a clause about a node, and the reason this tool is small is that there is
 only ever one of those.
 
-Worth waiting for a second example in a different language before deciding
-that the repetition is the notation's fault rather than that description's.
+**The second example arrived with [1.1](#11-a-nodes-position-reachable-from-a-clause),
+and it is a different shape.** The first was a computation repeated because
+several node types do the same thing. This one is a computation the notation
+cannot express *at all*:
+
+> **A value computed for every element of a list.** `each` applies a *template*
+> to a list, and a template can only write an element out. There is no way to
+> say "for each of these, this expression of it".
+
+Two library entries covered the cases the `.sob` line table needed — the size
+of each element, and each of a column of numbers as fixed-width bytes — and one
+case is still open, because it is a `lookup` per element: a chunk holding code
+from two files needs a run per statement naming a row of a table of the
+distinct files, and a description cannot compute that column. The `.sob` file
+table is therefore written only when a chunk is about one file, which is the
+honest answer rather than a wrong file name.
+
+That the fix was **two library entries and then a third case it did not
+cover** is the argument for reading this entry again. A map with an expression
+would have covered all three at once, and it is the mechanism this page keeps
+warning about.
+
+Still worth waiting for a second *language* before deciding, but the evidence
+has moved: it is no longer only about repetition.
 
 ---
 
@@ -163,18 +209,20 @@ will either.
 ### 2.4 Inlining a block — from `solas`
 
 **Found by 1.0 rather than by design**, which is why it is here rather than in
-the warts: `@include` made 24 more programs compilable, 22 of them agree with
-`solas`, and the two that do not cross a line the other 72 never reach.
+the warts: `@include` made 24 more programs compilable, and two of them cross a
+line the others never reach. [1.1](#11-a-nodes-position-reachable-from-a-clause)
+then made it the *only* remaining disagreement about a traceback, which is what
+turns this from a curiosity into the next thing worth doing.
 
 `solas` compiles the block of an `ifTrue:`, a `whileTrue:`, an `and:` and an
 `or:` **into the enclosing chunk**, behind a jump. `languages/solveig/solveig-sob.phx`
 compiles every block as a block. The bytes differ and what a program prints does
-not — the two agree over seventy-two programs — except in three places where a
-block that is really a block is visible:
+not — the two agree over sixty-six programs byte for byte — except in three
+places where a block that is really a block is visible:
 
 | | |
 | --- | --- |
-| a traceback | an inlined block is a frame that is not there. Normalised away in the test, alongside the missing line table of [1.1](#11-a-nodes-position-reachable-from-a-clause) |
+| a traceback | an inlined block is a frame that is not there, and the frame around it points at the statement the block is written in rather than at the send inside it. **Since [1.1](#11-a-nodes-position-reachable-from-a-clause) this is the only thing left that a traceback disagrees about**, and it is counted rather than normalised: seven programs differ in a traceback line and in nothing else |
 | the format's nesting limit | `.sob` allows blocks 16 deep. `programs/pascal.sol` nests 19 and `solas` inlines its way under; this backend cannot, and the loader refuses what it writes |
 | the call depth | `programs/basic.sol` is a BASIC interpreter whose own suite calls something recursive until the machine stops it, and prints what happened. One extra frame per level means it stops one test earlier |
 
@@ -240,6 +288,14 @@ The `.sob` backend added three, and each says what was missing:
 | `int(text, base)` | Solveig writes `#45`, `$ff` and `%1010` as one node, so the marker says the base |
 | `positions(list)` | the table saying where each thing is. A slot *is* a position in the frame's list of names, and `at` wants an index rather than making one |
 
+The line table added **one more, and one extension**, and both say the same
+thing about the notation — see [1.3](#13-a-way-for-a-description-to-share-a-computation):
+
+| | |
+| --- | --- |
+| `sizes(list)` | the size of each element. The companion to `positions`: that one answers where each thing is, this one how big it is, and neither can be asked any other way |
+| `bytes(list, width)` | a **column** of numbers, each as bytes. Not a new entry — the same function taking a list, the way `bind` takes names pairwise and `each` takes two lists — and without it a table in a binary format is written as the same line of notation once per node type that could be a row |
+
 ### 3.5 Conditionals in the meta-language
 
 There is no `if`. Clauses match on shape, and a clause that needs a choice is
@@ -295,6 +351,13 @@ place: a directive that names a node type and a field of it is two names that
 can be typos, and a typo in either is a mechanism that silently does nothing.
 Both are decidable from the description, so both are decided when it is read.
 
+A fifth came with `$pos`, and it is about a **name** rather than about an
+order: `pos` means the same thing in every clause of every pass only if nothing
+else can be called that, so a field or an attribute of that name is refused.
+The cost of a reserved word is real and is the kind this project prefers to
+state rather than to hide — [5](#5-known-warts) already says so about `and`
+and `or`.
+
 The first is a warning and the other two are errors, because the first is legal
 and merely almost never meant.
 
@@ -304,6 +367,12 @@ found before anybody else sees it. That is the whole argument for a check
 existing at all, and the reason to prefer one over a comment.
 
 ## 5. Known warts
+
+**`pos` is a reserved field name.** Every node has a position and `$pos` is
+what reads it, in every clause of every pass — which only holds if nothing else
+can be called that. A grammar building a node with a field of that name is
+refused. One word, across the whole notation, and it is the same bargain as the
+one below rather than a different kind of cost.
 
 **A grammar module imposes reserved words.** Importing
 [`expression.phx`](../lib/expression.phx) means `and`, `or` and `not` cannot be

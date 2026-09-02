@@ -35,4 +35,24 @@ let  = n:name "=" v:number ";" -> Let(name: $n, value: $v) .
   Let  : show = "{}={}" of $name, $value .
   Use  : show = "use {}" of $path .
 
+(* Where each thing came from -- the same list, said by position rather than
+ * by content, which is what a line table in a binary format is.
+ *
+ * `$pos` answers a node, so `.file`, `.line` and `.column` are ordinary field
+ * reads, and `.` over a list already means "that of each" -- so a table with a
+ * row per item is written the way every other list is. *)
+%pass where
+  File : where = join(each($items.pos.file, $items.pos.line, "{}:{} "), "")
+       : cols  = join(each($items.pos.column, "{} "), "") .
+
+(* `sizes` and `bytes` over a list: the size of each element of a list, and a
+ * column of numbers each as fixed-width bytes. A table in a binary format is a
+ * column, and without these the only way to write one was the same line of
+ * notation once per node type that could be a row. *)
+%pass widths
+  File : widths = join(each(bytes(sizes($items.show), 2), "{}"), "") .
+
 %driver show = show -> show .
+%driver where   = where -> where .
+%driver columns = where -> cols .
+%driver widths  = show, widths -> widths .

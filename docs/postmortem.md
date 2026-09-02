@@ -104,27 +104,36 @@ for Solveig.
 
 ### What the numbers are
 
-- 129 tests, 0 failing
+- 135 tests, 0 failing
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
-- 75 Solveig files round-trip to an identical tree
-- 72 Solveig programs compile to bytecode that prints what `solas`'s does
+- every `.sol` file in the Solveig repository round-trips to an identical tree
+- 66 Solveig programs compile to bytecode that prints what `solas`'s does, byte
+  for byte, tracebacks included
 
 ---
 
 ## 3. What the design cost
 
-**A library that grew.** 22 entries now. The rule each had to meet is written
+**A library that grew.** 23 entries now. The rule each had to meet is written
 down — *a pass for a real language needed it, and it could not be written in
 the notation* — and each addition names what was missing. But roadmap 3.4 also
-says a generator whose library keeps growing has failed at something, and two
-of the 22 arrived in one stage, with a third gaining an argument. That is the
-number to watch.
+says a generator whose library keeps growing has failed at something, and the
+last four arrived in two stages, three of them for one reason. That is the
+number to watch, and what it is measuring is below.
 
-**Repetition in the descriptions.** The append-if-absent idiom appears six
-times in `solveig-sob.phx`, once per node type that interns a name, because
-the notation has no way to name a shared computation. Not wrong, but the
-clearest place where a description is longer than the thing it describes.
+**Repetition in the descriptions, and the thing behind it.** The
+append-if-absent idiom appears six times in `solveig-sob.phx`, once per node
+type that interns a name, because the notation has no way to name a shared
+computation. The `.sob` line table then asked for something narrower and
+sharper: **a value computed for every element of a list**. `each` applies a
+template, and a template can only write an element out.
+
+`sizes` and `bytes`-over-a-list are two cases of that answered one at a time,
+and a third — a `lookup` per element, which a chunk holding two files needs —
+is still open, so the file table is written only when a chunk is about one
+file. Three cases in one stage is what a missing mechanism looks like from the
+inside, and it is why roadmap 1.3 is now the entry to read again.
 
 **No forward references.** An attribute cannot refer to a node the walk has
 not reached. Several passes and a `%driver` are the answer, which is what a
@@ -143,10 +152,15 @@ section proposed, and the count above moved from 50 to 72. What it did *not*
 find is anything wrong with the backend over the 22 programs it added, which
 is the more useful half of the result.
 
-**Debug information in a binary target.** The `.sob` backend emits one line
-run per chunk and no file table, so a traceback says `[line 1]` where `solas`
-says the file and the line. Everything needed is present — a node carries its
-position — and nothing in the notation reaches it. `$pos` does not exist.
+**Debug information in a binary target** — *settled since this was written,
+and it cost more than this paragraph expected*. `$pos` answers
+`Position(line, column, file)`, so reading part of one is an ordinary field
+read; the `.sob` line table is now a run per statement and the file table is
+written whenever a chunk is about one file. "Everything needed is present" was
+true of *reading* a position and false of *using* one: a table is a value
+computed for every element of a list, and the notation cannot say that. Two
+library entries covered what the line table needed and a third case is still
+open — see ROADMAP 1.3, which now has its second example.
 
 **Whether a description can share a computation.** See the repetition above. A
 `%pass`-level definition, or a rule that other rules can call, would remove

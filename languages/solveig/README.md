@@ -152,10 +152,10 @@ to nest — see [the journal](../../docs/journal.md).
 
 [`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
 Solveig repository twice — once with `solas`, once with this description —
-runs both under `solvm`, and requires the same output. **Seventy-two programs
-agree**, including the 24 that use `@include`. Locations in a traceback are
-normalised away, because this backend emits one line run per chunk and no file
-table; that is missing debug information rather than a miscompile.
+runs both under `solvm`, and requires the same output. **Sixty-six programs
+print exactly the same bytes, tracebacks included**: the file and the line a
+message points at are compared rather than normalised away, which they were
+until `$pos` gave a clause the position it needed.
 
 It found two bugs in the front end, neither of them findable by rendering: the
 `-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
@@ -179,18 +179,43 @@ been read.
 The library those files include lives in `lib/` beside the Solveig binaries, so
 the test passes `-I`, exactly as `bin/solas` looks in `bin/../lib`.
 
+### Line numbers, and which file they are in
+
+`$pos` answers `Position(line, column, file)`, so a chunk's line table is a run
+per statement — its bytes at its line, then the `POP` after it at the same
+line — written in one clause because `bytes` takes a column of numbers:
+
+```
+bodyruns = join(each(bytes(sizes($body.code), 4),
+                     bytes($body.pos.line, 4),
+                     "{}{}\x01\x00\x00\x00{}"), "")
+```
+
+The file table is written **when a chunk is about one file**, which every block
+is and every program that does not include is. A chunk holding code from two
+files would need a run per statement naming a row of a table of the distinct
+files, and a description cannot compute a value per element of a list; the
+format's own answer for that is no file table and a bare line, so that is what
+is written. A line number naming a file nobody said is worse than no file name
+at all — see [ROADMAP 1.3](../../docs/ROADMAP.md).
+
 ### What it does not do
 
 **Inline a block.** `ifTrue`, `whileTrue`, `and` and `or` are real methods on
 real objects here, so a block and a send are correct where `solas` emits a jump
 over code in the enclosing chunk. The programs agree and the bytecode is
-longer — and in two of the seventy-four, longer is visible:
+longer — and longer is visible three ways:
 
+- seven programs differ in **a traceback line and nothing else**: a block that
+  is really a block is a frame `solas` has not got, and the frame around it
+  points at the statement the block is written in rather than at the send
+  inside it. Since the line table became exact this is the only thing left that
+  a traceback disagrees about.
 - `programs/pascal.sol` nests blocks 19 deep and the `.sob` format allows 16.
   `solas` inlines its way under the limit; this does not, and the loader
   refuses what it writes.
 - `programs/basic.sol` calls something recursive until the machine stops it and
   prints what happened, so one extra frame per level stops it a test earlier.
 
-Both are counted apart in the test rather than compared, and neither is a
-miscompile. See [ROADMAP 2.4](../../docs/ROADMAP.md).
+All three are counted apart in the test rather than compared, and none of them
+is a miscompile. See [ROADMAP 2.4](../../docs/ROADMAP.md).

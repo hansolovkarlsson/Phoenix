@@ -1675,3 +1675,126 @@ place — and it only worked because the count is reported by category rather
 than as a single number. "72 agree, 2 nest a block `solas` inlines" says
 something; "74 tried" would have said nothing, and hiding the two would have
 been a lie with a green tick on it.
+
+## 2026-09-02 — `$pos`, and the sentence on the roadmap that was wrong
+
+[ROADMAP 1.1](ROADMAP.md) asked one question and answered another. The question
+was *what a position is to a description* — a line, a line and a column, or an
+opaque value only the diagnostics understand. The answer it did not offer is
+the one that turned out to be right:
+
+```
+Position(line, column, file)
+```
+
+**A node.** Which sounds like a detail and is the whole design. A number would
+have been smaller and would have meant nothing: every use a description has for
+a position is a line or the name of a file, and a byte offset into a buffer
+nobody wrote is neither. A node makes reading part of one an *ordinary field
+read* — `$pos.line`, `$pos.file` — so the notation needs no new syntax and no
+library function to get at it, and a fourth thing later is a field rather than
+a second reserved name.
+
+And because `.` over a list already means "that of each", `$body.pos.line` is a
+column of line numbers without anybody deciding it should be. That is the shape
+a table in a binary format wants, and it arrived free.
+
+### One word reserved, said out loud
+
+`$pos` resolves **before** bindings, fields and attributes. It has to: a name
+that means the position on one node type and a field on another is the shape of
+quiet wrongness this project keeps checks for, and a description reading
+`$body.pos` over a mixed list would get both.
+
+So `pos` is a word a grammar may not call a field, and a description that does
+is refused when it is read. That is a real cost and it is written in the warts
+rather than left to be discovered — the same bargain `expression.phx` makes
+when it reserves `and` and `or`.
+
+### "Everything needed is already there" was wrong
+
+The entry said the work was small because a node already carries its position.
+Reading one *is* small: about thirty lines. Using one is not.
+
+A `.sob` line table is a run per statement — its bytes at its line — and
+writing one needs, for every element of a list, a value computed from it.
+**The notation cannot say that.** `each` applies a *template* to a list, and a
+template can only write an element out; it cannot ask for `size(x)` of one, or
+for `x` as four little-endian bytes.
+
+There were two ways forward and only one of them is small:
+
+- a clause on **every node type that can be a statement**, each carrying the
+  same line of notation. Twelve of them in Solveig, identical.
+- the two operations, as a library entry and an extension.
+
+The second, and the reason is the argument roadmap 3.4 makes about the library
+being a visible thing: `sizes(list)` is the companion to `positions(list)` —
+that one answers where each thing is, this one how big it is, and neither can
+be asked any other way — and `bytes` taking a *column* of numbers is the same
+function taking a list, the way `bind` already takes names pairwise and `each`
+already takes two lists.
+
+With those, the whole line table is one clause:
+
+```
+bodyruns = join(each(bytes(sizes($body.code), 4),
+                     bytes($body.pos.line, 4),
+                     "{}{}\x01\x00\x00\x00{}"), "")
+```
+
+— each statement's bytes at its line, then the one byte after it, the `POP`, at
+the same line. A block drops eight bytes off the end of that table for the same
+reason it drops one byte off the end of its code: its last statement has no
+`POP`. The run count is measured off the table rather than counted from the
+body, because the loader adds the runs up and refuses a file whose lines do not
+account for every byte.
+
+### The case that stayed open, and what it is evidence for
+
+The file table did not fall out. A chunk holding code from two files — which is
+what `@include` made possible last night — needs a run per statement naming a
+**row of a table of the distinct files**, and that is a `lookup` per element:
+the third case of the same missing thing, and the one two library entries did
+not cover.
+
+So the file table is written when a chunk is about **one** file, which every
+block is and every program that does not include is, and otherwise it is not
+written at all. That is the format's own answer for the case — bytes belonging
+to no file print a bare line — and it is the right one, because a line number
+naming a file nobody said reads as a line of the file you were looking at and
+is worse than saying nothing.
+
+**Three cases of one missing mechanism in a single stage** is what
+[ROADMAP 1.3](ROADMAP.md) was waiting for, and it is not the shape it expected.
+1.3 was written about *repetition*: the same computation spelled out once per
+node type. This is narrower and worse — a computation the notation cannot
+express at all, patched twice by adding to the library and left open the third
+time. A map with an expression would have covered all three, and it is the
+mechanism that page keeps warning about.
+
+### What it bought, measured
+
+The Solveig oracle **stopped normalising locations away**. It used to replace
+every `[...]` in a program's output before comparing, because every message
+from bytecode written here said `[line 1]`; now the file and the line are
+compared like any other byte.
+
+- **66 programs print exactly what `solas`'s bytecode prints**, tracebacks
+  included. Four of them have real tracebacks and match to the character.
+- **7 differ in a traceback line and in nothing else.** Every one is the
+  inlining of [ROADMAP 2.4](ROADMAP.md): a block that is really a block is a
+  frame `solas` has not got, and the frame around it points at the statement
+  the block is written in rather than at the send inside it. Six of those also
+  lose the file name, which is the open case above — but `programs/log.sol` has
+  no include, gets its file table, and still differs by a line, which is what
+  proves the two causes are separate.
+- 2 are the nesting limit and the call depth, the same inlining seen twice
+  more; 1 does not print the same thing twice under `solas` either.
+
+**A test that stopped normalising also found a flaky one.** `programs/diff.sol`
+prints a file's timestamp to the second, and the check for that ran the oracle
+twice back to back — which nearly always agrees — before running this backend a
+moment later, on the other side of a second boundary. The two oracle runs now
+*bracket* the one under test, so a clock that ticks anywhere in the window is
+reported as a program that does not repeat itself, which is what it is.

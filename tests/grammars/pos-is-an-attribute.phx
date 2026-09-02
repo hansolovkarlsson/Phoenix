@@ -1,0 +1,14 @@
+(* And a clause may not define one either, for the same reason from the other
+ * side. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number { "," number -> $2 } -> Row(cells: [$1, ...$2]) .
+
+%pass p
+  Row : pos = 1 .

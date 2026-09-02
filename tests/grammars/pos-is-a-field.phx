@@ -1,0 +1,13 @@
+(* `pos` is what every node says its position with, so a grammar may not call
+ * a field that. One word reserved, refused when the description is read
+ * rather than found later as a clause that answers two different things
+ * depending on which node it ran on. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number { "," number -> $2 } -> Row(pos: $1, cells: [$1, ...$2]) .

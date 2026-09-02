@@ -195,6 +195,24 @@ is not a list is an error**, because the likeliest way to write one is
 miscounting an item — `[$e, ...$3]` where `$3` is the third item rather than
 the repetition builds the first element twice, and nothing downstream can tell.
 
+## Where a node came from
+
+`$pos` answers a node, and reading part of it is an ordinary field read:
+
+```
+Position(line, column, file)
+```
+
+`line` and `column` count from one; `file` is the file that stretch of source
+came from, which after an `@include` is not necessarily the file the command
+line named. It is the one name in a pass that is not a field, an attribute or a
+binding: it resolves **before** all of those, so that it means the same thing
+in every clause of every pass, and a description with a field or an attribute
+of that name is refused when it is read.
+
+`.` over a list already means "that of each", so `$body.pos.line` is a column
+of line numbers — which is what a table in a binary format is written out of.
+
 ## Attributes, and when each one runs
 
 One walk, post-order, two phases at each node:

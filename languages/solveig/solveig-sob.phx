@@ -297,11 +297,55 @@
         : joined   = join(each($body.code, "{}\x12"), "")
         : bodycode = "{}{}" of slice($joined, 1, size($joined) - 1), bytes(19, 1)
 
+          (* ---- where the code came from ----
+           *
+           * A run per statement: its bytes at its line, then the one byte
+           * after it -- the `POP` -- at the same line. `$pos` is what makes
+           * this sayable at all, and `bytes` over a list is what makes it one
+           * line instead of a clause on every node type that can be a
+           * statement.
+           *
+           * The table has to **cover the code exactly**: the loader adds the
+           * runs up and refuses a file whose lines do not account for every
+           * byte. That is why the count is measured off the table itself
+           * rather than counted from the body.
+           *)
+        : bodyruns = join(each(bytes(sizes($body.code), 4),
+                               bytes($body.pos.line, 4),
+                               "{}{}\x01\x00\x00\x00{}"), "")
+
+          (* And which file each line is in, which an `@include` made a real
+           * question: a chunk can now hold code from two files, and a line
+           * number naming a file nobody said is worse than no line at all.
+           *
+           * **One file, or none.** A chunk whose statements are all from one
+           * file says so; one that holds two would need a run per statement
+           * naming a row of a table of the distinct files, and there is no way
+           * to compute a value per element of a list -- see ROADMAP 1.3. So
+           * the honest answer for that case is the one the format has for it:
+           * no file table, and a bare line. *)
+        : nfiles   = size(positions($body.pos.file))
+        : onefile  = at([...$body.pos.file, $pos.file], 1)
+        : nfileout = lookup([[1, 1]], $nfiles, 0)
+        : filetext = lookup([[1, "{}{}" of bytes(size($onefile), 2), $onefile]],
+                            $nfiles, "")
+        : fileruns = lookup([[1, "{}{}" of bytes(size($bodycode), 4),
+                                           bytes(0, 4)]], $nfiles, "")
+
+          (* The last statement has no `POP`, so the run written for the byte
+           * after it goes too -- eight bytes off the end of the table, the way
+           * one byte comes off the end of the code just above. *)
+        : lineruns = "{}\x01\x00\x00\x00{}"
+                       of slice($bodyruns, 1, size($bodyruns) - 8),
+                          bytes($pos.line, 4)
+
         : chunk  = join([bytes(size($names), 4), $nametext,
                          bytes($nconsts, 4), $consts,
                          bytes(size($bodycode), 4), $bodycode,
-                         bytes(1, 4), bytes(size($bodycode), 4), bytes(1, 4),
-                         bytes(0, 4), bytes(0, 4), bytes(0, 2),
+                         bytes(quotient(size($lineruns), 8), 4), $lineruns,
+                         bytes($nfileout, 4), $filetext,
+                         bytes($nfileout, 4), $fileruns,
+                         bytes(0, 2),
                          bytes($nmethods, 4), $methods], "")
 
           (* name, arity, slots, flags, body. The flag is `IS_BLOCK`; the
@@ -347,19 +391,29 @@
           : down outerdepth = []
           : down bdepth     = 0
           : bodycode = "{}{}" of join(each($body.code, "{}\x12"), ""), bytes(20, 1)
+          (* The same table as a block's, and the same reason -- see `Block`
+           * above, where it is written out. A `Program` keeps every `POP`, so
+           * nothing comes off the end; what it adds is the `HALT`, one byte at
+           * the line the file starts on, which nothing can fail at. *)
+          : bodyruns = join(each(bytes(sizes($body.code), 4),
+                                 bytes($body.pos.line, 4),
+                                 "{}{}\x01\x00\x00\x00{}"), "")
+          : nfiles   = size(positions($body.pos.file))
+          : onefile  = at([...$body.pos.file, $pos.file], 1)
+          : nfileout = lookup([[1, 1]], $nfiles, 0)
+          : filetext = lookup([[1, "{}{}" of bytes(size($onefile), 2), $onefile]],
+                              $nfiles, "")
+          : fileruns = lookup([[1, "{}{}" of bytes(size($bodycode), 4),
+                                             bytes(0, 4)]], $nfiles, "")
+          : lineruns = "{}\x01\x00\x00\x00{}" of $bodyruns, bytes($pos.line, 4)
           : out = join([
               "SOLB", bytes(14, 2), bytes($nslots, 2),
               bytes(size($names), 4), $nametext,
               bytes($nconsts, 4), $consts,
               bytes(size($bodycode), 4), $bodycode,
-              (* The line table has to **cover the code**: the loader adds the
-               * runs up and refuses a file whose lines do not account for
-               * every byte. One run, all of it line one -- which is honest
-               * rather than useful, and is what a message will point at until
-               * this carries real positions. *)
-              bytes(1, 4), bytes(size($bodycode), 4), bytes(1, 4),
-              bytes(0, 4),              (* files     *)
-              bytes(0, 4),              (* fileruns  *)
+              bytes(quotient(size($lineruns), 8), 4), $lineruns,
+              bytes($nfileout, 4), $filetext,
+              bytes($nfileout, 4), $fileruns,
               bytes(0, 2),              (* slotnames *)
               bytes($nmethods, 4), $methods
             ], "") .

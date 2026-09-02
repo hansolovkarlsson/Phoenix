@@ -198,15 +198,21 @@ echo "what a source includes"
 inc="$root/tests/grammars/includes.phx"
 src="$root/tests/sources/includes"
 
-# shows <what> <expected> <args...> -- the `show` pass over the spliced tree.
-shows() {
+# prints <what> <expected> <args...> -- what phx writes, exactly.
+prints() {
     what=$1; _want=$2; shift 2
-    got=$("$phx" --run show --show show "$@" 2>&1)
+    got=$("$phx" "$@" 2>&1)
     if [ "$got" = "$_want" ]; then
         report pass "$what"
     else
         report fail "$what" "wanted '$_want', got '$got'"
     fi
+}
+
+# shows <what> <expected> <args...> -- the `show` pass over the spliced tree.
+shows() {
+    what=$1; _want=$2; shift 2
+    prints "$what" "$_want" --run show --show show "$@"
 }
 
 shows "a file spliced in where the include stood" \
@@ -250,6 +256,33 @@ if printf '%s' "$out" | grep -q "broken.inc:2:"; then
 else
     report fail "a fault in an included file names it" "$(printf '%s' "$out" | head -1)"
 fi
+
+echo "where a node came from"
+# `$pos` is the one name in a pass that is not a field, an attribute or a
+# binding. It answers a node -- Position(line, column, file) -- so reading part
+# of one is an ordinary field read, and `.` over a list already means "that of
+# each", which is what a table with a row per statement is written out of.
+prints "a position names its own file and line" \
+       "$src/main.inc:1 $src/second.inc:1 $src/third.inc:1 $src/main.inc:3 " \
+       --driver where "$inc" "$src/main.inc"
+prints "and its column" "1 1 1 1 " --driver columns "$inc" "$src/main.inc"
+
+# `sizes` and `bytes` over a list: the size of each element, and each of a
+# column of numbers as fixed-width bytes. Both exist because a table in a
+# binary format is a column, and the alternative was the same line of notation
+# written once per node type that could be a row.
+widths=$("$phx" --raw --driver widths "$inc" "$src/main.inc" 2>/dev/null \
+         | od -An -tu1 | tr '\n' ' ' | tr -s ' ' | sed 's/^ //;s/ $//')
+if [ "$widths" = "3 0 3 0 3 0 3 0" ]; then
+    report pass "sizes, and bytes over a list"
+else
+    report fail "sizes, and bytes over a list" "got '$widths'"
+fi
+
+refuses "a field called 'pos'" "what every node says its position with" \
+        "$root/tests/grammars/pos-is-a-field.phx"
+refuses "a clause defining 'pos'" "a clause cannot define one" \
+        "$root/tests/grammars/pos-is-an-attribute.phx"
 
 echo "drivers"
 refuses "a driver in the wrong order" "nothing before it defines one" \
@@ -484,6 +517,17 @@ if "$phx" "$root/tests/grammars/includes.phx" -o "$tmp0/inc.c" 2>/dev/null \
         report pass "a generated compiler follows an include"
     else
         report fail "a generated compiler follows an include" "phx '$a', it '$b'"
+    fi
+
+    # And it says where a node came from, which is the target file's position
+    # rather than anything frozen into the tables.
+    a=$("$phx" -I "$src/elsewhere" --driver where "$root/tests/grammars/includes.phx" \
+        "$src/needs-path.inc" 2>/dev/null)
+    b=$("$tmp0/incc" -I "$src/elsewhere" --driver where "$src/needs-path.inc" 2>/dev/null)
+    if [ "$a" = "$b" ] && [ "$a" = "$src/elsewhere/far.inc:1 $src/needs-path.inc:2 " ]; then
+        report pass "and agrees about where each node came from"
+    else
+        report fail "and agrees about where each node came from" "phx '$a', it '$b'"
     fi
 
     missing=$("$tmp0/incc" "$src/absent.inc" 2>&1)

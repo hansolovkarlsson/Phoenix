@@ -56,6 +56,46 @@ static Value *list_of(Arena *a, Value **items, int n)
     return v;
 }
 
+/* One number as `width` little-endian bytes. Split out when `bytes` learned to
+ * take a list, so that one number and a column of them cannot disagree. */
+static Value *bytes_of(Eval *e, const Expr *x, Arena *a, const Value *n,
+                       long long width)
+{
+    if (n->kind != V_INT && n->kind != V_FLOAT)
+        return library_fail(e, x, "'bytes' wants a number, and this is %s",
+                            value_kind_name(n));
+
+    /* A float is written as what it *is* -- its IEEE 754 bits -- which is
+     * the only reading of "this number as eight bytes" a binary format
+     * ever wants. Four bytes is single precision, and narrower is not a
+     * float at all, so it is refused rather than quietly rounded. */
+    unsigned long long v;
+    if (n->kind == V_FLOAT) {
+        if (width == 8) {
+            double d = n->real;
+            unsigned long long bits;
+            memcpy(&bits, &d, sizeof bits);
+            v = bits;
+        } else if (width == 4) {
+            float g = (float)n->real;
+            unsigned int bits;
+            memcpy(&bits, &g, sizeof bits);
+            v = bits;
+        } else {
+            return library_fail(e, x, "a float is four or eight bytes, not %lld",
+                                width);
+        }
+    } else {
+        v = (unsigned long long)n->ival;
+    }
+
+    char *out = arena_alloc(a, (size_t)width + 1);
+    for (long long i = 0; i < width; i++) out[i] = (char)((v >> (8 * i)) & 0xff);
+    out[width] = '\0';
+
+    return value_text(a, out, (size_t)width);
+}
+
 static Value *pair(Arena *a, Value *k, Value *v)
 {
     Value **items = arena_alloc(a, 2 * sizeof *items);
@@ -290,11 +330,13 @@ Value *eval_call(Eval *e, const Expr *x)
      *
      * Little-endian and a width, because those are the two things a file
      * format fixes and the two things a caller must therefore say.
+     *
+     * A **list** of numbers answers a list of encodings, which is what a table
+     * in a binary format is a column of.
      */
     if (strcmp(f, "bytes") == 0) {
         if (!want(e, x, 2, args)) return NULL;
-        if ((args[0]->kind != V_INT && args[0]->kind != V_FLOAT) ||
-            args[1]->kind != V_INT)
+        if (args[1]->kind != V_INT)
             return library_fail(e, x, "'bytes' wants a number and a width");
 
         long long width = args[1]->ival;
@@ -302,35 +344,28 @@ Value *eval_call(Eval *e, const Expr *x)
             return library_fail(e, x, "'bytes' writes one to eight bytes, not %lld",
                                 width);
 
-        /* A float is written as what it *is* -- its IEEE 754 bits -- which is
-         * the only reading of "this number as eight bytes" a binary format
-         * ever wants. Four bytes is single precision, and narrower is not a
-         * float at all, so it is refused rather than quietly rounded. */
-        unsigned long long v;
-        if (args[0]->kind == V_FLOAT) {
-            if (width == 8) {
-                double d = args[0]->real;
-                unsigned long long bits;
-                memcpy(&bits, &d, sizeof bits);
-                v = bits;
-            } else if (width == 4) {
-                float g = (float)args[0]->real;
-                unsigned int bits;
-                memcpy(&bits, &g, sizeof bits);
-                v = bits;
-            } else {
-                return library_fail(e, x, "a float is four or eight bytes, not %lld",
-                                    width);
+        /* **A list of numbers answers a list of encodings**, which is the same
+         * operation done as many times and not a second function. A table in a
+         * binary format is a column of fixed-width numbers, and a description
+         * that can say what the numbers are had no way to say them as bytes --
+         * the row-by-row alternative is a clause on every node type that could
+         * be a row, which is the same line of notation written twelve times.
+         *
+         * A *list* rather than the bytes joined together, because `join` is how
+         * this notation concatenates and `each` is how it pairs two columns up.
+         * Answering the concatenation would have been one function doing two
+         * things. */
+        if (args[0]->kind == V_LIST) {
+            Value **items = arena_alloc(a, (size_t)(args[0]->n ? args[0]->n : 1)
+                                             * sizeof *items);
+            for (int i = 0; i < args[0]->n; i++) {
+                Value *one = bytes_of(e, x, a, args[0]->items[i], width);
+                if (!one) return NULL;
+                items[i] = one;
             }
-        } else {
-            v = (unsigned long long)args[0]->ival;
+            return list_of(a, items, args[0]->n);
         }
-        char *out = arena_alloc(a, (size_t)width + 1);
-
-        for (long long i = 0; i < width; i++) out[i] = (char)((v >> (8 * i)) & 0xff);
-        out[width] = '\0';
-
-        return value_text(a, out, (size_t)width);
+        return bytes_of(e, x, a, args[0], width);
     }
 
     /* ---- text ----
@@ -405,6 +440,37 @@ Value *eval_call(Eval *e, const Expr *x)
             return library_fail(e, x, "'size' wants text, a list or a node, and this is %s",
                         value_kind_name(args[0]));
         }
+    }
+
+    /* `sizes(list)` -- how big each element is, which is the companion to
+     * `positions(list)`: that one answers where each thing is and this one how
+     * big it is, and neither can be asked any other way. `each` applies a
+     * *template* to a list, and a template can only write an element out.
+     *
+     * A table in a binary format is a column of lengths beside a column of
+     * things, and the alternative to this was the same line of notation once
+     * per node type that could be a row. */
+    if (strcmp(f, "sizes") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return library_fail(e, x, "'sizes' wants a list, and this is %s",
+                                value_kind_name(args[0]));
+
+        Value **items = arena_alloc(a, (size_t)(args[0]->n ? args[0]->n : 1)
+                                         * sizeof *items);
+        for (int i = 0; i < args[0]->n; i++) {
+            const Value *it = args[0]->items[i];
+            switch (it->kind) {
+            case V_TEXT: items[i] = value_int(a, (long long)it->len); break;
+            case V_LIST:
+            case V_NODE: items[i] = value_int(a, it->n);              break;
+            default:
+                return library_fail(e, x, "'sizes' wants text, lists or nodes, "
+                                    "and element %d is %s", i + 1,
+                                    value_kind_name(it));
+            }
+        }
+        return list_of(a, items, args[0]->n);
     }
 
     if (strcmp(f, "at") == 0) {

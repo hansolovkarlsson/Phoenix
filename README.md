@@ -372,6 +372,39 @@ expected, since a file is a number of things and a field holds one; and a file
 whose root holds two parts, since nothing says which of them a statement
 position wanted.
 
+### `$pos`: where a node came from
+
+Every node carries a position and nothing in a clause could reach it, so a
+`.sob` written here had one line run for a whole chunk and no file table:
+every message from a program it compiled said `[line 1]`. `$pos` is what reads
+it, and it answers a **node**:
+
+```
+Position(line, column, file)
+```
+
+which is the whole of the design. A number would have been smaller and would
+have meant nothing to a description — every use a description has for a
+position is a line or the name of a file. A node makes reading part of one an
+ordinary field read, so the notation needs no new syntax and no library
+function, and a fourth thing later is a field rather than a second reserved
+name.
+
+`.` over a list already means "that of each", so a table with a row per
+statement is written the way every other list is:
+
+```
+Program : lines = bytes($body.pos.line, 4) .
+```
+
+`file` is the file that node's text came from, which after an `@include` is
+not necessarily the one the command line named.
+
+**One word is reserved.** `$pos` resolves before bindings, fields and
+attributes, so that it means the same thing in every clause of every pass — and
+a grammar that builds a node with a field called `pos` is refused when the
+description is read rather than getting two answers later.
+
 ### Modules declare their holes
 
 An expression grammar cannot know what a language's atoms are — a number, a
@@ -554,6 +587,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
 | a check reading the attributes it guards | a check runs first, by design |
 | `%include` naming a node nothing builds | or a field that node has not got — the mechanism would then do nothing, quietly, and every include would reach a pass as a node it has no clause for |
+| a field or an attribute called `pos` | the name every node says its position with, so it has to mean one thing everywhere |
 
 ## The layout
 
@@ -579,18 +613,18 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 129 checks, covering 35 Pascal programs against fpc
-                #   and 72 Solveig programs against solas
+make test       # 135 checks, covering 35 Pascal programs against fpc
+                #   and 66 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 127 of the 129 need only what is vendored here, and the two
+repository** — 133 of the 135 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
 
 ```sh
-SOLVEIG=/path/to/Solveig make test    # the other two, and 75 files round-tripped
+SOLVEIG=/path/to/Solveig make test    # the other two, and every .sol there round-tripped
 PHX_TEST_SOLVEIG=1 make test          # also emit Solveig from calc.phx and compile it
 ```
 
@@ -749,9 +783,11 @@ outside the subset are refused loudly rather than mistranslated.
 
 `solas` and `solvm` do the same for Solveig, and the test is stronger: not
 "does the output read correctly" but "does the compiled program print the same
-thing". Seventy-two programs compile to bytecode that prints what `solas`'s
-does. It found two bugs in the front end and one in Phoenix itself, and **none
-of the three was reachable by rendering the tree back to source**:
+thing". Sixty-six programs compile to bytecode that prints what `solas`'s does,
+**byte for byte, tracebacks included** — the file and the line a message points
+at are compared rather than normalised away. It found two bugs in the front end
+and one in Phoenix itself, and **none of the three was reachable by rendering
+the tree back to source**:
 
 | | |
 | --- | --- |
