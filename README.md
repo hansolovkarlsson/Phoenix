@@ -705,12 +705,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 162 checks, covering 35 Pascal programs against fpc
+make test       # 166 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 160 of the 162 need only what is vendored here, and the two
+repository** — 164 of the 166 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:

@@ -95,10 +95,40 @@ rather than a tree:
 
 Each read back as the same tree and neither is awk.
 
+## The call check, and what it says about the roadmap
+
+**awk resolves a call by name over the whole program**, so a function may be
+used above where it is defined. That is the forward reference
+[ROADMAP 2.1](../../docs/ROADMAP.md) has been waiting for a language to need,
+and it is **two passes**:
+
+```
+%pass functions
+  thread known = []
+  Function : known = [...$known, [$name, size($params)]] .
+  Program  : table = $known .
+
+%pass calls
+  Program : down declared = $table .
+  Apply ! not defined($declared, $name) : "'{}' is not a function ..." of $name
+```
+
+One walk collects the functions and leaves the table on the root — a leaving
+clause runs after the whole subtree, so every function is in it wherever it was
+written. The next hands it back down. Attributes stay on the nodes between
+passes, which is what makes a sequence of them worth having.
+
+It finds while *reading* the program what awk finds when the call *runs*, and
+it flags [`outside/hello.awk`](tests/outside/hello.awk) for calling a gawk
+builtin that POSIX awk has not got.
+
+So the entry that was waiting for this language got its answer, and the answer
+is no: what reference attributes would have bought is one walk instead of two.
+
 ## What it does not do
 
-**Compile anything.** This is a front end: a grammar, a tree and a way to write
-it back out. `languages/solveig/` was built the same way round — a conformance
+**Compile anything.** This is a front end: a grammar, a tree, a check and a way
+to write it back out. `languages/solveig/` was built the same way round — a conformance
 suite, then a description that reads every program there is, then a backend —
 and the reason is that a backend for a language whose parse is wrong is a
 backend that has to be written twice.

@@ -1057,6 +1057,35 @@ prints "a/b/c is read as a regexp between two names" \
 prints "and f (1) as a call, where awk concatenates" \
        "BEGIN { x = f(1) }" "$root/languages/awk/awk.phx" "$d/spaced-call.awk"
 
+# **A call is resolved over the whole program**, so a function may be used
+# above where it is defined -- which is the forward reference ROADMAP 2.1 is
+# about, and which two passes answer: one collects what functions there are,
+# the other hands the table down and checks the calls. What awk finds when the
+# call runs, this finds while reading the program.
+a="$root/languages/awk/awk.phx"
+accepted=0; rejected=0
+for f in "$root"/languages/awk/tests/corpus/*.awk \
+         "$root"/languages/awk/tests/conformance/*.awk; do
+    if "$phx" --quiet --driver check "$a" "$f" >/dev/null 2>&1
+    then accepted=$((accepted+1))
+    else rejected=$((rejected+1)); echo "  check refuses $(basename "$f")"
+         "$phx" --quiet --driver check "$a" "$f" 2>&1 | head -2 | sed 's/^/      /'
+    fi
+done
+if [ "$rejected" -eq 0 ]; then
+    report pass "$accepted awk programs pass the call check"
+else
+    report fail "awk programs pass the call check" "$rejected refused"
+fi
+
+refuses "a call to a function nothing defines" "is not a function in this program" \
+        --driver check "$a" "$root/languages/awk/tests/refused/undefined-function.awk"
+refuses "a call with more arguments than parameters" "and this gives 2" \
+        --driver check "$a" "$root/languages/awk/tests/refused/too-many-arguments.awk"
+# And the one the whole exercise is for: defined *below* the call, and fine.
+accepts "a function called above where it is defined" \
+        --driver check "$a" "$root/languages/awk/tests/conformance/functions.awk"
+
 if orc=$("$root/languages/awk/tests/oracle.sh" 2>&1); then
     report pass "$(printf '%s' "$orc" | tail -1)"
 else

@@ -2379,3 +2379,89 @@ nothing has yet had to resolve that call.
 
 Which is the same order Solveig was built in, and for the same reason: a
 backend for a language whose parse is wrong is a backend written twice.
+
+## 2026-09-02 — the entry that was waiting for a language, and lost
+
+[ROADMAP 2.1](ROADMAP.md) — reference attributes, from JastAdd — had been
+narrowed twice already. What was left of it was one sentence:
+
+> **A reference that points *forward*** — to a node the walk has not reached —
+> which is the only case a backward lookup cannot serve.
+
+and one condition: *until a language that needs one is being described, this
+stays unbuilt.* Pascal has `forward` precisely so that it does not need one.
+Solveig sends messages and resolves nothing until it runs. awk was picked, in
+part, **because it would need one**: a function may be called above where it is
+defined, and awk resolves the call by name over the whole program.
+
+```awk
+BEGIN { print greet("world") }
+function greet(who,   prefix) { prefix = "hello, "; return prefix who }
+```
+
+awk prints `hello, world`. So checking that a call names something has to see a
+node the walk has not reached.
+
+### It is two passes
+
+```
+%pass functions
+  thread known = []
+  Function : known = [...$known, [$name, size($params)]] .
+  Program  : table = $known .
+
+%pass calls
+  Program : down declared = $table .
+  Apply ! not defined($declared, $name)
+          : "'{}' is not a function in this program" of $name .
+```
+
+One walk collects the functions and leaves the table on the root. **A leaving
+clause on the root runs after the whole subtree**, so every function is in that
+table wherever in the file it was written — the forward reference is answered
+by the shape of the walk rather than by a mechanism. The next pass hands the
+table back down, and attributes stay on nodes between passes, which is the
+whole reason a `%driver` names a sequence.
+
+Twenty lines, and it finds while *reading* a program what awk finds when the
+call *runs* — on somebody else's input, on somebody else's machine. It flags
+`outside/hello.awk` for calling `bindtextdomain`, a gawk builtin POSIX awk has
+not got, which is a true thing about that file.
+
+The arity check came free beside it, and with it the notation doing plurals the
+way it does every other conditional — a table:
+
+```
+lookup([[1, ""]], lookup($declared, $name, 0), "s")
+```
+
+### So the entry loses
+
+The cost of two passes is that the walk happens twice. The cost of reference
+attributes is demand-driven evaluation and the cycle detection that walking
+once avoids, and what it would have bought here is **one walk instead of two**.
+
+The case two passes cannot do is a dependency that does not *stratify* — two
+nodes each needing an attribute the other computes. Neither Pascal nor Solveig
+nor awk has one.
+
+Three languages described without wanting this, and the one picked because it
+looked like it would want it did not. That is as close to an answer as this
+project's roadmap gets, and it is worth more than the mechanism would have
+been: **the entry can now be closed on evidence rather than left open on
+politeness.**
+
+### What is worth noticing about the shape of the answer
+
+Every time this roadmap has been wrong, it has been wrong in the same
+direction: it predicted a **new mechanism** where the answer was the
+mechanisms already there, used in an order nobody had tried.
+
+- 1.3 wanted a map over a list; the answer was an attribute every node has.
+- 2.4 wanted a way to compile a block differently; the answer was to take the
+  block out of the tree.
+- 2.1 wanted a reference that points forward; the answer is that a root's
+  leaving clause has already seen everything.
+
+Three for three. The next entry that asks for a mechanism deserves the same
+question first: *what does the walk already know, and when does it know it?*

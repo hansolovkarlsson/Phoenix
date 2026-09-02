@@ -190,7 +190,8 @@ reason: a shape that is right is cheaper to keep than a shape that is minimal.
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
 whose. Two of the four are done, and the two that are not are the two this page
-has twice said to be sceptical about.
+has twice said to be sceptical about — one of which has now been tested against
+the language it was waiting for, and lost.
 
 ### 2.1 Reference attributes — from JastAdd
 
@@ -222,13 +223,39 @@ so would a language where a method may be used above where it is defined. Until
 one of those is being described, this stays unbuilt, and the reason is now
 evidence rather than policy.
 
-**The language arrived.** `languages/awk/` has exactly that shape: a function
-may be called above where it is defined, nothing is declared, and
-`tests/conformance/functions.awk` calls one from `BEGIN` before its body
-appears. What is described so far is a **front end** — a grammar, a tree and a
-way to write it back out — so nothing has yet had to *resolve* that call, and
-this entry is still unbuilt. It is no longer waiting for a language, though; it
-is waiting for a pass over the one it has.
+**The language arrived, and it did not need this.** `languages/awk/` has
+exactly the shape this entry was waiting for: a function may be called above
+where it is defined, nothing is declared, and `tests/conformance/functions.awk`
+calls one from `BEGIN` before its body appears — awk resolves it and prints the
+answer.
+
+Checking those calls is **two passes and twenty lines**. One walks the program
+and collects what functions there are, leaving the table on the root; the other
+hands it back down and checks every call against it. Attributes stay on the
+nodes between passes, so the second reads what the first left — and a leaving
+clause on the root runs after the whole subtree, so every function is in the
+table wherever it was written.
+
+```
+Function : known = [...$known, [$name, size($params)]] .
+Program  : table = $known .          (* pass one  *)
+Program  : down declared = $table .  (* pass two  *)
+```
+
+It finds, while reading the program, what awk finds when the call runs — on
+somebody else's input, on somebody else's machine. It flags
+`outside/hello.awk` for calling a gawk builtin that POSIX awk does not have.
+
+**So the score is against building it.** The cost of two passes is that the
+walk happens twice. The cost of reference attributes is demand-driven
+evaluation and the cycle detection that walking once avoids, and what it would
+have bought here is one walk instead of two. A dependency that does not
+*stratify* — where two nodes each need an attribute the other computes — is the
+case two passes cannot do, and neither Pascal nor Solveig nor awk has one.
+
+Three languages have now been described without wanting this, and the one
+picked *because* it looked like it would want it did not. That is as close to
+an answer as this page gets.
 
 If it is ever built, the cost is that demand-driven evaluation comes back with
 it, along with the cycle detection that walking once avoided —

@@ -371,3 +371,53 @@ arglist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2]
   Apply   : show = "{}({})" of $name, join($args.show, ", ") .
 
 %driver show = show -> show .
+
+(* ------------------------------------------------------------------ *)
+(* What a call means
+ *
+ * **awk resolves a call by name, at run time, over the whole program.** A
+ * function may be called above where it is defined -- `tests/conformance/
+ * functions.awk` calls `greet` from `BEGIN` before its body appears, and awk
+ * prints the answer. So the check that a call names something has to see a
+ * node the walk has not reached, which is the forward reference
+ * `docs/ROADMAP.md` 2.1 is about.
+ *
+ * **It is two passes, and that is the whole of it.** The first walks the
+ * program and collects what functions there are; the second hands that table
+ * down and checks the calls against it. Attributes stay on the nodes between
+ * passes, so the second reads what the first left on the root -- which is what
+ * a hand-written compiler does, and why 2.1 has stayed unbuilt.
+ *
+ * What that costs, said plainly: the walk happens twice. What it saves is
+ * demand-driven evaluation and the cycle detection that comes with it.
+ *)
+%pass functions
+
+  thread known = []
+
+  Function : known = [...$known, [$name, size($params)]] .
+
+  (* The table, left on the root for the pass after this one. Every function in
+   * the program is in it by the time this clause runs, wherever it was
+   * written, because a leaving clause runs after the whole subtree. *)
+  Program : table = $known .
+
+%pass calls
+
+  (* And handed back down, from the node the first pass left it on. *)
+  Program : down declared = $table .
+
+  Apply ! not defined($declared, $name)
+          : "'{}' is not a function in this program" of $name
+
+        (* awk allows a call with **fewer** arguments than the function has --
+         * the rest are its locals, which is how awk says local at all -- and
+         * refuses more. `lookup` answers this call's own count when the name
+         * is unknown, so a call to nothing is one message rather than two. *)
+        ! size($args) > lookup($declared, $name, size($args))
+          : "'{}' takes {} argument{}, and this gives {}"
+              of $name, lookup($declared, $name, 0),
+                 lookup([[1, ""]], lookup($declared, $name, 0), "s"),
+                 size($args) .
+
+%driver check = functions, calls .
