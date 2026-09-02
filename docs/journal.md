@@ -2569,3 +2569,76 @@ built because there is **one** customer. What it would cost is on the page: a
 description that names a file it does not contain stops being one thing, and
 `-o` writing a compiler that needs a file beside it would be the end of *one
 file, no headers, no library*.
+
+## 2026-09-02 — arrays, functions and regular expressions, and three questions `otherwise` answered
+
+Stage two of the awk backend: the parts that need a hash table and a regular
+expression engine. `<regex.h>` is POSIX and is what one-true-awk's EREs are
+close enough to; the hash table is a hundred lines. The runtime went from two
+hundred lines to three, and — as in stage one — **it was written and checked
+against awk before being embedded**, which is why the rest went quickly.
+
+```
+ok    10 awk programs compiled to C print what awk prints, 0 do not
+```
+
+Arrays with `in`, `delete` and `for`-in; functions with locals, recursion,
+calls above their definition and **arrays by reference**; patterns, `~`, `!~`,
+`match`, `sub`, `gsub` and `split`.
+
+### Three questions the tree could not answer, and one mechanism that could
+
+Every one of them is the same shape: *what is this node, when it is used
+**here**?* — which a clause cannot ask, because a clause is keyed on what a
+node **is**.
+
+| | |
+| --- | --- |
+| `stmt` | `x = 1` is an `Assign` whether it stands alone or sits inside something. A statement wants a `;` after it and an expression does not |
+| `argout` | a variable handed to a function has its array made first, because an array is by reference and a scalar is by value and awk decides which by what the callee does. Anything that is not a variable is passed as it stands |
+| `reout` | a regexp on its own matches the record; handed to `sub` or `split` it *is* the pattern. `Match` can ask with a clause pattern, because the regexp is a **field** of it — an argument is in a **list**, and a clause cannot reach into one |
+
+`otherwise` answers all three, one line each, and the nodes that differ say so.
+Without it each would have been the same clause written once per node type —
+twenty-odd times, three times over.
+
+That is the mechanism [1.3](ROADMAP.md) landed on, in its third language,
+answering a question nobody had when it was built. It was added for *"an
+attribute nearly every node answers the same way"*; what it turns out to be
+good at is *"an attribute about the **position** a node is in"*, which is a
+larger thing.
+
+### Four bugs, and where each was actually wrong
+
+**`(i, j) in a`** asked about a C comma expression. A parenthesised subscript
+list is one SUBSEP key, and saying so is a clause pattern — `In(index: Group)`.
+
+**An array's name was text.** `Index(array: "a", ...)` meant the pass that
+collects a program's variables never saw it, because that pass looks at `Var`
+nodes. An array name *is* a variable, so it builds one now. **The fix was in
+the grammar**, which is the fourth time this week the answer to a pass that
+could not ask something was a tree with a different shape.
+
+**`substr("abc", 0, 2)`** was `"a"` and one-true-awk says `"ab"`: the start is
+clamped to 1 and *then* the count is taken. POSIX can be read either way and
+the oracle cannot, which is the whole reason for having one.
+
+**`/ +/` will not parse**, and that is not a bug — it is the guess from stage
+one, met in the wild. A regexp may not begin with a space here, because `a / b`
+is division and nothing but a parser can tell them apart. It has a way out that
+costs nothing (`" +"` is a string used as a regexp, which awk allows) so it is
+a limit rather than a wall, and it is checked in beside the other two
+divergences. **Found by writing a conformance program rather than by thinking
+about it**, which is the useful kind of finding.
+
+### What the shape of this stage says
+
+Stage one was the hard one and it was hard in the runtime. Stage two is twice
+the language and about the same amount of work, nearly all of it in C rather
+than in the notation — because once a value is a `Cell` and a variable can hold
+a map, an array is a hash table lookup and a function is a C function.
+
+The description grew by about a hundred and twenty lines for arrays, functions,
+regular expressions and eighteen builtins. That ratio is the argument for the
+whole project, and it is the first time it has been visible on a language
+nobody here designed.

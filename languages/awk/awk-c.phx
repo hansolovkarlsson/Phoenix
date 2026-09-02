@@ -63,7 +63,8 @@
    * anything. *)
   Var : special = defined([["NR", true], ["NF", true], ["FS", true],
                            ["OFS", true], ["ORS", true], ["CONVFMT", true],
-                           ["OFMT", true]], $name)
+                           ["OFMT", true], ["RSTART", true], ["RLENGTH", true],
+                           ["SUBSEP", true]], $name)
       : known   = $special or defined($names, $name)
       : decls   = lookup([[true, $decls]], $known,
                          "{}static Cell v_{};\n" of $decls, $name)
@@ -81,22 +82,10 @@
 
   (* ---- what stage one does not do, said by name ---- *)
 
-  Index     ! true : "an array is stage two" .
-  In        ! true : "'in' is stage two" .
-  Delete    ! true : "'delete' is stage two" .
-  DeleteAll ! true : "'delete' is stage two" .
-  ForIn     ! true : "'for (k in a)' is stage two" .
-  Function  ! true : "a function definition is stage two" .
-  Apply     ! true : "a call to a function is stage two" .
-  Regex     ! true : "a regular expression is stage two" .
-  Match     ! true : "'~' is stage two" .
-  Range     ! true : "a range pattern is stage two" .
-  Append    ! true : "redirecting output is stage two" .
-  Write     ! true : "redirecting output is stage two" .
-  Pipe      ! true : "a pipe is stage two" .
-  Exit      ! true : "'exit' is stage two -- it has to run the END rules" .
-  Next      ! true : "'next' is stage two" .
-  Return    ! true : "a function is stage two, so a return is too" .
+  Range     ! true : "a range pattern is stage three" .
+  Append    ! true : "redirecting output is stage three" .
+  Write     ! true : "redirecting output is stage three" .
+  Pipe      ! true : "a pipe is stage three" .
 
   (* ---- expressions: every one answers a C expression of type `Cell` ---- *)
 
@@ -111,7 +100,15 @@
   Var(name: "ORS")     : out = "mkstr(ORS)" .
   Var(name: "CONVFMT") : out = "mkstr(CONVFMT)" .
   Var(name: "OFMT")    : out = "mkstr(OFMT)" .
-  Var                  : out = "v_{}" of $name .
+  Var(name: "RSTART")  : out = "mknum(RSTART)" .
+  Var(name: "RLENGTH") : out = "mknum(RLENGTH)" .
+  Var(name: "SUBSEP")  : out = "mkstr(SUBSEP)" .
+  (* Passed to a function, a variable has its array made first: an array is by
+   * reference and a scalar by value, and awk decides which by what the callee
+   * does with it. Everything that is not a variable is passed as it stands,
+   * which is what the `otherwise` below says in one line. *)
+  Var                  : out    = "v_{}" of $name
+                       : argout = "arr_ready(&v_{})" of $name .
 
   Field : out = "fld_of({})" of $index.out .
   Group : out = "({})" of join($items.out, ", ") .
@@ -147,11 +144,14 @@
   PreDecr  : out = "pre_step(&{}, -1)"  of $target.out .
 
   (* Assigning `FS` and its kind writes the runtime's string, not a Cell. *)
+  (* Assigning a field rebuilds the record, so it is the runtime's job. *)
+  Assign(target: Field, op: "=") : out = "fld_set({}, {})"
+                                           of $target.index.out, $value.out .
+
   Assign(target: Var(name: "FS"), op: "=")  : out = "assign_str(&FS, {})"  of $value.out .
   Assign(target: Var(name: "OFS"), op: "=") : out = "assign_str(&OFS, {})" of $value.out .
   Assign(target: Var(name: "ORS"), op: "=") : out = "assign_str(&ORS, {})" of $value.out .
 
-  Assign(target: Field) ! true : "assigning a field is stage two" .
   Assign(op: "=")  : out = "({} = {})" of $target.out, $value.out .
   Assign(op: "+=") : out = "({} = mknum(num_of({}) + num_of({})))"
                              of $target.out, $target.out, $value.out .
@@ -166,7 +166,107 @@
   Assign(op: "^=") : out = "({} = mknum(pow(num_of({}), num_of({}))))"
                              of $target.out, $target.out, $value.out .
 
-  (* The two builtins stage one has. `length` with no argument is the record. *)
+  (* ---- arrays ----
+   *
+   * A variable becomes an array by being subscripted, which is why the map
+   * hangs off a value rather than being a kind of its own. `a[k]` **creates**
+   * the element, which is what awk does; `in` is the question that does not.
+   *
+   * The subscripts arrive as an array because there is no way to fold a list
+   * into nested calls, and `key_of` is that fold. *)
+  Index : key = "key_of((Cell[]){{{}}}, {})" of join($index.out, ", "), size($index)
+        : out = "(*elem_of(&{}, {}))" of $array.out, $key .
+
+  (* `(i, j) in a` asks about the one key those two make, so a parenthesised
+   * list on the left of `in` is the subscripts and not a value. *)
+  In(index: Group) : key = "key_of((Cell[]){{{}}}, {})"
+                             of join($index.items.out, ", "), size($index.items)
+                   : out = "has_elem(&{}, {})" of $array.out, $key .
+  In    : key = "key_of((Cell[]){{{}}}, 1)" of $index.out
+        : out = "has_elem(&{}, {})" of $array.out, $key .
+
+  Delete    : key  = "key_of((Cell[]){{{}}}, {})" of join($index.out, ", "), size($index)
+            : out  = "  del_elem(&{}, {});\n" of $array.out, $key
+            : stmt = $out .
+  DeleteAll : out = "  del_all(&{});\n" of $array.out : stmt = $out .
+
+  (* The keys are taken once, before the body runs, because the body may add
+   * to the array or take from it and awk does not say what happens then. *)
+  ForIn : out = join(["  {{ char **ks; int kn = map_keys(arr_of(&{}), &ks);",
+                      "    for (int ki = 0; ki < kn; ki++) {{ {} = mkstr(ks[ki]);",
+                      "{}    }} }}\n"], "\n")
+                  of $array.out, $var.out, $body.stmt
+        : stmt = $out .
+
+  (* ---- functions ----
+   *
+   * Every parameter past what the call gave is a local, so a call passes what
+   * it has and the body asks for what it wants. The counter is how an emitter
+   * with no way to number a list writes an indexed sequence. *)
+  (* A definition is not a `BEGIN`, a rule or an `END`, so it answers nothing
+   * for all three and its own two things instead: the body, and the line that
+   * lets a call above it compile. **awk resolves a call over the whole
+   * program**, so C has to be told in advance. *)
+  Function : begins = "" : rules = "" : ends = "" : reads = "" : out = ""
+           : ahead = "static Cell f_{}(Cell *A, int AN);\n" of $name
+           : funcs = join(["static Cell f_{}(Cell *A, int AN)", "{{", "  int k = 0;",
+                           "{}{}  return uninit();", "}}\n"], "\n")
+                       of $name,
+                          join(each($params, "  Cell v_{} = arg_at(A, AN, k++);\n"), ""),
+                          join($body.stmt, "") .
+
+  Apply(args: []) : out = "f_{}((Cell[]){{uninit()}}, 0)" of $name .
+  Apply           : out = "f_{}((Cell[]){{{}}}, {})"
+                            of $name, join($args.argout, ", "), size($args) .
+
+  (* An array is passed by reference and a scalar by value, and awk decides
+   * which by what the callee does -- so a variable handed to a function has
+   * its array made first, whichever way it turns out to be used. Everything
+   * that is not a variable is passed as it stands, which is what `otherwise`
+   * says in one line. *)
+  otherwise argout = $out
+
+  Return(value: nil) : out = "  return uninit();\n" : stmt = $out .
+  Return             : out = "  return {};\n" of $value.out : stmt = $out .
+
+  (* ---- regular expressions ----
+   *
+   * A regexp on its own matches the record; on the right of `~` it is the
+   * pattern. Which one it is, is which node it sits in -- so it is a pattern
+   * on the clause rather than a question in it. *)
+  (* The slashes come off and the backslashes and quotes are doubled, because
+   * what was a regexp in awk has to be a string literal in C. The attribute is
+   * not called `text`, because the node's field is. *)
+  (* **A regexp is two things depending on where it sits.** On its own it
+   * matches the record; handed to `sub`, `match` or `split` it *is* the
+   * pattern. `Match` can say which with a pattern on the clause, because the
+   * regexp is a field of it -- an argument is in a list, so the argument says
+   * instead: `reout` is "as a pattern", and everything that is not a regexp
+   * answers with itself. *)
+  otherwise reout = $out
+
+  Regex : pattern = join(split(join(split(slice($text, 2, size($text) - 1), "\\"),
+                                    "\\\\"), "\""), "\\\"")
+        : out     = "re_test(fld_of(mknum(0)), mkstr(\"{}\"))" of $pattern
+        : reout   = "mkstr(\"{}\")" of $pattern .
+
+  Match(op: "~",  right: Regex) : out = "re_test({}, mkstr(\"{}\"))"
+                                          of $left.out, $right.pattern .
+  Match(op: "!~", right: Regex) : out = "re_ntest({}, mkstr(\"{}\"))"
+                                          of $left.out, $right.pattern .
+  Match(op: "~")  : out = "re_test({}, {})"  of $left.out, $right.out .
+  Match(op: "!~") : out = "re_ntest({}, {})" of $left.out, $right.out .
+
+  (* ---- leaving a rule, and leaving the program ---- *)
+  Next : out = "  goto awk_next;\n" : stmt = $out .
+
+  (* `exit` runs the END rules first, unless it is already in one. *)
+  Exit(value: nil) : out = "  {{ awk_status = 0; goto awk_end; }}\n" : stmt = $out .
+  Exit             : out = "  {{ awk_status = (int)num_of({}); goto awk_end; }}\n"
+                             of $value.out
+                   : stmt = $out .
+
+  (* The builtins. `length` with no argument is the record. *)
   Call(name: "int")    : out = "mknum((double)(long long)num_of({}))"
                                  of join($args.out, "") .
   (* `length` with no argument is the length of the record, so the record is
@@ -174,7 +274,42 @@
    * notation with no conditional says "this, or that when there is no this". *)
   Call(name: "length") : out = "mknum((double)strlen(str_of({})))"
                                  of at([...$args.out, "fld_of(mknum(0))"], 1) .
-  Call ! true : "'{}' is stage two" of $name .
+  Call(name: "substr")  : out = "awk_substr({}, {}, {}, {})"
+                            of at($args.out, 1), at($args.out, 2),
+                               at([...$args.out, "mknum(0)", "mknum(0)"], 3),
+                               size($args) - 2 .
+  Call(name: "index")   : out = "awk_index({}, {})" of at($args.out, 1), at($args.out, 2) .
+  Call(name: "split")   : out = "awk_split({}, &{}, {}, {})"
+                            of at($args.out, 1), at($args.out, 2),
+                               at([...$args.reout, "mkstr(FS)", "mkstr(FS)"], 3),
+                               size($args) - 2 .
+  Call(name: "sprintf") : out = "awk_sprintf((Cell[]){{{}}}, {})"
+                            of join($args.out, ", "), size($args) - 1 .
+
+  (* `sub` and `gsub` write through their third argument, which defaults to the
+   * record -- so the target is an address and not a value. *)
+  Call(name: "sub")  : out = "awk_sub({}, {}, &{}, 0)"
+                         of at($args.reout, 1), at($args.out, 2),
+                            at([...$args.out, "REC0", "REC0"], 3) .
+  Call(name: "gsub") : out = "awk_sub({}, {}, &{}, 1)"
+                         of at($args.reout, 1), at($args.out, 2),
+                            at([...$args.out, "REC0", "REC0"], 3) .
+  Call(name: "match") : out = "re_match_at({}, {})" of at($args.out, 1), at($args.reout, 2) .
+
+  Call(name: "tolower") : out = "awk_tolower({})" of join($args.out, "") .
+  Call(name: "toupper") : out = "awk_toupper({})" of join($args.out, "") .
+  Call(name: "sin")   : out = "math1(sin, {})"  of join($args.out, "") .
+  Call(name: "cos")   : out = "math1(cos, {})"  of join($args.out, "") .
+  Call(name: "exp")   : out = "math1(exp, {})"  of join($args.out, "") .
+  Call(name: "log")   : out = "math1(log, {})"  of join($args.out, "") .
+  Call(name: "sqrt")  : out = "math1(sqrt, {})" of join($args.out, "") .
+  Call(name: "atan2") : out = "mknum(atan2(num_of({}), num_of({})))"
+                                of at($args.out, 1), at($args.out, 2) .
+  Call(name: "rand")  : out = "awk_rand()" .
+  Call(name: "srand") : out = "awk_srand({}, {})"
+                                of at([...$args.out, "mknum(0)"], 1), size($args) .
+
+  Call ! true : "'{}' is stage three" of $name .
 
   (* ---- statements ----
    *
@@ -241,24 +376,29 @@
    * list of mixed items is sorted into three places without asking what kind
    * each one is.
    *)
+  (* The four kinds of item answer `out` with nothing: they are not
+   * expressions, and the two defaults below are about expressions. *)
   Begin : begins = join($body.stmt, "") : rules = "" : ends = "" : reads = ""
-        : stmt = "" .
+        : out = "" : funcs = "" : ahead = "" .
   End   : begins = "" : rules = "" : ends = join($body.stmt, "") : reads = "y"
-        : stmt = "" .
+        : out = "" : funcs = "" : ahead = "" .
 
-  Rule(pattern: nil) : begins = "" : ends = "" : reads = "y" : stmt = ""
+  Rule(pattern: nil) : begins = "" : ends = "" : reads = "y" : out = ""
+                     : funcs = "" : ahead = ""
                      : rules  = join($body.stmt, "") .
-  Rule(body: nil)    : begins = "" : ends = "" : reads = "y" : stmt = ""
+  Rule(body: nil)    : begins = "" : ends = "" : reads = "y" : out = ""
+                     : funcs = "" : ahead = ""
                      : rules  = "  if (truth_of({})) {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
                                   of $pattern.out .
-  Rule               : begins = "" : ends = "" : reads = "y" : stmt = ""
+  Rule               : begins = "" : ends = "" : reads = "y" : out = ""
+                     : funcs = "" : ahead = ""
                      : rules  = "  if (truth_of({})) {{\n{}  }}\n"
                                   of $pattern.out, join($body.stmt, "") .
 
   (* A program of nothing but `BEGIN` does not read its input, which is what
    * lets `awk 'BEGIN {{ print 1 }}' < /dev/tty` answer rather than wait. *)
   Program : loop = lookup([[true, ""]], join($items.reads, "") = "",
-                          "  while (next_record()) {{\n{}  }}\n"
+                          "  while (next_record()) {{\n{}    awk_next: ;\n  }}\n"
                             of join($items.rules, ""))
           : out = join([
       "/* ---- the awk runtime, emitted by languages/awk/awk-c.phx ---- */",
@@ -267,11 +407,14 @@
       "#include <string.h>",
       "#include <ctype.h>",
       "#include <math.h>",
+      "#include <regex.h>",
+      "#include <time.h>",
       "",
       "/* A value is a string and a number at once, which is the whole of awk's type",
       "   system. `isnum` says the number is the one to use; `strnum` says the string",
       "   came from input and looked like a number, so a comparison treats it as one. */",
-      "typedef struct { char *s; double n; int isnum, strnum; } Cell;",
+      "typedef struct Map Map;",
+      "typedef struct { char *s; double n; int isnum, strnum; Map *map; } Cell;",
       "",
       "static void *xmalloc(size_t n) {",
       "    void *p = malloc(n);",
@@ -280,9 +423,9 @@
       "}",
       "static char *dup_str(const char *s) { char *p = xmalloc(strlen(s)+1); strcpy(p, s); return p; }",
       "",
-      "static Cell mkstr(const char *s) { Cell c; c.s = dup_str(s); c.n = 0; c.isnum = 0; c.strnum = 0; return c; }",
-      "static Cell mknum(double d)      { Cell c; c.s = 0; c.n = d; c.isnum = 1; c.strnum = 0; return c; }",
-      "static Cell uninit(void)         { Cell c; c.s = dup_str(\"\"); c.n = 0; c.isnum = 1; c.strnum = 1; return c; }",
+      "static Cell mkstr(const char *s) { Cell c; c.s = dup_str(s); c.n = 0; c.isnum = 0; c.strnum = 0; c.map = 0; return c; }",
+      "static Cell mknum(double d)      { Cell c; c.s = 0; c.n = d; c.isnum = 1; c.strnum = 0; c.map = 0; return c; }",
+      "static Cell uninit(void)         { Cell c; c.s = dup_str(\"\"); c.n = 0; c.isnum = 1; c.strnum = 1; c.map = 0; return c; }",
       "",
       "/* Does this text look like a number all the way through? That is what makes a",
       "   field compare as a number rather than as text. */",
@@ -349,7 +492,7 @@
       "    const char *x = to_str(a), *y = to_str(b);",
       "    char *p = xmalloc(strlen(x) + strlen(y) + 1);",
       "    strcpy(p, x); strcat(p, y);",
-      "    Cell c; c.s = p; c.n = 0; c.isnum = 0; c.strnum = 0; return c;",
+      "    Cell c; c.s = p; c.n = 0; c.isnum = 0; c.strnum = 0; c.map = 0; return c;",
       "}",
       "",
       "/* ---- the record, and its fields ---- */",
@@ -435,41 +578,62 @@
       "",
       "/* awk's printf: the format is walked and each conversion takes the next value",
       "   as whatever that conversion wants. */",
-      "static void awk_printf(Cell *fmt, Cell *a, int n) {",
+      "typedef struct { char *p; size_t at, cap; } Buf;",
+      "static void buf_need(Buf *b, size_t n) {",
+      "    if (b->p && b->at + n + 1 < b->cap) return;",
+      "    b->cap = (b->cap + n + 1) * 2;",
+      "    b->p = realloc(b->p, b->cap);",
+      "    if (!b->p) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "}",
+      "static void buf_put(Buf *b, const char *s) { size_t n = strlen(s); buf_need(b, n); memcpy(b->p + b->at, s, n); b->at += n; }",
+      "static void buf_ch(Buf *b, char c) { buf_need(b, 1); b->p[b->at++] = c; }",
+      "",
+      "/* One formatter, so that `printf` and `sprintf` cannot disagree about a",
+      "   format. Each conversion takes the next value as whatever it wants. */",
+      "static char *format_with(Cell *fmt, Cell *a, int n) {",
       "    const char *f = to_str(fmt);",
+      "    Buf b = { 0, 0, 0 };",
+      "    char spec[64], piece[512];",
       "    int at = 0;",
-      "    char spec[64];",
+      "    buf_need(&b, 16);",
       "    while (*f) {",
-      "        if (*f != '%') { putchar(*f++); continue; }",
-      "        if (f[1] == '%') { putchar('%'); f += 2; continue; }",
+      "        if (*f != '%') { buf_ch(&b, *f++); continue; }",
+      "        if (f[1] == '%') { buf_ch(&b, '%'); f += 2; continue; }",
       "        size_t k = 0;",
       "        spec[k++] = *f++;",
-      "        while (*f && !strchr(\"diouxXeEfgGcs\", *f) && k < sizeof spec - 2) spec[k++] = *f++;",
+      "        while (*f && !strchr(\"diouxXeEfgGcs\", *f) && k < sizeof spec - 4) spec[k++] = *f++;",
       "        if (!*f) break;",
       "        char conv = *f++;",
-      "        spec[k++] = conv; spec[k] = 0;",
       "        Cell nothing = uninit();",
       "        Cell *v = at < n ? &a[at++] : &nothing;",
       "        switch (conv) {",
-      "        case 'd': case 'i': {",
-      "            spec[k - 1] = 'l'; spec[k] = 'l'; spec[k + 1] = 'd'; spec[k + 2] = 0;",
-      "            printf(spec, (long long)to_num(v)); break;",
-      "        }",
-      "        case 'o': case 'u': case 'x': case 'X': {",
-      "            spec[k - 1] = 'l'; spec[k] = 'l'; spec[k + 1] = conv; spec[k + 2] = 0;",
-      "            printf(spec, (long long)to_num(v)); break;",
-      "        }",
+      "        case 'd': case 'i':",
+      "            spec[k] = 'l'; spec[k+1] = 'l'; spec[k+2] = 'd'; spec[k+3] = 0;",
+      "            snprintf(piece, sizeof piece, spec, (long long)to_num(v)); break;",
+      "        case 'o': case 'u': case 'x': case 'X':",
+      "            spec[k] = 'l'; spec[k+1] = 'l'; spec[k+2] = conv; spec[k+3] = 0;",
+      "            snprintf(piece, sizeof piece, spec, (long long)to_num(v)); break;",
       "        case 'e': case 'E': case 'f': case 'g': case 'G':",
-      "            printf(spec, to_num(v)); break;",
+      "            spec[k] = conv; spec[k+1] = 0;",
+      "            snprintf(piece, sizeof piece, spec, to_num(v)); break;",
       "        case 'c': {",
-      "            if (numericish(v) && !v->s) { spec[k - 1] = 'c'; spec[k] = 0; printf(spec, (int)to_num(v)); }",
-      "            else { const char *s = to_str(v); spec[k - 1] = 'c'; spec[k] = 0; printf(spec, s[0] ? s[0] : ' '); }",
-      "            break;",
+      "            spec[k] = 'c'; spec[k+1] = 0;",
+      "            int ch;",
+      "            if (v->isnum && !v->s) ch = (int)to_num(v);",
+      "            else { const char *t = to_str(v); ch = t[0] ? (unsigned char)t[0] : ' '; }",
+      "            snprintf(piece, sizeof piece, spec, ch); break;",
       "        }",
-      "        case 's': printf(spec, to_str(v)); break;",
+      "        default:",
+      "            spec[k] = 's'; spec[k+1] = 0;",
+      "            snprintf(piece, sizeof piece, spec, to_str(v)); break;",
       "        }",
+      "        buf_put(&b, piece);",
       "    }",
+      "    buf_need(&b, 1); b.p[b.at] = 0;",
+      "    return b.p;",
       "}",
+      "static void awk_printf(Cell *fmt, Cell *a, int n) { fputs(format_with(fmt, a, n), stdout); }",
+      "",
       "",
       "/* ---- what emitted code calls ----",
       "   Every expression in a compiled program is a `Cell`, and these take one by",
@@ -500,15 +664,303 @@
       "    return *v;",
       "}",
       "static Cell assign_str(char **slot, Cell v) { *slot = dup_str(to_str(&v)); return v; }",
+      "",
+      "/* ---- arrays ----",
+      "   awk has one aggregate and it is a hash from strings to values. A variable",
+      "   becomes one by being subscripted, which is why the map hangs off a `Cell`",
+      "   rather than being a kind of its own. */",
+      "typedef struct Slot { char *key; Cell val; struct Slot *next; } Slot;",
+      "struct Map { Slot **b; int cap, n; };",
+      "",
+      "static char *SUBSEP = \"\\034\";",
+      "",
+      "static unsigned hash_of(const char *s) {",
+      "    unsigned h = 2166136261u;",
+      "    while (*s) { h ^= (unsigned char)*s++; h *= 16777619u; }",
+      "    return h;",
+      "}",
+      "static Map *new_map(void) {",
+      "    Map *m = xmalloc(sizeof *m);",
+      "    m->cap = 64; m->n = 0;",
+      "    m->b = xmalloc((size_t)m->cap * sizeof *m->b);",
+      "    for (int i = 0; i < m->cap; i++) m->b[i] = 0;",
+      "    return m;",
+      "}",
+      "static Map *arr_of(Cell *v) { if (!v->map) v->map = new_map(); return v->map; }",
+      "",
+      "static Slot *map_find(Map *m, const char *k) {",
+      "    for (Slot *s = m->b[hash_of(k) % (unsigned)m->cap]; s; s = s->next)",
+      "        if (strcmp(s->key, k) == 0) return s;",
+      "    return 0;",
+      "}",
+      "static int map_has(Map *m, const char *k) { return map_find(m, k) != 0; }",
+      "",
+      "/* Reading `a[k]` creates the element, which is what awk does and what makes",
+      "   `if (a[k] == \"\")` grow the array. `in` is the question that does not. */",
+      "static Cell *map_at(Map *m, const char *k) {",
+      "    Slot *s = map_find(m, k);",
+      "    if (s) return &s->val;",
+      "    unsigned i = hash_of(k) % (unsigned)m->cap;",
+      "    s = xmalloc(sizeof *s);",
+      "    s->key = dup_str(k); s->val = uninit(); s->next = m->b[i];",
+      "    m->b[i] = s; m->n++;",
+      "    return &s->val;",
+      "}",
+      "static void map_del(Map *m, const char *k) {",
+      "    unsigned i = hash_of(k) % (unsigned)m->cap;",
+      "    Slot **p = &m->b[i];",
+      "    while (*p) { if (strcmp((*p)->key, k) == 0) { *p = (*p)->next; m->n--; return; } p = &(*p)->next; }",
+      "}",
+      "static void map_clear(Map *m) {",
+      "    for (int i = 0; i < m->cap; i++) m->b[i] = 0;",
+      "    m->n = 0;",
+      "}",
+      "static int map_keys(Map *m, char ***out) {",
+      "    char **k = xmalloc((size_t)(m->n ? m->n : 1) * sizeof *k);",
+      "    int at = 0;",
+      "    for (int i = 0; i < m->cap; i++)",
+      "        for (Slot *s = m->b[i]; s; s = s->next) k[at++] = s->key;",
+      "    *out = k;",
+      "    return at;",
+      "}",
+      "/* `a[i, j]` is one key with SUBSEP between the parts, which is how awk gets a",
+      "   multi-dimensional array out of a one-dimensional one. */",
+      "static Cell subsep_join(Cell a, Cell b) {",
+      "    Cell sep = mkstr(SUBSEP);",
+      "    Cell left = cat_cells(&a, &sep);",
+      "    return cat_cells(&left, &b);",
+      "}",
+      "",
+      "/* ---- regular expressions ----",
+      "   Compiled once and kept, because a pattern in a loop is the common case and",
+      "   `regcomp` is not cheap. */",
+      "typedef struct RE { char *pat; regex_t re; struct RE *next; } RE;",
+      "static RE *RECACHE = 0;",
+      "",
+      "static regex_t *re_get(const char *pat) {",
+      "    for (RE *r = RECACHE; r; r = r->next) if (strcmp(r->pat, pat) == 0) return &r->re;",
+      "    RE *r = xmalloc(sizeof *r);",
+      "    r->pat = dup_str(pat);",
+      "    if (regcomp(&r->re, pat, REG_EXTENDED) != 0) {",
+      "        fprintf(stderr, \"awk: cannot compile regular expression /%s/\\n\", pat);",
+      "        exit(2);",
+      "    }",
+      "    r->next = RECACHE; RECACHE = r;",
+      "    return &r->re;",
+      "}",
+      "static double RSTART = 0, RLENGTH = -1;",
+      "",
+      "static int re_find(const char *s, const char *pat, int *start, int *len) {",
+      "    regmatch_t m;",
+      "    if (regexec(re_get(pat), s, 1, &m, 0) != 0) return 0;",
+      "    if (start) *start = (int)m.rm_so;",
+      "    if (len)   *len   = (int)(m.rm_eo - m.rm_so);",
+      "    return 1;",
+      "}",
+      "static int re_matches(Cell s, Cell pat) { return re_find(str_of(s), str_of(pat), 0, 0); }",
+      "static Cell re_match_at(Cell s, Cell pat) {",
+      "    int start, len;",
+      "    if (!re_find(str_of(s), str_of(pat), &start, &len)) { RSTART = 0; RLENGTH = -1; return mknum(0); }",
+      "    RSTART = start + 1; RLENGTH = len;",
+      "    return mknum(RSTART);",
+      "}",
+      "",
+      "/* ---- the record, written to ---- */",
+      "",
+      "static void rebuild_record(void) {",
+      "    size_t total = 0;",
+      "    for (int i = 0; i < NFIELD; i++) total += strlen(to_str(&FIELD[i])) + strlen(OFS);",
+      "    char *p = xmalloc(total + 1); p[0] = 0;",
+      "    for (int i = 0; i < NFIELD; i++) {",
+      "        if (i) strcat(p, OFS);",
+      "        strcat(p, to_str(&FIELD[i]));",
+      "    }",
+      "    RECORD = p;",
+      "}",
+      "static void set_record(const char *s) { RECORD = dup_str(s); split_record(); }",
+      "",
+      "static Cell set_field(double which, Cell v) {",
+      "    int i = (int)which;",
+      "    if (i == 0) { set_record(to_str(&v)); return v; }",
+      "    while (NFIELD < i) {",
+      "        if (NFIELD == FIELDCAP) {",
+      "            FIELDCAP = FIELDCAP ? FIELDCAP * 2 : 16;",
+      "            FIELD = realloc(FIELD, (size_t)FIELDCAP * sizeof *FIELD);",
+      "            if (!FIELD) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "        }",
+      "        FIELD[NFIELD++] = uninit();",
+      "    }",
+      "    NF = NFIELD;",
+      "    FIELD[i - 1] = v;",
+      "    rebuild_record();",
+      "    return v;",
+      "}",
+      "",
+      "/* ---- the string builtins ---- */",
+      "",
+      "static Cell awk_substr(Cell s, Cell m, Cell n, int have_n) {",
+      "    const char *t = str_of(s);",
+      "    long len = (long)strlen(t);",
+      "    long from = (long)(to_num(&m) + 0.5), count = have_n ? (long)(to_num(&n) + 0.5) : len;",
+      "    /* The start is clamped to 1 and *then* the count is taken, which is what",
+      "       one-true-awk does: substr(\"abc\", 0, 2) is \"ab\" and not \"a\". */",
+      "    long start = from < 1 ? 1 : from;",
+      "    long end = start + count;           /* one past the last, in awk's numbering */",
+      "    if (end > len + 1) end = len + 1;",
+      "    if (end <= start) return mkstr(\"\");",
+      "    char *p = xmalloc((size_t)(end - start) + 1);",
+      "    memcpy(p, t + start - 1, (size_t)(end - start)); p[end - start] = 0;",
+      "    Cell c = mkstr(p); return c;",
+      "}",
+      "static Cell awk_index(Cell s, Cell t) {",
+      "    const char *a = str_of(s), *b = str_of(t);",
+      "    const char *at = strstr(a, b);",
+      "    return mknum(at ? (double)(at - a) + 1 : 0);",
+      "}",
+      "static Cell awk_toupper(Cell s) {",
+      "    char *p = dup_str(str_of(s));",
+      "    for (char *q = p; *q; q++) *q = (char)toupper((unsigned char)*q);",
+      "    return mkstr(p);",
+      "}",
+      "static Cell awk_tolower(Cell s) {",
+      "    char *p = dup_str(str_of(s));",
+      "    for (char *q = p; *q; q++) *q = (char)tolower((unsigned char)*q);",
+      "    return mkstr(p);",
+      "}",
+      "static Cell awk_sprintf(Cell *a, int n);",
+      "",
+      "/* `split` fills an array and answers how many parts there were. */",
+      "static Cell awk_split(Cell s, Cell *arr, Cell fs, int have_fs) {",
+      "    Map *m = arr_of(arr);",
+      "    map_clear(m);",
+      "    const char *t = str_of(s);",
+      "    const char *sep = have_fs ? str_of(fs) : FS;",
+      "    int count = 0;",
+      "    char key[32];",
+      "",
+      "    if (!*t) return mknum(0);",
+      "    if (sep[0] == ' ' && sep[1] == 0) {",
+      "        const char *p = t;",
+      "        for (;;) {",
+      "            while (*p == ' ' || *p == '\\t' || *p == '\\n') p++;",
+      "            if (!*p) break;",
+      "            const char *start = p;",
+      "            while (*p && *p != ' ' && *p != '\\t' && *p != '\\n') p++;",
+      "            char *w = xmalloc((size_t)(p - start) + 1);",
+      "            memcpy(w, start, (size_t)(p - start)); w[p - start] = 0;",
+      "            snprintf(key, sizeof key, \"%d\", ++count);",
+      "            *map_at(m, key) = mkinput(w);",
+      "        }",
+      "        return mknum(count);",
+      "    }",
+      "    /* A separator of one character is that character; anything longer is a",
+      "       regular expression, which is what awk says and what FS usually is. */",
+      "    const char *p = t;",
+      "    for (;;) {",
+      "        int start = 0, len = 0;",
+      "        int found = sep[1] && re_find(p, sep, &start, &len) && len > 0;",
+      "        int cut = found ? start : (int)strlen(p);",
+      "        if (!found && sep[1] == 0) {",
+      "            const char *hit = strchr(p, sep[0]);",
+      "            cut = hit ? (int)(hit - p) : (int)strlen(p);",
+      "            found = hit != 0; len = 1;",
+      "        }",
+      "        char *w = xmalloc((size_t)cut + 1);",
+      "        memcpy(w, p, (size_t)cut); w[cut] = 0;",
+      "        snprintf(key, sizeof key, \"%d\", ++count);",
+      "        *map_at(m, key) = mkinput(w);",
+      "        if (!found) break;",
+      "        p += cut + len;",
+      "    }",
+      "    return mknum(count);",
+      "}",
+      "",
+      "/* `sub` and `gsub` write through their target, and `&` in the replacement is",
+      "   whatever matched. */",
+      "static Cell awk_sub(Cell re, Cell repl, Cell *target, int global) {",
+      "    const char *s = to_str(target), *pat = str_of(re), *r = str_of(repl);",
+      "    size_t cap = strlen(s) * 2 + strlen(r) * 4 + 64;",
+      "    char *out = xmalloc(cap); size_t at = 0;",
+      "    int count = 0;",
+      "    const char *p = s;",
+      "",
+      "    for (;;) {",
+      "        int start, len;",
+      "        if (!re_find(p, pat, &start, &len)) break;",
+      "        if (at + (size_t)start + 2 >= cap) { cap = cap * 2 + (size_t)start; out = realloc(out, cap); }",
+      "        memcpy(out + at, p, (size_t)start); at += (size_t)start;",
+      "        for (const char *q = r; *q; q++) {",
+      "            if (at + (size_t)len + 4 >= cap) { cap = cap * 2 + (size_t)len; out = realloc(out, cap); }",
+      "            if (*q == '\\\\' && q[1] == '&') { out[at++] = '&'; q++; }",
+      "            else if (*q == '&') { memcpy(out + at, p + start, (size_t)len); at += (size_t)len; }",
+      "            else out[at++] = *q;",
+      "        }",
+      "        count++;",
+      "        p += start + len;",
+      "        if (len == 0) { if (!*p) break; out[at++] = *p++; }",
+      "        if (!global) break;",
+      "    }",
+      "    size_t rest = strlen(p);",
+      "    if (at + rest + 1 >= cap) { cap = at + rest + 2; out = realloc(out, cap); }",
+      "    memcpy(out + at, p, rest); out[at + rest] = 0;",
+      "    if (count) *target = mkstr(out);",
+      "    return mknum(count);",
+      "}",
+      "",
+      "static Cell awk_sprintf(Cell *a, int n) {",
+      "    return mkstr(format_with(&a[0], a + 1, n));",
+      "}",
+      "",
+      "/* ---- what stage two's emitted code calls ---- */",
+      "",
+      "static Cell  *elem_of(Cell *v, Cell k)      { return map_at(arr_of(v), str_of(k)); }",
+      "static Cell   has_elem(Cell *v, Cell k)     { return mknum(map_has(arr_of(v), str_of(k))); }",
+      "static void   del_elem(Cell *v, Cell k)     { map_del(arr_of(v), str_of(k)); }",
+      "static void   del_all(Cell *v)              { map_clear(arr_of(v)); }",
+      "static Cell   sub_join(Cell a, Cell b)      { return subsep_join(a, b); }",
+      "static Cell   re_test(Cell s, Cell p)       { return mknum(re_matches(s, p)); }",
+      "static Cell   re_ntest(Cell s, Cell p)      { return mknum(!re_matches(s, p)); }",
+      "static Cell   fld_set(Cell i, Cell v)       { return set_field(to_num(&i), v); }",
+      "",
+      "static Cell math1(double (*f)(double), Cell x) { return mknum(f(to_num(&x))); }",
+      "static Cell awk_rand(void)  { return mknum((double)rand() / ((double)RAND_MAX + 1.0)); }",
+      "static Cell awk_srand(Cell s, int have) {",
+      "    static double prev = 0;",
+      "    double was = prev;",
+      "    prev = have ? to_num(&s) : (double)time(0);",
+      "    srand((unsigned)prev);",
+      "    return mknum(was);",
+      "}",
+      "",
+      "/* `a[i, j]` -- the parts arrive as an array because the emitter has no way to",
+      "   fold a list into nested calls, and this is the fold. */",
+      "static Cell key_of(Cell *parts, int n) {",
+      "    Cell k = parts[0];",
+      "    for (int i = 1; i < n; i++) k = subsep_join(k, parts[i]);",
+      "    return k;",
+      "}",
+      "",
+      "/* A function's parameters beyond what the call gave are its locals, so a call",
+      "   passes what it has and the body asks for what it wants. */",
+      "static Cell arg_at(Cell *a, int n, int i) { return i < n ? a[i] : uninit(); }",
+      "",
+      "/* An array is passed by reference and a scalar by value, and awk decides which",
+      "   by what the callee does. Making the map before the call means a variable",
+      "   used as an array inside is the caller's array, whichever way it is used. */",
+      "static Cell arr_ready(Cell *v) { arr_of(v); return *v; }",
               "",
               $declarations,
+              "static int awk_status = 0;",
+              join($items.ahead, ""),
+              join($items.funcs, ""),
               "int main(void)",
               "{",
               $initialisers,
               join($items.begins, ""),
               $loop,
+              "awk_end: ;",
               join($items.ends, ""),
-              "  return 0;",
+              "  return awk_status;",
               "}"
             ], "\n") .
 

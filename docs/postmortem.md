@@ -109,6 +109,7 @@ for Solveig.
 - 12 Solveig conformance programs, written against the documentation
 - 6 awk programs other people wrote, and 7 written here, doing the same thing
   after this description rewrites them
+- 10 awk programs compiled to C that prints what `/usr/bin/awk` prints
 - every `.sol` file in the Solveig repository round-trips to an identical tree
 - 76 Solveig programs compile to bytecode that prints what `solas`'s does, byte
   for byte, tracebacks included -- every one in that repository, with nothing

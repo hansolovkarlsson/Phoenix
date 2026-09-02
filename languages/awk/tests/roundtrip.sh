@@ -14,7 +14,8 @@
 #
 # `corpus/` is awk other people wrote, for reasons of their own: e2fsprogs,
 # ncurses and vim ship these. `outside/` is the one that is **not** POSIX awk
-# and is here anyway, because structure is structure.
+# and is here anyway, because structure is structure. `not-yet/` is awk the
+# backend does not compile, which has nothing to do with reading it.
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
@@ -25,7 +26,8 @@ tmp="$root/build/awk-roundtrip"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
 same=0; differ=0
-for f in "$here"/corpus/*.awk "$here"/outside/*.awk "$here"/conformance/*.awk; do
+for f in "$here"/corpus/*.awk "$here"/outside/*.awk "$here"/conformance/*.awk \
+         "$here"/backend/*.awk "$here"/not-yet/*.awk; do
     [ -f "$f" ] || continue
     if ! "$phx" --tree "$desc" "$f" > "$tmp/a" 2>/dev/null; then
         differ=$((differ+1)); echo "  will not parse: $f"; continue

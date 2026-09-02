@@ -125,39 +125,51 @@ builtin that POSIX awk has not got.
 So the entry that was waiting for this language got its answer, and the answer
 is no: what reference attributes would have bought is one walk instead of two.
 
-## The backend, stage one
+## The backend
 
 [`awk-c.phx`](awk-c.phx) compiles awk to C. It is **the first target here where
 a value is not a machine word**: `pascal-c.phx` emits four `#include`s and lets
 C's types do the work, and `solveig-sob.phx` emits opcodes for a machine that
 already knows what a value is. awk has one type and it is not C's, so a
-compiled awk program carries a runtime — 200 lines of it, held as a list of
+compiled awk program carries a runtime — 300 lines of it, held as a list of
 one-line literals in the description.
 
 ```
-typedef struct { char *s; double n; int isnum, strnum; } Cell;
+typedef struct { char *s; double n; int isnum, strnum; Map *map; } Cell;
 ```
 
 A string and a number at once, which is the whole of awk's type system.
 `isnum` says the number is the one to use; `strnum` says the string came from
 input and looked like a number, so a comparison treats it as one. That is what
 makes `$1 == 10` true for a field of ` 10 ` and `x == 0` *and* `x == ""` both
-true for a variable never set — and it is checked, against awk, in
-[`tests/backend/values.awk`](tests/backend/values.awk).
+true for a variable never set.
 
-**Stage one is** values, fields, the main loop, `print` and `printf`,
-arithmetic, comparison, concatenation and control flow. Arrays, functions,
-regular expressions, redirection, `getline`, `exit` and `next` are **refused by
-name** — [`tests/stage-two/`](tests/stage-two/) holds four programs that are
-valid awk and say which.
+The `map` is the other half: **a variable becomes an array by being
+subscripted**, which is why the map hangs off a value rather than being a kind
+of its own. It is also what makes an array passed to a function by reference
+and a scalar by value, which awk decides by what the callee does — so a
+variable handed to a function has its map made first, whichever way it turns
+out to be used.
 
 ```
-ok    6 awk programs compiled to C print what awk prints, 0 do not
+ok    10 awk programs compiled to C print what awk prints, 0 do not
 ```
 
 That is the conformance rule with a third language under it: compiled by
 `awk-c.phx`, built by `cc`, and compared byte for byte with `/usr/bin/awk` on
 the same input.
+
+### What it compiles
+
+Values, fields, the main loop, `print` and `printf`, arithmetic, comparison,
+concatenation, control flow, **arrays** with `in`, `delete` and `for`-in,
+**functions** with locals, recursion, forward calls and arrays by reference,
+and **regular expressions** — patterns, `~`, `!~`, `match`, `sub`, `gsub`,
+`split` — over POSIX `<regex.h>`.
+
+What is left is redirection, a pipe, `getline` and a range pattern.
+[`tests/not-yet/`](tests/not-yet/) holds one of each, and each is refused **by
+name** with a position rather than mis-compiled.
 
 ### Two things the backend taught the front end
 
@@ -167,7 +179,9 @@ awk had not:
 | | |
 | --- | --- |
 | `for (;;)` would not parse | the rule for "any number of newlines or semicolons between two things" was being used inside a `for` header, where the semicolons belong to the header. POSIX writes `newline_opt` there and this now has a separate `nl` for exactly that |
-| `For` shadowed its own fields | the emit pass named attributes `init`, `cond` and `step`, which are the node's *fields* — so nothing outside the pass could have seen them. Phoenix's own check said so |
+| `For` shadowed its own fields | the emit pass named attributes `init`, `cond` and `step`, which are the node's *fields* — so nothing outside the pass could have seen them. Phoenix's own check said so, and said it again about `Regex.text` |
+| an array's name was **text** | `Index(array: "a", ...)` meant the pass that collects the program's variables never saw it, because it only looks at `Var` nodes. An array name is a variable and now builds one, which is the same lesson as `Nothing` below: fix the tree, not the pass |
+| a regexp beginning with a space | `split($0, parts, / +/)` is ordinary awk and the guess above will not read it. Found by writing a conformance program rather than by thinking about it, and checked in beside the other two |
 
 **A backend is the test a front end cannot be given any other way**, which is
 the argument for building one at all.
@@ -182,6 +196,18 @@ The fix was in the *grammar*, not the pass: an omitted part now builds a
 `Nothing` node that renders as nothing, so every part is emitted the same way
 whether it is there or not and the question disappears. See
 [ROADMAP 3.5](../../docs/ROADMAP.md).
+
+**And `otherwise` carried three questions this backend could not otherwise
+ask**, all of them "what is this node, when it is used *here*":
+
+| | |
+| --- | --- |
+| `stmt` | an expression used as a statement wants a `;`. The tree cannot say which `x = 1` is, so every node answers both and nine statement kinds override |
+| `argout` | a variable handed to a function has its array made first; anything else is passed as it stands |
+| `reout` | a regexp is a match against the record on its own and a *pattern* when handed to `sub` or `split`. `Match` can ask with a clause pattern because the regexp is a field of it; an argument is in a list, so the argument answers instead |
+
+Each is one line plus the nodes that differ. Without them each would have been
+the same clause written once per node type.
 
 ## What it does not do
 

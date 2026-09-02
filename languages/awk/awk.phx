@@ -133,7 +133,7 @@ statement = "if" "(" c:expr ")" optnl t:statement optnl "else" optnl e:statement
           | "do" optnl b:statement optnl "while" "(" c:expr ")"
               -> DoWhile(body: $b, cond: $c)
           | "for" "(" v:name "in" a:name ")" optnl b:statement
-              -> ForIn(var: $v, array: $a, body: $b)
+              -> ForIn(var: Var(name: $v), array: Var(name: $a), body: $b)
           | "for" "(" i:forpart ";" nl c:forpart ";" nl u:forpart ")"
               optnl b:statement
               -> For(init: $i, cond: $c, step: $u, body: $b)
@@ -142,8 +142,9 @@ statement = "if" "(" c:expr ")" optnl t:statement optnl "else" optnl e:statement
           | "next"     -> Next
           | "exit"   e:optexpr -> Exit(value: $e)
           | "return" e:optexpr -> Return(value: $e)
-          | "delete" n:name "[" x:exprlist "]" -> Delete(array: $n, index: $x)
-          | "delete" n:name -> DeleteAll(array: $n)
+          | "delete" n:name "[" x:exprlist "]"
+              -> Delete(array: Var(name: $n), index: $x)
+          | "delete" n:name -> DeleteAll(array: Var(name: $n))
           | a:action -> Block(body: $a)
           | s:simple -> $s .
 
@@ -191,7 +192,7 @@ pdisjunction = pconjunction { "||" nl a:pconjunction
                                 -> Logical(op: "||", left: $$, right: $a) } .
 pconjunction = pmembership  { "&&" nl a:pmembership
                                 -> Logical(op: "&&", left: $$, right: $a) } .
-pmembership  = pmatching { "in" a:name -> In(index: $$, array: $a) } .
+pmembership  = pmatching { "in" a:name -> In(index: $$, array: Var(name: $a)) } .
 pmatching    = concat { o:matchop r:concat
                           -> Match(op: $o, left: $$, right: $r) } .
 
@@ -212,7 +213,7 @@ disjunction = conjunction { "||" nl a:conjunction
 conjunction = membership  { "&&" nl a:membership
                               -> Logical(op: "&&", left: $$, right: $a) } .
 
-membership = matching { "in" a:name -> In(index: $$, array: $a) } .
+membership = matching { "in" a:name -> In(index: $$, array: Var(name: $a)) } .
 
 matching = comparison { o:matchop r:comparison
                           -> Match(op: $o, left: $$, right: $r) } .
@@ -259,12 +260,12 @@ primary = "++" l:lvalue -> PreIncr(target: $l)
         | b:builtin "(" a:arglist ")" -> Call(name: $b, args: $a)
         | b:builtin -> Call(name: $b, args: [])
         | n:name "(" a:arglist ")" -> Apply(name: $n, args: $a)
-        | n:name "[" x:exprlist "]" -> Index(array: $n, index: $x)
+        | n:name "[" x:exprlist "]" -> Index(array: Var(name: $n), index: $x)
         | n:name -> Var(name: $n) .
 
 (* An lvalue is the only thing that may be assigned to or stepped. *)
 lvalue = "$" p:primary -> Field(index: $p)
-       | n:name "[" x:exprlist "]" -> Index(array: $n, index: $x)
+       | n:name "[" x:exprlist "]" -> Index(array: Var(name: $n), index: $x)
        | n:name -> Var(name: $n) .
 
 builtin = "length" | "substr" | "index" | "split" | "sub" | "gsub" | "match"
@@ -326,7 +327,7 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
    * `do` with a `while` left over. *)
   DoWhile(body: Block) : show = "do {} while ({})" of $body.show, $cond.show .
   DoWhile              : show = "do {}; while ({})" of $body.show, $cond.show .
-  ForIn     : show = "for ({} in {}) {}" of $var, $array, $body.show .
+  ForIn     : show = "for ({} in {}) {}" of $var.show, $array.show, $body.show .
   For       : show = "for ({}; {}; {}) {}"
                        of $init.show, $cond.show, $step.show, $body.show .
   Nothing   : show = "" .
@@ -341,8 +342,8 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
   Return(value: nil) : show = "return" .
   Return             : show = "return {}" of $value.show .
 
-  Delete    : show = "delete {}[{}]" of $array, join($index.show, ", ") .
-  DeleteAll : show = "delete {}" of $array .
+  Delete    : show = "delete {}[{}]" of $array.show, join($index.show, ", ") .
+  DeleteAll : show = "delete {}" of $array.show .
   Block     : show = "{ {} }" of join($body.show, "; ") .
 
   Print(to: nil)  : show = "print {}" of join($args.show, ", ") .
@@ -359,7 +360,7 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
   Assign  : show = "{} {} {}" of $target.show, $op, $value.show .
   Cond    : show = "{} ? {} : {}" of $cond.show, $then.show, $otherwise.show .
   Logical : show = "{} {} {}" of $left.show, $op, $right.show .
-  In      : show = "{} in {}" of $index.show, $array .
+  In      : show = "{} in {}" of $index.show, $array.show .
   Match   : show = "{} {} {}" of $left.show, $op, $right.show .
   Compare : show = "{} {} {}" of $left.show, $op, $right.show .
 
@@ -382,7 +383,7 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
   Str     : show = "{}" of $text .
   Regex   : show = "{}" of $text .
   Var     : show = "{}" of $name .
-  Index   : show = "{}[{}]" of $array, join($index.show, ", ") .
+  Index   : show = "{}[{}]" of $array.show, join($index.show, ", ") .
   Call    : show = "{}({})" of $name, join($args.show, ", ") .
   Apply   : show = "{}({})" of $name, join($args.show, ", ") .
 

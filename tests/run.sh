@@ -1056,6 +1056,10 @@ prints "a/b/c is read as a regexp between two names" \
        "BEGIN { print a /b/ c }" "$root/languages/awk/awk.phx" "$d/slash.awk"
 prints "and f (1) as a call, where awk concatenates" \
        "BEGIN { x = f(1) }" "$root/languages/awk/awk.phx" "$d/spaced-call.awk"
+# The third witness, and the one found by writing a program rather than by
+# thinking about it: a regexp may not begin with a space either.
+refuses "a regexp beginning with a space" "and found \"BEGIN\"" \
+        "$root/languages/awk/awk.phx" "$d/spaced-regex.awk"
 
 # **A call is resolved over the whole program**, so a function may be used
 # above where it is defined -- which is the forward reference ROADMAP 2.1 is
@@ -1102,18 +1106,16 @@ else
     printf '%s\n' "$be" | sed 's/^/        /' | head -12
 fi
 
-# Stage one is a subset, and what is outside it is refused **by name** rather
-# than mis-compiled. All four of these are valid awk.
+# The backend is a subset, and what is outside it is refused **by name** rather
+# than mis-compiled. All three of these are valid awk.
 c="$root/languages/awk/awk-c.phx"
-t="$root/languages/awk/tests/stage-two"
-refuses "an array, which stage one does not have" "an array is stage two" \
-        --driver c "$c" "$t/arrays.awk"
-refuses "a function, likewise"                    "is stage two" \
-        --driver c "$c" "$t/functions.awk"
-refuses "a regular expression, likewise"          "a regular expression is stage two" \
-        --driver c "$c" "$t/regex.awk"
-refuses "output sent somewhere, likewise"         "redirecting output is stage two" \
+t="$root/languages/awk/tests/not-yet"
+refuses "output sent to a file"  "redirecting output is stage three" \
         --driver c "$c" "$t/redirect.awk"
+refuses "output sent to a command" "a pipe is stage three" \
+        --driver c "$c" "$t/pipe.awk"
+refuses "a range pattern, which is a rule with a memory" "a range pattern is stage three" \
+        --driver c "$c" "$t/range.awk"
 
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
