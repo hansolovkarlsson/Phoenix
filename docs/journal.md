@@ -254,12 +254,12 @@ interpreter checks*. Losing the third leg is a real loss and a small one.
 `pascal.bnf` and its fixtures out of a sibling checkout, which is the kind of
 dependency that breaks a test suite for reasons having nothing to do with the
 project being tested — reorganise Solveig, and Phoenix fails. Those are fixtures,
-not a library, so they are vendored into `tests/pascal/` and the suite now passes
+not a library, so they are vendored into `languages/pascal/tests/grammar/` and the suite now passes
 with Solveig absent from disk, which was checked rather than assumed.
 
 **Going back is writing an emit pass, not changing Phoenix.** The language a
 compiler emits was never Phoenix's business; it lives in the `.phx`.
-`examples/calc-solveig.phx` still holds those clauses and is still *read* by the
+`languages/calc/calc-solveig.phx` still holds those clauses and is still *read* by the
 suite, so the notation cannot drift out from under it, and
 `PHX_TEST_SOLVEIG=1 make test` runs the round trip. The only place "C only" is a
 genuine narrowing is stage 5's own backend — what a generated compiler is
@@ -452,7 +452,7 @@ pass reading its own.
 
 The point of doing this to Pascal rather than to another toy is that the
 grammar was written by somebody else, for another purpose, years before Phoenix
-existed. `examples/pascal.phx` is `tests/pascal/pascal.bnf` with `->` clauses
+existed. `languages/pascal/pascal.phx` is `languages/pascal/tests/grammar/pascal.bnf` with `->` clauses
 added — the fixture is left unmodified, because three tests depend on it being
 a real published grammar that Phoenix reads without being met halfway.
 
@@ -590,7 +590,7 @@ the symptom points nowhere near the cause.
 
 ## 2026-09-01 — Pascal that checks programs
 
-`examples/pascal.phx` now has a `symbols` pass and a `typecheck` pass, and
+`languages/pascal/pascal.phx` now has a `symbols` pass and a `typecheck` pass, and
 `--driver check` reports undeclared names, bad assignments and non-boolean
 conditions on real Pascal. Both fixtures check clean; a program wrong in four
 ways has all four found, each at the right column.
@@ -720,8 +720,8 @@ it did.
 
 ## 2026-09-01 — Pascal to C
 
-`examples/pascal-c.phx` is `%import "pascal.phx"` and an emit pass.
-`examples/primes.pas` compiles to C that `cc -Wall -Werror` accepts, and the
+`languages/pascal/pascal-c.phx` is `%import "pascal.phx"` and an emit pass.
+`languages/pascal/programs/primes.pas` compiles to C that `cc -Wall -Werror` accepts, and the
 program is right — ten primes below thirty, the last of them 29, and
 `Gcd(1071, 462)` is 21. The whole chain has nothing in it but `cc`.
 
@@ -796,7 +796,7 @@ compiles what the compiler emits rather than only reading it.
 
 ## 2026-09-01 — gcd.pas compiles
 
-The Pascal subset now covers `tests/pascal/gcd.pas`, which is the file that has
+The Pascal subset now covers `languages/pascal/tests/grammar/gcd.pas`, which is the file that has
 been in this repository since the first commit and was written for another tool
 years before Phoenix existed. It compiles to C that `cc -Wall -Werror` accepts,
 and every line of its output is right — the record through a `with`, the
@@ -843,7 +843,7 @@ that was usually empty has stopped existing.
 
 ## 2026-09-01 — the notation, described in itself
 
-`examples/phoenix.phx` is the `.phx` notation written in `.phx`. It parses
+`languages/phx/phoenix.phx` is the `.phx` notation written in `.phx`. It parses
 itself, and it parses every other description in this repository.
 
 This is [level one](#2026-09-01--what-self-hosting-would-and-would-not-prove) of
@@ -924,7 +924,7 @@ the first time anybody had to notice it was a rule.
 `.val` is a token now. The scanner makes one when a dot is immediately followed
 by a lower-case letter, and the expression reader has nothing left to decide.
 
-This is the change `examples/phoenix.phx` argued for by being written: the
+This is the change `languages/phx/phoenix.phx` argued for by being written: the
 notation could only describe its own attribute access by making it lexical, and
 having done so it was plainly the better rule. **The `tight` flag is gone from
 every token**, along with the stamping that maintained it, and the wart that has
@@ -985,7 +985,7 @@ description of what emitting C means.
 
 ## 2026-09-01 — the oracle, and the six bugs it found on the first run
 
-`tests/oracle/` compiles the same Pascal with `fpc -Miso` and with Phoenix, runs
+`languages/pascal/tests/oracle/` compiles the same Pascal with `fpc -Miso` and with Phoenix, runs
 both, and compares byte for byte. **fpc is the oracle**: where they differ,
 Phoenix is wrong until somebody shows otherwise, because fpc has been read by
 more people than this repository has. It is the method Solveig's `PASCAL.md`
@@ -1009,7 +1009,7 @@ own expected output, which I wrote down from what Phoenix produced.
 
 ### What it cost to fix, and what that says
 
-Nothing was added to Phoenix. All six are changes to `examples/pascal-c.phx`,
+Nothing was added to Phoenix. All six are changes to `languages/pascal/pascal-c.phx`,
 and the two that needed C that Pascal has and C does not — `phx_mod` and
 `phx_real` — are **emitted by the description into every program it compiles**.
 A description that needs a runtime writes one.
@@ -1077,7 +1077,7 @@ write and the read used the same wrong offset: the answers matched and the
 memory did not.
 
 **An oracle proves agreement, not correctness**, and a program that only reads
-back what it wrote is exactly the shape that hides this. `tests/oracle/run.sh`
+back what it wrote is exactly the shape that hides this. `languages/pascal/languages/pascal/tests/oracle/run.sh`
 says so at the top now. What found it was reading the emitted C, which is the
 other half of the method and the half that does not scale.
 
@@ -1117,7 +1117,7 @@ there. Nothing said so until a program was written that asked, and the oracle
 would never have asked, because a program using a big set is not a program
 anybody writes by accident.
 
-`tests/refused/` is that half now: programs that must fail, each with a message
+`languages/pascal/tests/refused/` is that half now: programs that must fail, each with a message
 naming the feature, at a position in the Pascal. Four of them — a nested
 routine, a set too large, pointers, files — and the test insists on both halves
 of the message, so a refusal that says *'Pointer' has no attribute 'pre' in
@@ -1180,3 +1180,30 @@ node to put it on.
 **And a check cannot read an attribute its own rule defines.** A check is a
 guard and runs *before* them. `FieldOf`'s check asks the child instead, which is
 where the answer was anyway.
+
+## 2026-09-01 — a directory per language
+
+Pascal had spread: three descriptions in `examples/`, its programs beside
+calc's, its grammar fixtures in `tests/pascal/`, its oracle in `tests/oracle/`
+and its refusals in `tests/refused/`. None of that was wrong while there was one
+serious language, and all of it would have been in the way of a second.
+
+```
+languages/
+  pascal/   the descriptions, its programs, and its own tests
+  calc/     the same, smaller
+  phx/      the notation described in itself
+tests/      tests of Phoenix rather than of any language
+```
+
+**The distinction that matters is the last line.** `tests/` was holding two
+kinds of thing: whether Phoenix reads a description correctly, and whether the
+Pascal description describes Pascal correctly. The first belongs to the tool and
+the second to the language, and only one of them multiplies when a language is
+added.
+
+The move was mechanical and the tests caught every path it broke, which is the
+argument for having had them. Nothing in `phoenix/` changed, and no description
+needed editing beyond the paths in its own header comment — `%import` resolves
+beside the file that names it, so the descriptions moved together and kept
+working without being told.

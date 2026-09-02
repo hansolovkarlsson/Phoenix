@@ -43,7 +43,7 @@ than it was.**
 
 Both cases that motivated it — `with origin do ... x ...` needing a record's
 fields, and `function Area;` needing the `forward` heading it repeats — are
-solved in `examples/pascal.phx` with nothing that was not already in the
+solved in `languages/pascal/pascal.phx` with nothing that was not already in the
 notation. A value can *be* a node, `.field` reads one wherever it came from,
 and an environment binding a name to the thing it was declared as is an
 ordinary list of pairs. Following `origin` to its `NamedType`, that to `Point`,
@@ -113,7 +113,7 @@ thing a value computed once can say.
 
 This is not a gap to fill. Interpreting is for checking a language while it is
 being designed; compiling is what Phoenix is for, and the clauses in
-[`examples/calc.phx`](../examples/calc.phx) say so where a program runs into it.
+[`languages/calc/calc.phx`](../languages/calc/calc.phx) say so where a program runs into it.
 
 *It does cost something.* The conformance rule — the same description,
 interpreted and compiled, giving the same answer — therefore covers
@@ -173,7 +173,7 @@ syntactic rule because there it would ask about characters where there are only
 tokens. The cost is that the notation cannot describe two things the reader
 does: a production ending without its `.`, and a directive's arguments ending
 at a line. The second was fixed by letting a directive be terminated; the first
-stands, and `examples/phoenix.phx` records it.
+stands, and `languages/phx/phoenix.phx` records it.
 
 **Ordered choice is not revisited.** `a | b` tries `a`, and if `a` succeeds and
 the rule around it fails later, `b` is never tried. It costs nothing on an LL(1)

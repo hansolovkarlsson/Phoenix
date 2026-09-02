@@ -6,10 +6,10 @@
  * A target is a small file that imports this one and adds an emit pass:
  * `calc-c.phx` is C, `calc-solveig.phx` is Solveig.
  *
- *   phx examples/calc-c.phx prog.calc                 the tree
- *   phx --run typecheck --show type examples/calc-c.phx prog.calc
- *   phx --run eval examples/calc-c.phx prog.calc      run it
- *   phx --run emit-c examples/calc-c.phx prog.calc    compile it
+ *   phx languages/calc/calc-c.phx prog.calc                 the tree
+ *   phx --run typecheck --show type languages/calc/calc-c.phx prog.calc
+ *   phx --run eval languages/calc/calc-c.phx prog.calc      run it
+ *   phx --run emit-c languages/calc/calc-c.phx prog.calc    compile it
  *)
 
 (* ------------------------------------------------------------------ *)

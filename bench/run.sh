@@ -14,7 +14,7 @@ phx="$root/bin/phx"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-grammar=${1:-"$root/examples/pascal.phx"}
+grammar=${1:-"$root/languages/pascal/pascal.phx"}
 
 for shape in width expr nest blocks; do
     printf '\n%s\n' "$shape"

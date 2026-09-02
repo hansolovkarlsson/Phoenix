@@ -1,5 +1,5 @@
 #!/bin/sh
-# tests/oracle/run.sh -- the same Pascal, compiled two ways, giving one answer.
+# languages/pascal/languages/pascal/tests/oracle/run.sh -- the same Pascal, compiled two ways, giving one answer.
 #
 # Every program here is compiled by `fpc -Miso` and by Phoenix, both are run,
 # and their output is compared byte for byte. **fpc is the oracle**: where they
@@ -9,8 +9,8 @@
 # It is the method Solveig's PASCAL.md uses for the same reason, and it is what
 # turns "the output looks right" into "the output is Pascal's".
 #
-#   tests/oracle/run.sh            all of them
-#   tests/oracle/run.sh reals      one of them
+#   languages/pascal/languages/pascal/tests/oracle/run.sh            all of them
+#   languages/pascal/languages/pascal/tests/oracle/run.sh reals      one of them
 #
 # **An oracle can agree with a wrong program.** `bounds.pas` passed while the
 # compiler was writing outside its arrays: both the write and the read used the
@@ -23,9 +23,9 @@
 
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$here/../.." && pwd)
+root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
-desc="$root/examples/pascal-c.phx"
+desc="$root/languages/pascal/pascal-c.phx"
 
 if ! command -v fpc >/dev/null 2>&1; then
     echo "no fpc on this machine -- the oracle is skipped, not failed"

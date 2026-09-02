@@ -1,6 +1,6 @@
 (* calc-c.phx -- the calculator, compiled to C.
  *
- *     phx --run emit-c examples/calc-c.phx prog.calc > prog.c
+ *     phx --run emit-c languages/calc/calc-c.phx prog.calc > prog.c
  *     cc prog.c -o prog && ./prog
  *
  * **This file is only the emit clauses.** The grammar, the actions, the

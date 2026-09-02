@@ -1,6 +1,6 @@
 (* phoenix.phx -- the `.phx` notation, described in itself.
  *
- *   bin/phx --tree examples/phoenix.phx examples/phoenix.phx
+ *   bin/phx --tree languages/phx/phoenix.phx languages/phx/phoenix.phx
  *
  * **This file parses itself.** That is the whole of what it is for: a
  * notation that can describe its own grammar has demonstrably got enough in

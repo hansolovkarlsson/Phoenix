@@ -1,10 +1,10 @@
 (* pascal.phx -- ISO 7185 Pascal: what it looks like, and what it means.
  *
- *   bin/phx --tree examples/pascal.phx prog.pas
- *   bin/phx --nodes examples/pascal.phx
+ *   bin/phx --tree languages/pascal/pascal.phx prog.pas
+ *   bin/phx --nodes languages/pascal/pascal.phx
  *
  * **The grammar is Wirth's and is not this project's work.** It came from
- * `tests/pascal/pascal.bnf`, which is kept unmodified because three tests
+ * `languages/pascal/tests/grammar/pascal.bnf`, which is kept unmodified because three tests
  * depend on it being a real published grammar that Phoenix reads without
  * being met halfway. What is added here is the `->` clauses: what each
  * construct *builds*, which is the half a grammar does not have.

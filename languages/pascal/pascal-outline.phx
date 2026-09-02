@@ -1,6 +1,6 @@
 (* pascal-outline.phx -- what a Pascal program declares, listed.
  *
- *   phx examples/pascal-outline.phx prog.pas
+ *   phx languages/pascal/pascal-outline.phx prog.pas
  *
  * The grammar, the tree and the analysis are in `pascal.phx`, which has no
  * opinion about what anybody wants out of them. This file is one thing

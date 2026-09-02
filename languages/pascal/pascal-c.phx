@@ -1,6 +1,6 @@
 (* pascal-c.phx -- Pascal, compiled to C.
  *
- *   phx examples/pascal-c.phx prog.pas > prog.c && cc prog.c -o prog
+ *   phx languages/pascal/pascal-c.phx prog.pas > prog.c && cc prog.c -o prog
  *
  * The grammar, the tree, the symbol table and the typechecker are in
  * `pascal.phx` and are imported: none of them has an opinion about C. This
@@ -24,12 +24,12 @@
  *
  * **Out:** files, pointers, nested routines, variant records, and a set of
  * more than 63 values. Each is **refused with a message naming it**, at a
- * position in the Pascal, and `tests/refused/` checks that they are: a
+ * position in the Pascal, and `languages/pascal/tests/refused/` checks that they are: a
  * compiler for a subset has to be right about what it covers *and* loud about
  * what it does not, and the second is the half that is easy to get wrong,
  * because a silent wrong answer looks like success.
  *
- * `tests/pascal/gcd.pas` is inside it, and that file was written for another
+ * `languages/pascal/tests/grammar/gcd.pas` is inside it, and that file was written for another
  * tool years before Phoenix existed.
  *
  * ---------------------------------------------------------------------------
@@ -393,7 +393,7 @@
   (* **`mod` is not `%`.** ISO Pascal's `i mod j` is the non-negative
    * remainder and wants `j > 0`: `-7 mod 2` is 1 where C says -1, and
    * `7 mod -2` is an error where C answers. `fpc -Miso` does this and the
-   * first version of this file did not; `tests/oracle/run.sh` is what said
+   * first version of this file did not; `languages/pascal/languages/pascal/tests/oracle/run.sh` is what said
    * so. *)
   Binary(op: "mod") : out = "phx_mod({}, {})" of $left.out, $right.out .
   Binary(op: "and") : out = "({} && {})" of $left.out, $right.out .
@@ -458,7 +458,7 @@
   (* ------------------------------------------------------------------
    * What Pascal needs that C does not have, emitted once at the top.
    *
-   * These were all found by `tests/oracle/run.sh`, which compiles the same
+   * These were all found by `languages/pascal/languages/pascal/tests/oracle/run.sh`, which compiles the same
    * program with `fpc -Miso` and compares. Every one of them is a place C's
    * obvious answer is not Pascal's answer.
    *

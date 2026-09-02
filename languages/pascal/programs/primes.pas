@@ -1,4 +1,4 @@
-{ A program in the subset examples/pascal-c.phx compiles: constants, subranges,
+{ A program in the subset languages/pascal/pascal-c.phx compiles: constants, subranges,
   arrays with written bounds, records, value and var parameters, if, while,
   repeat, for, and writeln. }
 program Primes(output);

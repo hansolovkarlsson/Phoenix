@@ -1,6 +1,6 @@
 (* calc-solveig.phx -- the calculator, compiled to Solveig.
  *
- *     phx --run emit-sol examples/calc-solveig.phx prog.calc > prog.sol
+ *     phx --run emit-sol languages/calc/calc-solveig.phx prog.calc > prog.sol
  *     solas prog.sol -o prog.sob && solvm prog.sob
  *
  * **Parked, and now cheap to keep.** Phoenix targets C: Solveig is still

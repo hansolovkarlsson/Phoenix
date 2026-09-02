@@ -65,13 +65,13 @@ parsing a file, checking it, compiling it — or writes it out as a C program
 that does the same thing without Phoenix.
 
 ```sh
-phx examples/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 7,400 lines
+phx languages/pascal/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 7,400 lines
 cc pasc.c -o pasc                     # no flags, no headers, no library
 ./pasc prog.pas > prog.c && cc prog.c -o prog && ./prog
 ```
 
 Nothing in that chain but `cc`. What it compiles includes
-[`tests/pascal/gcd.pas`](tests/pascal/), the fixture that has been in this
+[`languages/pascal/tests/grammar/gcd.pas`](languages/pascal/tests/grammar/), the fixture that has been in this
 repository since the first commit — records, sets, enumerations, a `case`, a
 `with`, `var` parameters and field widths — written for another tool years
 before Phoenix existed:
@@ -88,7 +88,7 @@ blue
 
 ```sh
 make
-bin/phx examples/calc-c.phx examples/sum.calc
+bin/phx languages/calc/calc-c.phx languages/calc/programs/sum.calc
 ```
 
 ```
@@ -267,7 +267,7 @@ whatever order they were typed.
 — which is the surface a pass will be written against:
 
 ```
-$ bin/phx --nodes examples/calc.phx
+$ bin/phx --nodes languages/calc/calc.phx
 Program(body)
 Print(value)
 Let(name, value)
@@ -318,9 +318,9 @@ against *the target*:
 
 | | |
 | --- | --- |
-| `examples/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about C |
-| `examples/calc-c.phx` | `%import "calc.phx"` and an emit pass |
-| `examples/calc-solveig.phx` | `%import "calc.phx"` and a different emit pass |
+| `languages/calc/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about C |
+| `languages/calc/calc-c.phx` | `%import "calc.phx"` and an emit pass |
+| `languages/calc/calc-solveig.phx` | `%import "calc.phx"` and a different emit pass |
 
 Everything upstream of emitting is about the source language. Only emit is per
 target — which is why `calc-solveig.phx` went from ninety lines of duplicated
@@ -356,7 +356,7 @@ primary = integer -> Number(text: $1) | name -> Variable(name: $1) .
 ```
 
 `a + 2 * -b < 10 and not c` then parses as `(((a + (2 * -b)) < 10) and not c)`,
-and `examples/calc.phx` gets boolean operators and unary minus without writing
+and `languages/calc/calc.phx` gets boolean operators and unary minus without writing
 a line of grammar for them.
 
 **Importing a grammar module costs two things, and both are worth stating.**
@@ -506,6 +506,26 @@ a correct file reported as broken, at a place that is not the mistake.
 | `$n` past the last factor | and `$label` naming no factor — yacc's silent drift, made loud |
 | one node type, two shapes | a pass keyed on it would have to handle both |
 
+## The layout
+
+```
+phoenix/      the tool, in C11
+lib/          modules any description may import
+languages/    one directory per language described
+  pascal/       the grammar, a typechecker, a compiler to C, and its tests
+  calc/         the smallest language worth having a compiler for
+  phx/          the notation described in itself
+tests/        tests of Phoenix rather than of any language
+bench/        measuring the tool, with Pascal as its subject
+docs/
+```
+
+**A language keeps its own tests.** `languages/pascal/tests/` holds the
+published grammar it is checked against, the programs compared with `fpc`, and
+the programs that must be refused — so a second language arrives beside the
+first rather than mixed into it. [`languages/README.md`](languages/README.md)
+says what goes where.
+
 ## Building
 
 ```sh
@@ -528,7 +548,7 @@ different clauses:
   Binary : out = "({} {} {})" of $left.out, $op, $right.out .
 ```
 
-`examples/calc.phx` emits C. `examples/calc-solveig.phx` is the same calculator
+`languages/calc/calc.phx` emits C. `languages/calc/calc-solveig.phx` is the same calculator
 emitting [Solveig](https://github.com/hansolovkarlsson/Solveig) instead, and the
 only difference between the two files is those clauses.
 
@@ -556,7 +576,7 @@ division, no implicit conversion, structural equality.
 
 ## The notation, described in itself
 
-[`examples/phoenix.phx`](examples/phoenix.phx) is the `.phx` notation written in
+[`languages/phx/phoenix.phx`](languages/phx/phoenix.phx) is the `.phx` notation written in
 `.phx`, and it **parses itself** — along with every other description in this
 repository. That is Wirth's own argument for the notation he proposed, carried
 out rather than asserted: a notation that can describe its own grammar has
@@ -577,7 +597,7 @@ Four things came out of writing it, and three were improvements:
 
 ## The oracle
 
-[`tests/oracle/`](tests/oracle/) holds Pascal programs that are compiled twice
+[`languages/pascal/tests/oracle/`](languages/pascal/tests/oracle/) holds Pascal programs that are compiled twice
 — once by `fpc -Miso`, once by Phoenix — run, and compared byte for byte.
 **fpc is the oracle**: where they differ, Phoenix is wrong until somebody shows
 otherwise, because fpc has been read by more people than this repository has.
@@ -616,9 +636,9 @@ and **a silent wrong answer looks like success**: `set of 0 .. 200` compiled
 quietly and answered `no` where Pascal answers `yes`, because a set is a bit
 per member in a `long` and the two-hundredth bit is not there.
 
-[`tests/refused/`](tests/refused/) is the other half — programs that must fail,
+[`languages/pascal/tests/refused/`](languages/pascal/tests/refused/) is the other half — programs that must fail,
 each with a message naming the feature at a position in the Pascal. A program
-there that starts *compiling* is as much a failure as one in `tests/oracle/`
+there that starts *compiling* is as much a failure as one in `languages/pascal/tests/oracle/`
 that starts disagreeing.
 
 ### The bugs it found
@@ -658,7 +678,7 @@ from whom, and what is deliberately absent.
 ## Evidence
 
 The strongest available check that this reads real published grammars rather
-than only its own examples: [`tests/pascal/pascal.bnf`](tests/pascal/) is
+than only its own examples: [`languages/pascal/tests/grammar/pascal.bnf`](languages/pascal/tests/grammar/) is
 Wirth's Pascal in Wirth's notation, ~185 lines, together with files that
 `fpc -Miso` accepts and files it rejects. Phoenix reads that grammar unmodified,
 accepts both good programs and rejects all four bad ones, each with a line, a
@@ -670,13 +690,13 @@ missing-semicolon.pas:13:3: error: expected else, ; or end, and found "n"
     ^
 ```
 
-[`examples/pascal.phx`](examples/pascal.phx) is that grammar with `->` clauses
+[`languages/pascal/pascal.phx`](languages/pascal/pascal.phx) is that grammar with `->` clauses
 added — 51 node types, an abstract tree with no punctuation in it, and a pass
 that reads packed arrays, pointer types, records, sets and `var` parameters back
 out:
 
 ```
-$ bin/phx examples/pascal.phx tests/pascal/features.pas
+$ bin/phx languages/pascal/pascal.phx languages/pascal/tests/grammar/features.pas
 program Features(input, output)
   const     Max = 100
   type      Str = packed array [1..80] of char
@@ -691,7 +711,7 @@ because an inherited attribute runs *before* a node's children and gathering
 runs after, so one walk cannot do both:
 
 ```
-$ bin/phx --driver check examples/pascal.phx wrong.pas
+$ bin/phx --driver check languages/pascal/pascal.phx wrong.pas
 wrong.pas:8:3: error: cannot assign integer to boolean
     ok := n;
     ^
