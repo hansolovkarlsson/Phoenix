@@ -1,0 +1,373 @@
+(* awk.phx -- awk: what it looks like, and what it builds.
+ *
+ *   bin/phx --tree languages/awk/awk.phx prog.awk
+ *   bin/phx --nodes languages/awk/awk.phx
+ *
+ * ---------------------------------------------------------------------------
+ * The third language, and the first whose grammar is not vendored
+ *
+ * Pascal's grammar came from Wirth's report and Solveig's from that project's
+ * `solum.bnf`, both held character for character in `tests/`. There is no awk
+ * grammar on this machine to hold this against: what is below is the POSIX
+ * definition **transcribed** into Wirth's notation, and saying so is the
+ * honest version of that difference.
+ *
+ * What keeps it honest instead is the oracle. `/usr/bin/awk` is the arbiter of
+ * whether a program is awk, and `tests/corpus/` is seven awk programs written
+ * by other people for other reasons -- e2fsprogs, ncurses, vim, gettext --
+ * which this has to read and write back unchanged.
+ *
+ * ---------------------------------------------------------------------------
+ * Why awk, and what it is here to test
+ *
+ * Pascal has statements, expressions and a type system; Solveig has one thing
+ * that happens. awk has neither shape. A program is a list of **pattern-action
+ * rules** run over every line of input, there is no declaration of anything,
+ * a variable's type is whatever it last held, and a function may be **called
+ * above where it is defined** -- which is the forward reference
+ * `docs/ROADMAP.md` 2.1 has been waiting for a language to need.
+ *
+ * ---------------------------------------------------------------------------
+ * The one place this description guesses, and it is awk's fault
+ *
+ * `/` is division, and `/re/` is a regular expression. **Which one it is
+ * depends on the parser**, not on the characters: real awk lexers ask whether
+ * the previous token could end an expression. Phoenix's scanner is longest
+ * match over the token rules and has no such feedback -- deliberately, and
+ * `docs/ROADMAP.md` 3.3 says why.
+ *
+ * So `ere` below requires the character after the `/` to be neither a space, a
+ * tab, an `=` nor a newline, and requires the closing `/` on the same line.
+ * That reads every `/re/` in the corpus and every division in it, because
+ * nobody writes `a/b/c` without spaces. **It is a guess and it has a shape it
+ * gets wrong**, which is written down in `tests/refused/` rather than left to
+ * be found.
+ *)
+
+%fragment letter digit exponent escape restchar .
+
+letter   = "a" .. "z" | "A" .. "Z" | "_" .
+digit    = "0" .. "9" .
+
+name     = letter { letter | digit } .
+
+(* awk's numbers are all doubles, and `.5` is one. *)
+number   = digit { digit } [ "." { digit } ] [ exponent ]
+         | "." digit { digit } [ exponent ] .
+exponent = ( "e" | "E" ) [ "+" | "-" ] digit { digit } .
+
+(* A string does not span lines; a backslash claims the character after it. *)
+string   = "\"" { escape | ! ( "\"" | "\n" ) } "\"" .
+escape   = "\\" ! "\n" .
+
+(* The regular expression literal -- see the header. The first character
+ * carries the whole of the guess: a space, a tab or an `=` after the `/` says
+ * this is division or `/=`, because no regexp anybody writes starts with one. *)
+ere      = "/" restchar { escape | ! ( "/" | "\n" ) } "/" .
+restchar = escape | ! ( "/" | "\n" | " " | "\t" | "=" ) .
+
+(* **A newline is a token**, because in awk it ends a statement. It is the one
+ * thing in this file that a language with braces would have skipped, and it is
+ * why `optnl` appears in twenty places below: awk allows a line break after
+ * some things and not others, and the grammar has to say which. *)
+newline  = "\r" "\n" | "\n" .
+
+blank    = ( " " | "\t" ) { " " | "\t" } .
+comment  = "#" { ! "\n" } .
+joined   = "\\" "\n" .
+
+punctuation = ">>" | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%=" | "^="
+            | "==" | "!=" | "<=" | ">=" | "&&" | "||" | "!~"
+            | "{" | "}" | "(" | ")" | "[" | "]" | ";" | "," | "?" | ":"
+            | "+" | "-" | "*" | "/" | "%" | "^" | "!" | ">" | "<" | "|"
+            | "~" | "$" | "=" .
+
+%skip blank comment joined .
+
+(* ------------------------------------------------------------------ *)
+(* What a program is                                                    *)
+
+%syntax .
+%start program .
+
+program = { optnl i:item -> $i } optnl -> Program(items: $1) .
+
+(* A statement ends at a newline or a `;`, and any number of either may sit
+ * between two of anything. *)
+optnl = { newline | ";" } .
+
+item = "BEGIN" a:action -> Begin(body: $a)
+     | "END"   a:action -> End(body: $a)
+     | "function" n:name "(" p:params ")" optnl a:action
+         -> Function(name: $n, params: $p, body: $a)
+     | p:pattern a:action -> Rule(pattern: $p, body: $a)
+     | p:pattern          -> Rule(pattern: $p, body: nil)
+     | a:action           -> Rule(pattern: nil, body: $a) .
+
+params = n:name { "," optnl m:name -> $m } -> [$n, ...$2]
+       | -> [] .
+
+(* `/from/,/to/` is a range: every line from one match to the next. *)
+pattern = a:expr "," optnl b:expr -> Range(from: $a, to: $b)
+        | e:expr                  -> $e .
+
+action = "{" s:statements "}" -> $s .
+
+statements = { optnl s:statement -> $s } optnl -> $1 .
+
+(* ------------------------------------------------------------------ *)
+(* Statements                                                           *)
+
+statement = "if" "(" c:expr ")" optnl t:statement optnl "else" optnl e:statement
+              -> If(cond: $c, then: $t, otherwise: $e)
+          | "if" "(" c:expr ")" optnl t:statement
+              -> If(cond: $c, then: $t, otherwise: nil)
+          | "while" "(" c:expr ")" optnl b:statement -> While(cond: $c, body: $b)
+          | "do" optnl b:statement optnl "while" "(" c:expr ")"
+              -> DoWhile(body: $b, cond: $c)
+          | "for" "(" v:name "in" a:name ")" optnl b:statement
+              -> ForIn(var: $v, array: $a, body: $b)
+          | "for" "(" i:forpart ";" optnl c:forpart ";" optnl u:forpart ")"
+              optnl b:statement
+              -> For(init: $i, cond: $c, step: $u, body: $b)
+          | "break"    -> Break
+          | "continue" -> Continue
+          | "next"     -> Next
+          | "exit"   e:forpart -> Exit(value: $e)
+          | "return" e:forpart -> Return(value: $e)
+          | "delete" n:name "[" x:exprlist "]" -> Delete(array: $n, index: $x)
+          | "delete" n:name -> DeleteAll(array: $n)
+          | a:action -> Block(body: $a)
+          | s:simple -> $s .
+
+(* The three places awk lets an expression be left out. *)
+forpart = e:expr -> $e | -> nil .
+
+simple = "print"  a:printargs r:redirect -> Print(args: $a, to: $r)
+       | "printf" a:printargs r:redirect -> Printf(args: $a, to: $r)
+       | e:expr -> $e .
+
+redirect = ">>" e:concat -> Append(file: $e)
+         | ">"  e:concat -> Write(file: $e)
+         | "|"  e:concat -> Pipe(command: $e)
+         | -> nil .
+
+(* **`print a > b` writes to a file**, so a print's arguments cannot contain a
+ * relation at all -- not `>`, and not `==` or `<` either, which awk rejects
+ * for the symmetry rather than the ambiguity. `print (a > b)` is how you
+ * compare, and the parenthesis is what says which you meant.
+ *
+ * So the ladder below is the one above with **one rung taken out**, and it is
+ * duplicated rather than shared because there is nothing in the notation that
+ * parameterises a rule. awk's own grammar does exactly this, under the names
+ * `unary_expr` and `non_unary_expr`; this is the same split with the same
+ * cost, said once instead of twice. *)
+printargs = e:printitem { "," optnl f:printitem -> $f } -> [$e, ...$2]
+          | -> [] .
+
+printitem = t:lvalue o:assignop v:printitem -> Assign(target: $t, op: $o, value: $v)
+          | pternary .
+
+pternary = c:pdisjunction "?" optnl t:pternary ":" optnl e:pternary
+             -> Cond(cond: $c, then: $t, otherwise: $e)
+         | pdisjunction .
+
+pdisjunction = pconjunction { "||" optnl a:pconjunction
+                                -> Logical(op: "||", left: $$, right: $a) } .
+pconjunction = pmembership  { "&&" optnl a:pmembership
+                                -> Logical(op: "&&", left: $$, right: $a) } .
+pmembership  = pmatching { "in" a:name -> In(index: $$, array: $a) } .
+pmatching    = concat { o:matchop r:concat
+                          -> Match(op: $o, left: $$, right: $r) } .
+
+(* ------------------------------------------------------------------ *)
+(* Expressions, loosest first                                           *)
+
+expr = t:lvalue o:assignop v:expr -> Assign(target: $t, op: $o, value: $v)
+     | ternary .
+
+assignop = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "^=" .
+
+ternary = c:disjunction "?" optnl t:ternary ":" optnl e:ternary
+            -> Cond(cond: $c, then: $t, otherwise: $e)
+        | disjunction .
+
+disjunction = conjunction { "||" optnl a:conjunction
+                              -> Logical(op: "||", left: $$, right: $a) } .
+conjunction = membership  { "&&" optnl a:membership
+                              -> Logical(op: "&&", left: $$, right: $a) } .
+
+membership = matching { "in" a:name -> In(index: $$, array: $a) } .
+
+matching = comparison { o:matchop r:comparison
+                          -> Match(op: $o, left: $$, right: $r) } .
+matchop = "~" | "!~" .
+
+(* Not associative: `a < b < c` is two comparisons in C and nonsense here. *)
+comparison = a:concat o:relop b:concat -> Compare(op: $o, left: $a, right: $b)
+           | concat .
+relop = "<=" | "!=" | "==" | ">=" | "<" | ">" .
+
+(* **Concatenation has no operator**, which is awk's most distinctive syntax
+ * and the reason its grammar is not LL(1). Here it is a repetition of the rung
+ * below, which is what juxtaposition is. *)
+concat = additive { a:additive -> Concat(left: $$, right: $a) } .
+
+additive = multiplicative { o:addop m:multiplicative
+                              -> Binary(op: $o, left: $$, right: $m) } .
+addop = "+" | "-" .
+
+multiplicative = unary { o:mulop u:unary -> Binary(op: $o, left: $$, right: $u) } .
+mulop = "*" | "/" | "%" .
+
+unary = "!" u:unary -> Not(value: $u)
+      | "-" u:unary -> Negate(value: $u)
+      | "+" u:unary -> Positive(value: $u)
+      | power .
+
+(* `^` is right-associative and binds tighter than unary minus, so `-2^2` is
+ * -4 and not 4. *)
+power = p:postfix "^" u:unary -> Binary(op: "^", left: $p, right: $u)
+      | postfix .
+
+postfix = l:lvalue "++" -> PostIncr(target: $l)
+        | l:lvalue "--" -> PostDecr(target: $l)
+        | primary .
+
+primary = "++" l:lvalue -> PreIncr(target: $l)
+        | "--" l:lvalue -> PreDecr(target: $l)
+        | "$" p:primary -> Field(index: $p)
+        | "(" e:exprlist ")" -> Group(items: $e)
+        | n:number -> Number(text: $n)
+        | s:string -> Str(text: $s)
+        | r:ere    -> Regex(text: $r)
+        | b:builtin "(" a:arglist ")" -> Call(name: $b, args: $a)
+        | b:builtin -> Call(name: $b, args: [])
+        | n:name "(" a:arglist ")" -> Apply(name: $n, args: $a)
+        | n:name "[" x:exprlist "]" -> Index(array: $n, index: $x)
+        | n:name -> Var(name: $n) .
+
+(* An lvalue is the only thing that may be assigned to or stepped. *)
+lvalue = "$" p:primary -> Field(index: $p)
+       | n:name "[" x:exprlist "]" -> Index(array: $n, index: $x)
+       | n:name -> Var(name: $n) .
+
+builtin = "length" | "substr" | "index" | "split" | "sub" | "gsub" | "match"
+        | "sprintf" | "sin" | "cos" | "atan2" | "exp" | "log" | "sqrt"
+        | "int" | "rand" | "srand" | "tolower" | "toupper" | "system"
+        | "close" | "fflush" .
+
+exprlist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2] .
+
+arglist = e:expr { "," optnl f:expr -> $f } -> [$e, ...$2]
+        | -> [] .
+
+(* ------------------------------------------------------------------ *)
+(* Writing it back out
+ *
+ * **A check on the tree rather than a pretty-printer.** Every awk program
+ * there is here is parsed, written back out by this pass, and parsed again;
+ * the two trees must be identical. That catches a node built with the wrong
+ * shape, an argument list dropped, or a fold that went the wrong way -- over
+ * programs other people wrote, rather than over the ones somebody thought to
+ * look at.
+ *
+ * It is not a round trip of *source*. Comments are skipped and do not come
+ * back, statements come out separated by `;` whatever they were written with,
+ * and a line break inside an expression is gone. It is a round trip of
+ * **structure**, and it works because a parenthesis is a `Group` node: no
+ * bracket comes back that was not written, and none that was written is lost.
+ *)
+%pass show
+
+  Program : show = join($items.show, "\n") .
+
+  Begin    : show = "BEGIN { {} }" of join($body.show, "; ") .
+  End      : show = "END { {} }"   of join($body.show, "; ") .
+  Function : show = "function {}({}) { {} }"
+                      of $name, join($params, ", "), join($body.show, "; ") .
+
+  Rule(pattern: nil) : show = "{ {} }" of join($body.show, "; ") .
+  Rule(body: nil)    : show = "{}" of $pattern.show .
+  Rule               : show = "{} { {} }" of $pattern.show, join($body.show, "; ") .
+
+  Range : show = "{}, {}" of $from.show, $to.show .
+
+  (* ---- statements ---- *)
+
+  (* **A `;` before `else` is a syntax error when the branch is a block**, and
+   * required when it is not: awk wants a *terminated* statement there, a
+   * block terminates itself, and a `}` followed by `;` ends the whole `if`
+   * with an `else` left over. Two clauses, chosen by the shape of the branch,
+   * which is what a pattern is for. *)
+  If(otherwise: nil)  : show = "if ({}) {}" of $cond.show, $then.show .
+  If(then: Block)     : show = "if ({}) {} else {}"
+                                 of $cond.show, $then.show, $otherwise.show .
+  If                  : show = "if ({}) {}; else {}"
+                                 of $cond.show, $then.show, $otherwise.show .
+  While     : show = "while ({}) {}" of $cond.show, $body.show .
+  (* And the same again for `do`: awk wants a terminated statement before the
+   * `while`, a block terminates itself, and a `}` followed by `;` ends the
+   * `do` with a `while` left over. *)
+  DoWhile(body: Block) : show = "do {} while ({})" of $body.show, $cond.show .
+  DoWhile              : show = "do {}; while ({})" of $body.show, $cond.show .
+  ForIn     : show = "for ({} in {}) {}" of $var, $array, $body.show .
+  For       : show = "for ({}; {}; {}) {}"
+                       of $init.show, $cond.show, $step.show, $body.show .
+  Break     : show = "break" .
+  Continue  : show = "continue" .
+  Next      : show = "next" .
+
+  (* `exit` and `return` with nothing after them, and the two `for` parts that
+   * may be empty, are all a nil where an expression would be. *)
+  Exit(value: nil)   : show = "exit" .
+  Exit               : show = "exit {}" of $value.show .
+  Return(value: nil) : show = "return" .
+  Return             : show = "return {}" of $value.show .
+
+  Delete    : show = "delete {}[{}]" of $array, join($index.show, ", ") .
+  DeleteAll : show = "delete {}" of $array .
+  Block     : show = "{ {} }" of join($body.show, "; ") .
+
+  Print(to: nil)  : show = "print {}" of join($args.show, ", ") .
+  Print           : show = "print {} {}" of join($args.show, ", "), $to.show .
+  Printf(to: nil) : show = "printf {}" of join($args.show, ", ") .
+  Printf          : show = "printf {} {}" of join($args.show, ", "), $to.show .
+
+  Append : show = ">> {}" of $file.show .
+  Write  : show = "> {}"  of $file.show .
+  Pipe   : show = "| {}"  of $command.show .
+
+  (* ---- expressions ---- *)
+
+  Assign  : show = "{} {} {}" of $target.show, $op, $value.show .
+  Cond    : show = "{} ? {} : {}" of $cond.show, $then.show, $otherwise.show .
+  Logical : show = "{} {} {}" of $left.show, $op, $right.show .
+  In      : show = "{} in {}" of $index.show, $array .
+  Match   : show = "{} {} {}" of $left.show, $op, $right.show .
+  Compare : show = "{} {} {}" of $left.show, $op, $right.show .
+
+  (* The one operator with no spelling: two things beside each other. *)
+  Concat  : show = "{} {}" of $left.show, $right.show .
+
+  Binary  : show = "{} {} {}" of $left.show, $op, $right.show .
+  Not     : show = "!{}" of $value.show .
+  Negate  : show = "-{}" of $value.show .
+  Positive : show = "+{}" of $value.show .
+
+  PostIncr : show = "{}++" of $target.show .
+  PostDecr : show = "{}--" of $target.show .
+  PreIncr  : show = "++{}" of $target.show .
+  PreDecr  : show = "--{}" of $target.show .
+
+  Field   : show = "${}" of $index.show .
+  Group   : show = "({})" of join($items.show, ", ") .
+  Number  : show = "{}" of $text .
+  Str     : show = "{}" of $text .
+  Regex   : show = "{}" of $text .
+  Var     : show = "{}" of $name .
+  Index   : show = "{}[{}]" of $array, join($index.show, ", ") .
+  Call    : show = "{}({})" of $name, join($args.show, ", ") .
+  Apply   : show = "{}({})" of $name, join($args.show, ", ") .
+
+%driver show = show -> show .

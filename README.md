@@ -686,6 +686,8 @@ phoenix/      the tool, in C11
 lib/          modules any description may import
 languages/    one directory per language described
   pascal/       the grammar, a typechecker, a compiler to C, and its tests
+  solveig/      a front end and a bytecode backend, against that project's own
+  awk/          pattern-action rules, checked against /usr/bin/awk
   calc/         the smallest language worth having a compiler for
   phx/          the notation described in itself
 tests/        tests of Phoenix rather than of any language
@@ -703,12 +705,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 157 checks, covering 35 Pascal programs against fpc
+make test       # 162 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 155 of the 157 need only what is vendored here, and the two
+repository** — 160 of the 162 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -919,6 +921,25 @@ to be.
 from whom, and what is deliberately absent.
 
 ## Evidence
+
+**Three languages, and the third is the one that was not written for this.**
+Pascal came with Wirth's grammar and Solveig with its own `solum.bnf`, both
+vendored and read unmodified. There is no awk grammar on this machine, so
+[`languages/awk/`](languages/awk/) is the POSIX definition transcribed — and
+the check that it is *right* is not a grammar at all, it is six awk programs
+that e2fsprogs, ncurses and vim ship, run under `/usr/bin/awk` before and after
+this description rewrites them:
+
+```
+ok    14 awk programs parse, render, and parse to the same tree, 0 do not
+ok    7 awk programs and 6 other people wrote do the same thing rendered, 0 do not
+```
+
+The second line is the one that earns its place. The first was green while two
+constructs were being written back out as programs awk rejects — `if (c) { a };
+else { b }` and `do { a }; while (c)`, where a `;` after a block ends the
+statement and orphans what follows. Both read back as the *same tree*, which is
+exactly the failure a round trip cannot see.
 
 The strongest available check that this reads real published grammars rather
 than only its own examples: [`languages/pascal/tests/grammar/pascal.bnf`](languages/pascal/tests/grammar/) is

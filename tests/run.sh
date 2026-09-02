@@ -1035,6 +1035,35 @@ else
     printf '  --    the conformance suite needs Solveig, which is not here\n'
 fi
 
+# awk: the third language, and the first whose grammar is not vendored -- there
+# is no awk grammar on this machine to hold it against, so the oracle carries
+# the whole weight. `/usr/bin/awk` is the arbiter of what awk means, and
+# `corpus/` is awk that e2fsprogs, ncurses and vim ship.
+echo "awk"
+accepts "the description reads" "$root/languages/awk/awk.phx"
+if rt=$("$root/languages/awk/tests/roundtrip.sh" 2>&1); then
+    report pass "$(printf '%s' "$rt" | tail -1)"
+else
+    report fail "awk programs round-trip"
+    printf '%s\n' "$rt" | sed 's/^/        /' | head -8
+fi
+# **Two places this description reads awk differently from awk**, both of them
+# the lexical seam that `docs/ROADMAP.md` 3.3 says Phoenix will not guess at.
+# They are pinned here so that they are named rather than found: a change to
+# either shows up as a failing test with the old answer in it.
+d="$root/languages/awk/tests/divergent"
+prints "a/b/c is read as a regexp between two names" \
+       "BEGIN { print a /b/ c }" "$root/languages/awk/awk.phx" "$d/slash.awk"
+prints "and f (1) as a call, where awk concatenates" \
+       "BEGIN { x = f(1) }" "$root/languages/awk/awk.phx" "$d/spaced-call.awk"
+
+if orc=$("$root/languages/awk/tests/oracle.sh" 2>&1); then
+    report pass "$(printf '%s' "$orc" | tail -1)"
+else
+    report fail "rendered awk does the same thing"
+    printf '%s\n' "$orc" | sed 's/^/        /' | head -12
+fi
+
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

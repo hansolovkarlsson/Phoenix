@@ -2267,3 +2267,115 @@ regression test nobody has tested.
 
 **A specification nothing runs is a document about a program**, and it drifts
 from it one sentence at a time. This one runs.
+
+## 2026-09-02 — awk, and the two bugs a round trip could not see
+
+The Solveig oracle had run out of disagreements, and the note at the end of
+that stage said the next evidence had to come from a language nobody here had
+described. This machine has `/usr/bin/awk`, so: awk.
+
+### The first grammar that is not vendored
+
+Pascal came with Wirth's report and Solveig with that project's `solum.bnf`,
+both held character for character in `tests/` so that "reads the published
+grammar unmodified" is a checkable claim. **There is no awk grammar on this
+machine.** What `languages/awk/awk.phx` holds is the POSIX definition
+transcribed into Wirth's notation, and the honest thing is to say so at the top
+of the file rather than to imply otherwise.
+
+What carries the weight instead is the oracle, and it carries more of it than
+in either previous language: `/usr/bin/awk` decides what awk means, and
+`tests/corpus/` is six programs that e2fsprogs, ncurses and vim ship — 800
+lines of awk written by people who had never heard of this.
+
+**All six parsed on the first run**, which was not expected and is the single
+most useful thing the stage says about the notation.
+
+### What awk is here to test
+
+Pascal has statements, expressions and a type system, and 51 node types.
+Solveig has one thing that happens and 12. awk has neither shape and 46: a
+program is a list of pattern-action rules with no main; nothing is declared;
+and **concatenation has no operator**, which is why its grammar is not LL(1)
+and why `concat` here is a repetition of the rung below it.
+
+```
+concat = additive { a:additive -> Concat(left: $$, right: $a) } .
+```
+
+That is juxtaposition written down, and it is one line.
+
+### The one place the description guesses
+
+`/` is division and `/re/` is a regular expression, and **which one it is
+depends on the parser**: a real awk lexer asks whether the previous token could
+end an expression. Phoenix's scanner is longest match over the token rules and
+has no such feedback, deliberately — [ROADMAP 3.3](ROADMAP.md) says a tool that
+guesses the lexical/syntactic seam reports a correct file as broken.
+
+So the description guesses instead, which is its business and not the tool's: a
+regexp may not start with a space, a tab or an `=`, and must close on the same
+line. That reads every regexp in the corpus and every division in it, because
+nobody writes `a/b/c` without spaces.
+
+**And `a/b/c` is checked in**, in `tests/divergent/`, together with the second
+divergence — `f (1)` with a space, which awk reads as a concatenation and this
+reads as a call, because saying otherwise means putting the `(` inside the
+token and then `if(`, `while(` and `print(` become function names. Both tests
+assert the *wrong* answer on purpose, so that a change to either shows up with
+the old answer in it. A guess with a witness is a different thing from a guess.
+
+### The two bugs, and why the round trip could not see them
+
+Fourteen programs parsed, rendered and re-parsed to identical trees. Then the
+oracle ran them:
+
+```
+awk: syntax error at source line 1
+	do { printf "%d", i; i++ >>>  }; <<<
+```
+
+**A `;` after a block is not the same as a `;` after a statement.** awk wants a
+*terminated* statement before an `else` or a `while`; a block terminates
+itself, so `}` followed by `;` ends the whole `if` and orphans the `else`.
+Written the other way — `if (c) x = 1 else y = 2` — awk wants the `;`.
+
+So the rendering depends on the **shape of the branch**, which is what a
+pattern is for:
+
+```
+If(otherwise: nil)  : show = "if ({}) {}" of ...
+If(then: Block)     : show = "if ({}) {} else {}" of ...
+If                  : show = "if ({}) {}; else {}" of ...
+```
+
+and the same three lines again for `do`. Both bugs re-parsed to the same tree,
+which is exactly the failure a round trip cannot see, and it is the third time
+this journal has written that sentence.
+
+### The rung awk takes out
+
+`print a > b` writes to a file. So a print's arguments cannot contain a
+relation — and not just `>`: awk rejects `print 1 == 2` and `print 1 < 2` as
+well, while allowing `&&`, `?:` and assignment. That is awk's own grammar
+splitting `unary_expr` from `non_unary_expr`, and here it is the expression
+ladder with **one rung removed**, duplicated because nothing in the notation
+parameterises a rule.
+
+Six rules copied, which is the largest piece of duplication in any description
+here. It is the same shape [1.3](ROADMAP.md) was about and it is *not* the same
+problem: `otherwise` answers "every node does this", and this needs "these
+seven rules, but one of them differently". Worth remembering if a fourth
+language wants it too; not worth a mechanism on one example.
+
+### What it left on the roadmap
+
+[2.1](ROADMAP.md) has been waiting for a language where a name is used above
+where it is defined. awk is that language — `tests/conformance/functions.awk`
+calls `greet` from `BEGIN` before its body appears, and awk resolves it — so
+the entry is no longer waiting for a language. It is waiting for a **pass**
+over the one it has, because what is described so far is a front end and
+nothing has yet had to resolve that call.
+
+Which is the same order Solveig was built in, and for the same reason: a
+backend for a language whose parse is wrong is a backend written twice.

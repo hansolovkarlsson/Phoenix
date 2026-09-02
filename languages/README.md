@@ -9,6 +9,7 @@ language arrives *beside* the first rather than mixed into it.
 | [`pascal/`](pascal/) | ISO 7185 Pascal: a grammar, a typechecker, a compiler to C, and an outline tool. The one that is taken seriously — 24 programs checked against `fpc -Miso` |
 | [`calc/`](calc/) | the smallest language worth having a compiler for. What the stages were built against, and still the fastest thing to try a change on |
 | [`solveig/`](solveig/) | [Solveig](https://github.com/hansolovkarlsson/Solveig): a conformance suite written before anything aimed at it, and a description that parses every `.sol` file there is and writes each one back to the same tree |
+| [`awk/`](awk/) | POSIX awk: pattern-action rules, no declarations, and concatenation with no operator. The first whose grammar is not vendored — `/usr/bin/awk` carries the whole weight instead |
 | [`phx/`](phx/) | the `.phx` notation described in itself. It parses itself and every other description here |
 
 ## What goes where

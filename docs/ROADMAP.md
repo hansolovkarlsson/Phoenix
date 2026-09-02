@@ -222,6 +222,14 @@ so would a language where a method may be used above where it is defined. Until
 one of those is being described, this stays unbuilt, and the reason is now
 evidence rather than policy.
 
+**The language arrived.** `languages/awk/` has exactly that shape: a function
+may be called above where it is defined, nothing is declared, and
+`tests/conformance/functions.awk` calls one from `BEGIN` before its body
+appears. What is described so far is a **front end** — a grammar, a tree and a
+way to write it back out — so nothing has yet had to *resolve* that call, and
+this entry is still unbuilt. It is no longer waiting for a language, though; it
+is waiting for a pass over the one it has.
+
 If it is ever built, the cost is that demand-driven evaluation comes back with
 it, along with the cycle detection that walking once avoided —
 [journal.md](journal.md#2026-09-01--stage-2-and-one-thing-the-sketch-got-wrong)
@@ -343,6 +351,24 @@ compiler be written in* stops being a question anybody can ask.
 A rule is not lexical because of anything about its shape; `identifier` and
 `expression` look alike. A tool that guesses wrong reports a correct file as
 broken, which is the worst thing this one could do. `%syntax` is declared.
+
+**awk is what this costs, and it is worth being exact about whose problem it
+is.** `/` is division and `/re/` is a regular expression, and which one it is
+depends on the parser: a real awk lexer asks whether the previous token could
+end an expression. Phoenix's scanner is longest match over the token rules and
+has no such feedback, so `languages/awk/awk.phx` **guesses** — a regexp may not
+start with a space, a tab or an `=`, and must close on the same line.
+
+That is the description guessing, which is its business, and not the tool
+guessing, which is what this entry refuses. The difference matters: the guess
+is written down at the top of the file, it has a witness in
+`tests/divergent/slash.awk`, and rendering that program puts the spaces in so
+the divergence is **visible** rather than silent. A tool that guessed would
+have had nowhere to write any of that.
+
+What a scanner with parser feedback would cost is the thing to weigh if this
+ever comes up twice: two languages have been described without wanting one, and
+the third wants it in one construct.
 
 ### 3.4 A library that grows without deciding
 
