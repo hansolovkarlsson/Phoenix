@@ -16,6 +16,10 @@
 # ncurses and vim ship these. `outside/` is the one that is **not** POSIX awk
 # and is here anyway, because structure is structure. `not-yet/` is awk the
 # backend does not compile, which has nothing to do with reading it.
+#
+# `divergent/` is **not** here: it holds the programs this description reads
+# differently from awk, or does not read at all, and a round trip of those is
+# not a question worth asking.
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)

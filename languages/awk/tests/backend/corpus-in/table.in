@@ -1,0 +1,4 @@
+error_table foo
+ec FOO_ONE, "the first"
+ec FOO_TWO, "the second"
+end

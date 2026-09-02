@@ -152,24 +152,35 @@ variable handed to a function has its map made first, whichever way it turns
 out to be used.
 
 ```
-ok    10 awk programs compiled to C print what awk prints, 0 do not
+ok    13 awk programs and 6 other people wrote compile to C that prints what awk prints
 ```
 
-That is the conformance rule with a third language under it: compiled by
-`awk-c.phx`, built by `cc`, and compared byte for byte with `/usr/bin/awk` on
-the same input.
+**The six are the corpus** — awk that e2fsprogs, ncurses and vim ship, compiled
+to C, built by `cc`, and run against `/usr/bin/awk` on the same input with the
+same arguments. `et_c.awk` is 269 lines of awk that generates C error tables;
+it becomes 1,149 lines of C and prints the same 56 lines either way.
 
 ### What it compiles
 
 Values, fields, the main loop, `print` and `printf`, arithmetic, comparison,
 concatenation, control flow, **arrays** with `in`, `delete` and `for`-in,
 **functions** with locals, recursion, forward calls and arrays by reference,
-and **regular expressions** — patterns, `~`, `!~`, `match`, `sub`, `gsub`,
-`split` — over POSIX `<regex.h>`.
+**regular expressions** — patterns, `~`, `!~`, `match`, `sub`, `gsub`, `split`,
+and a multi-character `FS` — over POSIX `<regex.h>`, **output** to a file, an
+appended file or a pipe with `close`, **range patterns**, and the input awk
+takes: the files named on the command line, `FILENAME`, `FNR`, and
+`name=value` operands including `-v`.
 
-What is left is redirection, a pipe, `getline` and a range pattern.
-[`tests/not-yet/`](tests/not-yet/) holds one of each, and each is refused **by
-name** with a position rather than mis-compiled.
+**What is left is `getline`**, and it is the only thing here whose *grammar* is
+the problem rather than its runtime. Four of its six forms are described;
+`cmd | getline` is the other two and needs `|` to be an expression operator,
+which it is not. Both are in [`tests/not-yet/`](tests/not-yet/) and
+[`tests/divergent/`](tests/divergent/), and both are refused with a position.
+
+**It is described even though nothing compiles it**, and that is the
+interesting part: `getline` is not a keyword unless some rule says so, and
+without one `getline line` reads as *two variables concatenated* — a silent
+mis-parse of ordinary awk. Mentioning the word is what makes it reserved.
 
 ### Two things the backend taught the front end
 

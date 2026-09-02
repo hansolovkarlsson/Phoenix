@@ -2642,3 +2642,93 @@ The description grew by about a hundred and twenty lines for arrays, functions,
 regular expressions and eighteen builtins. That ratio is the argument for the
 whole project, and it is the first time it has been visible on a language
 nobody here designed.
+
+## 2026-09-02 — the corpus, compiled
+
+Stage three of the awk backend: output redirection and pipes, `close`,
+`system`, `fflush`, range patterns, a multi-character `FS`, and the input awk
+actually takes — the files named on the command line, `FILENAME`, `FNR`, and
+`name=value` operands including `-v`.
+
+The point of it was one line:
+
+```
+ok    13 awk programs and 6 other people wrote compile to C that prints what awk prints
+```
+
+**The six are the corpus.** `et_c.awk` is 269 lines of awk that e2fsprogs uses
+to generate C error tables. Compiled by `awk-c.phx` it becomes 1,149 lines of C
+and prints the same 56 lines that `/usr/bin/awk` does, given the same input and
+the same `-v outfile=`. Nobody who wrote it had heard of this project, and that
+is the whole claim being tested.
+
+### Two bugs found by compiling other people's code
+
+Neither could have been found any other way — both are in constructs the
+conformance programs written here did not happen to use.
+
+**`sub(/,/, ", ")` with no third argument.** It works on the record, which
+means writing the record back and splitting it again — and the emitter had a
+placeholder for a `$0` that was never defined, so the C did not compile. Two
+shapes told apart by how many arguments there are, which is what a **list
+pattern** is for.
+
+**`printf("%s %s\n", a, b)`.** A parenthesised list after `print` or `printf`
+is *its arguments*, not one argument that happens to be parenthesised — and
+that is how most awk is written. The tree cannot say which, because both are a
+`Group` in the one place a group may be. It compiled to a **C comma
+expression**, which is to say it printed the last argument and threw the rest
+away, silently.
+
+A clause would have needed four of them — print and printf, each with and
+without a redirect — and each would have had to reach inside a list to find the
+group. Written as a rewrite it is two rules:
+
+```
+%rewrite unparen bottomup
+  Print(args: [Group(items: g)], to: t)  => Print(args: $g, to: $t) .
+  Printf(args: [Group(items: g)], to: t) => Printf(args: $g, to: $t) .
+```
+
+**That is the third mechanism in a row doing something it was not built for.**
+`%rewrite` was built to take an inlined block out of a tree; here it takes a
+parenthesis out. Both are "the answer is a different node".
+
+### And a mis-parse that was worse than a refusal
+
+`getline` was not described at all, on the grounds that nothing compiles it and
+the corpus does not use it. So it was not a keyword — and `getline line` read
+as **two variables concatenated**. Ordinary awk, read as something else,
+quietly.
+
+That is the failure this project refuses to have, and refusing to describe a
+construct is not the same as refusing it. Four of `getline`'s six forms are
+described now, the node is refused by name with a position, and the other two —
+`cmd | getline`, which needs `|` to be an expression operator — do not parse,
+which is loud. **Mentioning the word is what makes it reserved**, and that is
+the whole reason the four forms are in the grammar.
+
+### The range pattern, and the position it is named after
+
+A range is a rule with a memory, and the memory has to be a static with a name
+nothing else uses. `$pos` answers where the rule was written, so the static is
+named after it:
+
+```
+: id    = "{}_{}" of $pos.line, $pos.column
+: ahead = "static int in_range_{};\n" of $id
+```
+
+Which is `$pos` doing something it was not built for either — it was added so
+that a `.sob` could say which line an instruction came from.
+
+### Where it stands
+
+awk is described, checked, and compiled. Three descriptions, 458 lines for the
+language and 1,187 for the backend, of which about 700 are the C runtime held
+as literals — awk's value model, its hash tables, its regular expressions and
+its input loop, none of which C brings.
+
+The ratio is the argument for the whole project: **the awk in the corpus is
+800 lines, the description that compiles it is 1,600, and the description
+works on awk nobody has written yet.**

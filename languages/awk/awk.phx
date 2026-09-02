@@ -250,7 +250,20 @@ postfix = l:lvalue "++" -> PostIncr(target: $l)
         | l:lvalue "--" -> PostDecr(target: $l)
         | primary .
 
-primary = "++" l:lvalue -> PreIncr(target: $l)
+(* **`getline` has to be described even though nothing compiles it**, because
+ * the alternative is worse than refusing: `getline` is not a keyword unless
+ * some rule says so, and without one `getline line` reads as *two variables
+ * concatenated* -- a silent mis-parse of ordinary awk.
+ *
+ * Four of its six forms are here, which is the two that read from a file or
+ * from the input. `cmd | getline` is the other two, and `|` is not an
+ * expression operator here, so those do not parse -- loudly, which is the
+ * point. Mentioning the word at all is what makes it reserved. *)
+primary = "getline" l:lvalue "<" e:concat -> Getline(into: $l, from: $e)
+        | "getline" "<" e:concat          -> Getline(into: nil, from: $e)
+        | "getline" l:lvalue              -> Getline(into: $l, from: nil)
+        | "getline"                       -> Getline(into: nil, from: nil)
+        | "++" l:lvalue -> PreIncr(target: $l)
         | "--" l:lvalue -> PreDecr(target: $l)
         | "$" p:primary -> Field(index: $p)
         | "(" e:exprlist ")" -> Group(items: $e)
@@ -376,6 +389,11 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
   PostDecr : show = "{}--" of $target.show .
   PreIncr  : show = "++{}" of $target.show .
   PreDecr  : show = "--{}" of $target.show .
+
+  Getline(into: nil, from: nil) : show = "getline" .
+  Getline(into: nil) : show = "getline < {}" of $from.show .
+  Getline(from: nil) : show = "getline {}" of $into.show .
+  Getline            : show = "getline {} < {}" of $into.show, $from.show .
 
   Field   : show = "${}" of $index.show .
   Group   : show = "({})" of join($items.show, ", ") .

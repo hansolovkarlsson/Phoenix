@@ -58,22 +58,50 @@
   thread names = []
   thread decls = ""
   thread inits = ""
+  thread gtable = ""
 
   (* The ones the runtime owns. A program that mentions `NR` is not declaring
    * anything. *)
   Var : special = defined([["NR", true], ["NF", true], ["FS", true],
                            ["OFS", true], ["ORS", true], ["CONVFMT", true],
                            ["OFMT", true], ["RSTART", true], ["RLENGTH", true],
-                           ["SUBSEP", true]], $name)
+                           ["SUBSEP", true], ["FNR", true],
+                           ["FILENAME", true]], $name)
       : known   = $special or defined($names, $name)
       : decls   = lookup([[true, $decls]], $known,
                          "{}static Cell v_{};\n" of $decls, $name)
       : inits   = lookup([[true, $inits]], $known,
                          "{}  v_{} = uninit();\n" of $inits, $name)
+      (* And the same names again as a table, so that a `name=value` on the
+       * command line can find the variable it is about. awk assigns those
+       * when the reader reaches them, which is a run-time question about a
+       * name, and this is the only place the answer exists. *)
+      : gtable  = lookup([[true, $gtable]], $known,
+                         "{}  {{\"{}\", &v_{}}},\n" of $gtable, $name, $name)
       : names   = lookup([[true, $names]], $known, [...$names, [$name, true]]) .
 
   Program : declarations = $decls
-          : initialisers = $inits .
+          : initialisers = $inits
+          : globaltable  = $gtable
+          : globalcount  = size($names) .
+
+(* ------------------------------------------------------------------ *)
+(* `printf("...", a, b)`
+ *
+ * A parenthesised list after `print` or `printf` is **its arguments**, not one
+ * argument that happens to be parenthesised -- `printf("%s %s\n", a, b)` is
+ * how most awk is written. The tree cannot say which, because both are a
+ * `Group` in the one place a group may be; so the group comes out of the tree
+ * before anything walks it.
+ *
+ * A clause would have needed four of them -- print and printf, each with and
+ * without a redirect -- and each would have had to reach inside a list to find
+ * the group. This is two rules and reaches inside a pattern, which is what a
+ * rewrite is for.
+ *)
+%rewrite unparen bottomup
+  Print(args: [Group(items: g)], to: t)  => Print(args: $g, to: $t) .
+  Printf(args: [Group(items: g)], to: t) => Printf(args: $g, to: $t) .
 
 (* ------------------------------------------------------------------ *)
 (* The code                                                             *)
@@ -82,10 +110,17 @@
 
   (* ---- what stage one does not do, said by name ---- *)
 
-  Range     ! true : "a range pattern is stage three" .
-  Append    ! true : "redirecting output is stage three" .
-  Write     ! true : "redirecting output is stage three" .
-  Pipe      ! true : "a pipe is stage three" .
+  (* The one construct that is described and not compiled: `getline` needs a
+   * second reader, and the two forms this grammar does not describe need `|`
+   * to be an expression operator. Neither is here, and both are refused rather
+   * than guessed at. *)
+  Getline ! true : "getline is not compiled" .
+
+  (* Where output goes. A name stays open until `close` or the end, because
+   * `print > "f"` twice appends to what it opened the first time. *)
+  Write  : stream = "file_out({})" of $file.out    : out = "" .
+  Append : stream = "file_app({})" of $file.out    : out = "" .
+  Pipe   : stream = "pipe_out({})" of $command.out : out = "" .
 
   (* ---- expressions: every one answers a C expression of type `Cell` ---- *)
 
@@ -103,6 +138,8 @@
   Var(name: "RSTART")  : out = "mknum(RSTART)" .
   Var(name: "RLENGTH") : out = "mknum(RLENGTH)" .
   Var(name: "SUBSEP")  : out = "mkstr(SUBSEP)" .
+  Var(name: "FNR")     : out = "mknum(FNR)" .
+  Var(name: "FILENAME") : out = "mkstr(FILENAME)" .
   (* Passed to a function, a variable has its array made first: an array is by
    * reference and a scalar by value, and awk decides which by what the callee
    * does with it. Everything that is not a variable is passed as it stands,
@@ -286,14 +323,19 @@
   Call(name: "sprintf") : out = "awk_sprintf((Cell[]){{{}}}, {})"
                             of join($args.out, ", "), size($args) - 1 .
 
-  (* `sub` and `gsub` write through their third argument, which defaults to the
-   * record -- so the target is an address and not a value. *)
+  (* `sub` and `gsub` write through their third argument, so the target is an
+   * address and not a value -- and with no third argument they work on the
+   * **record**, which means writing it back and splitting it again. Two
+   * shapes, told apart by how many arguments there are, which is what a list
+   * pattern is for. *)
+  Call(name: "sub",  args: [r, t]) : out = "awk_sub0({}, {}, 0)"
+                                       of at($args.reout, 1), $t.out .
+  Call(name: "gsub", args: [r, t]) : out = "awk_sub0({}, {}, 1)"
+                                       of at($args.reout, 1), $t.out .
   Call(name: "sub")  : out = "awk_sub({}, {}, &{}, 0)"
-                         of at($args.reout, 1), at($args.out, 2),
-                            at([...$args.out, "REC0", "REC0"], 3) .
+                         of at($args.reout, 1), at($args.out, 2), at($args.out, 3) .
   Call(name: "gsub") : out = "awk_sub({}, {}, &{}, 1)"
-                         of at($args.reout, 1), at($args.out, 2),
-                            at([...$args.out, "REC0", "REC0"], 3) .
+                         of at($args.reout, 1), at($args.out, 2), at($args.out, 3) .
   Call(name: "match") : out = "re_match_at({}, {})" of at($args.out, 1), at($args.reout, 2) .
 
   Call(name: "tolower") : out = "awk_tolower({})" of join($args.out, "") .
@@ -309,7 +351,11 @@
   Call(name: "srand") : out = "awk_srand({}, {})"
                                 of at([...$args.out, "mknum(0)"], 1), size($args) .
 
-  Call ! true : "'{}' is stage three" of $name .
+  Call(name: "close")  : out = "awk_close({})" of join($args.out, "") .
+  Call(name: "system") : out = "awk_system({})" of join($args.out, "") .
+  Call(name: "fflush") : out = "awk_fflush()" .
+
+  Call ! true : "'{}' is not compiled" of $name .
 
   (* ---- statements ----
    *
@@ -359,15 +405,29 @@
   (* `print` with nothing after it prints the record. Otherwise the values go
    * into an array a counter fills, which is how an emitter with no way to
    * count a list writes one out. *)
-  Print(args: [])  : out = "  {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
+  (* Four clauses rather than two, because where the output goes is part of
+   * the statement and not an argument to it. The one with nothing after it
+   * prints the record. *)
+  Print(args: [], to: nil) : out = "  {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
+                           : stmt = $out .
+  Print(args: [])  : out = "  {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_fprint({}, a, 1); }}\n"
+                             of $to.stream
                    : stmt = $out .
-  Print            : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_print(a, {}); }}\n"
+  Print(to: nil)   : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_print(a, {}); }}\n"
                              of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
                                 size($args)
                    : stmt = $out .
-  Printf           : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_printf(&a[0], a + 1, {}); }}\n"
+  Print            : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_fprint({}, a, {}); }}\n"
+                             of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
+                                $to.stream, size($args)
+                   : stmt = $out .
+  Printf(to: nil)  : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_printf(&a[0], a + 1, {}); }}\n"
                              of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
                                 size($args) - 1
+                   : stmt = $out .
+  Printf           : out = "  {{ Cell a[{}]; int k = 0;\n{}    awk_fprintf({}, &a[0], a + 1, {}); }}\n"
+                             of size($args), join(each($args.out, "    a[k++] = {};\n"), ""),
+                                $to.stream, size($args) - 1
                    : stmt = $out .
 
   (* ---- the shape of the program ----
@@ -390,6 +450,25 @@
                      : funcs = "" : ahead = ""
                      : rules  = "  if (truth_of({})) {{ Cell a[1]; a[0] = fld_of(mknum(0)); awk_print(a, 1); }}\n"
                                   of $pattern.out .
+  (* **A range is a rule with a memory**, and the memory is a static named
+   * after where the rule was written -- which is what `$pos` is for. Once it
+   * is on, the record runs; the second pattern is tried on the same record, so
+   * `/x/,/x/` matches one line and not the rest of the file. *)
+  Rule(pattern: Range)
+       : begins = "" : ends = "" : reads = "y" : out = "" : funcs = ""
+       : id     = "{}_{}" of $pos.line, $pos.column
+       : ahead  = "static int in_range_{};\n" of $id
+       : rules  = join(["  {{ int hit = 0;",
+                        "    if (in_range_{}) {{ hit = 1; if (truth_of({})) in_range_{} = 0; }}",
+                        "    else if (truth_of({})) {{ hit = 1; in_range_{} = 1;",
+                        "                             if (truth_of({})) in_range_{} = 0; }}",
+                        "    if (hit) {{\n{}    }} }}\n"], "\n")
+                    of $id, $pattern.to.out, $id,
+                       $pattern.from.out, $id, $pattern.to.out, $id,
+                       join($body.stmt, "") .
+
+  Range : out = "" .
+
   Rule               : begins = "" : ends = "" : reads = "y" : out = ""
                      : funcs = "" : ahead = ""
                      : rules  = "  if (truth_of({})) {{\n{}  }}\n"
@@ -495,9 +574,39 @@
       "    Cell c; c.s = p; c.n = 0; c.isnum = 0; c.strnum = 0; c.map = 0; return c;",
       "}",
       "",
+      "/* ---- regular expressions ----",
+      "   Compiled once and kept, because a pattern in a loop is the common case and",
+      "   `regcomp` is not cheap. */",
+      "typedef struct RE { char *pat; regex_t re; struct RE *next; } RE;",
+      "static RE *RECACHE = 0;",
+      "",
+      "static regex_t *re_get(const char *pat) {",
+      "    for (RE *r = RECACHE; r; r = r->next) if (strcmp(r->pat, pat) == 0) return &r->re;",
+      "    RE *r = xmalloc(sizeof *r);",
+      "    r->pat = dup_str(pat);",
+      "    if (regcomp(&r->re, pat, REG_EXTENDED) != 0) {",
+      "        fprintf(stderr, \"awk: cannot compile regular expression /%s/\\n\", pat);",
+      "        exit(2);",
+      "    }",
+      "    r->next = RECACHE; RECACHE = r;",
+      "    return &r->re;",
+      "}",
+      "static double RSTART = 0, RLENGTH = -1;",
+      "",
+      "static int re_find(const char *s, const char *pat, int *start, int *len) {",
+      "    regmatch_t m;",
+      "    if (regexec(re_get(pat), s, 1, &m, 0) != 0) return 0;",
+      "    if (start) *start = (int)m.rm_so;",
+      "    if (len)   *len   = (int)(m.rm_eo - m.rm_so);",
+      "    return 1;",
+      "}",
+      "",
       "/* ---- the record, and its fields ---- */",
       "",
       "static char  *RECORD = 0;",
+      "static FILE  *INPUT = 0;",
+      "static double FNR = 0;",
+      "static char  *FILENAME = \"\";",
       "static Cell  *FIELD  = 0;",
       "static int    NFIELD = 0, FIELDCAP = 0;",
       "static double NR = 0, NF = 0;",
@@ -521,6 +630,24 @@
       "            memcpy(t, start, (size_t)(p - start)); t[p - start] = 0;",
       "            FIELD[NFIELD++] = mkinput(t);",
       "        }",
+      "    } else if (FS[1]) {",
+      "        /* More than one character is a regular expression, which is what",
+      "           `FS = \"[:,]\"` means and what one-true-awk does with it. */",
+      "        for (;;) {",
+      "            int at = 0, len = 0;",
+      "            int found = re_find(p, FS, &at, &len) && len > 0;",
+      "            int cut = found ? at : (int)strlen(p);",
+      "            if (NFIELD == FIELDCAP) {",
+      "                FIELDCAP = FIELDCAP ? FIELDCAP * 2 : 16;",
+      "                FIELD = realloc(FIELD, (size_t)FIELDCAP * sizeof *FIELD);",
+      "                if (!FIELD) { fputs(\"awk: out of memory\\n\", stderr); exit(2); }",
+      "            }",
+      "            char *t = xmalloc((size_t)cut + 1);",
+      "            memcpy(t, p, (size_t)cut); t[cut] = 0;",
+      "            FIELD[NFIELD++] = mkinput(t);",
+      "            if (!found) break;",
+      "            p += cut + len;",
+      "        }",
       "    } else {",
       "        for (;;) {",
       "            const char *start = p;",
@@ -540,23 +667,31 @@
       "    NF = NFIELD;",
       "}",
       "",
+      "static int next_file(void);",
+      "",
       "static int next_record(void) {",
       "    static char *line = 0; static size_t cap = 0;",
-      "    size_t len = 0;",
-      "    int ch;",
+      "    extern FILE *INPUT;",
       "    for (;;) {",
-      "        ch = getchar();",
-      "        if (ch == EOF && len == 0) return 0;",
-      "        if (ch == '\\n' || ch == EOF) break;",
+      "        if (!INPUT && !next_file()) return 0;",
+      "        size_t len = 0;",
+      "        int ch, any = 0;",
+      "        for (;;) {",
+      "            ch = getc(INPUT);",
+      "            if (ch == EOF) break;",
+      "            any = 1;",
+      "            if (ch == '\\n') break;",
+      "            if (len + 1 >= cap) { cap = cap ? cap * 2 : 128; line = realloc(line, cap); }",
+      "            line[len++] = (char)ch;",
+      "        }",
+      "        if (!any) { if (INPUT != stdin) fclose(INPUT); INPUT = 0; continue; }",
       "        if (len + 1 >= cap) { cap = cap ? cap * 2 : 128; line = realloc(line, cap); }",
-      "        line[len++] = (char)ch;",
+      "        line[len] = 0;",
+      "        RECORD = dup_str(line);",
+      "        NR++; FNR++;",
+      "        split_record();",
+      "        return 1;",
       "    }",
-      "    if (len + 1 >= cap) { cap = cap ? cap * 2 : 128; line = realloc(line, cap); }",
-      "    line[len] = 0;",
-      "    RECORD = dup_str(line);",
-      "    NR++;",
-      "    split_record();",
-      "    return 1;",
       "}",
       "",
       "static Cell get_field(double which) {",
@@ -568,13 +703,14 @@
       "",
       "/* ---- output ---- */",
       "",
-      "static void awk_print(Cell *a, int n) {",
+      "static void awk_fprint(FILE *f, Cell *a, int n) {",
       "    for (int i = 0; i < n; i++) {",
-      "        if (i) fputs(OFS, stdout);",
-      "        fputs(to_out(&a[i]), stdout);",
+      "        if (i) fputs(OFS, f);",
+      "        fputs(to_out(&a[i]), f);",
       "    }",
-      "    fputs(ORS, stdout);",
+      "    fputs(ORS, f);",
       "}",
+      "static void awk_print(Cell *a, int n) { awk_fprint(stdout, a, n); }",
       "",
       "/* awk's printf: the format is walked and each conversion takes the next value",
       "   as whatever that conversion wants. */",
@@ -632,7 +768,9 @@
       "    buf_need(&b, 1); b.p[b.at] = 0;",
       "    return b.p;",
       "}",
-      "static void awk_printf(Cell *fmt, Cell *a, int n) { fputs(format_with(fmt, a, n), stdout); }",
+      "static void awk_fprintf(FILE *f, Cell *fmt, Cell *a, int n) { fputs(format_with(fmt, a, n), f); }",
+      "static void awk_printf(Cell *fmt, Cell *a, int n) { awk_fprintf(stdout, fmt, a, n); }",
+      "",
       "",
       "",
       "/* ---- what emitted code calls ----",
@@ -644,6 +782,14 @@
       "static int         cmp_of(Cell a, Cell b) { return cmp_cells(&a, &b); }",
       "static Cell        cat_of(Cell a, Cell b) { return cat_cells(&a, &b); }",
       "static Cell        fld_of(Cell i)         { return get_field(to_num(&i)); }",
+      "",
+      "static int re_matches(Cell s, Cell pat) { return re_find(str_of(s), str_of(pat), 0, 0); }",
+      "static Cell re_match_at(Cell s, Cell pat) {",
+      "    int start, len;",
+      "    if (!re_find(str_of(s), str_of(pat), &start, &len)) { RSTART = 0; RLENGTH = -1; return mknum(0); }",
+      "    RSTART = start + 1; RLENGTH = len;",
+      "    return mknum(RSTART);",
+      "}",
       "",
       "static double div_by(double a, double b) {",
       "    if (b == 0) { fputs(\"awk: division by zero\\n\", stderr); exit(2); }",
@@ -729,40 +875,6 @@
       "    Cell sep = mkstr(SUBSEP);",
       "    Cell left = cat_cells(&a, &sep);",
       "    return cat_cells(&left, &b);",
-      "}",
-      "",
-      "/* ---- regular expressions ----",
-      "   Compiled once and kept, because a pattern in a loop is the common case and",
-      "   `regcomp` is not cheap. */",
-      "typedef struct RE { char *pat; regex_t re; struct RE *next; } RE;",
-      "static RE *RECACHE = 0;",
-      "",
-      "static regex_t *re_get(const char *pat) {",
-      "    for (RE *r = RECACHE; r; r = r->next) if (strcmp(r->pat, pat) == 0) return &r->re;",
-      "    RE *r = xmalloc(sizeof *r);",
-      "    r->pat = dup_str(pat);",
-      "    if (regcomp(&r->re, pat, REG_EXTENDED) != 0) {",
-      "        fprintf(stderr, \"awk: cannot compile regular expression /%s/\\n\", pat);",
-      "        exit(2);",
-      "    }",
-      "    r->next = RECACHE; RECACHE = r;",
-      "    return &r->re;",
-      "}",
-      "static double RSTART = 0, RLENGTH = -1;",
-      "",
-      "static int re_find(const char *s, const char *pat, int *start, int *len) {",
-      "    regmatch_t m;",
-      "    if (regexec(re_get(pat), s, 1, &m, 0) != 0) return 0;",
-      "    if (start) *start = (int)m.rm_so;",
-      "    if (len)   *len   = (int)(m.rm_eo - m.rm_so);",
-      "    return 1;",
-      "}",
-      "static int re_matches(Cell s, Cell pat) { return re_find(str_of(s), str_of(pat), 0, 0); }",
-      "static Cell re_match_at(Cell s, Cell pat) {",
-      "    int start, len;",
-      "    if (!re_find(str_of(s), str_of(pat), &start, &len)) { RSTART = 0; RLENGTH = -1; return mknum(0); }",
-      "    RSTART = start + 1; RLENGTH = len;",
-      "    return mknum(RSTART);",
       "}",
       "",
       "/* ---- the record, written to ---- */",
@@ -948,20 +1060,128 @@
       "   by what the callee does. Making the map before the call means a variable",
       "   used as an array inside is the caller's array, whichever way it is used. */",
       "static Cell arr_ready(Cell *v) { arr_of(v); return *v; }",
+      "",
+      "/* ---- where output goes ----",
+      "   A name is a file or a command; either way it stays open until `close` or",
+      "   the end, because awk's `print > \"f\"` appends to what it already opened. */",
+      "typedef struct Out { char *name; FILE *f; int is_pipe; struct Out *next; } Out;",
+      "static Out *OUTS = 0;",
+      "",
+      "static FILE *out_for(const char *name, const char *mode, int is_pipe) {",
+      "    for (Out *o = OUTS; o; o = o->next)",
+      "        if (o->is_pipe == is_pipe && strcmp(o->name, name) == 0) return o->f;",
+      "    FILE *f = is_pipe ? popen(name, \"w\") : fopen(name, mode);",
+      "    if (!f) { fprintf(stderr, \"awk: cannot open %s\\n\", name); exit(2); }",
+      "    Out *o = xmalloc(sizeof *o);",
+      "    o->name = dup_str(name); o->f = f; o->is_pipe = is_pipe; o->next = OUTS;",
+      "    OUTS = o;",
+      "    return f;",
+      "}",
+      "static FILE *file_out(Cell n)   { return out_for(str_of(n), \"w\", 0); }",
+      "static FILE *file_app(Cell n)   { return out_for(str_of(n), \"a\", 0); }",
+      "static FILE *pipe_out(Cell n)   { return out_for(str_of(n), \"w\", 1); }",
+      "",
+      "static Cell awk_close(Cell name) {",
+      "    const char *n = str_of(name);",
+      "    Out **p = &OUTS;",
+      "    while (*p) {",
+      "        if (strcmp((*p)->name, n) == 0) {",
+      "            int r = (*p)->is_pipe ? pclose((*p)->f) : fclose((*p)->f);",
+      "            *p = (*p)->next;",
+      "            return mknum(r);",
+      "        }",
+      "        p = &(*p)->next;",
+      "    }",
+      "    return mknum(-1);",
+      "}",
+      "static void close_all(void) {",
+      "    for (Out *o = OUTS; o; o = o->next) { if (o->is_pipe) pclose(o->f); else fclose(o->f); }",
+      "    OUTS = 0;",
+      "}",
+      "static Cell awk_system(Cell cmd) { fflush(0); return mknum(system(str_of(cmd)) / 256); }",
+      "static Cell awk_fflush(void)     { fflush(0); return mknum(0); }",
+      "",
+      "/* ---- the input, which is the files named on the command line ---- */",
+      "",
+      "static char **ARGF = 0;",
+      "static int    ARGFN = 0, ARGFAT = 0;",
+      "",
+      "/* A `name=value` operand is an assignment made when the reader reaches it, not",
+      "   at the start -- which is what lets `awk '{...}' n=1 a.txt n=2 b.txt` work. */",
+      "typedef struct { const char *name; Cell *slot; } Global;",
+      "static Global *GLOBALS = 0;",
+      "static int NGLOBALS = 0;",
+      "",
+      "static int assign_arg(const char *s) {",
+      "    const char *eq = strchr(s, '=');",
+      "    if (!eq || eq == s) return 0;",
+      "    for (const char *p = s; p < eq; p++)",
+      "        if (!isalnum((unsigned char)*p) && *p != '_') return 0;",
+      "    for (int i = 0; i < NGLOBALS; i++)",
+      "        if ((int)strlen(GLOBALS[i].name) == eq - s",
+      "            && memcmp(GLOBALS[i].name, s, (size_t)(eq - s)) == 0) {",
+      "            *GLOBALS[i].slot = mkinput(eq + 1);",
+      "            return 1;",
+      "        }",
+      "    return 1;                       /* a name the program never mentions */",
+      "}",
+      "",
+      "static int next_file(void) {",
+      "    while (ARGFAT < ARGFN) {",
+      "        char *a = ARGF[ARGFAT++];",
+      "        if (assign_arg(a)) continue;",
+      "        INPUT = strcmp(a, \"-\") == 0 ? stdin : fopen(a, \"r\");",
+      "        if (!INPUT) { fprintf(stderr, \"awk: can't open file %s\\n\", a); exit(2); }",
+      "        FILENAME = a; FNR = 0;",
+      "        return 1;",
+      "    }",
+      "    if (ARGFN == 0 && !INPUT && ARGFAT == 0) { ARGFAT = 1; INPUT = stdin; return 1; }",
+      "    return 0;",
+      "}",
+      "",
+      "/* `-v name=value` is applied before BEGIN; a bare `name=value` among the files",
+      "   is applied when the reader reaches it. Same syntax, different moment, which",
+      "   is awk's rule and the reason both exist. */",
+      "static int take_options(int argc, char **argv) {",
+      "    int i = 1;",
+      "    while (i < argc && strcmp(argv[i], \"-v\") == 0 && i + 1 < argc) {",
+      "        assign_arg(argv[i + 1]);",
+      "        i += 2;",
+      "    }",
+      "    return i;",
+      "}",
+      "static void input_from(int argc, char **argv, int at) {",
+      "    ARGF = argv + at; ARGFN = argc - at; ARGFAT = 0;",
+      "}",
+      "",
+      "/* `sub(re, repl)` with no third argument works on the record, which means",
+      "   writing it back and splitting it again. */",
+      "static Cell awk_sub0(Cell re, Cell repl, int global) {",
+      "    Cell t = mkinput(RECORD ? RECORD : \"\");",
+      "    Cell n = awk_sub(re, repl, &t, global);",
+      "    if (to_num(&n) > 0) set_record(to_str(&t));",
+      "    return n;",
+      "}",
               "",
               $declarations,
               "static int awk_status = 0;",
               join($items.ahead, ""),
               join($items.funcs, ""),
-              "int main(void)",
+              "int main(int argc, char **argv)",
               "{",
+              "  static Global gs[] = {",
+              $globaltable,
+              "    {0, 0} };",
+              ("  GLOBALS = gs; NGLOBALS = {};" of $globalcount),
               $initialisers,
+              "  { int at = take_options(argc, argv); input_from(argc, argv, at); }",
               join($items.begins, ""),
               $loop,
               "awk_end: ;",
               join($items.ends, ""),
+              "  close_all();",
               "  return awk_status;",
               "}"
             ], "\n") .
 
-%driver c = functions, calls, globals, emit-c -> out .
+%driver c = functions, calls, unparen, globals, emit-c -> out .

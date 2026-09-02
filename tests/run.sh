@@ -1110,12 +1110,13 @@ fi
 # than mis-compiled. All three of these are valid awk.
 c="$root/languages/awk/awk-c.phx"
 t="$root/languages/awk/tests/not-yet"
-refuses "output sent to a file"  "redirecting output is stage three" \
-        --driver c "$c" "$t/redirect.awk"
-refuses "output sent to a command" "a pipe is stage three" \
-        --driver c "$c" "$t/pipe.awk"
-refuses "a range pattern, which is a rule with a memory" "a range pattern is stage three" \
-        --driver c "$c" "$t/range.awk"
+# `getline` is described and not compiled -- described because without a rule
+# mentioning the word, `getline line` reads as two variables concatenated,
+# which is a silent mis-parse of ordinary awk.
+refuses "getline, which is read and not compiled" "getline is not compiled" \
+        --driver c "$c" "$t/getline.awk"
+refuses "and the two forms of it that need | to be an operator" "and found" \
+        "$a" "$d/getline-pipe.awk"
 
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"

@@ -705,12 +705,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 171 checks, covering 35 Pascal programs against fpc
+make test       # 170 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 169 of the 171 need only what is vendored here, and the two
+repository** — 168 of the 170 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -931,9 +931,9 @@ that e2fsprogs, ncurses and vim ship, run under `/usr/bin/awk` before and after
 this description rewrites them:
 
 ```
-ok    27 awk programs parse, render, and parse to the same tree, 0 do not
+ok    28 awk programs parse, render, and parse to the same tree, 0 do not
 ok    7 awk programs and 6 other people wrote do the same thing rendered, 0 do not
-ok    10 awk programs compiled to C print what awk prints, 0 do not
+ok    13 awk programs and 6 other people wrote compile to C that prints what awk prints
 ```
 
 The second line is the one that earns its place. The first was green while two
@@ -941,6 +941,12 @@ constructs were being written back out as programs awk rejects — `if (c) { a }
 else { b }` and `do { a }; while (c)`, where a `;` after a block ends the
 statement and orphans what follows. Both read back as the *same tree*, which is
 exactly the failure a round trip cannot see.
+
+The third is the one that says the most. `et_c.awk` is 269 lines of awk that
+e2fsprogs uses to generate C error tables; compiled by
+[`languages/awk/awk-c.phx`](languages/awk/awk-c.phx) it becomes 1,149 lines of
+C and prints the same 56 lines that `/usr/bin/awk` does. **Nobody involved in
+writing it had heard of this project.**
 
 The strongest available check that this reads real published grammars rather
 than only its own examples: [`languages/pascal/tests/grammar/pascal.bnf`](languages/pascal/tests/grammar/) is

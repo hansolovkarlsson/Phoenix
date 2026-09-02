@@ -190,7 +190,7 @@ reason: a shape that is right is cheaper to keep than a shape that is minimal.
 *size* of something rather than about whether it can be said at all.
 
 `languages/pascal/pascal-c.phx` emits four `#include`s and Pascal's own types
-do the rest. `languages/awk/awk-c.phx` emits **three hundred lines of C** —
+do the rest. `languages/awk/awk-c.phx` emits **seven hundred lines of C** —
 awk's value model is a string and a number at once, and its one aggregate is a
 hash table, and a compiled awk program has to carry both — held as a list of
 one-line literals and joined:
