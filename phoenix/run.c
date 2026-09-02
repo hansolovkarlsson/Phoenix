@@ -505,6 +505,49 @@ static void run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
     }
 }
 
+/* Whether the rule a node matched has a clause for this attribute. That is
+ * what decides whether an `otherwise` runs -- a property of the rule and not
+ * of the node, so it is the same answer every time and can be read off the
+ * description. A node that matched no rule at all gets every one of them. */
+static bool rule_defines(const PassRule *rule, const char *attr)
+{
+    if (!rule) return false;
+
+    for (int i = 0; i < rule->nclauses; i++)
+        if (rule->clauses[i].attr && strcmp(rule->clauses[i].attr, attr) == 0)
+            return true;
+    return false;
+}
+
+/* The defaults, after the node's own clauses so that they can read what those
+ * worked out. A field of the same name is the node answering too -- `.name`
+ * reads a field before an attribute -- which is the reading that makes
+ * `otherwise` mean "unless the node says otherwise" rather than "unless a
+ * clause says otherwise". */
+static void run_defaults(Run *r, Value *v, const PassRule *rule)
+{
+    const Pass *p = r->pass;
+    if (!p->ndefaults) return;
+
+    Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r, .pos = v->pos };
+
+    for (int i = 0; i < p->ndefaults; i++) {
+        const Clause *c = &p->defaults[i];
+        if (rule_defines(rule, c->attr)) continue;
+
+        Value *got = eval_expr(&e, c->value);
+        if (!got) got = value_error(r->a);
+
+        if (c->kind == C_THREAD) {
+            for (int k = 0; k < p->nthreads; k++)
+                if (strcmp(r->threads[k].name, c->attr) == 0)
+                    r->threads[k].value = got;
+        } else {
+            attr_set(r, v, c->attr, got);
+        }
+    }
+}
+
 static void walk(Run *r, Value *v)
 {
     if (v->kind == V_LIST) {
@@ -539,6 +582,7 @@ static void walk(Run *r, Value *v)
     r->nbound = minen;
 
     if (rule) run_clauses(r, v, rule, false);     /* leaving: everything else */
+    run_defaults(r, v, rule);
 
     r->node   = outer_node;
     r->bound  = outer_bound;

@@ -153,7 +153,8 @@ names  = n:name { m:name -> $m } -> [$n, ...$2] .
  * a place that wants a plain name says which words it will also take. It is
  * the wart the README calls *a grammar module imposes reserved words*, met in
  * the one description guaranteed to meet it. *)
-word = name | "of" | "and" | "or" | "not" | "div" | "mod" | "thread" | "down" .
+word = name | "of" | "and" | "or" | "not" | "div" | "mod" | "thread" | "down"
+     | "otherwise" .
 answer = "->" a:name -> $a
        | -> NoAnswer .
 
@@ -184,7 +185,8 @@ atom = lo:literal ".." hi:literal -> Range(low: $lo, high: $hi)   (* order *)
 clause = p:pattern d:{ definition-clause | check-clause } "."
        -> Clause(pattern: $p, does: $d)
        | "thread" n:name "=" e:action [ "." ] -> Thread(name: $n, start: $e)
-       | "thread" n:name [ "." ]              -> Thread(name: $n, start: NoAction) .
+       | "thread" n:name [ "." ]              -> Thread(name: $n, start: NoAction)
+       | "otherwise" n:name "=" e:action [ "." ] -> Otherwise(attr: $n, value: $e) .
 
 definition-clause = ":" "down" a:word "=" e:action -> Inherited(attr: $a, value: $e)
                   | ":" a:word "=" e:action        -> Synthesised(attr: $a, value: $e) .

@@ -269,6 +269,25 @@ Which is why a `down` clause cannot read an attribute its own rule computes,
 and a check — which runs before the attributes it guards — cannot read those
 either. Both are refused when the description is read.
 
+### `otherwise`
+
+```
+otherwise type = "void"
+```
+
+What a node answers with when the rule it matched has no clause for that
+attribute — including a node that matched no rule at all. It runs **after** the
+node's own clauses, so it can read what they worked out, and it may name a
+threaded attribute, in which case it updates the thread the same way a clause
+would.
+
+A node with a *field* of that name reads the field, since `.name` reads a field
+before an attribute. That is the node saying so itself, which is what this is
+"otherwise" to.
+
+`down` is refused: what a node hands its children is not what it answers with,
+and every node hands one down already.
+
 ### `down` on a threaded attribute
 
 A `down` clause naming a **threaded** attribute sets the thread for the

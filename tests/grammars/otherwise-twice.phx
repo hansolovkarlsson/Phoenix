@@ -1,0 +1,16 @@
+(* Two answers to what a node answers with when it has none of its own. Which
+ * one won would be the order they were written in, and nothing about the
+ * notation says an order there is meaningful. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass p
+  otherwise kind = "one"
+  otherwise kind = "two"
+  Number : out = "{}" of $kind .
+%driver d = p -> out .

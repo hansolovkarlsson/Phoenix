@@ -265,6 +265,22 @@ static void emit_passes(Emit *e)
             fprintf(e->out, "#define pp%d_%d (&p%d)\n", i, k, pat);
         }
 
+        if (p->ndefaults) {
+            int *dv = arena_alloc(e->g->arena,
+                                  (size_t)p->ndefaults * sizeof *dv);
+            for (int k = 0; k < p->ndefaults; k++)
+                dv[k] = emit_expr(e, p->defaults[k].value);
+
+            fprintf(e->out, "static Clause df%d[] = {", i);
+            for (int k = 0; k < p->ndefaults; k++) {
+                const Clause *c = &p->defaults[k];
+                fprintf(e->out, "{%d,", (int)c->kind);
+                emit_string(e, c->attr);
+                fprintf(e->out, ",&x%d,NULL,%zu},", dv[k], c->pos);
+            }
+            fputs("};\n", e->out);
+        }
+
         fprintf(e->out, "static PassRule pr%d[] = {", i);
         for (int k = 0; k < p->nrules; k++)
             fprintf(e->out, "{pp%d_%d,cl%d_%d,%d,%zu},",
@@ -279,7 +295,10 @@ static void emit_passes(Emit *e)
         emit_string(e, p->name);
         if (p->nthreads) fprintf(e->out, ",tn%d,tv%d,%d,", i, i, p->nthreads);
         else             fputs(",NULL,NULL,0,", e->out);
-        fprintf(e->out, "pr%d,%d,%zu},\n", i, p->nrules, p->pos);
+        fprintf(e->out, "pr%d,%d,", i, p->nrules);
+        if (p->ndefaults) fprintf(e->out, "df%d,%d,", i, p->ndefaults);
+        else              fputs("NULL,0,", e->out);
+        fprintf(e->out, "%zu},\n", p->pos);
     }
     fputs("};\n", e->out);
 }

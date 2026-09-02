@@ -337,6 +337,25 @@ struct Pass {
     int       nthreads;
     PassRule *rules;
     int       nrules;
+
+    /* `otherwise type = "void"` -- what a node has when its own rule does not
+     * work one out.
+     *
+     * A clause is keyed on a node type, and some attributes are answered the
+     * same way by nearly every type. `languages/pascal/pascal.phx` wrote
+     * `type = "void"` twenty-one times so that a node above could read a type
+     * without asking which kind of statement it was; the `.sob` backend would
+     * have written one line of a run table once per node type that can be a
+     * statement.
+     *
+     * **It is still a clause about a node**, which is the whole reason this is
+     * the mechanism rather than a function or a macro: the general one. It
+     * runs after the node's own clauses, so it can read what they worked out,
+     * and only for the attributes that rule left alone.
+     */
+    Clause   *defaults;
+    int       ndefaults;
+
     size_t    pos;
 };
 

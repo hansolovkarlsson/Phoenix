@@ -316,6 +316,28 @@ refuses "a rewrite reading an attribute" "rather than what a pass worked out" \
 refuses "a rewrite named like a pass" "is a pass as well as a rewrite" \
         "$root/tests/grammars/rewrite-named-twice.phx"
 
+echo "what a node answers otherwise"
+# A clause is keyed on a node type, and some attributes are answered the same
+# way by nearly every type -- `languages/pascal/pascal.phx` wrote
+# `type = "void"` twenty-one times so that a node above could read a type
+# without asking which kind of statement it was. `otherwise` is the one clause
+# that says it, and it is still a clause about a node: the general one.
+ow="$root/tests/grammars/otherwise.phx"
+prints "a node with none of its own takes the default" \
+       "a row: a seven, something" "$ow" "$root/tests/sources/seven-two.txt"
+refuses "two answers to what a node answers otherwise" "already has an 'otherwise'" \
+        "$root/tests/grammars/otherwise-twice.phx"
+refuses "an 'otherwise down'" "is what it hands its children" \
+        "$root/tests/grammars/otherwise-down.phx"
+
+# Pascal is where it came from, and the 35 programs above are what says it
+# still means the same thing. This says the twenty-one are gone.
+if [ "$(grep -c ': type = "void"' "$root/languages/pascal/pascal.phx")" = "0" ]; then
+    report pass "and Pascal says it once"
+else
+    report fail "and Pascal says it once" "'type = \"void\"' is still written out"
+fi
+
 echo "drivers"
 refuses "a driver in the wrong order" "nothing before it defines one" \
         "$root/tests/grammars/misordered-driver.phx"

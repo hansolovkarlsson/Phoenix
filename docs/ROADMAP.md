@@ -11,10 +11,11 @@ predictions made here against what the evidence turned out to say.
 
 ## 1. The stages
 
-The first two are done and are kept here rather than deleted, because what an
+Three of these are done and are kept here rather than deleted, because what an
 entry predicted and what it cost is the only way to tell whether this page is
-worth writing — and one of them predicted wrong, which is the more useful
-half. The rest remain.
+worth writing — and two of them predicted wrong, which is the more useful half.
+One is new, and is the first here that came from a measurement rather than from
+a design.
 
 ### 1.0 A reader-level mechanism, for a target language's imports — **done**
 
@@ -97,46 +98,72 @@ definition down first, and code generated against them can be checked against
 the interpreter that produced them. Doing it the other way round is how two
 implementations appear.
 
-### 1.3 A way for a description to share a computation
+### 1.3 A way for a description to share a computation — **done**
 
-The append-if-absent idiom appears six times in
-[`solveig-sob.phx`](../languages/solveig/solveig-sob.phx) — once per node type
-that interns a name — because there is no way to name a shared computation.
-The notation has clauses keyed by node type and nothing else.
-
-**It is not urgent and it is the most dangerous entry on this page**, because
-the obvious fixes are all a second mechanism: a function, a macro, a rule
-other rules call. Each one would be the first thing in the notation that is
+This entry was the most dangerous on the page and it said so, twice: the
+obvious fixes were all a second mechanism — a function, a macro, a rule other
+rules call — and *"each one would be the first thing in the notation that is
 not a clause about a node, and the reason this tool is small is that there is
-only ever one of those.
+only ever one of those."*
 
-**The second example arrived with [1.1](#11-a-nodes-position-reachable-from-a-clause),
-and it is a different shape.** The first was a computation repeated because
-several node types do the same thing. This one is a computation the notation
-cannot express *at all*:
+**The answer was the general clause about a node**, which is why the warning
+turned out not to apply:
 
-> **A value computed for every element of a list.** `each` applies a *template*
-> to a list, and a template can only write an element out. There is no way to
-> say "for each of these, this expression of it".
+```
+otherwise type = "void"
+```
 
-Two library entries covered the cases the `.sob` line table needed — the size
-of each element, and each of a column of numbers as fixed-width bytes — and two
-are still open, both of them the reason this backend is not byte-for-byte with
-`solas`:
+What a node answers with when its own rule works nothing out. It runs after
+that rule, so it can read what it worked out, and only for the attributes that
+rule left alone; a node with a *field* of the name reads the field, because
+`.name` reads a field before an attribute — which is the node saying so itself,
+and what this is "otherwise" to.
+
+**The second language this entry was waiting for was already written.**
+`languages/pascal/pascal.phx` had `type = "void"` twenty-one times, with a
+comment saying exactly why: *"Everything else a walk reaches, so that a node
+above it can read a type without asking which kind of statement it was."* That
+is one line now. And it settled the shape: what was missing was never a map
+over a list — it was **an attribute defined for every node**, of which a list
+of nodes then has one per element.
+
+It closed both cases this entry had open, and the entry's own framing of them
+as "a `lookup` per element" and "a run per element" was the wrong way round.
+Both are per-*node*:
 
 | | |
 | --- | --- |
-| a **`lookup` per element** | the file table of a chunk holding code from two files: a run per statement naming a row of a table of the distinct files |
-| a **run per element** | the line table of a chunk whose statement holds an inlined block, which holds several lines |
+| the file table | `otherwise fileidx` interns every node's file into the chunk's table; a chunk's file runs are then `$body.fileidx`, a column like any other |
+| the line table | `otherwise runs` gives every node its own code at its own line, and the seven nodes an inlined block became say something else |
 
-**This is now the only entry between `languages/solveig/` and an oracle it
-agrees with on every byte**, which is as concrete as this page gets about
-anything. Three stages have each ended at it, and the fix each time was either
-a library entry or the same line of notation once per node type.
+`languages/solveig/` went from 68 programs agreeing with `solas` byte for byte
+to **71**, and every message it produces now names the right file.
 
-Still worth waiting for a second *language* before deciding what the mechanism
-is. But the evidence has moved twice: it is no longer only about repetition,
-and it is no longer only about tidiness.
+Two library entries — `sizes` and `bytes` over a list — were added along the
+way, for cases this would also have covered. That is the cost of answering a
+question one case at a time before seeing its shape, and it is
+[3.4](#34-a-library-that-grows-without-deciding)'s number to watch going up for
+a reason worth recording.
+
+### 1.4 Where a node ends
+
+**The last thing between `languages/solveig/` and an oracle it agrees with on
+every byte**, and the first entry on this page that came from a measurement
+rather than from a design.
+
+A node carries one position and that is its **first** token. `solas` writes an
+`OP_SEND` after compiling the arguments, so the line it records is where the
+argument list *ends*. Four programs fail inside a send whose arguments run over
+several lines, and name the first of them where `solas` names the last.
+
+Everything else needed is there: `otherwise` gives every node a line run, and a
+composite node can compose one from its children's. What is missing is a second
+number — and the question to answer first is whether a position is a point or a
+**span**, because `$pos.line` and `$pos.column` are the start of one either way
+and nothing has yet wanted the end.
+
+Not urgent. It is four traceback lines in seventy-five programs, and the four
+are counted and named rather than hidden.
 
 ---
 
@@ -258,16 +285,12 @@ What it fixed, measured against the oracle:
 | the call depth | `programs/basic.sol` calls something recursive until the machine stops it and prints what happened; one extra frame per level stopped it a test earlier. It agrees now |
 | the frames in a traceback | an inlined block is a frame that is not there, and there are no longer any extra ones |
 
-**Sixty-eight programs print exactly what `solas`'s bytecode prints.** Seven
-still differ, and *the cause is no longer this entry* — see
-[1.3](#13-a-way-for-a-description-to-share-a-computation), which is now the
-only thing between this backend and an oracle it agrees with on every byte:
-
-- **six lose the file name.** Their top-level chunk holds code from more than
-  one file, and the file table for that is a `lookup` per element of a list.
-- **the line is the enclosing statement's.** A chunk's line table is a run per
-  statement, and a statement holding an inlined block holds several lines.
-  Splitting it is a run computed per element of a list.
+**Sixty-eight programs printed exactly what `solas`'s bytecode prints** when
+this was written, and seven still differed — for reasons that were no longer
+this entry. [1.3](#13-a-way-for-a-description-to-share-a-computation) closed
+six of them and part of the seventh; what is left is
+[1.4](#14-where-a-node-ends), four programs, and seventy-one agreeing on every
+byte.
 
 ---
 
@@ -328,7 +351,15 @@ thing about the notation — see [1.3](#13-a-way-for-a-description-to-share-a-co
 | | |
 | --- | --- |
 | `sizes(list)` | the size of each element. The companion to `positions`: that one answers where each thing is, this one how big it is, and neither can be asked any other way |
-| `bytes(list, width)` | a **column** of numbers, each as bytes. Not a new entry — the same function taking a list, the way `bind` takes names pairwise and `each` takes two lists — and without it a table in a binary format is written as the same line of notation once per node type that could be a row |
+| `bytes(list, width)` | a **column** of numbers, each as bytes. Not a new entry — the same function taking a list, the way `bind` takes names pairwise and `each` takes two lists |
+
+**Both are cases `otherwise` would have covered**, and that is the entry worth
+reading beside this one. They were added while the question looked like *"a map
+over a list"*; it was [1.3](#13-a-way-for-a-description-to-share-a-computation)'s,
+*"an attribute every node has"*, and a list of nodes then has a column of them
+for free. The rule this section states was met by both and they are still here,
+so the rule is not enough on its own: **a library entry answers one case, and
+what it costs is the chance to see the shape of the rest.**
 
 ### 3.5 Conditionals in the meta-language
 

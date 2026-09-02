@@ -15,32 +15,22 @@
 # thrown away, because this backend wrote one line run for a whole chunk and no
 # file table: every message said `[line 1]`. `%include` gave a chunk more than
 # one file to be about, `$pos` gave a clause the position it needed, and
-# `%rewrite inline` made the frames themselves agree. Sixty-eight programs
-# agree on every byte of their output, tracebacks included.
+# `%rewrite inline` made the frames themselves agree, and `otherwise` gave
+# every node a line run and a row in its chunk's file table. Seventy-one
+# programs agree on every byte of their output, tracebacks included, and a
+# message names the right file always.
 #
-# What is still counted apart is **where a traceback points**, and it is no
-# longer about inlining: `%rewrite inline` in `solveig-sob.phx` compiles the
-# block of an `ifTrue:`, a `whileTrue:` and the rest into the enclosing chunk
-# the way `solas` does, so the frames agree. What is left is the line those
-# frames name, and there are two reasons for it, both the same missing thing:
+# What is still counted apart is one thing: **the line a send's own bytes
+# belong to**. `solas` writes an `OP_SEND` after compiling the arguments, so
+# its line is where the argument list *ends*; this backend has only where the
+# node *starts*, because a node carries one position and that is its first
+# token. Four programs fail inside a send whose arguments run over several
+# lines, and name the first of them where `solas` names the last.
 #
-#   - **six lose the file name.** Their top-level chunk holds code from more
-#     than one file, and a file table for that needs a run per statement naming
-#     a row of a table of the distinct files -- a `lookup` for every element of
-#     a list, which the notation cannot compute. The format's own answer is no
-#     file table and a bare line, which is what is written.
-#
-#   - **the line is the enclosing statement's.** A chunk's line table is a run
-#     per statement of its body, and a statement holding an inlined block holds
-#     several lines. Splitting it needs a run computed for every element of a
-#     list, which is the same missing thing again.
-#
-# Both are ROADMAP 1.3. A run where **every** differing line is a traceback
-# line is counted here; anything else is a failure.
-#
-#   - **a file that does not print the same thing twice under `solas`**,
-#     which is a program that reads the clock or the file system rather than
-#     a disagreement about what it compiles to
+# A run where **every** differing line is a traceback line is counted there;
+# anything else is a failure. And a program that does not print the same thing
+# twice under `solas` -- one that reads the clock or the file system -- is
+# counted apart too, since that is not a disagreement about compiling.
 #
 # **Nothing here writes outside Phoenix.** The Solveig checkout is a resource
 # that happens to be on the same computer: it is read, and its `solas` and

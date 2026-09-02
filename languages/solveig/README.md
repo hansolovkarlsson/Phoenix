@@ -152,11 +152,12 @@ to nest — see [the journal](../../docs/journal.md).
 
 [`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
 Solveig repository twice — once with `solas`, once with this description —
-runs both under `solvm`, and requires the same output. **Sixty-eight programs
+runs both under `solvm`, and requires the same output. **Seventy-one programs
 print exactly the same bytes, tracebacks included**: the file and the line a
 message points at are compared rather than normalised away, which they were
-until `$pos` gave a clause the position it needed and `%rewrite inline` made
-the frames themselves agree.
+until `$pos` gave a clause the position it needed, `%rewrite inline` made the
+frames themselves agree, and `otherwise` gave the line and file tables a row
+per statement.
 
 It found two bugs in the front end, neither of them findable by rendering: the
 `-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
@@ -228,11 +229,27 @@ inlining would declare them in the enclosing one, where they could collide.
 Anything else falls through to the ordinary `Send` clause, so the slow path
 stays correct rather than merely unused.
 
+### The line and file tables
+
+A chunk's line table is a run per statement — and a statement holding an
+inlined block holds several lines, so the seven nodes an inlined block became
+compose one from their parts. Every other node takes the default:
+
+```
+otherwise runs = "{}{}" of bytes(size($code), 4), bytes($pos.line, 4)
+```
+
+The file table is interned per chunk, exactly as the name table is, and by an
+`otherwise` for the same reason: **every** node is in a file, and which one is a
+fact about the node rather than about what kind it is. A chunk's file runs are
+then `$body.fileidx`, a column like any other.
+
 ### What it does not do
 
-**Say which file a line is in, when a chunk holds two.** Six programs' `in
-script` frames print a bare line for that reason, and one more prints the
-enclosing statement's line where `solas` prints the inlined statement's. Both
-need a value computed for every element of a list, which the notation cannot
-say — see [ROADMAP 1.3](../../docs/ROADMAP.md). They are the only seven
-programs left that do not agree with the oracle on every byte.
+**Say where a send's own bytes belong.** `solas` writes an `OP_SEND` after
+compiling the arguments, so its line is where the argument list *ends*; a node
+here carries one position and that is its first token. Four programs fail
+inside a send whose arguments run over several lines, and name the first of
+them where `solas` names the last — see
+[ROADMAP 1.4](../../docs/ROADMAP.md). They are the only four left that do not
+agree with the oracle on every byte.

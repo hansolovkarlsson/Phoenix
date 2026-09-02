@@ -497,6 +497,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
 
 %pass typecheck
 
+  (* **A statement has no type**, and nearly every node here is one. That was
+   * written out twenty-one times -- once per node type a walk reaches -- so
+   * that a node above could read a type without asking which kind of
+   * statement it was. `otherwise` is the one clause that says it: what a node
+   * answers with when its own rule does not work one out.
+   *
+   * A node with a *field* called `type` -- `var x : integer` has one -- reads
+   * the field, because `.type` reads a field before an attribute. That is the
+   * node saying so itself, which is what this is "otherwise" to. *)
+  otherwise type = "void"
+
   (* The scope a program starts in. Written out rather than built in, so that
    * what Phoenix considers standard Pascal is readable and arguable. *)
   (* `with origin do ... x ...` opens a record's fields into scope, and
@@ -509,8 +520,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * worse than one that says nothing, and this says nothing exactly where it
    * does not know. Making it know is a table that carries structures, and it
    * is written down in the roadmap rather than guessed at here. *)
-  Program : type = "void"
-          : down known = []
+  Program : down known = []
           : down lows  = []
           : down spans  = []
           : down elems  = []
@@ -544,14 +554,13 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * `known` is everything visible here, handed down. Two names, because they
    * are two things -- Phoenix warns when one pass overwrites another's
    * attribute, and it was right to. *)
-  Block     : type = "void"
-            : down lows  = [...$lowmap, ...$lows]
+  Block     : down lows  = [...$lowmap, ...$lows]
             : down spans  = [...$spanmap, ...$spans]
             : down elems  = [...$elemmap, ...$elems]
             : down fields = [...$fieldmap, ...$fields]
             : down env   = [...$scope, ...$env]
             : down known = [...$shapes, ...$known] .
-  Procedure : type = "void" : down env = [...$own, ...$env] .
+  Procedure : down env = [...$own, ...$env] .
 
   (* `function Area;` after a `function Area(r : real) : real; forward;` --
    * the heading is repeated and the parameters belong to the declaration it
@@ -581,13 +590,12 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * is already in the block's scope, and shadowing it with this heading's
    * empty result type is what produced `cannot assign real to void`. *)
   Function(returns: NoType)
-            : type = "void"
             : down env = [...flatten([...lookup($known, $name,
                                                 Shape(iname: "", startsat: "1",
                                                       node: [], rtype: "void")
                                               ).node.entries]),
                           ...$env] .
-  Function  : type = "void" : down env = [...$own, ...$env] .
+  Function  : down env = [...$own, ...$env] .
 
 
   (* ---- reaching into a value ----
@@ -664,8 +672,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   (* The index range, resolved: written out (`array [1..30]`) or named
    * (`array [Small]`). The table holds a `Shape` around each type, so the
    * default wraps the index itself and both sides answer `.node`. *)
-  ArrayType : type = "void"
-            : bound = lookup($known, at($indices, 1).iname,
+  ArrayType : bound = lookup($known, at($indices, 1).iname,
                              Shape(iname: "", startsat: "1",
                                    node: at($indices, 1), rtype: "void")).node .
 
@@ -689,40 +696,25 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * `unknown` on either side passes: it is what reaching into an array or a
    * record answers, and a checker that invented an error there would be worse
    * than one that says nothing. Integer to real is Pascal's one widening. *)
-  Assign   : type = "void"
-           ! not ($target.type = $value.type
+  Assign   ! not ($target.type = $value.type
                   or $target.type = "unknown" or $value.type = "unknown"
                   or ($target.type = "real" and $value.type = "integer"))
              : "cannot assign {} to {}" of $value.type, $target.type .
 
-  If       : type = "void"
-           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+  If       ! not ($cond.type = "boolean" or $cond.type = "unknown")
              : "an if wants a boolean, and this is {}" of $cond.type .
-  IfElse   : type = "void"
-           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+  IfElse   ! not ($cond.type = "boolean" or $cond.type = "unknown")
              : "an if wants a boolean, and this is {}" of $cond.type .
-  While    : type = "void"
-           ! not ($cond.type = "boolean" or $cond.type = "unknown")
+  While    ! not ($cond.type = "boolean" or $cond.type = "unknown")
              : "a while wants a boolean, and this is {}" of $cond.type .
-  Repeat   : type = "void"
-           ! not ($until.type = "boolean" or $until.type = "unknown")
+  Repeat   ! not ($until.type = "boolean" or $until.type = "unknown")
              : "an until wants a boolean, and this is {}" of $until.type .
-  For      : type = "void"
-           ! $checking and not defined($env, $var)
+  For      ! $checking and not defined($env, $var)
                   : "'{}' is not declared" of $var .
 
-  CallStatement : type = "void"
-                ! $checking and not defined($env, $name)
+  CallStatement ! $checking and not defined($env, $name)
                   : "'{}' is not declared" of $name .
 
-  (* Everything else a walk reaches, so that a node above it can read a type
-   * without asking which kind of statement it was. *)
-  Goto     : type = "void" .
-  Labelled : type = "void" .
-  Empty    : type = "void" .
-  Compound : type = "void" .
-  Case     : type = "void" .
-  CaseOf   : type = "void" .
   (* `with origin do ... x ...` -- the fields of `origin`'s record come into
    * scope, and finding them is three lookups through nodes:
    *
@@ -735,8 +727,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    *
    * Only the first of `with a, b do` is followed: taking all of them is a
    * fold, and there is no fold in the notation. *)
-  With     : type = "void"
-
+  With
            (* The names the `with` brought into scope, left on the node for a
             * later pass. This is computed on the way *out*, where the `down`
             * clause below runs on the way in -- so the two say the chain
@@ -771,7 +762,6 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
                                                        node: RecordType(fields: []), rtype: "void")
                                                ).node.fields.shape]),
                            ...$known] .
-  Forward  : type = "void" .
 
 (* Analysis alone, with nothing asked of it but an answer about whether the
  * program is sound. A driver with no `->` prints nothing and says what it has

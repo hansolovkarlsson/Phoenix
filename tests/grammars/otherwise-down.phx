@@ -1,0 +1,14 @@
+(* `otherwise` is what a node answers with; `down` is what it hands its
+ * children, and every node hands one down already. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass p
+  otherwise down depth = 0
+  Number : out = "{}" of $text .
+%driver d = p -> out .

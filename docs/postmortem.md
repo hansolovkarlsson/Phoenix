@@ -104,11 +104,11 @@ for Solveig.
 
 ### What the numbers are
 
-- 147 tests, 0 failing
+- 151 tests, 0 failing
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
 - every `.sol` file in the Solveig repository round-trips to an identical tree
-- 68 Solveig programs compile to bytecode that prints what `solas`'s does, byte
+- 71 Solveig programs compile to bytecode that prints what `solas`'s does, byte
   for byte, tracebacks included
 
 ---
@@ -129,12 +129,14 @@ computation. The `.sob` line table then asked for something narrower and
 sharper: **a value computed for every element of a list**. `each` applies a
 template, and a template can only write an element out.
 
-`sizes` and `bytes`-over-a-list are two cases of that answered one at a time,
-and two are still open — a `lookup` per element, which a chunk holding two
-files needs for its file table, and a run per element, which a statement
-holding an inlined block needs for its line table. **They are the only thing
-left between `languages/solveig/` and an oracle it agrees with on every byte**,
-which is as concrete as this gets. Roadmap 1.3 is the entry to read again.
+`sizes` and `bytes`-over-a-list were two cases of that answered one at a time,
+and both turned out to be cases of something else. **The question was never a
+map over a list**: it was an attribute every node has, of which a list of nodes
+then has a column. `otherwise` is that, it is still a clause about a node, and
+it took Pascal's twenty-one `type = "void"` clauses down to one.
+
+The two library entries stay, and they are the honest cost of answering a
+question one case at a time before seeing the shape of it.
 
 **No forward references.** An attribute cannot refer to a node the walk has
 not reached. Several passes and a `%driver` are the answer, which is what a

@@ -284,6 +284,35 @@ Variable(name)
 A type built with two different field lists is a warning, since a pass keyed on
 it would have to handle both.
 
+## `otherwise`: what a node answers when its rule does not
+
+A clause is keyed on a node type, and some attributes are answered the same way
+by nearly every type. `languages/pascal/pascal.phx` wrote `type = "void"`
+twenty-one times, with a comment saying why: *so that a node above it can read
+a type without asking which kind of statement it was.*
+
+```
+%pass typecheck
+  otherwise type = "void"
+  ...
+```
+
+One clause, for every node whose own rule works nothing out. It runs **after**
+that rule, so it can read what the rule worked out, and only for the attributes
+the rule left alone. A node with a *field* of that name reads the field —
+`.name` reads a field before an attribute — which is the node saying so itself,
+and is what this is "otherwise" to.
+
+**It is still a clause about a node**, which is why it is this rather than a
+function or a macro. A description that could call a function would be a
+description with two kinds of thing in it, and the reason this tool is small is
+that there is only ever one.
+
+What it buys, besides twenty lines of Pascal: a list of nodes has a column of
+whatever every node answers. `$body.runs` is the line table of a chunk and
+`$body.fileidx` is its file table, and neither needed a way to map over a list —
+they needed an attribute every node has.
+
 ## `%rewrite`: when the answer is a different node
 
 A `%pass` **decorates**: it works out attributes and leaves the tree alone. A
@@ -631,6 +660,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | a field or an attribute called `pos` | the name every node says its position with, so it has to mean one thing everywhere |
 | a rewrite named like a pass | a driver names a stage by its name, so which one it meant has to be one stage |
 | a rewrite reading an attribute | it runs to change the tree, so the walk it would be reading has not happened |
+| two `otherwise` clauses for one attribute | two answers to what a node answers when it has none of its own |
 
 ## The layout
 
@@ -656,12 +686,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 147 checks, covering 35 Pascal programs against fpc
-                #   and 68 Solveig programs against solas, byte for byte
+make test       # 151 checks, covering 35 Pascal programs against fpc
+                #   and 71 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 145 of the 147 need only what is vendored here, and the two
+repository** — 149 of the 151 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -826,7 +856,7 @@ outside the subset are refused loudly rather than mistranslated.
 
 `solas` and `solvm` do the same for Solveig, and the test is stronger: not
 "does the output read correctly" but "does the compiled program print the same
-thing". Sixty-eight programs compile to bytecode that prints what `solas`'s
+thing". Seventy-one programs compile to bytecode that prints what `solas`'s
 does, **byte for byte, tracebacks included** — the file and the line a message
 points at are compared rather than normalised away. It found two bugs in the
 front end and one in Phoenix itself, and **none of the three was reachable by

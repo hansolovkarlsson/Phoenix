@@ -1,0 +1,28 @@
+(* `otherwise` -- what a node answers with when its own rule works nothing out.
+ *
+ * A clause is keyed on a node type, and some attributes are answered the same
+ * way by nearly every type: `languages/pascal/pascal.phx` wrote
+ * `type = "void"` twenty-one times so that a node above could read a type
+ * without asking which kind of statement it was.
+ *
+ * It is still a clause about a node -- the general one -- which is why it is
+ * this and not a function. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = cell { "," c:cell -> $c } -> Row(cells: [$1, ...$2]) .
+cell = number -> Cell(text: $1) .
+
+%pass p
+  otherwise kind = "something"
+
+  Row             : kind = "a row"
+                  : out  = "{}: {}" of $kind, join($cells.kind, ", ") .
+  Cell(text: "7") : kind = "a seven" .
+
+%driver d = p -> out .

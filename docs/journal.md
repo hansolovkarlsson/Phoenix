@@ -1917,3 +1917,97 @@ Comparing tracebacks exactly means comparing everything exactly, and
 happened to agree while this backend's, a moment later, did not. Both are now
 asked again — but only when they differ, which is two extra runs on the few
 that get there rather than on all seventy-five.
+
+## 2026-09-02 — the clause that was already the answer
+
+[ROADMAP 1.3](ROADMAP.md) had been the most dangerous entry on the page for
+three stages, and it said so itself: the obvious fixes were all a second
+mechanism — a function, a macro, a rule other rules call — and *"each one would
+be the first thing in the notation that is not a clause about a node, and the
+reason this tool is small is that there is only ever one of those."*
+
+It also said what to do about it: **wait for a second example in a different
+language.** Three stages had ended at this entry and all three examples were in
+Solveig, so the first thing worth doing was to look, rather than to design.
+
+It was already written. `languages/pascal/pascal.phx` has `type = "void"`
+**twenty-one times**, with a comment saying exactly why:
+
+> *Everything else a walk reaches, so that a node above it can read a type
+> without asking which kind of statement it was.*
+
+### And the shape it settled
+
+That comment is the whole answer, and it says the entry had been framing the
+problem the wrong way round. The Solveig cases looked like *a map over a list*:
+a `lookup` per element for the file table, a run per element for the line
+table. Pascal's is not a list at all. What both are is **an attribute every
+node has** — and a list of nodes then has a column of them for free, because
+`.` over a list already means "that of each".
+
+So the mechanism is not a map. It is the **general clause about a node**, which
+is why the warning this entry carried for three stages turned out not to apply:
+
+```
+otherwise type = "void"
+```
+
+What a node answers with when its own rule works nothing out. It runs after
+that rule, so it can read what the rule worked out, and only for the attributes
+the rule left alone. A node with a *field* of the name reads the field, since
+`.name` reads a field before an attribute — which is the node saying so itself,
+and is exactly what this is "otherwise" to.
+
+Twenty-one clauses in Pascal became one, and the 35 programs `fpc` checks are
+what says it still means the same thing.
+
+### Both open cases, closed
+
+**The file table.** `otherwise fileidx` interns every node's file into the
+chunk's table the way a name is interned, and a chunk's file runs are then
+`$body.fileidx`. The table is saved and restored per chunk exactly as the name
+and constant tables are — and a `Block` restores *and interns its own file into
+the enclosing table* in one clause, because a block is a statement of the chunk
+around it and its `OP_BLOCK` has to name a file like any other.
+
+**The line table.** `otherwise runs` gives every node its own code at its own
+line, and the seven nodes an inlined block became compose one from their parts:
+the condition's runs, the jump at this node's line, the body's runs, the tail.
+
+Sixty-eight programs agreeing with `solas` byte for byte became **seventy-one**,
+and every message the backend produces now names the right file.
+
+### What two library entries cost
+
+`sizes(list)` and `bytes` over a list were added a stage earlier, and
+`otherwise` would have covered both. That is worth writing down rather than
+tidying away: [3.4](ROADMAP.md) says a library entry has to be something a real
+pass needed and could not be written in the notation, and both met that rule at
+the time. What the rule does not catch is **answering a question one case at a
+time before seeing the shape of it** — and the cost of that is two entries in a
+library the same page says to watch the size of.
+
+### The four that are left, and what they are
+
+Not 1.3, and not inlining either. All four fail inside a send whose arguments
+run over several lines, and they name the line the statement *starts* on where
+`solas` names the line it *ends* on:
+
+```
+path := system:arguments:size:greaterThan(#0):ifElse(
+    { system:arguments:at(#1) },
+    { | fallback |
+      ...
+      fallback }).
+```
+
+`solas` writes the `OP_SEND` after compiling the arguments, so the line it
+records is the one the `)` is on. A node here carries **one** position and that
+is its first token.
+
+So the last gap is a second number, and the question to answer before adding
+one is whether a position is a point or a **span** — `$pos.line` and
+`$pos.column` are the start of one either way, and nothing until now has wanted
+the end. It is [1.4](ROADMAP.md), it is four traceback lines in seventy-five
+programs, and it is the first entry on that page that came from a measurement
+rather than from a design.

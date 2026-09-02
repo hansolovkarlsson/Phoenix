@@ -267,6 +267,50 @@ static bool read_one_pass(Reader *r, Pass *p)
             continue;
         }
 
+        /* `otherwise attr = expr` -- see the comment on `Pass.defaults`. It
+         * sits beside `thread` rather than among the rules because it is not
+         * one: no pattern, no ordering, and it does not compete for a node. */
+        if (is_word(r, "otherwise")) {
+            advance(r);
+
+            Clause c = { .kind = C_SYNTH, .pos = t->pos };
+
+            if (is_word(r, "down")) {
+                diag_error(r->src, peek(r)->pos,
+                           "'otherwise' is what a node answers with, and "
+                           "`down` is what it hands its children");
+                return false;
+            }
+            if (!at(r, T_NAME)) {
+                diag_error(r->src, peek(r)->pos,
+                           "'otherwise' wants the name of an attribute");
+                return false;
+            }
+            MToken *name = advance(r);
+            c.attr = name->text;
+
+            if (!at(r, T_DEFSYM)) {
+                diag_error(r->src, peek(r)->pos,
+                           "expected '=' after the attribute '%s'", c.attr);
+                return false;
+            }
+            advance(r);
+
+            c.value = read_expr(r);
+            if (!c.value) return false;
+            if (at(r, T_DOT)) advance(r);
+
+            if (is_thread(p, c.attr)) c.kind = C_THREAD;
+
+            Clause *big = arena_alloc(r->a,
+                                      (size_t)(p->ndefaults + 1) * sizeof *big);
+            memcpy(big, p->defaults, (size_t)p->ndefaults * sizeof *big);
+            big[p->ndefaults] = c;
+            p->defaults = big;
+            p->ndefaults++;
+            continue;
+        }
+
         PassRule rule = { .pos = t->pos };
         rule.pattern = read_pattern(r);
         if (!rule.pattern) return false;

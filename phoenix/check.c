@@ -648,6 +648,9 @@ static void pass_reads(const Pass *p, const char **names, int *n)
             if (c->value) expr_reads(c->value, names, n, MAX_ATTRS);
             if (c->when)  expr_reads(c->when,  names, n, MAX_ATTRS);
         }
+
+    for (int i = 0; i < p->ndefaults; i++)
+        if (p->defaults[i].value) expr_reads(p->defaults[i].value, names, n, MAX_ATTRS);
 }
 
 /* Whether a pass leaves this attribute *on a node*, which is what another
@@ -680,6 +683,10 @@ static bool pass_defines(const Pass *p, const char *attr)
             if (c->kind != C_ERROR && c->attr && strcmp(c->attr, attr) == 0)
                 return true;
         }
+
+    for (int i = 0; i < p->ndefaults; i++)
+        if (strcmp(p->defaults[i].attr, attr) == 0) return true;
+
     return false;
 }
 
@@ -1130,6 +1137,28 @@ static void check_rewrites(Check *c)
     }
 }
 
+/* `otherwise` says what a node answers with when its own rule does not, so
+ * two of them for one attribute are two answers to that. Which one won would
+ * be the order they were written in, and nothing about the notation says an
+ * order there is meaningful. */
+static void check_defaults(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *p = &g->passes[i];
+
+        for (int k = 1; k < p->ndefaults; k++)
+            for (int a = 0; a < k; a++)
+                if (strcmp(p->defaults[a].attr, p->defaults[k].attr) == 0) {
+                    diag_error(&g->src, p->defaults[k].pos,
+                               "'%s' already has an 'otherwise' in pass '%s'",
+                               p->defaults[k].attr, p->name);
+                    c->ok = false;
+                }
+    }
+}
+
 bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
@@ -1185,6 +1214,11 @@ bool grammar_check(Grammar *g)
                 if (cl->when)  collect_types(&c, cl->when);
             }
 
+    for (int i = 0; i < g->npasses; i++)
+        for (int k = 0; k < g->passes[i].ndefaults; k++)
+            if (g->passes[i].defaults[k].value)
+                collect_types(&c, g->passes[i].defaults[k].value);
+
     /* A rewrite builds nodes and is the whole reason some node types exist --
      * `--nodes` has to say so, and a clause keyed on one has to be checked
      * against the shape the rewrite gives it. */
@@ -1198,6 +1232,7 @@ bool grammar_check(Grammar *g)
     check_include(&c);
     check_position_name(&c);
     check_rewrites(&c);
+    check_defaults(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
      * without the token rules that will spell its literals -- `expression.phx`
