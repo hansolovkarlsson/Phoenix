@@ -39,6 +39,8 @@ something the documentation claims the language *is*:
 | `control` | there is no `if`: these are messages taking blocks |
 | `objects` | `new`, `via` where another language has `super`, and reflection that reads and never writes |
 | `strictness` | no implicit conversion anywhere, with `equals` the one exception; and a message wanting a block says so when it is *sent* |
+| `boundaries` | both ends included, one-based throughout, `first`/`last` clamping where `at` does not, `indexOf` answering `nil` and not `#0` |
+| `iteration` | how many times, exactly — a `loop` inclusive at its end, a `doUntil` that runs its body first, and every zero case |
 
 ### Why `narrowing` is its own program
 
@@ -61,6 +63,23 @@ the refusal:
 ```
 float does not understand 'asInteger'
 ```
+
+### The shape these programs are looking for
+
+A test that samples the middle of a range agrees with an implementation that is
+off by one at its ends. So the programs above assert the ends:
+
+| | |
+| --- | --- |
+| `copyFrom(#2, #2)` | a range of one element is one element, not none and not two |
+| `first(#99)` on four | **clamps** to four, where `at(#5)` is an error — the difference between the two is the point of having both |
+| `[#1, #7, #3]:loop` | reaches 7 exactly; `[#1, #6, #3]` stops at 4, because the end is reached only if the step lands on it |
+| `[#3, #1]:loop` | no iterations, not one |
+| `doUntil({ true })` | runs **once** — the body comes first, which is the whole difference from `whileTrue` |
+| `indexOf` when absent | `nil`, not `#0`, which a language counting from one cannot use as "absent" anyway |
+
+Every one of these passes for an implementation that is subtly wrong if the
+test only ever asks about the middle.
 
 ## What is not here yet
 
