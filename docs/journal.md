@@ -1305,3 +1305,42 @@ uniformity did not need. Deleted.
 That is the argument for this kind of check in one line: it is not that I would
 have made the mistakes more slowly, it is that one of them was in the tree,
 harmless, and would have stayed.
+
+## 2026-09-01 — Solveig, and a conformance suite before a compiler
+
+The next language is Solveig, and the first thing built for it is not a
+description — it is **a conformance suite**, so that the target exists before
+anything aims at it.
+
+**The grammar half is already free.** Solveig ships
+`programs/check_syntax/solum.bnf`, its published grammar in Wirth's notation,
+held character for character against `docs/GRAMMAR.md`. Phoenix reads it
+**unmodified** and parses **all 63 `.sol` files** in that repository — every
+example, every program, every library file. The same result `pascal.bnf` gave,
+from a grammar written for another tool.
+
+**Why a conformance suite is a different thing from Solveig's own tests.**
+`tests/*.c` there check the internals of `solas` and `solvm`, which is the right
+job for an implementation to do to itself. A conformance suite checks the
+*language*: programs and the output each must produce, which can be handed to
+anything claiming to compile Solveig. There was not one, and there is now — nine
+programs asserting what `CHEATSHEET.md` and `REFERENCE.md` say the language is.
+
+**The expectations are read against the documentation rather than taken on
+trust**, which is the difference between a suite and a set of fixtures. Where
+the two disagree that is a finding. Nothing disagreed: floored division,
+byte-counted strings, trapping overflow, `infinity` for float division by zero,
+`join` strict about strings, `and` checking for a block when it is *sent* — all
+as written.
+
+One thing that looked like a disagreement was not. `display` writes the value
+**and a newline**, which `CHEATSHEET.md` says explicitly of `print` and not of
+`display` — and `REFERENCE.md` shows `#3:repeat({ "tick":display })` producing
+`tick tick tick` on one line. Measured, it produces three. The inline comments
+in those docs render output space-separated, which is a convention rather than a
+claim; the three-line reading is right.
+
+**And two of the programs were wrong before the compiler was.** `join` over
+integers is an error, not a conversion, and I had written it expecting a
+conversion. That is what a suite written against documentation is for: it caught
+me rather than `solas`.

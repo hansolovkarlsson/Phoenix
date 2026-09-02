@@ -687,6 +687,23 @@ else
     printf '  --    the oracle needs fpc, which is not on this machine\n'
 fi
 
+# Solveig's conformance suite: programs and the output each must produce, held
+# against `solas` and `solvm`. A suite for the *language* rather than for one
+# implementation of it -- see languages/solveig/README.md.
+echo "Solveig conformance"
+sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
+if [ -x "$sol/bin/solas" ]; then
+    if conf=$("$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
+        n=$(printf '%s' "$conf" | grep -c '^  ok')
+        report pass "$n Solveig programs conform"
+    else
+        report fail "Solveig programs conform"
+        printf '%s\n' "$conf" | grep -A6 FAIL | sed 's/^/        /' | head -12
+    fi
+else
+    printf '  --    the conformance suite needs Solveig, which is not here\n'
+fi
+
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
