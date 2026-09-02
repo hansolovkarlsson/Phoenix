@@ -2809,3 +2809,68 @@ The cost here was not repetition and not size. It was that a tested artefact
 and a shipped artefact had drifted apart with nothing able to notice. That is
 worth adding to the questions a mechanism has to answer: not only *who else
 wants this*, but *what can no longer be checked without it*.
+
+## 2026-09-02 — where it stands
+
+*A stopping point rather than an entry: what is true now, so that the next
+session can start from the documents rather than from this one.*
+
+### What exists
+
+Three languages described and compiled, each against an oracle that is not this
+project's:
+
+| | |
+| --- | --- |
+| Pascal | 35 programs agree with `fpc -Miso`; 5 outside the subset are refused with a position |
+| Solveig | **every** `.sol` file in that repository prints what `solas`'s bytecode prints — byte for byte, tracebacks included, nothing normalised and nothing counted apart |
+| awk | 13 programs written here and **6 that e2fsprogs, ncurses and vim ship** compile to C that prints what `/usr/bin/awk` prints |
+
+176 tests, 0 failing; 174 of them need nothing outside this repository.
+
+[COMPLETED.md](COMPLETED.md) is the record — the tool, the languages, the
+notation, every roadmap entry that has left with a verdict, and the defects
+found with what found each one. [ROADMAP.md](ROADMAP.md) is now only what is
+*not* built: three entries, one of which is a measurement that keeps coming out
+the same way.
+
+### What this run of stages added to the notation
+
+`%include`, `%embed`, `%rewrite`, `otherwise`, `$pos`, and patterns over lists.
+Six mechanisms, and the thing worth noticing is how few of them were the
+mechanism that was asked for:
+
+> Every time this project has predicted a **new mechanism**, the answer has been
+> the mechanisms already there, used in an order nobody had tried.
+
+- a map over a list → an attribute every node has
+- a way to compile a block differently → take the block out of the tree
+- a reference that points forward → a leaving clause on the root
+- a conditional that skips a branch → a node that renders as nothing
+
+Four for four. `otherwise` is the sharpest case: added for *"an attribute nearly
+every node answers the same way"*, and what it turned out to be good at is
+*"an attribute about the **position** a node is in"* — which answered three
+questions in the awk backend that nothing else could ask.
+
+### What the tests learned
+
+Two claims on this project's own pages turned out to be false, and both were
+found by asking what a test does **not** compare:
+
+- *"There is only one implementation, so `phx` and the compiler it writes
+  cannot disagree."* They did, for two stages, for any description with a NUL
+  in a literal. The comparison had only ever covered text.
+- *"docs/semantics.md is the specification and eval.c is what makes it true."*
+  Nothing checked that. Every claim on that page is a check now, and every
+  refusal a clause, run through both implementations.
+
+The rule both leave behind: **a claim about the code is only as strong as the
+widest thing the tests compare.**
+
+### Where to look first
+
+`README.md` for what the tool is, `COMPLETED.md` for what exists, `ROADMAP.md`
+for what does not. The three things named as unfinished are `getline`'s two
+piped forms in awk, scope graphs, and compiling the tables to code — and the
+page says why none of them is urgent.

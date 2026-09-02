@@ -60,7 +60,8 @@ walks**, and that both halves can be written down instead of programmed.
 
 ## Where it is
 
-**All seven stages are done.** Phoenix reads a description, and either runs it —
+**All seven stages are done, and eight more since.** Phoenix reads a
+description, and either runs it —
 parsing a file, checking it, compiling it — or writes it out as a C program
 that does the same thing without Phoenix. What a description compiles *to* is
 its own business: C, another language, or a binary — Solveig's `.sob` bytecode
@@ -68,7 +69,7 @@ is emitted by [a description](languages/solveig/solveig-sob.phx), not by
 Phoenix.
 
 ```sh
-phx languages/pascal/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, 10,000 lines
+phx languages/pascal/pascal-c.phx -o pasc.c   # a Pascal-to-C compiler, one file
 cc pasc.c -o pasc                     # no flags, no headers, no library
 ./pasc prog.pas > prog.c && cc prog.c -o prog && ./prog
 ```
@@ -173,7 +174,8 @@ wrong can be backed out of to the last stage that was right.
 [docs/journal.md](docs/journal.md) records why each decision was made, which is
 what makes backing out informed rather than archaeological, and
 [docs/postmortem.md](docs/postmortem.md) scores those decisions against what
-the evidence later said — including the two predictions that were wrong.
+the evidence later said — including the predictions that were wrong, and the
+one claim on that page that a later stage falsified outright.
 
 ## What a production builds
 
@@ -943,8 +945,20 @@ already had the threaded attribute, under the name CHAIN), the rewriting systems
 that solved `%rewrite` already (Stratego), and the yacc family it is trying not
 to be.
 
-[docs/ROADMAP.md](docs/ROADMAP.md) says what is coming, what is worth stealing
-from whom, and what is deliberately absent.
+[docs/ROADMAP.md](docs/ROADMAP.md) says what is **not** built and why;
+[docs/COMPLETED.md](docs/COMPLETED.md) is the other half — the tool, the
+languages, the notation, and every roadmap entry that has left with a verdict,
+including the one that was settled *against* building it.
+
+| | |
+| --- | --- |
+| [COMPLETED.md](docs/COMPLETED.md) | what exists, and what each piece cost against what it was predicted to cost |
+| [ROADMAP.md](docs/ROADMAP.md) | what does not, and why |
+| [journal.md](docs/journal.md) | the day-by-day, including every wrong turn |
+| [postmortem.md](docs/postmortem.md) | the scoring — what was believed, and what the evidence said |
+| [semantics.md](docs/semantics.md) | what the meta-language's own expressions mean, executably |
+| [performance.md](docs/performance.md) | measured, three languages |
+| [lineage.md](docs/lineage.md) | whose ideas these are |
 
 ## Evidence
 
@@ -988,7 +1002,7 @@ missing-semicolon.pas:13:3: error: expected else, ; or end, and found "n"
 ```
 
 [`languages/pascal/pascal.phx`](languages/pascal/pascal.phx) is that grammar with `->` clauses
-added — 51 node types, an abstract tree with no punctuation in it, and a pass
+added — 56 node types, an abstract tree with no punctuation in it, and a pass
 that reads packed arrays, pointer types, records, sets and `var` parameters back
 out:
 
@@ -1033,9 +1047,10 @@ fields   → what each FieldDecl declares
 ```
 
 **Every hop points backwards**, at a node the single post-order walk has
-already finished with. That is why it needed nothing, and it is why the
-[roadmap's](docs/ROADMAP.md) entry on reference attributes is now about
-*forward* references only.
+already finished with. That is why it needed nothing — and when a language that
+needs a *forward* reference was finally described, awk, two passes answered it
+in twenty lines, so [reference attributes](docs/COMPLETED.md#21-reference-attributes--from-jastadd)
+were settled against rather than built.
 
 When a PEG fails at the top it has usually backtracked a long way from the real
 mistake, so the position reported is the one the match got *furthest*, not the

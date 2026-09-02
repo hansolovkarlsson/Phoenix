@@ -3,82 +3,31 @@
 *What is coming, what is borrowed, and what is deliberately absent. An entry
 here names **why** rather than when.*
 
-All seven stages are done; [journal.md](journal.md) records what each one cost
-and what it got wrong first, and [postmortem.md](postmortem.md) scores the
-predictions made here against what the evidence turned out to say.
+**This page is what is *not* built.** [COMPLETED.md](COMPLETED.md) is the other
+half — the tool, the languages, the notation, and every entry that has left
+here with a verdict. [journal.md](journal.md) records what each stage cost and
+what it got wrong first; [postmortem.md](postmortem.md) scores the predictions.
+
+Three languages are described and compiled: Pascal against `fpc`, Solveig
+against `solas`, awk against `/usr/bin/awk`. What remains on this page is one
+measurement that keeps coming out the same way, one small awkward grammar
+question, and one borrowed idea nothing has asked for.
 
 ---
 
-## 1. The stages
+## 1. The stages that remain
 
-All but one are done, and are kept here rather than deleted, because what an
-entry predicted and what it cost is the only way to tell whether this page is
-worth writing — and three of them predicted wrong, which is the more useful
-half. What is left is [1.2](#12-compiling-the-tables-to-code), which this page
-has now said three times is not worth doing, the third time with awk's numbers
-behind it.
+Six entries have left this section; [COMPLETED.md](COMPLETED.md) has them, with
+what each predicted against what it cost. Three of the six predicted wrong,
+which is the more useful half.
 
-### 1.0 A reader-level mechanism, for a target language's imports — **done**
-
-`%include` names which node an include is built as and which field holds the
-file; the reader splices, before the first pass. It was written exactly as this
-entry proposed and the prediction that mattered held: *the smallest shape that
-could work* was two names and a fixed meaning, and no description gets to vary
-what a splice is.
-
-The three new failures this entry warned about turned out to be two:
-
-- **a missing file** and **a path relative to which of two files** are one
-  message between them, and it has to say where it looked, because "beside the
-  includer, then the search path" is the rule nobody reconstructs from a bare
-  failure;
-- **a cycle** was not a failure at all. A file is read once however many ways
-  it is reached — which `%import` already did one level up, for the same
-  reason — so a file that comes round to itself finds itself already read and
-  contributes nothing. There was nothing to detect.
-
-What the entry did not anticipate is the pair of refusals that the *splice*
-needs: an include where a field is expected, and an included file whose root
-holds two parts. Both are "there is no answer to what this would mean", and
-both are where a tool of this shape has to say so rather than pick.
-
-**It moved the Solveig oracle from 50 programs to 72**, and the 22 it added
-found nothing wrong with the backend — which is the useful negative result. It
-did surface something already there; see [2.4](#24-inlining-a-block--from-solas).
-
-### 1.1 A node's position, reachable from a clause — **done**
-
-The question this entry posed was *what a position is to a description*: a
-line, a line and a column, or an opaque value only the diagnostics understand.
-The answer is **none of the three** — it is a node:
-
-```
-Position(line, column, file)
-```
-
-which makes reading part of one an ordinary field read, needs no new syntax and
-no library function, and takes a fourth thing later as a field rather than as a
-second reserved name. `$pos` resolves before bindings, fields and attributes so
-that it means one thing everywhere, and the cost is stated rather than
-discovered: `pos` is a word a grammar may not call a field, refused when the
-description is read.
-
-`.` over a list already means "that of each", so `$body.pos.line` is a column
-of line numbers, and that is the shape a table in a binary format wants.
-
-**"Everything needed is already there, which is what makes this small" was
-wrong**, and the way it was wrong is the useful part. *Reading* a position is
-small — thirty lines. *Using* one is not: a `.sob` line table is a run per
-statement, and building it needs a value computed for every element of a list,
-which the notation cannot do. Two things closed that gap and both are listed in
-[3.4](#34-a-library-that-grows-without-deciding); what it could not close is
-[1.3](#13-a-way-for-a-description-to-share-a-computation), which now has its
-second example.
-
-What it bought: the line table is exact, the file table is written whenever a
-chunk is about one file, and the Solveig oracle stopped normalising locations
-away. Sixty-six programs now agree on every byte of their output, tracebacks
-included.
+| | |
+| --- | --- |
+| [1.0](COMPLETED.md#10-a-reader-level-mechanism-for-a-target-languages-imports) | `%include` — a target language's own imports |
+| [1.1](COMPLETED.md#11-a-nodes-position-reachable-from-a-clause) | `$pos` — where a node came from |
+| [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation) | `otherwise` — what a node answers when its rule does not |
+| [1.4](COMPLETED.md#14-where-a-node-ends) | a position is a **span** |
+| [1.5](COMPLETED.md#15-a-runtime-that-is-not-a-literal) | `%embed` — a file's bytes under a name |
 
 ### 1.2 Compiling the tables to code
 
@@ -110,288 +59,59 @@ definition down first, and code generated against them can be checked against
 the interpreter that produced them. Doing it the other way round is how two
 implementations appear.
 
-### 1.3 A way for a description to share a computation — **done**
+### 1.6 `|` as an expression operator, for `getline`
 
-This entry was the most dangerous on the page and it said so, twice: the
-obvious fixes were all a second mechanism — a function, a macro, a rule other
-rules call — and *"each one would be the first thing in the notation that is
-not a clause about a node, and the reason this tool is small is that there is
-only ever one of those."*
+**The only piece of unfinished work in a language described here**, and it is
+small and awkward rather than deep.
 
-**The answer was the general clause about a node**, which is why the warning
-turned out not to apply:
+`languages/awk/awk.phx` describes four of `getline`'s six forms. The two it
+does not are `cmd | getline` and `cmd | getline var`, which need `|` to be an
+operator in an expression — and `|` is otherwise only a print redirect, so a
+`printargs` that stopped at one would have to be told where.
 
-```
-otherwise type = "void"
-```
+It is described rather than skipped for a reason worth keeping: **not
+describing a construct is not the same as refusing it.** Before there was a
+rule mentioning the word, `getline line` read as *two variables concatenated* —
+ordinary awk, read as something else, quietly. Mentioning it is what makes it
+reserved. The two piped forms do not parse, which is loud, and
+`tests/divergent/getline-pipe.awk` says so.
 
-What a node answers with when its own rule works nothing out. It runs after
-that rule, so it can read what it worked out, and only for the attributes that
-rule left alone; a node with a *field* of the name reads the field, because
-`.name` reads a field before an attribute — which is the node saying so itself,
-and what this is "otherwise" to.
-
-**The second language this entry was waiting for was already written.**
-`languages/pascal/pascal.phx` had `type = "void"` twenty-one times, with a
-comment saying exactly why: *"Everything else a walk reaches, so that a node
-above it can read a type without asking which kind of statement it was."* That
-is one line now. And it settled the shape: what was missing was never a map
-over a list — it was **an attribute defined for every node**, of which a list
-of nodes then has one per element.
-
-It closed both cases this entry had open, and the entry's own framing of them
-as "a `lookup` per element" and "a run per element" was the wrong way round.
-Both are per-*node*:
-
-| | |
-| --- | --- |
-| the file table | `otherwise fileidx` interns every node's file into the chunk's table; a chunk's file runs are then `$body.fileidx`, a column like any other |
-| the line table | `otherwise runs` gives every node its own code at its own line, and the seven nodes an inlined block became say something else |
-
-`languages/solveig/` went from 68 programs agreeing with `solas` byte for byte
-to **71**, and every message it produces now names the right file.
-
-Two library entries — `sizes` and `bytes` over a list — were added along the
-way, for cases this would also have covered. That is the cost of answering a
-question one case at a time before seeing its shape, and it is
-[3.4](#34-a-library-that-grows-without-deciding)'s number to watch going up for
-a reason worth recording.
-
-### 1.4 Where a node ends — **done**
-
-The last thing between `languages/solveig/` and an oracle it agrees with on
-every byte, and the only entry on this page that came from a measurement rather
-than from a design.
-
-The question it posed was whether a position is a point or a **span**. It is a
-span:
-
-```
-Position(line, column, file, endline, endcolumn)
-```
-
-A node occupies a stretch of source, and saying only where it starts is what
-made four programs name the wrong line. `solas` records the line of the token
-it has just read, so an `OP_SEND` — written *after* its arguments — belongs to
-the line the argument list ends on. `$pos.endline` is that, and the clause that
-was wrong is now right by one word:
-
-```
-Send : runs = join([$to.runs, join($args.runs, ""),
-                    bytes(4, 4), bytes($pos.endline, 4)], "") .
-```
-
-Every composite node composes its line runs from its children's now, in the
-order it writes their bytes — which is the order it already wrote them in,
-because the bytes and the lines are the same walk.
-
-**Seventy-six programs print exactly what `solas`'s bytecode prints, and
-nothing is counted apart any more.** The oracle normalises nothing: a traceback
-names a file and a line, and both are compared like any other byte. The only
-thing still set aside is a program that does not print the same thing twice
-under `solas` either — one that reads the clock.
-
-The one thing this did not need was `endcolumn`, which came along because a
-position is a line *and* a column at both ends or at neither. It is the second
-field on that node nothing has asked for yet, and both are there for the same
-reason: a shape that is right is cheaper to keep than a shape that is minimal.
-
-### 1.5 A runtime that is not a literal — **done**
-
-**Found by writing an awk backend**, and the only entry here that was about the
-*size* of something rather than about whether it could be said at all.
-
-`languages/pascal/pascal-c.phx` emits four `#include`s and Pascal's own types
-do the rest. `languages/awk/awk-c.phx` needs **seven hundred lines** — awk's
-value model is a string and a number at once, its one aggregate is a hash
-table, and neither is C's — and they were held as seven hundred string
-literals, which was 58% of the description.
-
-```
-%embed runtime "awk-runtime.c" .
-...
-: out = join([$runtime, ...], "\n") .
-```
-
-The file is read when the description is read and its bytes are frozen into
-whatever `-o` writes, so *one file, no headers, no library* still holds. It is
-looked for beside the description and then in the library, which is where
-`%import` looks, because it is the same question about the same kind of
-neighbour. `--imports` names it, because a Makefile that rebuilds on a change
-wants it.
-
-**This entry said to wait for a second customer, and that was the wrong test.**
-There is still only one. What made the case was the other half of the cost,
-which the entry had not noticed: seven hundred lines of C in a `.phx` cannot be
-**compiled**. The runtime was written as a standalone file and checked against
-awk before being embedded — and then that file was thrown away and only the
-transcription survived, so the artefact that had been tested was not the
-artefact in the repository. It is now, and `make test` compiles it.
-
-The sharp edge is the one `%import` already has: a change to the embedded file
-is a change to the description, and nothing says so at the point of use.
+Nothing in the corpus uses `getline` at all, which is why this has waited.
 
 ---
 
 ## 2. Borrowed, and worth borrowing
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
-whose. Two of the four are done, and the two that are not are the two this page
-has twice said to be sceptical about — one of which has now been tested against
-the language it was waiting for, and lost.
-
-### 2.1 Reference attributes — from JastAdd
-
-**Most of this turned out to be already here, and the entry is much smaller
-than it was.**
-
-Both cases that motivated it — `with origin do ... x ...` needing a record's
-fields, and `function Area;` needing the `forward` heading it repeats — are
-solved in `languages/pascal/pascal.phx` with nothing that was not already in the
-notation. A value can *be* a node, `.field` reads one wherever it came from,
-and an environment binding a name to the thing it was declared as is an
-ordinary list of pairs. Following `origin` to its `NamedType`, that to `Point`,
-`Point` to its `RecordType` and that to its fields is four hops and no new
-mechanism.
-
-**They work because every hop points backwards** — at a node the one post-order
-walk has already visited and finished with, whose attributes are therefore
-computed. That is the whole of what made them look hard and the whole of why
-they were not.
-
-So what is actually missing is narrower than the literature's version:
-
-> **A reference that points *forward*** — to a node the walk has not reached —
-> which is the only case a backward lookup cannot serve.
-
-Pascal barely has one; `forward` exists precisely so that it does not.
-Mutually recursive types in a language without a forward declaration would, and
-so would a language where a method may be used above where it is defined. Until
-one of those is being described, this stays unbuilt, and the reason is now
-evidence rather than policy.
-
-**The language arrived, and it did not need this.** `languages/awk/` has
-exactly the shape this entry was waiting for: a function may be called above
-where it is defined, nothing is declared, and `tests/conformance/functions.awk`
-calls one from `BEGIN` before its body appears — awk resolves it and prints the
-answer.
-
-Checking those calls is **two passes and twenty lines**. One walks the program
-and collects what functions there are, leaving the table on the root; the other
-hands it back down and checks every call against it. Attributes stay on the
-nodes between passes, so the second reads what the first left — and a leaving
-clause on the root runs after the whole subtree, so every function is in the
-table wherever it was written.
-
-```
-Function : known = [...$known, [$name, size($params)]] .
-Program  : table = $known .          (* pass one  *)
-Program  : down declared = $table .  (* pass two  *)
-```
-
-It finds, while reading the program, what awk finds when the call runs — on
-somebody else's input, on somebody else's machine. It flags
-`outside/hello.awk` for calling a gawk builtin that POSIX awk does not have.
-
-**So the score is against building it.** The cost of two passes is that the
-walk happens twice. The cost of reference attributes is demand-driven
-evaluation and the cycle detection that walking once avoids, and what it would
-have bought here is one walk instead of two. A dependency that does not
-*stratify* — where two nodes each need an attribute the other computes — is the
-case two passes cannot do, and neither Pascal nor Solveig nor awk has one.
-
-Three languages have now been described without wanting this, and the one
-picked *because* it looked like it would want it did not. That is as close to
-an answer as this page gets.
-
-If it is ever built, the cost is that demand-driven evaluation comes back with
-it, along with the cycle detection that walking once avoided —
-[journal.md](journal.md#2026-09-01--stage-2-and-one-thing-the-sketch-got-wrong)
-records why that was dropped.
-
-### 2.2 Strategies — from Stratego — **done**
-
-The `%rewrite` deferred on day one, with the vocabulary this entry had already
-worked out and kept: `topdown`, `bottomup`, `innermost`.
-
-```
-%rewrite fold bottomup
-  Binary(op: "+", left: Number(text: a), right: Number(text: b))
-    => Number(text: text(int($a) + int($b))) .
-```
-
-**"Most of the machinery is already built" was right**, which is the rarer kind
-of prediction on this page. Patterns match on shape and bind, the evaluator
-builds nodes; what was missing was a traversal that puts the answer back, and
-`run.c` grew about a hundred lines and a second entry point. There is one
-matcher and one evaluator, so a rewrite and a pass cannot disagree about what a
-pattern means.
-
-Constant folding was named here as the first customer.
-[`tests/grammars/fold.phx`](../tests/grammars/fold.phx) is that, and it is
-where the strategy earns being a word rather than a default: `2 + 3 * 4 + 1`
-folds to `15` bottom-up and stops at `((2 + 12) + 1)` top-down.
-
-**The customer that mattered was [2.4](#24-inlining-a-block--from-solas)**, and
-it is the argument for this being a rewrite rather than another kind of pass. A
-clause answers *about* a node. Some things are answered by there being a
-different node, and inlining is one: the block in the way is not something to
-compile differently, it is something that should not be there.
-
-One thing this entry did not anticipate: it needed **list patterns**. A value
-can be a list and a pattern could not be one, so `Send(args: [Block(params:
-[])])` — which is exactly the shape an optimisation asks about — was not
-sayable. Patterns now cover every value kind, which is what they should always
-have done.
-
-### 2.3 Scope graphs — from Statix
-
-**Further off than it looked.** `with` blocks that reopen a record's namespace
-were named here as the thing that would break threading, and Pascal has them —
-and they turned out to need nothing but an environment that binds names to
-nodes, which was already expressible.
-
-A scope graph earns its place when resolution stops being a search through a
-list that the walk built in order: modules that import each other, scopes that
-are visible from more than one place, a name whose meaning depends on which
-path you reached it by. Pascal has none of those. Nothing has yet asked for
-this, and after the `with` case it is worth being sceptical that the next thing
-will either.
-
-### 2.4 Inlining a block — from `solas` — **done**
-
-`solas` compiles the block of an `ifTrue:`, an `ifFalse:`, an `ifElse:`, an
-`and:`, an `or:`, a `whileTrue:` and a `doUntil:` **into the enclosing chunk**,
-behind a jump, whenever every block is written right there with no parameters
-and no temporaries. `languages/solveig/solveig-sob.phx` now does the same, and
-the whole of it is a `%rewrite` of seven rules and a clause for each node it
-builds.
-
-**The rewrite is what made it small, and the size of the alternative is the
-point.** Written as clauses on the existing tree, an inlined block would still
-be a `Block` node — which opens a chunk, starts fresh name and constant tables,
-and pushes a frame's worth of slots. Every one of those would have had to
-become a `lookup` on whether the parent inlined it: about thirty of them, in
-the most intricate rule in the description. Taking the node *out of the tree*
-costs nothing instead: what is left is a list of statements where the send was,
-and it compiles in the enclosing frame because that is the frame it is in.
-`OP_OUTER` depths come out right without anything adjusting them, for the
-reason `solas` gives for the same thing.
-
-What it fixed, measured against the oracle:
+whose. Three of the four are settled — two built, one **tested and refused** —
+and what is left is the one this page has always said to be sceptical about.
 
 | | |
 | --- | --- |
-| the format's nesting limit | `programs/pascal.sol` nested blocks 19 deep where `.sob` allows 16, and the loader refused what this backend wrote. It compiles and agrees now |
-| the call depth | `programs/basic.sol` calls something recursive until the machine stops it and prints what happened; one extra frame per level stopped it a test earlier. It agrees now |
-| the frames in a traceback | an inlined block is a frame that is not there, and there are no longer any extra ones |
+| [2.1](COMPLETED.md#21-reference-attributes--from-jastadd) | reference attributes, from JastAdd — settled **against**: awk needed a forward reference and two passes gave it |
+| [2.2](COMPLETED.md#22-strategies--from-stratego) | strategies, from Stratego — `%rewrite` |
+| [2.4](COMPLETED.md#24-inlining-a-block--from-solas) | inlining a block, from `solas` |
 
-**Sixty-eight programs printed exactly what `solas`'s bytecode prints** when
-this was written, and seven still differed — for reasons that were no longer
-this entry. [1.3](#13-a-way-for-a-description-to-share-a-computation) closed
-six of them and part of the seventh; what is left is
-[1.4](#14-where-a-node-ends), four programs, and seventy-one agreeing on every
-byte.
+### 2.3 Scope graphs — from Statix
+
+**Further off than it looked**, and further still after a third language.
+
+`with` blocks that reopen a record's namespace were named here as the thing
+that would break threading, and Pascal has them — and they turned out to need
+nothing but an environment that binds names to nodes, which was already
+expressible.
+
+A scope graph earns its place when resolution stops being a search through a
+list that the walk built in order: modules that import each other, scopes
+visible from more than one place, a name whose meaning depends on which path
+you reached it by. Pascal has none of those. **Solveig has one flat global
+namespace and awk has two** — globals, and a function's parameters — and awk's
+is resolved by C's own block scoping in the backend, without the description
+saying anything at all.
+
+Three languages, and the shape that would want this has not appeared. After the
+`with` case and after awk, it is worth being sceptical that the next one will
+either.
 
 ---
 
@@ -619,3 +339,17 @@ stands, and `languages/phx/phoenix.phx` records it.
 the rule around it fails later, `b` is never tried. It costs nothing on an LL(1)
 grammar, which is what nearly every published grammar is, and it costs a syntax
 error on a correct file otherwise.
+
+*Three languages later this has still not cost anything*, including awk, whose
+grammar is famously not LL(1) — concatenation with no operator, and a `print`
+whose arguments exclude a rung the rest of the ladder has. Both were describable
+by putting the specific alternative first, which is what ordered choice asks
+for and what a published grammar written for yacc does not say.
+
+**A description may guess where the tool will not.** `languages/awk/awk.phx`
+decides whether `/` opens a regexp by looking at the character after it,
+because awk's own lexer asks the parser and Phoenix's scanner cannot — see
+[3.3](#33-guessing-the-lexicalsyntactic-seam). That is the description's
+business rather than the tool's, and the difference is that a description can
+write the guess down, test the shapes it gets wrong, and render them back
+visibly. `languages/awk/tests/divergent/` holds all three.

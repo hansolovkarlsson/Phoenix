@@ -27,8 +27,8 @@ neither shape, and forty-six:
   which is why awk's grammar is not LL(1) and why `concat` here is a repetition
   of the rung below it;
 - a function may be **called above where it is defined**, which is the forward
-  reference [ROADMAP 2.1](../../docs/ROADMAP.md) has been waiting for a
-  language to need.
+  reference [entry 2.1](../../docs/COMPLETED.md#21-reference-attributes--from-jastadd)
+  had been waiting for a language to need — and which two passes answered.
 
 ## What is here
 
@@ -99,8 +99,8 @@ Each read back as the same tree and neither is awk.
 
 **awk resolves a call by name over the whole program**, so a function may be
 used above where it is defined. That is the forward reference
-[ROADMAP 2.1](../../docs/ROADMAP.md) has been waiting for a language to need,
-and it is **two passes**:
+[COMPLETED 2.1](../../docs/COMPLETED.md#21-reference-attributes--from-jastadd)
+had been waiting for a language to need, and it is **two passes**:
 
 ```
 %pass functions

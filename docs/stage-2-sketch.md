@@ -3,6 +3,12 @@
 *A proposal, not a decision. Nothing here is built. The point is to have
 something concrete enough to be wrong about before it costs anything.*
 
+> **Historical.** This is what stage 2 looked like before it was built, kept
+> for what it got wrong. `%pass` exists and works; where this sketch and the
+> code differ, the code is right. [COMPLETED.md](COMPLETED.md) is what was
+> built and [journal.md](journal.md) says what changed on the way.
+
+
 Stage 1 left a vocabulary — `Binary(op, left, right)`, `Let(name, value)` — and
 nothing that reads it. Stage 2 is `%pass`: clauses keyed on that vocabulary,
 computing attributes over the tree.

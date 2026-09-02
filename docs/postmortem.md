@@ -1,14 +1,19 @@
 # Postmortem
 
-*Written after seven stages, against the predictions the
-[roadmap](ROADMAP.md) and [journal](journal.md) made before there was
-evidence. A prediction that held is worth as little as one that failed unless
-both are written down; this file is where the scoring happens.*
+*Written against the predictions the [roadmap](ROADMAP.md) and
+[journal](journal.md) made before there was evidence. A prediction that held is
+worth as little as one that failed unless both are written down; this file is
+where the scoring happens. [COMPLETED.md](COMPLETED.md) is what exists;
+this is what was **believed** about it.*
 
-Phoenix is ~10,000 lines of C11 with no dependencies. The descriptions written
-against it come to ~2,900 lines: Pascal in 780 (51 node types, a checker and
-two backends), Solveig in 312 (15 node types) with a 372-line bytecode
-backend, and Phoenix's own notation in 242.
+*Revised after awk, which is the first language described here that was not
+chosen to suit the tool.*
+
+Phoenix is ~12,900 lines of C11 with no dependencies. The descriptions written
+against it come to ~4,100 lines: Pascal in 1,434 (56 node types, a checker and
+two backends), Solveig in 1,108 (15 node types) with a bytecode backend, awk in
+968 with a 682-line C runtime it embeds, calc in 362, and Phoenix's own
+notation in 256.
 
 ---
 
@@ -25,15 +30,29 @@ That worked for a reason worth naming: **every hop points backwards**, at a
 node the single post-order walk has already finished with. Nothing needed a
 second walk, a worklist, or a fixed point.
 
-### Held: one implementation of the notation, not two
+### Held, and then failed, and then held: one implementation of the notation
 
 A generated compiler runs the same `lex.c`, `parse.c`, `eval.c` and `run.c`
-that `phx` runs, over frozen tables. The conformance test says the output is
-identical byte for byte. **There has never been a disagreement between the
-interpreter and generated code**, because there is nothing to disagree.
+that `phx` runs, over frozen tables. There is nothing for the two to disagree
+about, because there is only one of them.
 
-The cost was measured rather than assumed: about 24 match-steps per token,
-20,000 lines of Pascal to running C in 238 ms. Nothing has asked for faster.
+**That was said here, and it was not true.** `emit.c` froze every string with
+`strlen`, so a literal holding a **NUL** arrived short while the length beside
+it still said otherwise — and the generated compiler read past the end of a
+string `phx` never had. Any description with a NUL in a literal, which is every
+description that emits a binary format, and `languages/solveig/solveig-sob.phx`
+had one from the day it was written.
+
+Nothing noticed for two stages, and the reason is the more useful half: **the
+test only ever compared text.** The one backend emitting bytes had never been
+written out as a compiler at all.
+
+> "There is only one implementation" is a claim about the code. That it
+> **holds** is a claim about the tests, and it is only as strong as the widest
+> thing they compare.
+
+The suite compares `.sob` files now, and a description whose literals hold a
+NUL in a grammar, a pattern and a template at once.
 
 ### Held: tables-as-conditionals, in place of an `if`
 
@@ -44,6 +63,14 @@ backend — three-way choices between a local slot, an outer slot and a global;
 an append-if-absent on four threaded tables at once — and never once wanted an
 `if`.
 
+**awk found the shape of it, and the shape is not an `if`.** `lookup` is a
+function, so *both* answers are worked out before it chooses — fine until one
+of them cannot be, which an omitted `for` part is. The fix was in the
+**grammar**: an omitted part builds a node that renders as nothing, so every
+part is emitted the same way and the question stops being asked. Third time the
+answer to *"the notation cannot say this"* has been *"say something else,
+earlier"*.
+
 ### Failed: the flat target would make `%rewrite` urgent
 
 The design memo predicted that a flat target (assembly, bytecode) would be
@@ -53,8 +80,15 @@ The design memo predicted that a flat target (assembly, bytecode) would be
 **It did not.** The `.sob` backend is attribute clauses and nothing else. A
 length-prefixed table is `size` of what the children emitted, so it is
 synthesised. A name is an index into a table that grows as the walk goes, so
-the table is threaded. `%rewrite` is still unbuilt and still unneeded, seven
-stages in.
+the table is threaded.
+
+**`%rewrite` was built two stages later, and not for a flat target.** What
+wanted it was an *optimisation*: `solas` compiles the block of an `ifTrue:`
+into the enclosing chunk, and written as clauses that meant conditioning thirty
+of `Block`'s on whether its parent inlined it. Taking the node out of the tree
+costs nothing instead. So the prediction was right that a rewrite would be
+wanted and wrong about every reason — which is the most common shape of a wrong
+prediction on this page.
 
 ### Failed: the missing thing would be expressiveness in expressions
 
@@ -99,8 +133,27 @@ The answers matched and the memory did not. An oracle proves the answers
 agree, not that the program is correct.
 
 The conclusion is that neither is optional and neither is sufficient, which is
-why both exist for both languages: `fpc -Miso` for Pascal, `solas` + `solvm`
-for Solveig.
+why both exist for every language: `fpc -Miso` for Pascal, `solas` + `solvm`
+for Solveig, `/usr/bin/awk` for awk.
+
+**awk demonstrated the round trip's blind spot a second time**, in a different
+language and within an hour of the description being written. Fourteen programs
+round-tripped to identical trees while two constructs were being written back
+out as programs awk *rejects* — `if (c) { a }; else { b }` and `do { a };
+while (c)`, where a `;` after a block ends the statement and orphans what
+follows. Both read back as the same tree. It took running the rendering under
+awk to see it.
+
+### And a fourth kind, added since
+
+| | catches | misses |
+| --- | --- | --- |
+| **comparing `phx` with a compiler `phx` wrote** | the two implementations drifting apart | anything both do wrongly — and anything in a *kind* of output the comparison does not cover |
+
+That last clause is not hypothetical. The comparison existed for stages and
+compared only text, and a bug that could only appear in binary output sat in
+`emit.c` the whole time. A test's blind spot is the shape of what it compares,
+not the shape of what it tests.
 
 ### What the numbers are
 
@@ -143,37 +196,66 @@ it took Pascal's twenty-one `type = "void"` clauses down to one.
 The two library entries stay, and they are the honest cost of answering a
 question one case at a time before seeing the shape of it.
 
-**No forward references.** An attribute cannot refer to a node the walk has
-not reached. Several passes and a `%driver` are the answer, which is what a
-hand-written compiler does anyway — but it is a real constraint and it is why
-reference attributes stay on the roadmap.
+**No forward references** — *and it turned out not to be a cost*. An attribute
+cannot refer to a node the walk has not reached, and several passes with a
+`%driver` are the answer. awk was described partly because it would test this:
+a function may be called above where it is defined. Checking those calls is two
+passes and twenty lines, because **a leaving clause on the root runs after the
+whole subtree**, so the forward reference is answered by the shape of the walk.
+Reference attributes are settled *against* — see
+[COMPLETED.md](COMPLETED.md#21-reference-attributes--from-jastadd).
+
+**Seven hundred lines of C in a string literal.** The awk backend needs a
+runtime, because awk's value model is a string and a number at once and C's is
+not. Held as literals it could not be **compiled** — the artefact that had been
+tested against awk was not the artefact in the repository. `%embed` fixed it,
+and the rule it changes is worth keeping: a mechanism has to answer not only
+*who else wants this* but *what can no longer be checked without it*.
 
 ---
 
-## 4. Open, and worth deciding before building
+## 4. What was open here, and how each closed
 
-**A reader-level mechanism, for `@include`** — *settled since this was
-written*. `%include` names which node an include is built as and which field
-holds the file, and the reader splices before the first pass; the bytecode
-backend has no clause for one and never meets one. It took the shape this
-section proposed, and the count above moved from 50 to 72. What it did *not*
-find is anything wrong with the backend over the 22 programs it added, which
-is the more useful half of the result.
+Every question this section held has been answered, which is why it is written
+in the past tense. [ROADMAP.md](ROADMAP.md) holds what is open now.
 
-**Debug information in a binary target** — *settled since this was written,
-and it cost more than this paragraph expected*. `$pos` answers
-`Position(line, column, file)`, so reading part of one is an ordinary field
-read; the `.sob` line table is now a run per statement and the file table is
-written whenever a chunk is about one file. "Everything needed is present" was
-true of *reading* a position and false of *using* one: a table is a value
-computed for every element of a list, and the notation cannot say that. Two
-library entries covered what the line table needed and a third case is still
-open — see ROADMAP 1.3, which now has its second example.
+**A reader-level mechanism, for `@include`.** `%include` names which node an
+include is built as and which field holds the file, and the reader splices
+before the first pass; a backend has no clause for one and never meets one. It
+took the shape this section proposed. What it did *not* find is anything wrong
+with the backend over the 22 programs it added — the more useful half.
 
-**Whether a description can share a computation.** See the repetition above. A
-`%pass`-level definition, or a rule that other rules can call, would remove
-it — and would be the first thing in the notation that is not a clause keyed
-by node type.
+**Debug information in a binary target**, *and it cost more than this
+paragraph expected*. `$pos` answers `Position(line, column, file, endline,
+endcolumn)`. "Everything needed is present" was true of *reading* a position
+and false of **using** one, and it took three more entries to finish: an
+attribute every node has, a span rather than a point, and inlining, before
+`languages/solveig/` agreed with `solas` on every byte of every program.
+
+**Whether a description can share a computation.** *Answered, and the question
+was mis-stated.* It was never a `%pass`-level definition or a rule other rules
+call — either would have been the first thing in the notation that is not a
+clause about a node. It is `otherwise`, which is the **most general** clause
+about a node, and the evidence that settled it was already in
+`languages/pascal/pascal.phx` before the question was asked.
+
+---
+
+### What replaced them
+
+The questions that arrived while these were being answered are a different
+kind, and worth naming because the shape repeats:
+
+> Every time this project has predicted a **new mechanism**, the answer has
+> been the mechanisms already there, used in an order nobody had tried.
+
+- a map over a list → an attribute every node has
+- a way to compile a block differently → take the block out of the tree
+- a reference that points forward → a leaving clause on the root
+- a conditional that skips a branch → a node that renders as nothing
+
+Four for four. The question a new entry now has to answer first is *what does
+the walk already know, and when does it know it?*
 
 ---
 
@@ -184,3 +266,14 @@ stage that was right. **Nothing has been backed out.** Every stage still
 stands, and the two designs most likely to fail — actions as a notation
 Phoenix owns rather than host-language splices, and one walk rather than
 demand-driven evaluation — are the two that made the later stages cheap.
+
+awk is the strongest evidence for both, because it is the first language here
+that was **not chosen to suit the tool**. It has pattern-action rules and no
+main, no declarations, concatenation with no operator, a value that is a string
+and a number at once, and a grammar that is not LL(1). It reads, round-trips,
+type-checks its calls and compiles — and the six programs in its corpus were
+written by people who had never heard of this.
+
+The ratio is the claim, and it is now measurable on somebody else's code: **800
+lines of awk in the corpus, 1,650 lines of description that compiles it, and
+the description works on awk nobody has written yet.**

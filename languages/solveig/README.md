@@ -184,7 +184,7 @@ the test passes `-I`, exactly as `bin/solas` looks in `bin/../lib`.
 
 ### Line numbers, and which file they are in
 
-`$pos` answers `Position(line, column, file)`, so a chunk's line table is a run
+`$pos` answers `Position(line, column, file, endline, endcolumn)`, so a chunk's line table is a run
 per statement — its bytes at its line, then the `POP` after it at the same
 line — written in one clause because `bytes` takes a column of numbers:
 
@@ -200,7 +200,7 @@ files would need a run per statement naming a row of a table of the distinct
 files, and a description cannot compute a value per element of a list; the
 format's own answer for that is no file table and a bare line, so that is what
 is written. A line number naming a file nobody said is worse than no file name
-at all — see [ROADMAP 1.3](../../docs/ROADMAP.md).
+at all — see [COMPLETED 1.3](../../docs/COMPLETED.md#13-a-way-for-a-description-to-share-a-computation), which settled it.
 
 ### Inlined control flow
 

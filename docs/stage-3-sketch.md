@@ -4,6 +4,10 @@
 thing in a way that only building it revealed, which is the point of writing
 one.*
 
+> **Historical.** This is what stage 3 looked like before it was built, kept
+> for what it got wrong. See [COMPLETED.md](COMPLETED.md) for what exists.
+
+
 ---
 
 ## The shape
@@ -85,7 +89,7 @@ about passes can check.
 run depends on something, that is two drivers.
 
 **No repeating a pass until nothing changes.** Fixpoint belongs to the
-`%rewrite` [strategies](ROADMAP.md#22-strategies--from-stratego) — `innermost`
+`%rewrite` [strategies](COMPLETED.md#22-strategies--from-stratego) — `innermost`
 already means *until nothing changes* — and putting a second, weaker version of
 it in the driver would be inventing a word for something that already has one.
 
