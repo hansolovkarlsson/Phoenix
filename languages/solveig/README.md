@@ -30,7 +30,8 @@ something the documentation claims the language *is*:
 | | |
 | --- | --- |
 | `integers` | arithmetic that traps rather than wraps, division that floors so `#-7:div(#2)` is `#-4`, and a remainder whose sign follows the divisor |
-| `floats` | the unmarked number is the float; narrowing names its direction; dividing by zero answers `infinity` rather than failing |
+| `floats` | the unmarked number is the float; dividing by zero answers `infinity` rather than failing |
+| `narrowing` | the whole reason there is no `asInteger` on a float — four operations, and a name that did not say which would be choosing one silently |
 | `strings` | bytes and not characters, so `"café":size` is `#5`; one-based and both ends included |
 | `arrays` | one-based, `add` answers the array so it chains, `join` is strict about strings |
 | `dictionaries` | `at` fails on a missing key and `at(key, default)` does not |
@@ -38,6 +39,28 @@ something the documentation claims the language *is*:
 | `control` | there is no `if`: these are messages taking blocks |
 | `objects` | `new`, `via` where another language has `super`, and reflection that reads and never writes |
 | `strictness` | no implicit conversion anywhere, with `equals` the one exception; and a message wanting a block says so when it is *sent* |
+
+### Why `narrowing` is its own program
+
+There is no `asInteger` on a float because there are four answers:
+
+| | 1.5 | −1.5 | 2.5 | −2.5 |
+| --- | --- | --- | --- | --- |
+| `truncated` | 1 | **−1** | 2 | −2 |
+| `rounded` | 2 | −2 | **3** | **−3** |
+| `floor` | 1 | **−2** | 2 | −3 |
+| `ceiling` | 2 | −1 | 3 | −2 |
+
+`truncated` goes toward zero and `floor` goes down, so they differ only on a
+negative. `rounded` goes **away from zero** at a half rather than toward even,
+so it differs from `truncated` only at one. Two pairs that agree on the obvious
+cases and part on the awkward ones is exactly the shape of thing a
+reimplementation gets subtly wrong, so the suite asserts all sixteen cells and
+the refusal:
+
+```
+float does not understand 'asInteger'
+```
 
 ## What is not here yet
 
