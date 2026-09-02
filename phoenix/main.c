@@ -67,6 +67,8 @@ static const char usage[] =
     "                 compiler, and stop\n"
     "  --tree         print the tree and stop, whatever drivers there are\n"
     "  --stats        report how much work reading the source took\n"
+    "  --raw          write the answer exactly, adding no trailing newline --\n"
+    "                 which a description emitting a binary format needs\n"
     "  --driver NAME  which %driver to run (default: the first declared)\n"
     "  --drivers      list the drivers this description declares\n"
     "  --run PASS     run one %pass on its own, for looking at it\n"
@@ -92,6 +94,7 @@ int main(int argc, char **argv)
     bool        want_drivers = false;
     bool        want_tree    = false;
     bool        want_stats   = false;
+    bool        want_raw     = false;
     const char *compile_to   = NULL;
     bool        quiet        = false;
 
@@ -108,6 +111,7 @@ int main(int argc, char **argv)
         if (strcmp(arg, "--drivers") == 0) { want_drivers = true; continue; }
         if (strcmp(arg, "--tree")    == 0) { want_tree    = true; continue; }
         if (strcmp(arg, "--stats")   == 0) { want_stats   = true; continue; }
+        if (strcmp(arg, "--raw")     == 0) { want_raw     = true; continue; }
 
         if (strcmp(arg, "-o") == 0) {
             if (i + 1 >= argc) {
@@ -356,7 +360,10 @@ int main(int argc, char **argv)
         size_t len;
         if (value_format(a, answer, &text, &len)) {
             fwrite(text, 1, len, stdout);
-            if (len == 0 || text[len - 1] != '\n') fputc('\n', stdout);
+            /* A trailing newline is a kindness to a terminal and a corruption
+             * of a binary file, so a description emitting one asks for --raw. */
+            if (!want_raw && (len == 0 || text[len - 1] != '\n'))
+                fputc('\n', stdout);
         } else {
             tree_dump(stdout, answer);
         }

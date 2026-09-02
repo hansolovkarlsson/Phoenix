@@ -1,0 +1,372 @@
+(* solveig-sob.phx -- Solveig, compiled to `.sob` bytecode for SolVM.
+ *
+ *   phx --raw languages/solveig/solveig-sob.phx prog.sol > prog.sob
+ *   solvm prog.sob
+ *
+ * The grammar, the tree and the `show` pass are in `solveig.phx` and are
+ * imported. This file is the emit pass, and it emits **bytes**.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this is the interesting target
+ *
+ * Every emit pass before this one produced *text*, where the shape of the
+ * output followed the shape of the tree and a parent wrapped its children.
+ * A bytecode file does not work that way:
+ *
+ *   - **a table is length-prefixed**, so its size must be known before its
+ *     first byte is written -- which falls out of `size` over what the
+ *     children already emitted, and is why synthesised attributes suit it
+ *   - **a name is an index into a table** that grows as the walk goes, so the
+ *     table is a *threaded* attribute and the index is where the name landed
+ *   - **a jump carries an offset** to code that has not been written yet,
+ *     which is the size of what the branch will emit -- again a child's
+ *     `size`, and again bottom-up
+ *
+ * The roadmap has claimed since stage 2 that a flat target is where threaded
+ * state earns its keep, and has never tested it. This is the test.
+ *
+ * ---------------------------------------------------------------------------
+ * The format
+ *
+ * From `docs/design.md` in the Solveig repository. Little-endian throughout,
+ * so a `.sob` is portable.
+ *
+ *   header      "SOLB", u16 version, u16 script slot count
+ *   names       u32 count, then each: u16 length + bytes
+ *   constants   u32 count, then each: u8 tag + payload (0 nil, 1 i64, 2 f64,
+ *                                                       3 bool)
+ *   code        u32 length, then that many bytes
+ *   lines       u32 run count, then each: u32 run length + u32 line
+ *   files       u32 count, then each: u16 length + bytes
+ *   fileruns    u32 run count, then each: u32 run length + u32 file index
+ *   slotnames   u16 count, then each: u16 length + bytes
+ *   methods     u32 count, then each: u16 name length + bytes, u16 arity,
+ *                                     u16 slot count, u16 flags, then a body
+ *)
+
+%import "solveig.phx" .
+
+%pass sob
+
+  (* ---- the tables, threaded ----
+   *
+   * `names` maps a name to the index it was given, and `nametext` is the same
+   * table already encoded. Both are threaded and both are updated together,
+   * because appending to one without the other would put an index in the code
+   * that the file does not carry.
+   *
+   * A name is added **only if it is not already there**, which is a
+   * conditional -- so it is a table, as every conditional here is:
+   * `lookup([[true, unchanged]], defined(...), changed)`.
+   *)
+  (* The table is **seeded** with the three names the desugarings need.
+   * `[a, b]` compiles to `array:of(a, b)` and `#[k = v]` to
+   * `dictionary:of(k, v)`, so those three names are wanted by nodes that
+   * never mention them -- and interning a name at the node that needs it
+   * would mean writing the append-if-absent dance twice more per node. A
+   * file that uses no collection carries three names it never reads, which
+   * costs twenty-one bytes and buys a description half the size.
+   *
+   * `size($names)` is the next free index, so the seeding has to agree with
+   * itself: three entries here, three encoded below, in the same order. *)
+  thread names    = [["array", 0], ["of", 1], ["dictionary", 2]] .
+  thread nametext = "\x05\x00array\x02\x00of\x0a\x00dictionary" .
+  thread consts   = "" .
+  thread nconsts  = 0 .
+
+  (* A block compiles to a chunk in the enclosing chunk's method table, and
+   * `OP_BLOCK` names it by index there -- so the table is threaded and the
+   * index is where the method landed, exactly as a name is. *)
+  thread methods  = "" .
+  thread nmethods = 0 .
+
+  (* How many slots the chunk being built needs. Slot 0 is the receiver, so a
+   * chunk with no locals still has one. A group adds slots to the frame it is
+   * written in and its siblings may reuse them, so what the chunk must
+   * declare is the **largest** any point in it reached, not the last. *)
+  thread nslots   = 1 .
+
+  (* Whether the chunk being built reaches out of its own frame. A block that
+   * does has to keep its home frame alive, which is the `CAPTURES` flag, and
+   * `solas` decides it the same way: does this chunk's own code contain an
+   * `OP_OUTER`. Per chunk, so it is saved and restored like the tables. *)
+  thread reaches  = false .
+
+  (* ---- literals ---- *)
+
+  (* `#45`, `$ff` and `%1010` are one node, and the marker says the base --
+   * which is a lookup on the first character, as every choice here is. *)
+  Integer : base   = lookup([["$", 16], ["%", 2]], slice($text, 1, 1), 10)
+          : value  = int(slice($text, 2, size($text)), $base)
+          : idx    = $nconsts
+          : consts  = "{}{}{}" of $consts, bytes(1, 1), bytes($value, 8)
+          : nconsts = $nconsts + 1
+          : code    = "{}{}" of bytes(0, 1), bytes($idx, 2) .
+
+  (* ---- a name ----
+   *
+   * A slot if the frame has one by that name, and a global otherwise. That is
+   * the whole of scoping here: `$slotnames` is the frame's slots in slot
+   * order, so a name's slot is simply *where it is in that list* -- which is
+   * what `positions` answers, and the reason it exists.
+   *
+   * A name belonging to an *enclosing* frame would need `OP_OUTER` and a
+   * count of frames to climb. That is not written yet, and a wrong answer
+   * here would be a global with the same name -- silently the wrong variable.
+   * So it is refused, and the check is what makes the omission safe. *)
+  Name ! $name = "self" and $bdepth = 0
+           : "'self' is only meaningful inside a block"
+       : slot   = lookup(positions($slotnames), $name, -1)
+       : oslot  = lookup($outerslot, $name, -1)
+       : odepth = lookup($outerdepth, $name, -1)
+       : reaches = lookup([[true, true]], $slot < 0 and $oslot > -1, $reaches)
+       : idx = lookup($names, $name, size($names))
+       : nametext = lookup([[true, $nametext]], defined($names, $name) or $slot > -1 or $oslot > -1,
+                           "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+       : names = lookup([[true, $names]], defined($names, $name) or $slot > -1 or $oslot > -1,
+                        [...$names, [$name, size($names)]])
+         (* A slot of this frame, a slot of one further out, or a global --
+          * and the depth is the difference between the two frames' distances
+          * from the script, which is why each frame records its own. *)
+       : code = lookup([[true, "{}{}" of bytes(4, 1), bytes($slot, 1)]], $slot > -1,
+                lookup([[true, "{}{}{}" of bytes(6, 1),
+                                          bytes($bdepth - $odepth, 1),
+                                          bytes($oslot, 1)]], $oslot > -1,
+                       "{}{}" of bytes(2, 1), bytes($idx, 2))) .
+
+  (* ---- a send ----
+   *
+   * The receiver's code, then each argument's, then the send. The order the
+   * bytes go in is the order the walk visited them, which is why a name's
+   * index and the code that uses it agree without anything being arranged.
+   *)
+  Send : idx = lookup($names, $message, size($names))
+       : nametext = lookup([[true, $nametext]], defined($names, $message),
+                           "{}{}{}" of $nametext, bytes(size($message), 2), $message)
+       : names = lookup([[true, $names]], defined($names, $message),
+                        [...$names, [$message, size($names)]])
+         (* A nested `of` is parenthesised: `of` does not chain, so without
+          * them the second one would be reading the first one's arguments. *)
+       : code = "{}{}{}{}{}" of $to.code, join($args.code, ""),
+                                bytes(11, 1), bytes($idx, 2),
+                                bytes(size($args), 1) .
+
+  (* ---- text and symbols ----
+   *
+   * Both live in the **names** table rather than the constants: `OP_STRING`
+   * and `OP_SYMBOL` take a name index and build the value at run time, which
+   * is how two occurrences of the same literal come to share one entry.
+   *
+   * A literal arrives with its quotes on and its escapes raw, because `show`
+   * has to be able to write it back out unchanged. Cooking it is four
+   * replacements, and the order is the whole difficulty: doing `\\` first
+   * would turn `\\n` into an escape it never was, and doing it last would
+   * have already eaten the backslash. So `\\` goes to a byte no source file
+   * can contain, the others are done, and the sentinel comes back. *)
+  Text : raw    = slice($text, 2, size($text) - 1)
+       : held   = join(split($raw, "\\\\"), "\x01")
+       : cooked = join(split(join(split(join(split(join(split($held, "\\n"), "\n"),
+                                               "\\t"), "\t"),
+                                    "\\r"), "\r"),
+                         "\\\""), "\"")
+       : value  = join(split($cooked, "\x01"), "\\")
+       : idx      = lookup($names, $value, size($names))
+       : nametext = lookup([[true, $nametext]], defined($names, $value),
+                           "{}{}{}" of $nametext, bytes(size($value), 2), $value)
+       : names    = lookup([[true, $names]], defined($names, $value),
+                           [...$names, [$value, size($names)]])
+       : code = "{}{}" of bytes(9, 1), bytes($idx, 2) .
+
+  Symbol : value    = slice($name, 2, size($name))
+         : idx      = lookup($names, $value, size($names))
+         : nametext = lookup([[true, $nametext]], defined($names, $value),
+                             "{}{}{}" of $nametext, bytes(size($value), 2), $value)
+         : names    = lookup([[true, $names]], defined($names, $value),
+                             [...$names, [$value, size($names)]])
+         : code = "{}{}" of bytes(10, 1), bytes($idx, 2) .
+
+  (* ---- floats ----
+   *
+   * Tag 2, and the payload is the double's own bits -- which is what `bytes`
+   * of a float means, and the reason it had to learn floats at all. *)
+  Float : idx     = $nconsts
+        : consts  = "{}{}{}" of $consts, bytes(2, 1), bytes(float($text), 8)
+        : nconsts = $nconsts + 1
+        : code    = "{}{}" of bytes(0, 1), bytes($idx, 2) .
+
+  (* ---- collections ----
+   *
+   * Neither is an instruction. `[a, b]` is `array:of(a, b)` and `#[k = v]` is
+   * `dictionary:of(k, v)`, so both are a global, the parts, and a send -- and
+   * a dictionary sends twice as many arguments as it has pairs, since a pair
+   * puts its key and its value on the stack as two.
+   *)
+  Array : code = "{}{}{}{}{}" of bytes(2, 1), bytes(0, 2),
+                                 join($items.code, ""),
+                                 ("{}{}" of bytes(11, 1), bytes(1, 2)),
+                                 bytes(size($items), 1) .
+
+  Pair : code = "{}{}" of $key.code, $value.code .
+
+  Dictionary : code = "{}{}{}{}{}" of bytes(2, 1), bytes(2, 2),
+                                      join($pairs.code, ""),
+                                      ("{}{}" of bytes(11, 1), bytes(1, 2)),
+                                      bytes(size($pairs) * 2, 1) .
+
+  (* ---- binding ----
+   *
+   * `x := v` at the top level is a global. Inside a block it would be a slot,
+   * which is what the scope work below is for; until a block has one, every
+   * binding is a global, which is exactly what a script without blocks means.
+   *)
+  Bind : slot   = lookup(positions($slotnames), $name, -1)
+       : oslot  = lookup($outerslot, $name, -1)
+       : odepth = lookup($outerdepth, $name, -1)
+       : reaches = lookup([[true, true]], $slot < 0 and $oslot > -1, $reaches)
+       : idx      = lookup($names, $name, size($names))
+       : nametext = lookup([[true, $nametext]], defined($names, $name) or $slot > -1 or $oslot > -1,
+                           "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+       : names    = lookup([[true, $names]], defined($names, $name) or $slot > -1 or $oslot > -1,
+                           [...$names, [$name, size($names)]])
+       : store = lookup([[true, "{}{}" of bytes(5, 1), bytes($slot, 1)]], $slot > -1,
+                 lookup([[true, "{}{}{}" of bytes(7, 1),
+                                           bytes($bdepth - $odepth, 1),
+                                           bytes($oslot, 1)]], $oslot > -1,
+                        "{}{}" of bytes(3, 1), bytes($idx, 2)))
+       : code = "{}{}" of $value.code, $store .
+
+  (* `o:x := v` -- the object, the value, and the name to bind on it. *)
+  SetSlot : idx      = lookup($names, $name, size($names))
+          : nametext = lookup([[true, $nametext]], defined($names, $name),
+                              "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+          : names    = lookup([[true, $names]], defined($names, $name),
+                              [...$names, [$name, size($names)]])
+          : code = "{}{}{}{}" of $to.code, $value.code,
+                                 bytes(12, 1), bytes($idx, 2) .
+
+  (* ---- a block ----
+   *
+   * The one construct that opens a **chunk of its own**, and the reason
+   * `down` had to learn to set a threaded attribute. A method carries its own
+   * name and constant tables, so entering one starts them empty and leaving
+   * one puts the enclosing tables back. The save is an ordinary `down`
+   * attribute, the reset is a `down` on the thread, and the restore is a
+   * leaving clause -- a stack, written out of the two things the notation
+   * already had rather than added to it.
+   *
+   * Because it is a stack, it nests: a block inside a block saves the middle
+   * chunk's tables and puts them back, and its method lands in the middle
+   * chunk's table where its `OP_BLOCK` looks for it.
+   *)
+  Block : down outerslot  = [...positions($slotnames), ...$outerslot]
+        : down outerdepth = bind($outerdepth, $slotnames, $bdepth)
+        : down bdepth     = $bdepth + 1
+          (* Slot 0 holds whatever the send put there: the receiver, which is
+           * what `self` means -- in **every** block, not only the outermost.
+           * A block installed on a class is a method and its slot 0 is the
+           * receiver of the send, and a block written inside another is still
+           * the one that gets sent. So `self` is slot 0 of the frame it is
+           * written in, always, which is what naming it here says. *)
+        : down slotnames = ["self", ...$params, ...$temps]
+        : down heldnames = $names
+        : down heldtext  = $nametext
+        : down heldcs    = $consts
+        : down heldnc    = $nconsts
+        : down heldms    = $methods
+        : down heldnm    = $nmethods
+        : down heldsl    = $nslots
+        : down heldre    = $reaches
+        : down names     = [["array", 0], ["of", 1], ["dictionary", 2]]
+        : down nametext  = "\x05\x00array\x02\x00of\x0a\x00dictionary"
+        : down consts    = ""
+        : down nconsts   = 0
+        : down methods   = ""
+        : down nmethods  = 0
+        : down nslots    = 1 + size($params) + size($temps)
+        : down reaches   = false
+
+          (* Two slots of one name would be one slot: `positions` keeps a
+           * repeat's first place, so the inner declaration would write over
+           * the outer one. Refused rather than compiled. *)
+        ! size(positions($slotnames)) < size($slotnames)
+            : "a name is declared twice in one frame"
+
+          (* Every statement but the last is discarded and the last is the
+           * answer -- which is the whole body with `POP` after each, less
+           * that final `POP`, since `POP` is one byte and it is the last one. *)
+        : joined   = join(each($body.code, "{}\x12"), "")
+        : bodycode = "{}{}" of slice($joined, 1, size($joined) - 1), bytes(19, 1)
+
+        : chunk  = join([bytes(size($names), 4), $nametext,
+                         bytes($nconsts, 4), $consts,
+                         bytes(size($bodycode), 4), $bodycode,
+                         bytes(1, 4), bytes(size($bodycode), 4), bytes(1, 4),
+                         bytes(0, 4), bytes(0, 4), bytes(0, 2),
+                         bytes($nmethods, 4), $methods], "")
+
+          (* name, arity, slots, flags, body. The flag is `IS_BLOCK`; the
+           * `CAPTURES` flag is set only for a chunk containing `OP_OUTER`,
+           * and this backend refuses those, so it is never on. *)
+        : flags  = lookup([[true, 3]], $reaches, 1)
+        : record = join([bytes(5, 2), "block", bytes(size($params), 2),
+                         bytes($nslots, 2), bytes($flags, 2), $chunk], "")
+
+        : idx      = $heldnm
+        : code     = "{}{}" of bytes(8, 1), bytes($idx, 2)
+        : names    = $heldnames
+        : nametext = $heldtext
+        : consts   = $heldcs
+        : nconsts  = $heldnc
+        : methods  = "{}{}" of $heldms, $record
+        : nmethods = $heldnm + 1
+        : nslots   = $heldsl
+        : reaches  = $heldre .
+
+  (* ---- a group ----
+   *
+   * `(|t| ...)` is not a chunk: it runs where it is written, and its
+   * temporaries are slots of the frame it is written in. So it adds to the
+   * slot names and to nothing else, and its code is its body inline.
+   *)
+  Group : down slotnames = [...$slotnames, ...$temps]
+        ! size(positions($slotnames)) < size($slotnames)
+            : "a name is declared twice in one frame"
+        : joined = join(each($body.code, "{}\x12"), "")
+        : code   = slice($joined, 1, size($joined) - 1)
+          (* The frame needs room for the deepest group in it, not the last. *)
+        : nslots = lookup([[true, $nslots]], $nslots > size($slotnames),
+                          size($slotnames)) .
+
+  (* `@include` splices another file in before compiling, which is a thing a
+   * *reader* does and this pass is not one. Refused by name, so the message
+   * says what is missing rather than that a node lacks an attribute. *)
+  Include ! true : "@include is not compiled by this backend" .
+
+  (* ---- the file ----
+   *
+   * A statement leaves a value nobody wants, so each is followed by a `POP`,
+   * and the script ends with a `HALT`.
+   *)
+  Program : down slotnames = [""]
+          : down outerslot  = []
+          : down outerdepth = []
+          : down bdepth     = 0
+          : bodycode = "{}{}" of join(each($body.code, "{}\x12"), ""), bytes(20, 1)
+          : out = join([
+              "SOLB", bytes(14, 2), bytes($nslots, 2),
+              bytes(size($names), 4), $nametext,
+              bytes($nconsts, 4), $consts,
+              bytes(size($bodycode), 4), $bodycode,
+              (* The line table has to **cover the code**: the loader adds the
+               * runs up and refuses a file whose lines do not account for
+               * every byte. One run, all of it line one -- which is honest
+               * rather than useful, and is what a message will point at until
+               * this carries real positions. *)
+              bytes(1, 4), bytes(size($bodycode), 4), bytes(1, 4),
+              bytes(0, 4),              (* files     *)
+              bytes(0, 4),              (* fileruns  *)
+              bytes(0, 2),              (* slotnames *)
+              bytes($nmethods, 4), $methods
+            ], "") .
+
+%driver sob = sob -> out .

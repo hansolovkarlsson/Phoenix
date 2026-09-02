@@ -189,7 +189,7 @@ definition-clause = ":" "down" a:word "=" e:action -> Inherited(attr: $a, value:
 check-clause = "!" c:action ":" m:action -> Check(when: $c, message: $m) .
 
 pattern = t:name "(" f:field-pattern { "," g:field-pattern -> $g } ")"
-            -> Shape(type: $t, fields: [$f, ...$3])                (* order *)
+            -> Shape(type: $t, fields: [$f, ...$4])                (* order *)
         | name    -> Kind(type: $1)
         | literal -> MatchText(text: $1)
         | integer -> MatchInteger(text: $1)
@@ -225,7 +225,7 @@ primary = reference          -> Ref(name: $1)
         | real               -> RealValue(text: $1)
         | integer            -> IntegerValue(text: $1)
         | n:name "(" a:argument { "," b:argument -> $b } ")"
-            -> Apply(what: $n, values: [$a, ...$3])                (* order *)
+            -> Apply(what: $n, values: [$a, ...$4])                (* order *)
         | n:name "(" ")"     -> Apply(what: $n, values: [])
         | name               -> Word(name: $1)
         | "[" e:element { "," f:element -> $f } "]" -> ListOf(items: [$e, ...$3])

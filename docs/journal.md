@@ -1405,3 +1405,133 @@ says the operators are a second spelling and never a second semantics, so the
 tree says so too — and `&` and `|` wrap their right side in a block, because
 `and` and `or` short-circuit. That is the one place the lowering is more than
 renaming, and it is the sort of thing a description is *for* saying.
+
+---
+
+## Stage 7 — a binary target, and what it took
+
+The `.sob` backend ([`languages/solveig/solveig-sob.phx`](../languages/solveig/solveig-sob.phx))
+compiles Solveig to SolVM bytecode, which `solvm` runs. Every emit pass before
+it produced *text*, where the output followed the shape of the tree and a
+parent wrapped its children. A bytecode file does not work that way, and the
+roadmap had claimed since stage 2 that a flat target is where threaded state
+earns its keep without ever testing the claim.
+
+**The claim held, and it was not enough.** Three things had to be added, and
+each one is a place where the notation was short rather than a place where the
+target was strange.
+
+### `bytes`, and `int` with a base
+
+A description that emits a binary format cannot do without a number as bytes,
+and it cannot be written in the notation. `bytes(n, width)` is little-endian
+and one to eight wide; `bytes(f, 8)` of a **float** is its IEEE 754 bits,
+which is the only reading of "this number as eight bytes" a binary format ever
+wants.
+
+`int(text, base)` is the same generalisation of something that was already
+there. Solveig writes `#45`, `$ff` and `%1010` and they are **one node**, so
+the marker says the base and the base has to be sayable.
+
+### `positions`, and slots
+
+A block's locals are slots numbered from zero, and *a name's slot is where it
+is in the list of the frame's slot names*. Nothing could reach that: `at` wants
+an index and nothing produced one. `positions(list)` answers the table saying
+where each thing is — a table rather than a list of indices, so that it
+composes with `lookup`, which is how every other question in the notation is
+asked.
+
+With it, scoping is three lines and no machinery: a name is a slot if the
+frame has one by that name, an `OP_OUTER` if a frame further out does, and a
+global otherwise.
+
+### `down` on a threaded attribute — the real one
+
+**A thread runs in one chain along the whole walk, which is right for anything
+the program has one of and wrong for anything a scope has its own of.** A
+`.sob` method carries its own name and constant tables, so entering one has to
+start them empty and leaving one has to put the enclosing tables back. That is
+a save and a restore. That is a stack. A single chain has no stack in it.
+
+The change is that a `down` clause naming a threaded attribute now *sets the
+thread for the subtree* instead of binding a name over it. Everything else
+follows from what was already there: the save is an ordinary `down` attribute,
+the restore is the node's own leaving clause — which works because a node's
+scope is torn down *after* its leaving clauses run, not before.
+
+```
+Block : down heldnames = $names        (* save    *)
+      : down names     = [...]         (* reset   *)
+      ...
+      : names          = $heldnames .  (* restore *)
+```
+
+It nests because a stack nests: a block inside a block saves the middle
+chunk's tables and puts them back, and its method lands in the middle chunk's
+method table where its `OP_BLOCK` looks for it. Nothing in `run.c` knows what
+a chunk is.
+
+**This is the first thing the design could not express**, and section 3.5 of
+the roadmap asked to have it recognised as this decision arriving rather than
+as a puzzle. It is not the conditional that gave way — tables-as-conditionals
+held up fine over an entire backend. It is that inherited and threaded were
+two mechanisms where the target wanted one thing that was both: accumulating
+left to right *and* scoped.
+
+### Spreading a non-list is now an error
+
+`...` of something that is not a list used to spread to the thing itself. That
+is quiet and wrong, and it hid a real bug in two files for as long as it was
+allowed:
+
+```
+group = "(" t:temporaries e:expression { "." f:expression -> $f } [ "." ] ")"
+          -> Group(temps: $t, body: [$e, ...$3]) .
+```
+
+`$3` is the third *item* — `e:expression` — not the repetition, which is `$4`.
+So `[$e, ...$3]` built `[e, e]`: the first statement twice, every later
+statement dropped. `("ran":display. { nil })` parsed as
+`("ran":display. "ran":display)`.
+
+**The round trip could not see it**, and this is the sharpest example yet of
+why an oracle is not optional. The parse was wrong, the tree was wrong, and
+what `show` wrote back out was wrong *in the same way* — so it parsed to an
+identical tree and the round trip passed. Running it did not: `ifTrue` was
+handed a string.
+
+Refusing the spread found the same mistake twice more, in
+`languages/phx/phoenix.phx` itself — `Apply(values: [$a, ...$3])` and
+`Shape(fields: [$f, ...$3])`, both wanting `$4`. Phoenix's own
+self-description had been miscounting items since it was written, and every
+test passed because the miscount was consistent.
+
+### What the oracle found
+
+`solas` and `solvm` are the oracle, the way `fpc` is for Pascal, and the test
+is stronger: not "does the output read correctly" but "does the compiled
+program print the same thing". Two bugs, both in the *front end* and neither
+findable by rendering:
+
+- **`-2^2` was 4 and should be -4.** `^` binds tighter than a leading minus,
+  so it is `-(2^2)`. Keeping the sign in the literal — which is what makes
+  `-1.5:truncated` read as `solas` reads it — gives `(-2)^2`. The one shape
+  where the two rules disagree is now written out first in `power`.
+- **`self` is slot 0 of *every* frame**, not of the outermost block of a nest.
+  A block installed on a class is a method and its slot 0 is the receiver, and
+  a block written inside another is still the one that gets sent.
+
+### Where it stands
+
+50 of the 51 Solveig files in the repository that do not use `@include`
+compile to bytecode that prints exactly what `solas`'s does, run by the same
+`solvm`. Four differ only in the *locations in a traceback*, because this
+backend emits one line run per chunk and no file table — missing debug
+information, not a miscompile. One reads the clock.
+
+`@include` is the one construct refused, and refusing it is right: splicing
+another file in before compiling is something a **reader** does, and a pass is
+a walk over one tree that has already been read. It is the first real gap that
+is not about expressions at all, and any language with a module system will
+want the same thing.

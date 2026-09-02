@@ -123,6 +123,33 @@ Value *eval_call(Eval *e, const Expr *x)
         return list_of(a, items, n + adding);
     }
 
+    /* `positions(list)` -- the table saying where each thing is, which is the
+     * one fact about a list nothing else could reach: `at` wants an index and
+     * nothing produced one. It is what turns a list of names into slots.
+     *
+     * Written as a table rather than as a list of indices so that it composes
+     * with `lookup`, which is how every other question in the notation is
+     * asked. A repeated element keeps its **first** position, matching what
+     * `lookup` would answer for it. */
+    if (strcmp(f, "positions") == 0) {
+        if (!want(e, x, 1, args)) return NULL;
+        if (args[0]->kind != V_LIST)
+            return library_fail(e, x, "'positions' wants a list, and this is %s",
+                                value_kind_name(args[0]));
+
+        Value **items = arena_alloc(a, (size_t)args[0]->n * sizeof *items);
+        int     n     = 0;
+
+        for (int i = 0; i < args[0]->n; i++) {
+            bool seen = false;
+            for (int j = 0; j < n; j++)
+                if (value_equal(items[j]->items[0], args[0]->items[i])) { seen = true; break; }
+            if (seen) continue;
+            items[n++] = pair(a, args[0]->items[i], value_int(a, i));
+        }
+        return list_of(a, items, n);
+    }
+
     /* `lookup(env, name)` and `lookup(env, name, default)` -- the second is
      * the same operation with an answer for absence, and a notation with no
      * conditional needs one. */
@@ -180,8 +207,12 @@ Value *eval_call(Eval *e, const Expr *x)
 
     /* ---- conversions ---- */
 
+    /* `int(text)` and `int(text, base)` -- the same operation with the base
+     * said out loud, which a language whose literals carry a marker needs:
+     * Solveig writes `#45`, `$ff` and `%1010` and they are one node. */
     if (strcmp(f, "int") == 0) {
-        if (!want(e, x, 1, args)) return NULL;
+        bool based = x->nkids == 2;
+        if (!based && !want(e, x, 1, args)) return NULL;
         if (args[0]->kind == V_INT) return args[0];
         if (args[0]->kind == V_FLOAT)
             return library_fail(e, x, "'int' does not narrow a float -- "
@@ -190,11 +221,19 @@ Value *eval_call(Eval *e, const Expr *x)
             return library_fail(e, x, "'int' wants text, and this is %s",
                         value_kind_name(args[0]));
 
+        int base = 10;
+        if (based) {
+            if (args[1]->kind != V_INT || args[1]->ival < 2 || args[1]->ival > 36)
+                return library_fail(e, x, "'int' wants a base between 2 and 36");
+            base = (int)args[1]->ival;
+        }
+
         char *end;
         char *copy = arena_strndup(a, args[0]->text, args[0]->len);
-        long long n = strtoll(copy, &end, 10);
+        long long n = strtoll(copy, &end, base);
         if (end == copy || *end)
-            return library_fail(e, x, "\"%s\" is not an integer", copy);
+            return library_fail(e, x, "\"%s\" is not an integer in base %d",
+                                copy, base);
         return value_int(a, n);
     }
 
@@ -239,6 +278,59 @@ Value *eval_call(Eval *e, const Expr *x)
         if (!(r >= -9223372036854775808.0 && r < 9223372036854775808.0))
             return library_fail(e, x, "%g does not fit a 64-bit integer", d);
         return value_int(a, (long long)r);
+    }
+
+    /* ---- bytes ----
+     *
+     * An integer as that many bytes, least significant first. **A description
+     * that emits a binary format cannot do without it**, and it cannot be
+     * written in the notation: there is no way to take a value apart into
+     * bytes with arithmetic that answers integers and text that answers
+     * characters.
+     *
+     * Little-endian and a width, because those are the two things a file
+     * format fixes and the two things a caller must therefore say.
+     */
+    if (strcmp(f, "bytes") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if ((args[0]->kind != V_INT && args[0]->kind != V_FLOAT) ||
+            args[1]->kind != V_INT)
+            return library_fail(e, x, "'bytes' wants a number and a width");
+
+        long long width = args[1]->ival;
+        if (width < 1 || width > 8)
+            return library_fail(e, x, "'bytes' writes one to eight bytes, not %lld",
+                                width);
+
+        /* A float is written as what it *is* -- its IEEE 754 bits -- which is
+         * the only reading of "this number as eight bytes" a binary format
+         * ever wants. Four bytes is single precision, and narrower is not a
+         * float at all, so it is refused rather than quietly rounded. */
+        unsigned long long v;
+        if (args[0]->kind == V_FLOAT) {
+            if (width == 8) {
+                double d = args[0]->real;
+                unsigned long long bits;
+                memcpy(&bits, &d, sizeof bits);
+                v = bits;
+            } else if (width == 4) {
+                float g = (float)args[0]->real;
+                unsigned int bits;
+                memcpy(&bits, &g, sizeof bits);
+                v = bits;
+            } else {
+                return library_fail(e, x, "a float is four or eight bytes, not %lld",
+                                    width);
+            }
+        } else {
+            v = (unsigned long long)args[0]->ival;
+        }
+        char *out = arena_alloc(a, (size_t)width + 1);
+
+        for (long long i = 0; i < width; i++) out[i] = (char)((v >> (8 * i)) & 0xff);
+        out[width] = '\0';
+
+        return value_text(a, out, (size_t)width);
     }
 
     /* ---- text ----

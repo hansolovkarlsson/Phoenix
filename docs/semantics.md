@@ -188,6 +188,50 @@ The last two are deliberate. A default rendering for a node is a thing that
 would silently appear in generated code, and a pass that wants one says what it
 is.
 
+## Lists
+
+`[a, b]` builds one; `...x` inside a list spreads it. **`...` of anything that
+is not a list is an error**, because the likeliest way to write one is
+miscounting an item — `[$e, ...$3]` where `$3` is the third item rather than
+the repetition builds the first element twice, and nothing downstream can tell.
+
+## Attributes, and when each one runs
+
+One walk, post-order, two phases at each node:
+
+| | |
+| --- | --- |
+| `down attr = e` | entering, before the children, visible below this node |
+| `attr = e` | leaving, after the children |
+| `thread attr = e` | leaving, and the value flows on to what the walk visits next |
+
+Which is why a `down` clause cannot read an attribute its own rule computes,
+and a check — which runs before the attributes it guards — cannot read those
+either. Both are refused when the description is read.
+
+### `down` on a threaded attribute
+
+A `down` clause naming a **threaded** attribute sets the thread for the
+subtree rather than binding a name over it, and that is what makes a thread
+nest. A thread otherwise runs in one chain along the whole walk, which is
+right for anything the program has one of and wrong for anything a scope has
+its own of.
+
+The save is an ordinary `down` attribute and the restore is the node's own
+leaving clause, which works because a node's scope is torn down *after* its
+leaving clauses run:
+
+```
+Block : down held  = $names       (* save the enclosing table   *)
+      : down names = []           (* start this scope's own     *)
+      ...                         (* the children fill it in    *)
+      : names      = $held .      (* and the enclosing one back *)
+```
+
+A rule that resets a thread and does not restore it lets the inner value flow
+on to its siblings, which is legal and is occasionally what is wanted — a slot
+counter that only ever grows, say.
+
 ---
 
 ## What a backend has to provide

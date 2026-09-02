@@ -5,8 +5,9 @@ language in which everything is an object and everything that happens is a
 message send. Its compiler `solas` produces `.sob` bytecode for the `solvm`
 virtual machine.
 
-**What is here so far is the conformance suite**, and that is deliberate: the
-target exists before anything aims at it.
+What is here is a conformance suite for the language, a front end that reads
+Solveig into a tree, and a **backend that emits `.sob` bytecode `solvm`
+runs**.
 
 ## The conformance suite
 
@@ -122,8 +123,52 @@ can afford it. A compiler cannot, so this description follows `solas`. It was
 found by the round trip, on the two conformance programs that write a negative
 float.
 
-What emitting `.sob` would need is written down in
-[the roadmap](../../docs/ROADMAP.md): length-prefixed tables fall out of
-synthesised sizes, jump offsets fall out of the same, constant pools are a
-threaded attribute, and the one thing missing is a way to write an integer as
-bytes.
+**It was the bytecode backend that settled it.** Rendering the tree back to
+source cannot see this: `(-2)^2` and `-(2^2)` both write back as themselves.
+Running the compiled program can, and it says -4. `^` binds tighter than the
+minus, so the one shape where the two readings disagree is written out first
+in `power` and everything else keeps the sign in the literal.
+
+## The bytecode backend
+
+[`solveig-sob.phx`](solveig-sob.phx) compiles Solveig to SolVM bytecode:
+
+```sh
+phx --raw --driver sob languages/solveig/solveig-sob.phx prog.sol > prog.sob
+solvm prog.sob
+```
+
+`--raw` suppresses the newline a driver otherwise adds, which is a kindness to
+a terminal and a corruption of a binary file.
+
+Everything the roadmap predicted about a flat target held. A length-prefixed
+table is `size` of what the children already emitted, so it is synthesised. A
+name is an index into a table that grows as the walk goes, so the table is
+threaded and the index is where the name landed. What the roadmap did not
+predict is that **a method carries its own tables**, so a thread had to learn
+to nest — see [the journal](../../docs/journal.md).
+
+### How it is checked
+
+[`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
+Solveig repository twice — once with `solas`, once with this description —
+runs both under `solvm`, and requires the same output. Fifty programs agree.
+Four more agree except for the *locations in a traceback*, because this
+backend emits one line run per chunk and no file table; that is missing debug
+information rather than a miscompile.
+
+It found two bugs in the front end, neither of them findable by rendering: the
+`-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
+than of the outermost block of a nest.
+
+### What it does not compile
+
+`@include`, which 24 of the files use. Splicing another file in before
+compiling is something a **reader** does, and a pass is a walk over one tree
+that has already been read. It is refused by name, so the message says what is
+missing.
+
+Inlined control flow is not implemented either, and does not need to be:
+`ifTrue`, `whileTrue` and the rest are real methods on real objects, so a
+block and a send are correct where `solas` emits a jump. The programs agree;
+the bytecode is longer.

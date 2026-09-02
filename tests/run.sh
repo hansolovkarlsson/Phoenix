@@ -709,6 +709,12 @@ if [ -x "$sol/bin/solas" ]; then
         report fail "Solveig programs conform"
         printf '%s\n' "$conf" | grep -A6 FAIL | sed 's/^/        /' | head -12
     fi
+    if bc=$("$root/languages/solveig/tests/bytecode.sh" 2>&1); then
+        report pass "$(printf '%s' "$bc" | tail -1)"
+    else
+        report fail "the .sob backend agrees with solas"
+        printf '%s\n' "$bc" | sed 's/^/        /' | head -14
+    fi
 else
     printf '  --    the conformance suite needs Solveig, which is not here\n'
 fi

@@ -457,17 +457,26 @@ Value *eval_expr(Eval *e, const Expr *x)
                 Value *inner = eval_expr(e, item->kids[0]);
                 if (!inner) return NULL;
 
-                int add = inner->kind == V_LIST ? inner->n : 1;
+                /* `...` of something that is not a list used to spread to
+                 * the thing itself, which is quiet and wrong: `[$e, ...$3]`
+                 * where `$3` is an item rather than a repetition then builds
+                 * a two-element list out of one expression twice, and both
+                 * the tree and everything written back from it are consistent
+                 * about it. A real grammar had that bug for as long as this
+                 * was allowed. Miscounting an item is the likeliest way to
+                 * get here, so it is refused. */
+                if (inner->kind != V_LIST)
+                    return eval_fail(e, item, "'...' wants a list, and this is %s",
+                                     value_kind_name(inner));
+
+                int add = inner->n;
                 if (n + add > cap) {
                     cap = (n + add) * 2;
                     Value **big = arena_alloc(e->a, (size_t)cap * sizeof *big);
                     memcpy(big, items, (size_t)n * sizeof *big);
                     items = big;
                 }
-                if (inner->kind == V_LIST)
-                    for (int k = 0; k < inner->n; k++) items[n++] = inner->items[k];
-                else
-                    items[n++] = inner;
+                for (int k = 0; k < inner->n; k++) items[n++] = inner->items[k];
                 continue;
             }
 

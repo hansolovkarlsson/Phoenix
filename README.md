@@ -156,7 +156,9 @@ tables have already pinned down.
 Each stage is useful on its own and tagged in git, so a design that turns out
 wrong can be backed out of to the last stage that was right.
 [docs/journal.md](docs/journal.md) records why each decision was made, which is
-what makes backing out informed rather than archaeological.
+what makes backing out informed rather than archaeological, and
+[docs/postmortem.md](docs/postmortem.md) scores those decisions against what
+the evidence later said — including the two predictions that were wrong.
 
 ## What a production builds
 
@@ -555,7 +557,22 @@ different clauses:
 emitting [Solveig](https://github.com/hansolovkarlsson/Solveig) instead, and the
 only difference between the two files is those clauses.
 
-**Solveig is parked rather than removed.** Phoenix began as a generator of
+**And a target need not be text at all.**
+[`languages/solveig/solveig-sob.phx`](languages/solveig/solveig-sob.phx)
+compiles Solveig to SolVM `.sob` bytecode — a length-prefixed binary with
+nested method chunks — which `solvm` runs. Fifty of the Solveig files in that
+repository compile to bytecode that prints exactly what `solas`'s does.
+
+That backend is what found the first thing the notation could not say, and it
+was not the missing `if`: **a threaded attribute could not nest.** A method
+chunk carries its own name and constant tables, so entering one has to start
+them empty and leaving one has to put the enclosing tables back, and a single
+chain along the walk has no stack in it. A `down` clause naming a thread now
+sets it for the subtree, which makes the save an ordinary `down` attribute and
+the restore an ordinary leaving clause. [docs/journal.md](docs/journal.md) has
+the reasoning.
+
+**Solveig is parked as an emit target for `calc` rather than removed.** Phoenix began as a generator of
 Solveig compilers and will likely emit Solveig again. It does not now, for two
 reasons: Solveig is still changing, and keeping a second backend in step with a
 moving language is maintenance spent proving a property that
@@ -667,6 +684,24 @@ again:
 | Pascal's `mod`, widths, formats | as above |
 | **an array passed by value was not copied** | Pascal copies it; a C array decays to a pointer, so the callee wrote the caller's memory. Arrays are wrapped in a struct now, which copies — and that took away the special case `var` arrays needed, because a struct does not decay |
 | **a `for` limit was evaluated every time round** | Pascal evaluates it once, before the loop |
+
+### And what a second oracle found
+
+`solas` and `solvm` do for Solveig what `fpc` does for Pascal, and the test is
+stronger: not "does the output read correctly" but "does the compiled program
+print the same thing". It found two bugs in the front end and one in Phoenix
+itself, and **none of the three was reachable by rendering the tree back to
+source**:
+
+| | |
+| --- | --- |
+| **`-2^2` was 4 and should be −4** | `^` binds tighter than a leading minus. `(-2)^2` and `-(2^2)` both write back out as themselves, so the round trip saw nothing; running it saw it at once |
+| **`self` was slot 0 of the wrong frame** | it is slot 0 of *every* frame, not of the outermost block of a nest — a block installed on a class is a method, and its slot 0 is the receiver |
+| **spreading a non-list was silent** | `[$e, ...$3]` where `$3` is the third *item* rather than the repetition built the first element twice and dropped the rest. The parse was wrong, the tree was wrong, and what was written back out was wrong *in the same way* — so it re-parsed to an identical tree and the round trip passed. `...` of a non-list is an error now, and that found the same miscount twice more **in Phoenix's own self-description** |
+
+The last one is the sharpest argument in this repository for why an oracle is
+not optional. Three tests agreed with each other for months because they all
+asked the same wrong question.
 
 ## Where this sits
 

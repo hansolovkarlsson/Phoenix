@@ -384,6 +384,30 @@ static void run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
             break;
 
         case C_DOWN: {
+            /* `down` on a **threaded** attribute sets the thread for the
+             * subtree instead of binding a name over it, and that is what
+             * makes a thread nest.
+             *
+             * A thread otherwise runs in one chain along the whole walk, which
+             * is right for anything the program has one of and wrong for
+             * anything a scope has its own of. A `.sob` method carries its own
+             * name and constant tables, so entering one has to start them
+             * empty and leaving one has to put the enclosing tables back --
+             * a save and a restore, which is a stack, and a single chain has
+             * no stack in it. With this, the save is an ordinary `down`
+             * attribute and the restore is the node's own leaving clause,
+             * both written in the notation rather than built in. */
+            bool threaded = false;
+            for (int k = 0; k < r->pass->nthreads; k++)
+                if (strcmp(r->pass->threads[k], c->attr) == 0) { threaded = true; break; }
+
+            if (threaded) {
+                for (int k = 0; k < r->pass->nthreads; k++)
+                    if (strcmp(r->threads[k].name, c->attr) == 0)
+                        r->threads[k].value = got;
+                break;
+            }
+
             Scope *s = arena_alloc(r->a, sizeof *s);
             s->name  = c->attr;
             s->value = got;

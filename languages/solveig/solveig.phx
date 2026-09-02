@@ -182,8 +182,22 @@ unary    = power                                                       (* order 
  * had to answer half a node for this to join up, and half a node in the tree
  * is worse than three alternatives in one place.
  *
- * `^` groups to the right and binds tighter than the minus in front of it. *)
-power = head { ":" m:identifier "(" a:arguments ")"
+ * `^` groups to the right and binds tighter than the minus in front of it,
+ * and **that is why the first alternative is here**. A minus in front of a
+ * number is otherwise part of the number, which is what makes
+ * `-1.5:truncated` read as `(-1.5):truncated` the way `solas` reads it -- but
+ * carried into `-2^2` the same rule would give `(-2)^2`, which is 4, and the
+ * answer is -4. So the one shape where the two rules disagree is written out
+ * first: a minus, a number, and a power. Everything else keeps the sign in
+ * the literal.
+ *
+ * The bytecode backend is what found this. Rendering the tree back to source
+ * could not: `(-2)^2` and `-(2^2)` both write back as themselves. Running it
+ * could. *)
+power = "-" f:float "^" u:unary
+          -> Send(to: Send(to: Float(text: $f), message: "pow", args: [$u]),
+                  message: "negated", args: [])
+      | head { ":" m:identifier "(" a:arguments ")"
                  -> Send(to: $$, message: $m, args: $a)
              | ":" m:identifier ":=" v:expression
                  -> SetSlot(to: $$, name: $m, value: $v)
@@ -238,8 +252,7 @@ pair = k:sum "=" v:expression -> Pair(key: $k, value: $v) .
 
 (* A group may open with `| a, b |`, declaring temporaries of the frame it sits
  * in -- the only way to declare one at the top level of a script. *)
-group = "(" t:temporaries e:expression { "." f:expression -> $f } [ "." ] ")"
-          -> Group(temps: $t, body: [$e, ...$3]) .
+group = "(" t:temporaries b:body ")" -> Group(temps: $t, body: $b) .
 
 (* ------------------------------------------------------------------ *)
 (* Writing the tree back out as Solveig.                              *)
