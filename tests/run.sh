@@ -65,6 +65,18 @@ refuses "no syntactic half, asked to parse" "no syntactic rules" \
         "$root/tests/grammars/no-syntax.phx" "$root/languages/calc/tests/one.calc"
 accepts "no syntactic half, on its own" "$root/tests/grammars/no-syntax.phx"
 refuses "a literal nothing spells" "no token rule spells" "$root/tests/grammars/unspellable.phx"
+# Three mistakes that are decidable from the description alone, each of which
+# was made more than once while writing languages/pascal. They are all about
+# *when* a clause runs.
+warns   "an attribute with a field's name" "is already a field of" \
+        "$root/tests/grammars/attribute-shadows-field.phx"
+refuses "an inherited clause reading its own rule's work" \
+        "an inherited clause runs on the way in" \
+        "$root/tests/grammars/down-reads-own.phx"
+refuses "a check reading the attributes it guards" \
+        "a check runs before the attributes it guards" \
+        "$root/tests/grammars/check-reads-own.phx"
+
 refuses "a clause nothing can reach" "can never match" \
         "$root/tests/grammars/unreachable-clause.phx"
 refuses "a fold with nothing to fold onto" "nothing to fold onto" \

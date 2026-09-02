@@ -1,0 +1,11 @@
+(* A check is a guard and runs before the attributes it guards. *)
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
+line = integer -> N(digits: $1) .
+%pass p
+  N : worked = "later"
+    : out = "x"
+    ! $worked = "later" : "cannot see it" .
+%driver d = p -> out .

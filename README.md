@@ -505,6 +505,9 @@ a correct file reported as broken, at a place that is not the mistake.
 | a clause nothing can reach | a general pattern above a specific one takes every case the specific one was for — the ordering hazard again, one level up |
 | `$n` past the last factor | and `$label` naming no factor — yacc's silent drift, made loud |
 | one node type, two shapes | a pass keyed on it would have to handle both |
+| an attribute with a field's name | a field is read before an attribute, so nothing outside the pass could see it |
+| an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
+| a check reading the attributes it guards | a check runs first, by design |
 
 ## The layout
 
@@ -530,7 +533,7 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 106 checks (35 of them against fpc), including Solveig's pascal.bnf when it is present
+make test       # 109 checks (35 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

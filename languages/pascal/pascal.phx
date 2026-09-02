@@ -672,7 +672,6 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   (* What a parameter's declared type turns out to *be* -- "array", "record",
    * "integer" and so on. Only this pass can answer it, because only this pass
    * has the scope; `emit-c` runs later and reads it off the node. *)
-  Param    : type = "void" .
 
   Compare  : type = "boolean" .
   Binary(op: "/")   : type = "real" .

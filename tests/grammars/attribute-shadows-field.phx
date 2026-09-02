@@ -1,0 +1,10 @@
+(* `N` has a field called `text`, and a field is read before an attribute --
+ * so an attribute of that name is invisible from outside the pass. *)
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
+line = integer -> N(text: $1) .
+%pass p
+  N : text = "shadowed" : out = "{}" of $text .
+%driver d = p -> out .

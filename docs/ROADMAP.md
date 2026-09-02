@@ -161,7 +161,28 @@ arriving rather than as a puzzle.
 
 ---
 
-## 4. Known warts
+## 4. What a description is checked for
+
+Every check Phoenix makes about a description exists because getting it wrong
+produces the same failure: something that looks right and is not. The three
+newest are all about **when a clause runs**, and all three were mistakes made
+more than once while writing `languages/pascal/`:
+
+- an attribute with the same name as a field of the node it is on — a field is
+  read first, so nothing outside the pass can see the attribute
+- a `down` clause reading an attribute its own rule computes — inherited runs
+  on the way in, synthesised on the way out
+- a check reading the attributes it guards — a check runs before them
+
+The first is a warning and the other two are errors, because the first is legal
+and merely almost never meant.
+
+**The general shape is worth stating**: a description is read once and then run
+over every program ever compiled with it, so a fault found while reading it is
+found before anybody else sees it. That is the whole argument for a check
+existing at all, and the reason to prefer one over a comment.
+
+## 5. Known warts
 
 **A grammar module imposes reserved words.** Importing
 [`expression.phx`](../lib/expression.phx) means `and`, `or` and `not` cannot be

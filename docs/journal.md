@@ -1274,3 +1274,34 @@ promise short-circuit evaluation and C promises the opposite, so
 `a` under Phoenix. It prints `a` under both: fpc short-circuits too. A
 divergence that was expected and is not there is worth a test, because the next
 compiler might not.
+
+## 2026-09-01 — three checks, from three mistakes made twice
+
+Writing `languages/pascal/` I hit the same three foot-guns repeatedly. All three
+are decidable from the description alone, which makes them Phoenix's business:
+a description is read once and then run over every program ever compiled with
+it, so a fault found while reading it is found before anybody else sees it.
+
+**All three are about when a clause runs.** A node is visited in two phases:
+`down` clauses on the way in, then the children, then the checks and the
+synthesised attributes on the way out.
+
+| | |
+| --- | --- |
+| an attribute with a field's name | a field is read before an attribute, so `Block.routines` and `Subrange.low` were invisible from outside their pass. A **warning**, since it is legal and merely almost never meant |
+| a `down` clause reading its own rule's attribute | inherited runs on the way in, synthesised on the way out. An **error** |
+| a check reading the attributes it guards | a check runs before them. An **error** |
+
+Each was tried against the mistake that motivated it, by putting the mistake
+back: `Subrange : low = ...` warns, and the `down spelled = ... $forward ...`
+that cost me twenty minutes is now a message naming the rule and the reason.
+
+**And the check found one I had not noticed.** `Param : type = "void"` — `Param`
+already has a field called `type`, so the attribute was never visible from
+outside the pass, and nothing read it. It had been there since the typechecker
+was written, doing nothing, because a clause was added for uniformity that the
+uniformity did not need. Deleted.
+
+That is the argument for this kind of check in one line: it is not that I would
+have made the mistakes more slowly, it is that one of them was in the tree,
+harmless, and would have stayed.

@@ -1,0 +1,12 @@
+(* An inherited clause runs on the way *in*, and the attribute it reads is
+ * computed on the way out. *)
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
+line = integer -> N(digits: $1) .
+%pass p
+  N : down carried = $worked
+    : worked = "later"
+    : out = "{}" of $carried .
+%driver d = p -> out .

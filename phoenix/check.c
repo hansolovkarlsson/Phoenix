@@ -474,6 +474,110 @@ void grammar_nodes(FILE *out, const Grammar *g)
 }
 
 /* ------------------------------------------------------------------ */
+/* Clauses that cannot work, and one that almost never means what it says
+ *
+ * Three mistakes, all of them made more than once while writing
+ * `languages/pascal/`, and all three decidable from the description alone --
+ * which makes them this program's business. A description is read once and run
+ * over every program ever compiled with it; a fault found here is found before
+ * anybody sees it.
+ *
+ * They are all about **when a clause runs**. A node is visited in two phases:
+ * `down` clauses on the way in, then the children, then the checks and the
+ * synthesised attributes on the way out. So a `down` clause cannot read an
+ * attribute its own rule computes -- that has not happened yet -- and neither
+ * can a check, which is a guard and runs before the attributes it guards.
+ */
+
+static bool refers_to(const Expr *x, const char *name)
+{
+    if (!x) return false;
+    if (x->kind == X_REF && x->name && strcmp(x->name, name) == 0) return true;
+
+    for (int i = 0; i < x->nkids; i++)
+        if (refers_to(x->kids[i], name)) return true;
+    return false;
+}
+
+static bool pattern_binds(const Pattern *p, const char *name)
+{
+    if (p->kind == P_BIND && p->name && strcmp(p->name, name) == 0) return true;
+
+    for (int i = 0; i < p->nkids; i++)
+        if (pattern_binds(p->kids[i], name)) return true;
+    return false;
+}
+
+/* Whether the node type this rule matches has a field of that name. A field is
+ * read before an attribute, so one that does is not shadowed and not a
+ * mistake -- it is the field the clause meant. */
+static bool type_has_field(const char *type, const char *field)
+{
+    if (!type) return false;
+
+    for (int i = 0; i < nvocabulary; i++) {
+        if (strcmp(vocabulary[i].type, type) != 0) continue;
+        for (int k = 0; k < vocabulary[i].nfields; k++)
+            if (vocabulary[i].fields[k]
+                && strcmp(vocabulary[i].fields[k], field) == 0) return true;
+    }
+    return false;
+}
+
+static void check_clause_order(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *pass = &g->passes[i];
+
+        for (int r = 0; r < pass->nrules; r++) {
+            const PassRule *rule = &pass->rules[r];
+            const char *type = rule->pattern->kind == P_TYPE
+                             ? rule->pattern->name : NULL;
+
+            for (int a = 0; a < rule->nclauses; a++) {
+                const Clause *def = &rule->clauses[a];
+                if (def->kind != C_SYNTH || !def->attr) continue;
+
+                /* 1. An attribute with a field's name is invisible from
+                 * outside: `$x.name` reads a field first. */
+                if (type_has_field(type, def->attr))
+                    diag_warn(&g->src, def->pos,
+                              "'%s' is already a field of '%s', and a field is "
+                              "read before an attribute -- so nothing outside "
+                              "this pass can see this one",
+                              def->attr, type);
+
+                /* 2 and 3. A clause that runs earlier cannot read it. */
+                for (int b = 0; b < rule->nclauses; b++) {
+                    const Clause *use = &rule->clauses[b];
+                    if (use->kind != C_DOWN && use->kind != C_ERROR) continue;
+
+                    if (!refers_to(use->value, def->attr)
+                        && !refers_to(use->when, def->attr)) continue;
+
+                    /* Unless the name means something else here. */
+                    if (pattern_binds(rule->pattern, def->attr)) continue;
+                    if (type_has_field(type, def->attr)) continue;
+
+                    diag_error(&g->src, use->pos,
+                               "this reads '%s', which this rule computes on "
+                               "the way out -- and %s",
+                               def->attr,
+                               use->kind == C_DOWN
+                                 ? "an inherited clause runs on the way in"
+                                 : "a check runs before the attributes it guards");
+                    diag_note("write the expression out here, or compute '%s' "
+                              "in an earlier pass", def->attr);
+                    c->ok = false;
+                }
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Drivers, and whether their order is right
  *
  * **A driver is a claim about order, and a claim about order can be wrong.**
@@ -868,6 +972,7 @@ bool grammar_check(Grammar *g)
             }
 
     check_reachable(&c);
+    check_clause_order(&c);
     check_drivers(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
