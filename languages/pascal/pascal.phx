@@ -435,16 +435,16 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
             : elementry  = bind([], $name, $type.elemname)
             : fieldentry = bind([], $name, $type.fieldentries)
             : shape   = bind([], $name, Shape(iname: $type.iname,
-                                              startsat: $type.startsat, node: $type)) .
+                                              startsat: $type.startsat, node: $type, rtype: "void")) .
   VarDecl   : entries = bind([], $names, $type.tname)
             : shape   = bind([], $names, Shape(iname: $type.iname,
-                                               startsat: $type.startsat, node: $type)) .
+                                               startsat: $type.startsat, node: $type, rtype: "void")) .
   Param     : entries = bind([], $names, $type)
             : shape   = bind([], $names, Shape(iname: $type, startsat: "1",
-                                               node: NamedType(name: $type))) .
+                                               node: NamedType(name: $type), rtype: "void")) .
   FieldDecl : entries = bind([], $names, $type.tname)
             : shape   = bind([], $names, Shape(iname: $type.iname,
-                                               startsat: $type.startsat, node: $type)) .
+                                               startsat: $type.startsat, node: $type, rtype: "void")) .
 
 
 
@@ -464,10 +464,16 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
    * declaration comes earlier in the same list, and `lookup` answers the first
    * match, so the forward one is what a repeat finds. *)
   Procedure : entries = bind([], $name, "void")
-            : shape   = bind([], $name, Shape(iname: "", startsat: "1", node: $params))
+            : shape   = bind([], $name, Shape(iname: "", startsat: "1",
+                                              node: $params, rtype: "void"))
             : own     = flatten([...$params.entries]) .
+  (* The shape carries the result type as a *name*, so that a heading
+   * repeated after a `forward` can find what it returns without a default
+   * that would have to be a constructed node with no attributes on it. *)
   Function  : entries = bind([], $name, $returns.tname)
-            : shape   = bind([], $name, Shape(iname: "", startsat: "1", node: $params))
+            : shape   = bind([], $name, Shape(iname: "", startsat: "1",
+                                              node: $params,
+                                              rtype: $returns.tname))
             : own     = flatten([bind([], $name, $returns.tname),
                                  ...$params.entries]) .
 
@@ -578,7 +584,8 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
             : type = "void"
             : down env = [...flatten([...lookup($known, $name,
                                                 Shape(iname: "", startsat: "1",
-                                                      node: [])).node.entries]),
+                                                      node: [], rtype: "void")
+                                              ).node.entries]),
                           ...$env] .
   Function  : type = "void" : down env = [...$own, ...$env] .
 
@@ -660,7 +667,7 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
   ArrayType : type = "void"
             : bound = lookup($known, at($indices, 1).iname,
                              Shape(iname: "", startsat: "1",
-                                   node: at($indices, 1))).node .
+                                   node: at($indices, 1), rtype: "void")).node .
 
   (* What a parameter's declared type turns out to *be* -- "array", "record",
    * "integer" and so on. Only this pass can answer it, because only this pass
@@ -739,17 +746,17 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
            : fields = flatten([...lookup($known,
                                          lookup($known, at($vars, 1).name,
                                                 Shape(iname: "?", startsat: "1",
-                                                      node: NoType)).iname,
+                                                      node: NoType, rtype: "void")).iname,
                                          Shape(iname: "", startsat: "1",
-                                               node: RecordType(fields: []))
+                                               node: RecordType(fields: []), rtype: "void")
                                        ).node.fields.names])
 
            : down env = [...flatten([...lookup($known,
                                               lookup($known, at($vars, 1).name,
                                                      Shape(iname: "?", startsat: "1",
-                                                           node: NoType)).iname,
+                                                           node: NoType, rtype: "void")).iname,
                                               Shape(iname: "", startsat: "1",
-                                                    node: RecordType(fields: []))
+                                                    node: RecordType(fields: []), rtype: "void")
                                             ).node.fields.entries]),
                          ...$env]
 
@@ -760,9 +767,9 @@ formal-section    = "var" i:identifier { "," n:identifier -> $n } ":" t:identifi
            : down known = [...flatten([...lookup($known,
                                                  lookup($known, at($vars, 1).name,
                                                         Shape(iname: "?", startsat: "1",
-                                                              node: NoType)).iname,
+                                                              node: NoType, rtype: "void")).iname,
                                                  Shape(iname: "", startsat: "1",
-                                                       node: RecordType(fields: []))
+                                                       node: RecordType(fields: []), rtype: "void")
                                                ).node.fields.shape]),
                            ...$known] .
   Forward  : type = "void" .

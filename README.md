@@ -530,7 +530,7 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 106 checks (30 of them against fpc), including Solveig's pascal.bnf when it is present
+make test       # 106 checks (35 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside

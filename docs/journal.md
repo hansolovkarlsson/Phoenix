@@ -1237,3 +1237,40 @@ means a nested `for` shadows it rather than clashing with it.
 last two were found. `a[1] := 99` inside a procedure is right-looking C, and
 `for (i = 1; i <= n; i++)` is what anyone would write. It took a program that
 asked, which is what an oracle is.
+
+## 2026-09-01 — mutual recursion, and two orderings said again
+
+Five more oracle programs — evaluation order of `and` and `or`, recursion to
+depth 500, mutual recursion through `forward`, stray semicolons and empty
+statements, and the boundaries of enumerations and `char`. **Thirty-five
+programs agree with `fpc -Miso`.**
+
+Four of the five passed first time, which is the first time that has happened
+and is worth noting for what it says: the bugs are getting harder to find, and
+the ones left are in the corners rather than in the middle.
+
+**`forward` was the one.** A forward declaration is a C prototype and the
+heading repeated after it is the definition, whose parameters and result type
+belong to the declaration it repeats. The routine's name is already bound to a
+shape; the shape carries the result type as a *name* now, so finding it is one
+lookup — **a backward reference**, like every other hard thing in this
+description.
+
+That the shape had to carry a *name* rather than the type node is the same fact
+as always: a lookup needs a default, a default has to be constructed, and a
+constructed node has fields but no attributes. Text needs no default worth
+worrying about.
+
+**And two orderings had to be said again.** An inherited clause runs on the way
+*in* and a synthesised one on the way out, so `down spelled` cannot read a
+`forward` attribute computed in the same rule — the lookup is written out
+twice. And Phoenix's own warning caught a `Shape` built with four fields in one
+place and three in another, which is a check written for a hazard that had not
+happened, catching the second time it did.
+
+**The evaluation-order test is the interesting pass.** ISO Pascal does not
+promise short-circuit evaluation and C promises the opposite, so
+`Note('a', false) and Note('b', true)` could have printed `ab` under fpc and
+`a` under Phoenix. It prints `a` under both: fpc short-circuits too. A
+divergence that was expected and is not there is worth a test, because the next
+compiler might not.

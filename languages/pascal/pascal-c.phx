@@ -20,7 +20,8 @@
  *
  * **Also in:** `goto` and labels, which C has and which a translator into
  * Solveig *source* could not have had -- there being no control-flow syntax
- * there to translate them into.
+ * there to translate them into. And `forward` declarations, which become C
+ * prototypes, so mutual recursion works.
  *
  * **Out:** files, pointers, nested routines, variant records, and a set of
  * more than 63 values. Each is **refused with a message naming it**, at a
@@ -204,7 +205,18 @@
    * A Pascal function returns by assigning to its own name, so C gets a local
    * of that name and a `return` at the end. *)
 
-  Forward   : out = "" : inner = "" .
+  Forward   : out = "" : inner = "" : decls = "" : code = "" .
+
+  (* A `forward` declaration is a C prototype, and the heading repeated after
+   * it is the definition -- whose parameters and result type belong to the
+   * declaration it repeats. The routine's name is bound to a shape carrying
+   * both, so finding them is a lookup: **a backward reference**, the same as
+   * everything else here. *)
+  Procedure(body: Forward)
+            : out = "static void {}({});\n" of $name, join($params.out, ", ") .
+  Function(body: Forward)
+            : out = "static {} {}({});\n"
+                of $returns.pre, $name, join($params.out, ", ") .
 
   Procedure : down inroutine = true
             : down storage = ""
@@ -218,6 +230,32 @@
    * compiling. The result gets a name of its own, and *reading* the function's
    * name inside it is spelled that way while *calling* it is not, because a
    * call is a different node and does not go through this table. *)
+  (* `function IsOdd;` repeating a `forward` heading. It writes neither its
+   * parameters nor its result type, and both belong to the declaration it
+   * repeats -- which bound its name to a shape carrying them, earlier in the
+   * same list, so `lookup` finds it. A backward reference, like everything
+   * else here. *)
+  Function(returns: NoType)
+            : down inroutine = true
+            : down storage = ""
+            : forward = lookup($known, $name,
+                               Shape(iname: "", startsat: "1", node: [],
+                                     rtype: "void"))
+              (* The lookup is written out again rather than read from
+               * `forward` below: an inherited clause runs on the way *in* and
+               * a synthesised one on the way out, so this cannot see that. *)
+            : down spelled = [...bind([], $name, "phx_result"),
+                              ...flatten([...lookup($known, $name,
+                                            Shape(iname: "", startsat: "1",
+                                                  node: [], rtype: "void")
+                                          ).node.refs]),
+                              ...$spelled]
+            : out = "static {} {}({})\n{{\n  {} phx_result;\n{}{}\n  return phx_result;\n}}\n"
+                of lookup($ctypes, $forward.rtype, $forward.rtype), $name,
+                   join($forward.node.out, ", "),
+                   lookup($ctypes, $forward.rtype, $forward.rtype),
+                   $body.decls, $body.code .
+
   Function  : down inroutine = true
             : down storage = ""
             : down spelled = [...bind([], $name, "phx_result"),
@@ -339,7 +377,7 @@
    * `each` over two lists pairs the arguments with what goes in front of
    * them. *)
   CallStatement : out = "  {}({});"
-                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [])).node.addr]),
+                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [], rtype: "void")).node.addr]),
                                         $args.out, "{}{}"), ", ") .
 
   (* ---- Pascal's standard functions ----
@@ -379,7 +417,7 @@
   CallExpression(name: "arctan") : out = "atan({})" of at($args, 1).out .
 
   CallExpression : out = "{}({})"
-                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [])).node.addr]),
+                    of $name, join(each(flatten([...lookup($known, $name, Shape(iname: "", startsat: "1", node: [], rtype: "void")).node.addr]),
                                         $args.out, "{}{}"), ", ") .
 
   (* ---- expressions ---- *)
