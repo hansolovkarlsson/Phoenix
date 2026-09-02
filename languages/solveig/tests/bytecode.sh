@@ -23,7 +23,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
 desc="$root/languages/solveig/solveig-sob.phx"
-sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
+sol=${SOLVEIG:-$root/../Solveig}
 
 [ -x "$sol/bin/solas" ] || { echo "  --    needs Solveig, which is not here"; exit 0; }
 

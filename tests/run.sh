@@ -335,7 +335,7 @@ fi
 accepts "the parked Solveig example" "$root/languages/calc/calc-solveig.phx"
 
 if [ -n "${PHX_TEST_SOLVEIG:-}" ]; then
-    SOL=${SOLVEIG:-/Users/hans/Projects/Solveig}
+    SOL=${SOLVEIG:-$root/../Solveig}
     if [ -x "$SOL/bin/solas" ]; then
         if "$phx" --run emit-sol "$root/languages/calc/calc-solveig.phx" \
                 "$root/languages/calc/programs/sum.calc" > "$tmp/out.sol" 2>/dev/null \
@@ -700,7 +700,7 @@ else
 fi
 
 echo "Solveig conformance"
-sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
+sol=${SOLVEIG:-$root/../Solveig}
 if [ -x "$sol/bin/solas" ]; then
     if conf=$("$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
         n=$(printf '%s' "$conf" | grep -c '^  ok')

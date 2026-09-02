@@ -20,7 +20,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
 desc="$root/languages/solveig/solveig.phx"
-sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
+sol=${SOLVEIG:-$root/../Solveig}
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

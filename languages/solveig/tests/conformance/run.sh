@@ -21,7 +21,7 @@
 
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
+sol=${SOLVEIG:-$here/../../../../../Solveig}
 
 if [ ! -x "$sol/bin/solas" ] || [ ! -x "$sol/bin/solvm" ]; then
     echo "no Solveig at $sol -- the conformance suite is skipped, not failed"

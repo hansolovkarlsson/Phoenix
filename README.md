@@ -544,9 +544,18 @@ make test       # 113 checks, covering 35 Pascal programs against fpc
 
 C11 and no dependencies. **The suite passes with nothing outside this
 repository** — 111 of the 113 need only what is vendored here, and the two
-that drive `solas` and `solvm` over the Solveig repository report themselves
-skipped when it is absent rather than failing. `SOLVEIG=` says where to find
-it.
+that drive `solas` and `solvm` over a checkout of
+[Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
+skipped when it is absent rather than failing:
+
+```sh
+SOLVEIG=/path/to/Solveig make test    # the other two, and 75 files round-tripped
+PHX_TEST_SOLVEIG=1 make test          # also emit Solveig from calc.phx and compile it
+```
+
+Both default to a sibling checkout's usual place, so neither is needed if
+`Solveig` sits beside `Phoenix`. `fpc -Miso` is what the Pascal oracle wants,
+and is likewise skipped rather than failed when it is not installed.
 
 ## What Phoenix emits, and what it is not tied to
 
