@@ -337,11 +337,6 @@
         : nslots = lookup([[true, $nslots]], $nslots > size($slotnames),
                           size($slotnames)) .
 
-  (* `@include` splices another file in before compiling, which is a thing a
-   * *reader* does and this pass is not one. Refused by name, so the message
-   * says what is missing rather than that a node lacks an attribute. *)
-  Include ! true : "@include is not compiled by this backend" .
-
   (* ---- the file ----
    *
    * A statement leaves a value nobody wants, so each is followed by a `POP`,

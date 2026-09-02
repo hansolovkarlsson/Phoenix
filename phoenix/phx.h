@@ -223,6 +223,13 @@ typedef struct {
     int     ndrivers;
     int     capdrivers;
 
+    /* `%include Include path` -- which node stands for a target file's own
+     * include, and which of its fields holds the name of the file. NULL when
+     * the language has no such thing, which is most of them. */
+    char   *include_type;
+    char   *include_field;
+    size_t  include_pos;     /* where it was declared, for the checks       */
+
     /* A module may name rules it does not define. Reading one on its own is
      * fine; using one to parse a file is not, and this is what says so. */
     bool    incomplete;
@@ -466,6 +473,36 @@ bool value_equal(const Value *a, const Value *b);
 /* Matches the tokens against the grammar. Answers NULL on a syntax error,
  * having reported where the match got furthest and what it wanted there. */
 Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t);
+
+/* ------------------------------------------------------------------ */
+/* A target language's own includes -- include.c
+ *
+ * `%import` splices one description into another. This is the same thing one
+ * level down, for the language being described, and it is a separate mechanism
+ * for a reason that is not arbitrary: **a pass cannot do it.** A pass is a walk
+ * over one tree that has already been read, and an include is a second file
+ * that has to be read before there is a tree to walk at all.
+ *
+ * So this runs between the parser and the first pass, and every pass after it
+ * sees one tree that never mentions a second file.
+ */
+
+typedef struct {
+    const char **dirs;
+    int          n;
+    int          cap;
+} IncludePath;
+
+/* `-I dir`, in the order given: the first directory holding a file wins. */
+void include_path_add(Arena *a, IncludePath *look, const char *dir);
+
+/* Replaces every include node in `root` with what the file it names holds.
+ * `src` grows as files are read, so that a position in an included file still
+ * names its own file and line; the tree is edited in place. Answers false
+ * having reported. Does nothing at all when the description declares no
+ * `%include`. */
+bool include_expand(Arena *a, const Grammar *g, Source *src,
+                    const IncludePath *look, Value *root);
 
 /* ------------------------------------------------------------------ */
 /* Counting the work

@@ -12,6 +12,12 @@
 # because the region is a spelling and the tree holds the sends. It is a round
 # trip of *meaning*, and it works because the lowering is idempotent.
 #
+# `--no-includes` because the question is about **this file**. Following an
+# `@include` is what a compilation does, and a tree with another file already
+# spliced into it would be a round trip of two files at once -- checking the
+# library over and over and never once checking that an `@include` is written
+# back as one.
+#
 # The conformance programs get the stronger check as well: what comes out is
 # compiled by `solas` and run, and must print what the original printed.
 
@@ -31,9 +37,9 @@ files="$here/conformance/*.sol"
 same=0; differ=0
 for f in $files; do
     [ -f "$f" ] || continue
-    "$phx" --tree "$desc" "$f" > "$tmp/a" 2>/dev/null || { differ=$((differ+1)); echo "  will not parse: $f"; continue; }
-    "$phx" "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
-    "$phx" --tree "$desc" "$tmp/rt.sol" > "$tmp/b" 2>/dev/null
+    "$phx" --no-includes --tree "$desc" "$f" > "$tmp/a" 2>/dev/null || { differ=$((differ+1)); echo "  will not parse: $f"; continue; }
+    "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
+    "$phx" --no-includes --tree "$desc" "$tmp/rt.sol" > "$tmp/b" 2>/dev/null
     if cmp -s "$tmp/a" "$tmp/b"; then same=$((same+1))
     else differ=$((differ+1)); echo "  tree differs: $f"; fi
 done
@@ -44,7 +50,7 @@ ran=0; wrong=0
 if [ -x "$sol/bin/solas" ]; then
     for f in "$here"/conformance/*.sol; do
         n=$(basename "$f" .sol)
-        "$phx" "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
+        "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
         "$sol/bin/solas" "$tmp/rt.sol" -o "$tmp/rt.sob" >/dev/null 2>&1 \
             && "$sol/bin/solvm" "$tmp/rt.sob" > "$tmp/out" 2>&1
         if cmp -s "$tmp/out" "$here/conformance/$n.expected"; then ran=$((ran+1))

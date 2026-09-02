@@ -1535,3 +1535,143 @@ another file in before compiling is something a **reader** does, and a pass is
 a walk over one tree that has already been read. It is the first real gap that
 is not about expressions at all, and any language with a module system will
 want the same thing.
+
+## 2026-09-02 — `@include`, and the failure that was not one
+
+The first gap that was about the shape of the tool rather than about
+expressions, and [ROADMAP 1.0](ROADMAP.md) had named it as the one to decide
+next. `@include "library.sol"` splices another Solveig file in before
+compiling; 24 of the files in that repository use it, and the bytecode backend
+refused all 24 by name.
+
+**Refusing it was right, and that is the whole argument for the mechanism.** A
+pass is a walk over one tree that has already been read. An include is a second
+file, which has to be read before there is a tree to walk. No clause can reach
+it, however it is written — so this is a directive the reader acts on, and the
+only one that is about the *target* language's files rather than about the
+description's.
+
+```ebnf
+include = "@include" p:string -> Include(path: slice($p, 2, size($p) - 1)) .
+%include Include path .
+```
+
+Two names: which node an include is built as, and which of its fields holds the
+file. What happens then is fixed and is deliberately not a description's to
+vary — the file is read with the same grammar, and the items its root holds
+take the include node's place in the list that held it.
+
+### The quotes come off in the action
+
+The first real decision, and it went the other way from the obvious one. A
+token arrives spelled the way the file spelled it, quotes and escapes and all,
+so `Include(path: $p)` holds `"library.sol"` with the quotes on. The reader
+could strip them. It must not: how a language writes a string is the one thing
+only that language's description knows, and a reader that guesses is a reader
+that is wrong about the first language that disagrees.
+
+So `%include` takes the field's text **exactly as it stands**, and the
+description says what a path is with the notation it already has. `show` then
+puts the quotes back, which is what keeps the round trip honest.
+
+### A cycle turned out not to be a failure
+
+The roadmap entry warned about three new ways to fail — a cycle, a missing
+file, a path relative to which of two files — and predicted each would need a
+message with a position. Two of them did, and they are one message: *cannot
+read the included file, and here is where I looked.* The rule is C's, and for
+C's reason: beside the file the include is written in, so a program survives
+being moved, then the search path, `-I` in the order given.
+
+The third needed nothing. **A file is read once however many ways it is
+reached**, which is what `%import` already does one level up and for the same
+reason — and once that is true, a file that comes round to itself finds itself
+already read and contributes nothing. There is no cycle to detect. The check
+that would have detected one would have been a second mechanism doing what the
+first already did.
+
+What the entry did *not* anticipate is that the splice needs two refusals of
+its own, and both are the same sentence: there is no answer to what this would
+mean.
+
+- **an include where a field is wanted.** A file is a number of things and a
+  field holds one. Solveig refuses the same shape from the other side — `x :=
+  @include "f"` is a compile error there — and this is that error arriving
+  through a different door.
+- **an included file whose root holds two parts.** Splicing is "the items its
+  root holds", and a root holding a header and a body has no answer to which of
+  them a statement position wanted.
+
+### Identity is spelling, and that is a decision
+
+A file reached beside its includer and again from the search path is the one
+file, so the two spellings have to be recognised as one. `realpath` is the
+answer and `realpath` is POSIX; a generated compiler is meant to build with
+`cc file.c` and nothing else, and this code is part of one. So the paths are
+folded textually — `a/./b`, `a//b` and `a/x/../b` are `a/b` — and a symbolic
+link is read twice.
+
+Worth writing down because it is a trade rather than an oversight: being wrong
+here costs a file compiled twice, which *runs* twice and is visible, rather
+than something quiet.
+
+### The joined text, and the pointer that stays valid
+
+Positions had to keep working across files, and the machinery for that already
+existed one level up: every file's text end to end in one buffer, with a map
+saying which stretch came from where, so an offset stays a single number and a
+diagnostic still names the file and its own line.
+
+The buffer is copied when it grows, which looked like a problem — a token
+scanned from an earlier copy points into memory that has been superseded. It is
+not one, and the reason is the arena: nothing is freed, text is only ever
+appended, so an old copy holds the same bytes at the same offsets that the new
+one does. A pointer into it is stale and correct. That removed the tree walk
+that would otherwise have had to shift every position, and with it the
+aliasing bug that walk would have had if a node ever appeared twice.
+
+### `--no-includes`, and what a round trip is a question about
+
+Expanding is what a *compilation* does, so `phx` does it before anything walks
+the tree, `--tree` shows the expanded tree, and a generated compiler does the
+same and takes `-I` for the same reason.
+
+The round-trip test wanted the other thing. It parses every `.sol` file in the
+Solveig repository, writes it back out, and parses that; with expansion it
+would have been checking the library over and over and never once checking that
+an `@include` is written back as one. So `--no-includes` exists, and the flag
+is not a convenience: *what does this file's own text mean* and *what does this
+compilation mean* are two questions, and only the second follows a file it
+names.
+
+### What it moved, and what it uncovered
+
+The Solveig oracle went from **50 programs to 72**. The 22 it added found
+nothing wrong with the backend, which is the useful negative result: some
+22,000 lines of Solveig that had never been compiled by this description
+before, and not one new disagreement.
+
+Two of them did cross a line the other seventy do not, and the cause is one
+thing seen twice. `solas` **inlines** the block of an `ifTrue:`, a
+`whileTrue:`, an `and:` and an `or:` into the enclosing chunk, behind a jump;
+`solveig-sob.phx` compiles every block as a block. The bytes differ and the
+output does not — except where a block that is really a block is visible:
+
+- `programs/pascal.sol` nests blocks **19 deep** and the `.sob` format allows
+  16. `solas` inlines its way under the limit; this backend cannot, and the
+  loader refuses what it writes.
+- `programs/basic.sol` is a BASIC interpreter whose own suite calls something
+  recursive until the machine stops it and prints what happened. One extra
+  frame per level means it stops one test earlier.
+
+Neither is a miscompile and neither was caused by this work; `@include` is
+what made the two files reachable. They are counted apart in the test, with the
+cause named, and [ROADMAP 2.4](ROADMAP.md) is the entry for the missing
+optimisation.
+
+**The oracle was worth more here for what it made reachable than for what it
+disagreed with**, which is the opposite of every previous time it earned its
+place — and it only worked because the count is reported by category rather
+than as a single number. "72 agree, 2 nest a block `solas` inlines" says
+something; "74 tried" would have said nothing, and hiding the two would have
+been a lie with a green tick on it.

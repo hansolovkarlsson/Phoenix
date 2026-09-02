@@ -104,11 +104,11 @@ for Solveig.
 
 ### What the numbers are
 
-- 113 tests, 0 failing
+- 129 tests, 0 failing
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
 - 75 Solveig files round-trip to an identical tree
-- 50 Solveig programs compile to bytecode that prints what `solas`'s does
+- 72 Solveig programs compile to bytecode that prints what `solas`'s does
 
 ---
 
@@ -135,13 +135,13 @@ reference attributes stay on the roadmap.
 
 ## 4. Open, and worth deciding before building
 
-**A reader-level mechanism, for `@include`.** 24 of the Solveig files in the
-repository use it, and the bytecode backend refuses all 24. Splicing another
-file in before compiling is something a **reader** does, and a pass is a walk
-over one tree that has already been read. Phoenix has `%import` for its own
-descriptions and nothing for a *target* language's imports. Any language with
-a module system wants the same thing, so this is the first gap that is about
-the shape of the tool rather than about expressions.
+**A reader-level mechanism, for `@include`** — *settled since this was
+written*. `%include` names which node an include is built as and which field
+holds the file, and the reader splices before the first pass; the bytecode
+backend has no clause for one and never meets one. It took the shape this
+section proposed, and the count above moved from 50 to 72. What it did *not*
+find is anything wrong with the backend over the 22 programs it added, which
+is the more useful half of the result.
 
 **Debug information in a binary target.** The `.sob` backend emits one line
 run per chunk and no file table, so a traceback says `[line 1]` where `solas`

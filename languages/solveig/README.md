@@ -152,23 +152,45 @@ to nest — see [the journal](../../docs/journal.md).
 
 [`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
 Solveig repository twice — once with `solas`, once with this description —
-runs both under `solvm`, and requires the same output. Fifty programs agree.
-Four more agree except for the *locations in a traceback*, because this
-backend emits one line run per chunk and no file table; that is missing debug
-information rather than a miscompile.
+runs both under `solvm`, and requires the same output. **Seventy-two programs
+agree**, including the 24 that use `@include`. Locations in a traceback are
+normalised away, because this backend emits one line run per chunk and no file
+table; that is missing debug information rather than a miscompile.
 
 It found two bugs in the front end, neither of them findable by rendering: the
 `-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
 than of the outermost block of a nest.
 
-### What it does not compile
+### `@include`
 
-`@include`, which 24 of the files use. Splicing another file in before
-compiling is something a **reader** does, and a pass is a walk over one tree
-that has already been read. It is refused by name, so the message says what is
-missing.
+Compiled, and not by this pass. `solveig.phx` says
 
-Inlined control flow is not implemented either, and does not need to be:
-`ifTrue`, `whileTrue` and the rest are real methods on real objects, so a
-block and a send are correct where `solas` emits a jump. The programs agree;
-the bytecode is longer.
+```ebnf
+include = "@include" p:string -> Include(path: slice($p, 2, size($p) - 1)) .
+%include Include path .
+```
+
+and the **reader** reads the named file and puts its statements where the
+directive stood, before any pass walks anything. So this backend has no clause
+for an include and never meets one, which is right: splicing another file in is
+something a reader does, and a pass is a walk over one tree that has already
+been read.
+
+The library those files include lives in `lib/` beside the Solveig binaries, so
+the test passes `-I`, exactly as `bin/solas` looks in `bin/../lib`.
+
+### What it does not do
+
+**Inline a block.** `ifTrue`, `whileTrue`, `and` and `or` are real methods on
+real objects here, so a block and a send are correct where `solas` emits a jump
+over code in the enclosing chunk. The programs agree and the bytecode is
+longer — and in two of the seventy-four, longer is visible:
+
+- `programs/pascal.sol` nests blocks 19 deep and the `.sob` format allows 16.
+  `solas` inlines its way under the limit; this does not, and the loader
+  refuses what it writes.
+- `programs/basic.sol` calls something recursive until the machine stops it and
+  prints what happened, so one extra frame per level stops it a test earlier.
+
+Both are counted apart in the test rather than compared, and neither is a
+miscompile. See [ROADMAP 2.4](../../docs/ROADMAP.md).

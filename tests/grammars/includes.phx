@@ -1,0 +1,38 @@
+(* A language with an include, and nothing else in it.
+ *
+ * `%include` names the node one is built as and the field holding the file --
+ * two names, and what happens then is fixed: the file is read with this same
+ * grammar and its items take the include's place, before any pass walks
+ * anything. `show` below has a clause for `Use` all the same, because
+ * `--no-includes` is a question about one file's own text and that is the
+ * shape it answers in.
+ *)
+%fragment letter digit .
+letter = "a" .. "z" .
+digit  = "0" .. "9" .
+name   = letter { letter | digit } .
+number = digit { digit } .
+string = "\"" { ! "\"" } "\"" .
+space  = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+punct  = ";" | "=" .
+%skip space .
+
+%syntax .
+%start file .
+
+file = { item } -> File(items: $1) .
+item = use | let .
+
+(* The quotes come off here: how a language spells a string is a thing only
+ * its own description knows, so `path` is the file name and nothing else. *)
+use  = "use" p:string ";" -> Use(path: slice($p, 2, size($p) - 1)) .
+let  = n:name "=" v:number ";" -> Let(name: $n, value: $v) .
+
+%include Use path .
+
+%pass show
+  File : show = join($items.show, " ") .
+  Let  : show = "{}={}" of $name, $value .
+  Use  : show = "use {}" of $path .
+
+%driver show = show -> show .

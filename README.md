@@ -332,6 +332,46 @@ target — which is why `calc-solveig.phx` went from ninety lines of duplicated
 grammar, quietly wrong the first time `calc.phx` changed, to an emit pass and a
 line naming the language.
 
+### `%include`: the same question, one level down
+
+`%import` is about the *description*. A target language often has the same
+thing about its own files — Solveig writes `@include "library.sol"` — and that
+one is not a pass and cannot be:
+
+> **A pass is a walk over one tree that has already been read.** An include is
+> a second file, which has to be read before there is a tree to walk. No clause
+> can reach it, however it is written.
+
+So it is a directive the reader acts on, and it says two things:
+
+```ebnf
+include = "@include" p:string -> Include(path: slice($p, 2, size($p) - 1)) .
+%include Include path .
+```
+
+which node an include is built as, and which of its fields holds the file. What
+happens then is fixed and is not a description's to vary: the file is read with
+this same grammar, and **the items its root holds take the include node's place
+in the list that held it**, before the first pass. A backend needs no clause for
+an include and never meets one.
+
+The quotes come off in the *action*, not in the reader, and that is deliberate:
+how a language spells a string is the one thing only its own description knows.
+
+**The rules are C's, for C's reasons.** A file is found beside the file that
+includes it — never beside the directory you were standing in, so a program
+survives being moved — and failing that on the search path, `-I dir` in the
+order given. A file is read **once** however many ways it is reached, which is
+also the whole of why a cycle ends: there is nothing to detect, because a file
+that comes round to itself finds itself already read. `--no-includes` asks
+about one file's own text instead, which is what a round trip is a question
+about.
+
+Two shapes are refused rather than guessed at: an include where a *field* is
+expected, since a file is a number of things and a field holds one; and a file
+whose root holds two parts, since nothing says which of them a statement
+position wanted.
+
 ### Modules declare their holes
 
 An expression grammar cannot know what a language's atoms are — a number, a
@@ -513,6 +553,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | an attribute with a field's name | a field is read before an attribute, so nothing outside the pass could see it |
 | an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
 | a check reading the attributes it guards | a check runs first, by design |
+| `%include` naming a node nothing builds | or a field that node has not got — the mechanism would then do nothing, quietly, and every include would reach a pass as a node it has no clause for |
 
 ## The layout
 
@@ -538,12 +579,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 113 checks, covering 35 Pascal programs against fpc
-                #   and 50 Solveig programs against solas
+make test       # 129 checks, covering 35 Pascal programs against fpc
+                #   and 72 Solveig programs against solas
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 111 of the 113 need only what is vendored here, and the two
+repository** — 127 of the 129 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:
@@ -708,9 +749,9 @@ outside the subset are refused loudly rather than mistranslated.
 
 `solas` and `solvm` do the same for Solveig, and the test is stronger: not
 "does the output read correctly" but "does the compiled program print the same
-thing". Fifty programs compile to bytecode that prints what `solas`'s does. It
-found two bugs in the front end and one in Phoenix itself, and **none of the
-three was reachable by rendering the tree back to source**:
+thing". Seventy-two programs compile to bytecode that prints what `solas`'s
+does. It found two bugs in the front end and one in Phoenix itself, and **none
+of the three was reachable by rendering the tree back to source**:
 
 | | |
 | --- | --- |

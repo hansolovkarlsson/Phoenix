@@ -70,6 +70,10 @@ static const char usage[] =
     "  --raw          write the answer exactly, adding no trailing newline --\n"
     "                 which a description emitting a binary format needs\n"
     "  --driver NAME  which %driver to run (default: the first declared)\n"
+    "  -I DIR         where to look for a file the source includes, when it is\n"
+    "                 not beside the file including it. Repeatable, in order\n"
+    "  --no-includes  do not follow what the source includes -- the tree of\n"
+    "                 this one file, with its include nodes still in it\n"
     "  --drivers      list the drivers this description declares\n"
     "  --run PASS     run one %pass on its own, for looking at it\n"
     "  --show ATTR    which attribute to print from the root, overriding\n"
@@ -97,6 +101,10 @@ int main(int argc, char **argv)
     bool        want_raw     = false;
     const char *compile_to   = NULL;
     bool        quiet        = false;
+    IncludePath look         = { NULL, 0, 0 };
+    bool        no_includes  = false;
+
+    Arena *a = arena_new();
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -112,6 +120,19 @@ int main(int argc, char **argv)
         if (strcmp(arg, "--tree")    == 0) { want_tree    = true; continue; }
         if (strcmp(arg, "--stats")   == 0) { want_stats   = true; continue; }
         if (strcmp(arg, "--raw")     == 0) { want_raw     = true; continue; }
+        if (strcmp(arg, "--no-includes") == 0) { no_includes = true; continue; }
+
+        /* `-Idir` and `-I dir` both, which is what every compiler accepts
+         * and what a Makefile that already has a variable of them will pass. */
+        if (strncmp(arg, "-I", 2) == 0) {
+            const char *dir = arg[2] ? arg + 2 : (i + 1 < argc ? argv[++i] : NULL);
+            if (!dir) {
+                fprintf(stderr, "phx: -I wants a directory\n");
+                return 2;
+            }
+            include_path_add(a, &look, dir);
+            continue;
+        }
 
         if (strcmp(arg, "-o") == 0) {
             if (i + 1 >= argc) {
@@ -167,7 +188,6 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    Arena   *a = arena_new();
     Grammar *g = grammar_read(a, grammar_path);
     if (!g) { arena_free(a); return 1; }
 
@@ -272,6 +292,19 @@ int main(int argc, char **argv)
 
     Value *tree = parse_run(a, g, &src, &toks);
     if (!tree) { arena_free(a); return 1; }
+
+    /* Before anything walks the tree, so that nothing after this point has to
+     * know that a second file was ever involved.
+     *
+     * `--no-includes` is for asking about this file rather than about the
+     * compilation: what its own text parses to, include nodes and all. It is
+     * what a round trip of one file is a question about -- rendering a tree
+     * that has already had another file spliced into it answers a different
+     * one. */
+    if (!no_includes && !include_expand(a, g, &src, &look, tree)) {
+        arena_free(a);
+        return 1;
+    }
 
     if (want_stats) {
         const Work *w = work_done();

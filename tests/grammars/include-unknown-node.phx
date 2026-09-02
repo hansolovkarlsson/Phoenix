@@ -1,0 +1,14 @@
+(* `%include` naming a node nothing builds. The mechanism would then do
+ * nothing at all, quietly: every include would stay in the tree and reach a
+ * pass as a node it has no clause for. Decidable from the description, so it
+ * is decided here. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number { "," number -> $2 } -> Row(cells: [$1, ...$2]) .
+%include Include path .

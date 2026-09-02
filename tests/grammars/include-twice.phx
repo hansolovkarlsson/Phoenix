@@ -1,0 +1,3 @@
+(* Two answers to a question the reader asks once per file. *)
+%import "includes.phx" .
+%include Use path .

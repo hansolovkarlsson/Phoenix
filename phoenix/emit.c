@@ -376,9 +376,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "  %d, %d,\n"
         "  phx_reserved, %d,\n"
         "  phx_passes, %d, %d,\n"
-        "  phx_drivers, %d, %d,\n"
-        "  false\n"
-        "};\n",
+        "  phx_drivers, %d, %d,\n",
         g->map.n, g->map.n,
         g->map.n ? g->map.units[0].path : "",
         g->map.n, g->map.n,
@@ -388,16 +386,36 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         g->npasses, g->npasses,
         g->ndrivers, g->ndrivers);
 
+    /* `%include`, which the generated compiler needs as much as `phx` does:
+     * a target file that includes another does so whoever is compiling it. */
+    fputs("  ", out);
+    emit_string(&e, g->include_type);
+    fputs(", ", out);
+    emit_string(&e, g->include_field);
+    fprintf(out, ", %zu,\n  false\n};\n", g->include_pos);
+
     fprintf(out, "%s", "\n"
         "/* ------------------------------------------------------------------ */\n"
         "\n"
         "int main(int argc, char **argv)\n"
         "{\n"
         "    const char *path = NULL, *want = NULL;\n"
+        "    IncludePath look = { NULL, 0, 0 };\n"
+        "    Arena *a = arena_new();\n"
         "\n"
         "    for (int i = 1; i < argc; i++) {\n"
         "        if (strcmp(argv[i], \"--driver\") == 0 && i + 1 < argc) {\n"
         "            want = argv[++i];\n"
+        "            continue;\n"
+        "        }\n"
+        "        if (strncmp(argv[i], \"-I\", 2) == 0) {\n"
+        "            const char *dir = argv[i][2] ? argv[i] + 2\n"
+        "                            : (i + 1 < argc ? argv[++i] : NULL);\n"
+        "            if (!dir) {\n"
+        "                fprintf(stderr, \"%s: -I wants a directory\\n\", argv[0]);\n"
+        "                return 2;\n"
+        "            }\n"
+        "            include_path_add(a, &look, dir);\n"
         "            continue;\n"
         "        }\n"
         "        if (strcmp(argv[i], \"--drivers\") == 0) {\n"
@@ -413,11 +431,11 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    }\n"
         "\n"
         "    if (!path) {\n"
-        "        fprintf(stderr, \"usage: %s [--driver NAME] <file>\\n\", argv[0]);\n"
+        "        fprintf(stderr, \"usage: %s [-I dir] [--driver NAME] <file>\\n\",\n"
+        "                argv[0]);\n"
         "        return 2;\n"
         "    }\n"
         "\n"
-        "    Arena *a = arena_new();\n"
         "    phx_grammar.arena = a;\n"
         "\n"
         "    Source src;\n"
@@ -428,6 +446,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "\n"
         "    Value *tree = parse_run(a, &phx_grammar, &src, &toks);\n"
         "    if (!tree) return 1;\n"
+        "\n"
+        "    if (!include_expand(a, &phx_grammar, &src, &look, tree)) return 1;\n"
         "\n"
         "    const Driver *driver = driver_default(&phx_grammar);\n"
         "    if (want) {\n"

@@ -190,6 +190,67 @@ refuses "a reserved word as a name" "expected"  "$root/languages/calc/calc-c.phx
 refuses "a character no rule matches" "nothing here matches" \
         "$root/languages/calc/calc-c.phx" "$root/languages/calc/tests/bad-token.calc"
 
+echo "what a source includes"
+# `%include` is `%import` one level down: for the language being described
+# rather than for the description. It cannot be a pass -- a pass walks one tree
+# that has already been read -- so it is a directive the reader acts on, and
+# these are the four new ways a reader that follows files can fail.
+inc="$root/tests/grammars/includes.phx"
+src="$root/tests/sources/includes"
+
+# shows <what> <expected> <args...> -- the `show` pass over the spliced tree.
+shows() {
+    what=$1; _want=$2; shift 2
+    got=$("$phx" --run show --show show "$@" 2>&1)
+    if [ "$got" = "$_want" ]; then
+        report pass "$what"
+    else
+        report fail "$what" "wanted '$_want', got '$got'"
+    fi
+}
+
+shows "a file spliced in where the include stood" \
+      "a=1 c=3 d=4 b=2" "$inc" "$src/main.inc"
+# Read once however many ways it is reached: `twice.inc` names `second.inc`,
+# which names `third.inc`, and then names `third.inc` itself.
+shows "a file reached twice is read once" \
+      "c=3 d=4 e=5" "$inc" "$src/twice.inc"
+# Which is also the whole of why a cycle ends -- there is nothing to detect.
+shows "two files that include each other" \
+      "q=2 p=1" "$inc" "$src/cycle-a.inc"
+# Three spellings of one file, and identity is what decides, not the letters:
+# `second.inc`, `./second.inc` and `elsewhere/../second.inc`.
+shows "three spellings of one file are one file" \
+      "c=3 d=4 f=7" "$inc" "$src/spellings.inc"
+shows "found on the search path, not beside the includer" \
+      "y=8 z=9" "-I" "$src/elsewhere" "$inc" "$src/needs-path.inc"
+shows "--no-includes leaves the include in the tree" \
+      "a=1 use second.inc b=2" "--no-includes" "$inc" "$src/main.inc"
+
+refuses "an included file that is not there" "cannot read the included file" \
+        "$inc" "$src/absent.inc"
+refuses "an include where one value is wanted" "where one value is wanted" \
+        "$root/tests/grammars/include-in-a-field.phx" "$src/in-a-field.inc"
+refuses "an included file with a two-part root" "nothing to splice in" \
+        "$root/tests/grammars/include-two-part-root.phx" "$src/two-part.inc"
+refuses "an include that is the whole file" "nothing here for it to be spliced into" \
+        "$root/tests/grammars/include-whole-file.phx" "$src/whole-file.inc"
+refuses "%include naming a node nothing builds" "nothing in this description builds" \
+        "$root/tests/grammars/include-unknown-node.phx"
+refuses "%include naming a field that is not one" "which is not a field of" \
+        "$root/tests/grammars/include-unknown-field.phx"
+refuses "%include declared twice" "already declared" \
+        "$root/tests/grammars/include-twice.phx"
+
+# A message from inside an included file has to name *that* file and its own
+# line, which is the whole reason the text is joined rather than parsed apart.
+out=$("$phx" --quiet "$inc" "$src/uses-broken.inc" 2>&1)
+if printf '%s' "$out" | grep -q "broken.inc:2:"; then
+    report pass "a fault in an included file names it"
+else
+    report fail "a fault in an included file names it" "$(printf '%s' "$out" | head -1)"
+fi
+
 echo "drivers"
 refuses "a driver in the wrong order" "nothing before it defines one" \
         "$root/tests/grammars/misordered-driver.phx"
@@ -408,6 +469,31 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
     fi
 else
     report fail "one file, no flags, no headers" "it did not compile"
+fi
+
+# A generated compiler follows includes too, and has to: whether one file
+# names another is a property of the language, not of who is compiling it. So
+# it takes `-I` for the same reason `phx` does, and the two must agree about
+# what the spliced tree is.
+if "$phx" "$root/tests/grammars/includes.phx" -o "$tmp0/inc.c" 2>/dev/null \
+   && cc -o "$tmp0/incc" "$tmp0/inc.c" 2>/dev/null; then
+    a=$("$phx" -I "$src/elsewhere" "$root/tests/grammars/includes.phx" \
+        "$src/needs-path.inc" 2>/dev/null)
+    b=$("$tmp0/incc" -I "$src/elsewhere" "$src/needs-path.inc" 2>/dev/null)
+    if [ "$a" = "$b" ] && [ "$a" = "y=8 z=9" ]; then
+        report pass "a generated compiler follows an include"
+    else
+        report fail "a generated compiler follows an include" "phx '$a', it '$b'"
+    fi
+
+    missing=$("$tmp0/incc" "$src/absent.inc" 2>&1)
+    if printf '%s' "$missing" | grep -qF "cannot read the included file"; then
+        report pass "and says so when the file is not there"
+    else
+        report fail "and says so when the file is not there" "$missing"
+    fi
+else
+    report fail "a generated compiler follows an include" "it did not build"
 fi
 
 # Pascal, the same way round.

@@ -918,6 +918,45 @@ static void check_spellable(Check *c, const Rule *owner, const GNode *n)
 
 /* ------------------------------------------------------------------ */
 
+/* `%include Include path` names a node and a field of it, and both are
+ * decidable from the description alone. A typo in either is otherwise a
+ * mechanism that does nothing -- every include stays in the tree and reaches a
+ * backend as a node it has no clause for -- which is the quiet failure this
+ * project keeps a check for.
+ */
+static void check_include(Check *c)
+{
+    Grammar *g = c->g;
+    if (!g->include_type) return;
+
+    const NodeType *t = NULL;
+    for (int i = 0; i < nvocabulary; i++)
+        if (strcmp(vocabulary[i].type, g->include_type) == 0) t = &vocabulary[i];
+
+    if (!t) {
+        diag_error(&g->src, g->include_pos,
+                   "%%include names '%s', which nothing in this description "
+                   "builds", g->include_type);
+        diag_note("`phx --nodes` lists the ones it does");
+        c->ok = false;
+        return;
+    }
+
+    for (int k = 0; k < t->nfields; k++)
+        if (t->fields[k] && strcmp(t->fields[k], g->include_field) == 0) return;
+
+    diag_error(&g->src, g->include_pos,
+               "%%include names '%s', which is not a field of '%s'",
+               g->include_field, g->include_type);
+    if (t->nfields) {
+        for (int k = 0; k < t->nfields; k++)
+            diag_note("'%s' has '%s'", t->type, t->fields[k]);
+    } else {
+        diag_note("'%s' has no fields at all", t->type);
+    }
+    c->ok = false;
+}
+
 bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
@@ -974,6 +1013,7 @@ bool grammar_check(Grammar *g)
     check_reachable(&c);
     check_clause_order(&c);
     check_drivers(&c);
+    check_include(&c);
 
     /* Only once the description is whole. A module with a hole in it is read
      * without the token rules that will spell its literals -- `expression.phx`

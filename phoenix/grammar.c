@@ -687,6 +687,51 @@ static Rule *rule_for(Reader *r, MToken *name, bool lexical)
     return add_rule(r, name->text, name->pos, lexical);
 }
 
+/* `%include Include path` -- the node that stands for one of the *target*
+ * language's includes, and the field of it that holds the name of the file.
+ *
+ * Two names and no more. What an include *means* is fixed -- the file is read
+ * with this same grammar and its contents take the include's place -- so there
+ * is nothing here for a description to say beyond which node it is written as.
+ *
+ * A description may say this once. Two of them would be two answers to a
+ * question the reader asks once per file, and the second would silently win.
+ */
+static bool read_include(Reader *r, MToken *d)
+{
+    if (!at(r, T_NAME) || peek(r)->line != d->line) {
+        diag_error(r->src, d->pos,
+                   "%%include wants the node an include is built as, and the "
+                   "field of it that names the file");
+        diag_note("as in `%%include Include path .`");
+        return false;
+    }
+    MToken *type = advance(r);
+
+    if (!at(r, T_NAME) || peek(r)->line != d->line) {
+        diag_error(r->src, type->pos,
+                   "%%include names '%s' and then nothing, so no field of it "
+                   "holds the file", type->text);
+        diag_note("as in `%%include %s path .`", type->text);
+        return false;
+    }
+    MToken *field = advance(r);
+
+    if (r->g->include_type) {
+        int line, col;
+        source_position(r->src, r->g->include_pos, &line, &col);
+        diag_error(r->src, d->pos, "%%include is already declared");
+        diag_note("the first is at %s:%d",
+                  source_path_at(r->src, r->g->include_pos), line);
+        return false;
+    }
+
+    r->g->include_type  = type->text;
+    r->g->include_field = field->text;
+    r->g->include_pos   = d->pos;
+    return true;
+}
+
 static bool read_file(Reader *r, const char *path)
 {
     Grammar *g       = r->g;
@@ -728,11 +773,14 @@ static bool read_file(Reader *r, const char *path)
                 if (!read_driver(r, d)) return false;
                 continue;
             }
+            else if (strcmp(d->text, "include")    == 0) {
+                if (!read_include(r, d)) return false;
+            }
             else {
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%import "
-                          "%%require %%driver");
+                          "%%require %%driver %%include");
                 return false;
             }
 
@@ -975,6 +1023,9 @@ void grammar_dump(FILE *out, const Grammar *g)
             fputs("\n%syntax\n", out);
             if (g->ignorecase) fputs("%ignorecase\n", out);
             if (g->start >= 0) fprintf(out, "%%start %s\n", g->rules[g->start].name);
+            if (g->include_type)
+                fprintf(out, "%%include %s %s\n", g->include_type,
+                        g->include_field);
             fputc('\n', out);
             lexical = false;
         }

@@ -1,0 +1,20 @@
+(* An include where one value is wanted. A file is a number of things and a
+ * field holds one, so there is nothing for a splice to mean -- which is the
+ * same refusal Solveig makes from the other side, where `x := @include "f"`
+ * is a compile error. *)
+%fragment letter digit .
+letter = "a" .. "z" .
+digit  = "0" .. "9" .
+name   = letter { letter | digit } .
+number = digit { digit } .
+string = "\"" { ! "\"" } "\"" .
+space  = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+punct  = ";" | "=" .
+%skip space .
+%syntax .
+%start file .
+file = { item } -> File(items: $1) .
+item = n:name "=" u:use ";" -> Let(name: $n, value: $u)
+     | n:name "=" v:number ";" -> Let(name: $n, value: $v) .
+use  = "use" p:string -> Use(path: slice($p, 2, size($p) - 1)) .
+%include Use path .

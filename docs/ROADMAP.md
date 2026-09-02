@@ -9,26 +9,39 @@ predictions made here against what the evidence turned out to say.
 
 ---
 
-## 1. The stages that remain
+## 1. The stages
 
-### 1.0 A reader-level mechanism, for a target language's imports
+The first of these is done and is kept here rather than deleted, because what
+an entry predicted and what it cost is the only way to tell whether this page
+is worth writing. The rest remain.
 
-**The first gap that is about the shape of the tool rather than about
-expressions**, and the one to decide next. `@include` splices another Solveig
-file in before compiling; 24 of the files in that repository use it and the
-bytecode backend refuses all 24.
+### 1.0 A reader-level mechanism, for a target language's imports — **done**
 
-A pass is a walk over **one tree that has already been read**, so no clause
-can reach it. Phoenix has `%import` for its own descriptions and nothing for
-the language being described. Any target with a module system wants the same
-thing, so the question is not whether but where it belongs: a directive that
-names which node stands for an include and how to get a path out of it, run
-by the reader before the first pass, is the smallest shape that could work.
+`%include` names which node an include is built as and which field holds the
+file; the reader splices, before the first pass. It was written exactly as this
+entry proposed and the prediction that mattered held: *the smallest shape that
+could work* was two names and a fixed meaning, and no description gets to vary
+what a splice is.
 
-The thing to be careful about is that it makes the reader recursive over
-*target* files, which is a new kind of failure — a cycle, a missing file, a
-path relative to which of two files — and each needs a message with a
-position.
+The three new failures this entry warned about turned out to be two:
+
+- **a missing file** and **a path relative to which of two files** are one
+  message between them, and it has to say where it looked, because "beside the
+  includer, then the search path" is the rule nobody reconstructs from a bare
+  failure;
+- **a cycle** was not a failure at all. A file is read once however many ways
+  it is reached — which `%import` already did one level up, for the same
+  reason — so a file that comes round to itself finds itself already read and
+  contributes nothing. There was nothing to detect.
+
+What the entry did not anticipate is the pair of refusals that the *splice*
+needs: an include where a field is expected, and an included file whose root
+holds two parts. Both are "there is no answer to what this would mean", and
+both are where a tool of this shape has to say so rather than pick.
+
+**It moved the Solveig oracle from 50 programs to 72**, and the 22 it added
+found nothing wrong with the backend — which is the useful negative result. It
+did surface something already there; see [2.4](#24-inlining-a-block--from-solas).
 
 ### 1.1 A node's position, reachable from a clause
 
@@ -147,6 +160,33 @@ path you reached it by. Pascal has none of those. Nothing has yet asked for
 this, and after the `with` case it is worth being sceptical that the next thing
 will either.
 
+### 2.4 Inlining a block — from `solas`
+
+**Found by 1.0 rather than by design**, which is why it is here rather than in
+the warts: `@include` made 24 more programs compilable, 22 of them agree with
+`solas`, and the two that do not cross a line the other 72 never reach.
+
+`solas` compiles the block of an `ifTrue:`, a `whileTrue:`, an `and:` and an
+`or:` **into the enclosing chunk**, behind a jump. `languages/solveig/solveig-sob.phx`
+compiles every block as a block. The bytes differ and what a program prints does
+not — the two agree over seventy-two programs — except in three places where a
+block that is really a block is visible:
+
+| | |
+| --- | --- |
+| a traceback | an inlined block is a frame that is not there. Normalised away in the test, alongside the missing line table of [1.1](#11-a-nodes-position-reachable-from-a-clause) |
+| the format's nesting limit | `.sob` allows blocks 16 deep. `programs/pascal.sol` nests 19 and `solas` inlines its way under; this backend cannot, and the loader refuses what it writes |
+| the call depth | `programs/basic.sol` is a BASIC interpreter whose own suite calls something recursive until the machine stops it, and prints what happened. One extra frame per level means it stops one test earlier |
+
+**It is not a miscompile and it is not urgent.** What makes it worth an entry is
+that it is the first thing the `.sob` backend cannot express rather than has not
+got round to: an inlined block needs a jump over code that is *in the middle of
+the chunk being built*, and every clause so far has answered with bytes that are
+complete when the clause runs. Whether that is a gap in the notation or in that
+description is exactly the question [1.3](#13-a-way-for-a-description-to-share-a-computation)
+says to wait for a second example before answering, and this is a second
+example of a different thing.
+
 ---
 
 ## 3. What is deliberately not here
@@ -249,6 +289,11 @@ more than once while writing `languages/pascal/`:
 - a `down` clause reading an attribute its own rule computes — inherited runs
   on the way in, synthesised on the way out
 - a check reading the attributes it guards — a check runs before them
+
+A fourth arrived with `%include`, and it is the same argument in a different
+place: a directive that names a node type and a field of it is two names that
+can be typos, and a typo in either is a mechanism that silently does nothing.
+Both are decidable from the description, so both are decided when it is read.
 
 The first is a warning and the other two are errors, because the first is legal
 and merely almost never meant.

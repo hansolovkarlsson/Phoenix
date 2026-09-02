@@ -110,7 +110,16 @@ program = s:statement { "." t:statement -> $t } [ "." ] -> Program(body: [$s, ..
 
 statement = include | expression .
 
-include = "@include" p:string -> Include(path: $p) .
+(* The quotes come off here rather than in the reader that follows the file,
+ * because how a language spells a string is a thing only its description
+ * knows. `%include` below takes `path` exactly as it stands. *)
+include = "@include" p:string -> Include(path: slice($p, 2, size($p) - 1)) .
+
+(* An `@include` is not a construct a pass ever sees: the file it names is read
+ * and its statements take this node's place, before the first walk. Which is
+ * what `@` says in this language -- it happens while compiling, and by the
+ * time the program runs there is nothing left of it. *)
+%include Include path .
 
 (* Binding a bare name is tried before a send: both begin with an identifier
  * and only the first goes on to want `:=`. *)
@@ -276,7 +285,11 @@ group = "(" t:temporaries b:body ")" -> Group(temps: $t, body: $b) .
   Symbol  : show = "{}" of $name .
   Name    : show = "{}" of $name .
 
-  Include : show = "@include {}" of $path .
+  (* Written back with its quotes on, which the tree no longer carries. A
+   * path holding a quote or a backslash would need the escaping `Text` does;
+   * a file name that needs escaping is not a thing that happens, and inventing
+   * the case here would be four lines nothing tests. *)
+  Include : show = "@include \"{}\"" of $path .
   (* **No parentheses that were not in the source.** In Solveig `(x)` is a
    * `Group` node, so a parenthesis put in for tidiness comes back as a node
    * that was not there and the round trip fails. Sends chain left to right and

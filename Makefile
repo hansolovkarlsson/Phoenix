@@ -17,7 +17,7 @@ WARN     = -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes \
 # The **front** is what *reads* a description, and a generated compiler has no
 # use for it: it will never see a `.phx` file.
 RUNTIME = phoenix/support.c phoenix/eval.c phoenix/library.c \
-          phoenix/lex.c phoenix/parse.c phoenix/run.c
+          phoenix/lex.c phoenix/parse.c phoenix/include.c phoenix/run.c
 
 FRONT   = phoenix/grammar.c phoenix/check.c phoenix/expr.c phoenix/pass.c \
           phoenix/emit.c phoenix/main.c

@@ -1,0 +1,19 @@
+(* A root with two parts, and an include with nowhere to go in it. Splicing
+ * means "the items its root holds", and a root holding two lists has no
+ * answer to which of them a statement position wanted. *)
+%fragment letter digit .
+letter = "a" .. "z" .
+digit  = "0" .. "9" .
+name   = letter { letter | digit } .
+number = digit { digit } .
+string = "\"" { ! "\"" } "\"" .
+space  = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+punct  = ";" | "=" .
+%skip space .
+%syntax .
+%start file .
+file = h:name ";" { item } -> File(head: $h, items: $3) .
+item = use | let .
+use  = "use" p:string ";" -> Use(path: slice($p, 2, size($p) - 1)) .
+let  = n:name "=" v:number ";" -> Let(name: $n, value: $v) .
+%include Use path .

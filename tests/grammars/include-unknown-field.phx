@@ -1,0 +1,12 @@
+(* The node is one the grammar builds and the field is not, which fails the
+ * same silent way. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+comma  = "," .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number { "," number -> $2 } -> Row(cells: [$1, ...$2]) .
+%include Row path .

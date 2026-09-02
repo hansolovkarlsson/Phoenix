@@ -1,0 +1,15 @@
+(* A file that is nothing but an include. There is no list around it and so
+ * nothing for it to be spliced into -- the one shape the walk cannot see,
+ * because a walk looks *into* things and this is the outermost. *)
+%fragment letter digit .
+letter = "a" .. "z" .
+digit  = "0" .. "9" .
+name   = letter { letter | digit } .
+string = "\"" { ! "\"" } "\"" .
+space  = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+punct  = ";" .
+%skip space .
+%syntax .
+%start use .
+use = "use" p:string ";" -> Use(path: slice($p, 2, size($p) - 1)) .
+%include Use path .
