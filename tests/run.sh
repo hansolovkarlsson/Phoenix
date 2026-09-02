@@ -690,6 +690,15 @@ fi
 # Solveig's conformance suite: programs and the output each must produce, held
 # against `solas` and `solvm`. A suite for the *language* rather than for one
 # implementation of it -- see languages/solveig/README.md.
+echo "Solveig"
+accepts "the description reads" "$root/languages/solveig/solveig.phx"
+if rt=$("$root/languages/solveig/tests/roundtrip.sh" 2>&1); then
+    n=$(printf '%s' "$rt" | awk '/round-trip to an identical tree/{print $1}')
+    report pass "$n Solveig files parse, render, and parse to the same tree"
+else
+    report fail "Solveig files round-trip" "$(printf '%s' "$rt" | grep -v '^[0-9]' | head -2 | tr '\n' ' ')"
+fi
+
 echo "Solveig conformance"
 sol=${SOLVEIG:-/Users/hans/Projects/Solveig}
 if [ -x "$sol/bin/solas" ]; then

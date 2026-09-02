@@ -8,7 +8,7 @@ language arrives *beside* the first rather than mixed into it.
 | --- | --- |
 | [`pascal/`](pascal/) | ISO 7185 Pascal: a grammar, a typechecker, a compiler to C, and an outline tool. The one that is taken seriously — 24 programs checked against `fpc -Miso` |
 | [`calc/`](calc/) | the smallest language worth having a compiler for. What the stages were built against, and still the fastest thing to try a change on |
-| [`solveig/`](solveig/) | a conformance suite for [Solveig](https://github.com/hansolovkarlsson/Solveig), written before anything aims at it. No description yet — but Phoenix already reads Solveig's published grammar unmodified and parses all 63 `.sol` files in that repository |
+| [`solveig/`](solveig/) | [Solveig](https://github.com/hansolovkarlsson/Solveig): a conformance suite written before anything aimed at it, and a description that parses every `.sol` file there is and writes each one back to the same tree |
 | [`phx/`](phx/) | the `.phx` notation described in itself. It parses itself and every other description here |
 
 ## What goes where

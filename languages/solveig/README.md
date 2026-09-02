@@ -81,12 +81,46 @@ off by one at its ends. So the programs above assert the ends:
 Every one of these passes for an implementation that is subtly wrong if the
 test only ever asks about the middle.
 
-## What is not here yet
+## The description
 
-A Phoenix description of Solveig. The grammar half is ready to start from:
-`programs/check_syntax/solum.bnf` in the Solveig repository is the published
-grammar, and **Phoenix reads it unmodified and parses all 63 `.sol` files in
-that repository** — every example, every program, every library file.
+[`solveig.phx`](solveig.phx) is the published grammar —
+`programs/check_syntax/solum.bnf`, kept unmodified in
+[`tests/grammar/`](tests/grammar/) — with `->` clauses added. **Eighteen node
+types**, where Pascal needed fifty-one, because Solveig has one thing that
+happens and Pascal has many.
+
+The operators are built as **the sends they read as**: `@expr(a + b * c)`
+produces `Send(a, add, [Send(b, mul, [c])])` and there is no operator anywhere
+in the tree, because the language says they are a second spelling and never a
+second semantics. `&` and `|` wrap their right-hand side in a block, since
+`and` and `or` short-circuit — the one place the lowering is more than
+renaming.
+
+### The round trip is the test
+
+[`tests/roundtrip.sh`](tests/roundtrip.sh) parses every `.sol` file there is,
+writes the tree back out as Solveig, and parses that: **the two trees must be
+identical.** Seventy-five files, including a 2,800-line compiler written in
+Solveig. It catches a node built with the wrong shape, an argument list
+dropped, a chain folded the wrong way — over the whole corpus rather than over
+the files somebody thought to look at.
+
+The conformance programs get the stronger form: what comes out is compiled by
+`solas`, run, and must print what the original printed.
+
+### The one place it departs from the published grammar
+
+`solum.bnf` lets the operator ladder take a leading minus, so `-1.5:truncated`
+reads as `negated(1.5:truncated)`. `solas` reads it as `(-1.5):truncated`,
+because outside an `@expr` region its scanner makes no minus at all — *'-' must
+be followed by digits* is what it says. The two differ: `#-1` in the language,
+`#1` in the grammar.
+
+**The grammar file names this itself** — *"that is the looseness this ladder
+costs"* — and a grammar checked against files rather than against a compiler
+can afford it. A compiler cannot, so this description follows `solas`. It was
+found by the round trip, on the two conformance programs that write a negative
+float.
 
 What emitting `.sob` would need is written down in
 [the roadmap](../../docs/ROADMAP.md): length-prefixed tables fall out of

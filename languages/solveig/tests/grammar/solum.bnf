@@ -1,0 +1,211 @@
+(* solum.bnf -- Solum, in the notation of Wirth's report.
+ *
+ *   ./bindigit/solvm programs/check_syntax.sob programs/check_syntax/solum.bnf prog.sol
+ *
+ * Taken from solas/src/lexer.c and solas/src/compiler.c rather than from the
+ * documentation, because the documentation gives the syntax in pieces and the
+ * one grammar written down -- the sketch at the top of solas/include/solas/parser.h
+ * -- says of itself that it is "as far as docs/design.md pins it down", and it
+ * has no blocks, no arrays, no symbols, no temporaries and no slot assignment.
+ *
+ * The whole language is here. That is not a boast about this file, it is the
+ * point of the language: there are no operators, no control-flow syntax and no
+ * keywords, so `if`, `while`, `and` and `return` are absent because they are
+ * messages rather than because this grammar is a subset.
+ *
+ * **There are no reserved words at all**, which check_syntax reports by having
+ * none to report: it reserves every word-shaped literal a syntactic rule
+ * mentions, and this half of the file mentions none. `nil`, `true`, `object`
+ * and `self` are ordinary identifiers that happen to be bound.
+ *)
+
+(* ------------------------------------------------------------------ *)
+(* The lexical half. solas/src/lexer.c.                                *)
+
+(* No %ignorecase: Solum is case-sensitive, so the letter ranges are
+ * written out both ways rather than folded. *)
+%fragment letter digit hexdigit bindigit exponent escape
+
+letter = "a" .. "z" | "A" .. "Z" | "_" .
+digit  = "0" .. "9" .
+hexdigit    = digit | "a" .. "f" | "A" .. "F" .
+bindigit    = "0" | "1" .
+
+identifier = letter { letter | digit } .
+
+(* The tag says which reading is meant, `45` and `#45` being the same
+ * characters twice. `$` and `%` carry no tag and take no sign: they are for
+ * looking at bits, and there is no hexadecimal float to be told apart from. *)
+integer = "#" [ "-" ] digit { digit }
+        | "$" hexdigit { hexdigit }
+        | "%" bindigit { bindigit } .
+
+(* The unmarked number, and it does not claim a sign.
+ *
+ * The scanner does, outside a `@expr` region: there a leading `-` belongs to
+ * the literal, and `-` with no digit after it is a lexical error rather than a
+ * token. Inside a region it is always the operator. A lexical grammar has no
+ * regions to be inside of, so this file reads `-3` as the operator applied to
+ * `3` everywhere -- which is the same value by either reading, and is what lets
+ * one grammar describe both. What it costs is that this file also admits
+ * `a - 3` outside a region, where the compiler refuses it. That is the third
+ * entry in GRAMMAR.md's short list of things refused by the compiler rather
+ * than here. *)
+float = digit { digit } [ "." digit { digit } ] [ exponent ] .
+
+(* Optional, and it backtracks: `1e` is the float 1 followed by the identifier `e`,
+ * not a malformed number. *)
+exponent = ( "e" | "E" ) [ "+" | "-" ] digit { digit } .
+
+(* A backslash claims the character after it, so the escape has to be tried
+ * before "any character that is not a quote" -- otherwise \" ends the string.
+ * A string may span lines; nothing here says it may not. *)
+string = '"' { escape | ! '"' } '"' .
+escape = "\\" ( '"' | "\\" | "n" | "t" | "r" ) .
+
+(* A quote prefix and no closing quote, the way Lisp reads one. *)
+symbol = "'" letter { letter | digit } .
+
+(* The `@` belongs to the token, so a directive is one lexeme and never an
+ * identifier that happens to follow a symbol. *)
+directive = "@" letter { letter | digit } .
+
+comment = ";" { ! "\n" } .
+space   = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+
+(* `:=` before `:`, or the binding would never be one token, and `#[` before
+ * anything that could take the `#` -- which is nothing, since `integer` wants a
+ * digit or a sign after it, but the ordering says the intent. *)
+punctuation = "#[" | ":=" | ":" | "(" | ")" | "{" | "}" | "[" | "]" | "|" | "," | "." .
+
+(* The five that only mean anything inside `@expr`. Four of them were not
+ * characters the language used at all; `-` was, and is the one place this file
+ * cannot say what the scanner does. `float` above claims a leading `-`, and it
+ * is tried first, so `a-3` tokenises here as an identifier and the float -3
+ * where the compiler inside a region reads a subtraction. Written with spaces
+ * -- `a - 3` -- the two agree, because `-` followed by a space is not the start
+ * of a float in either of them.
+ *
+ * A lexical grammar has no regions to be inside of, so this is a divergence to
+ * name rather than one to fix. Everything in examples/ and lib/ is spaced, and
+ * the sweep in test_cli is what holds that true. *)
+operator = "+" | "-" | "*" | "/" | "^"
+         | "<=" | "<>" | ">=" | "<" | ">" | "=" | "&" | "~" .
+
+%skip space comment
+
+(* ------------------------------------------------------------------ *)
+(* The syntactic half. solas/src/compiler.c.                           *)
+
+%syntax
+%start program
+
+(* `.` separates statements rather than terminating them: required between two
+ * and optional after the last. An empty file is a program. *)
+program = [ statement { "." statement } [ "." ] ] .
+
+statement = include | expression .
+
+(* `@include` happens while compiling and there is nowhere inside an expression
+ * to compile a file into, so it is the one statement that is not one. `@expr`
+ * is the other directive and is the opposite case: it answers a value, so it is
+ * a primary and not a statement of its own. *)
+include = "@include" string .
+
+(* Binding a bare identifier has to be tried before a send, since both begin with an
+ * identifier and only the first goes on to want `:=`. Ordered choice does the
+ * rest: `a:print` fails the first alternative at the `:` and falls through. *)
+expression = identifier ":=" expression
+           | disjunction .
+
+(* The arithmetic ladder, written once and reached by every expression, which is
+ * what makes an argument, an array element, a group and a block body all read
+ * the same way inside a `@expr` region -- the compiler's rule is that the
+ * region is lexical and covers everything within it, and a ladder at the top of
+ * `expression` is that rule with no duplication.
+ *
+ * `^` groups to the right and binds tighter than the minus in front of it, so
+ * `-2^2` is `-(2^2)` and `2^3^2` is `2^(3^2)`. The other three group to the
+ * left, the way they read.
+ *
+ * Outside a region the operators are not there to be used: the scanner makes no
+ * `-` and the compiler refuses the rest by name. That is the looseness this
+ * ladder costs, and it is listed with the other two. *)
+disjunction = conjunction { "|" conjunction } .
+conjunction = negation { "&" negation } .
+negation    = "~" negation | comparison .
+comparison  = sum [ ( "<=" | "<>" | ">=" | "<" | ">" | "=" ) sum ] .
+sum         = product { ( "+" | "-" ) product } .
+product     = unary { ( "*" | "/" ) unary } .
+unary       = "-" unary | power .
+power       = ( call | primary ) { send } [ "^" unary ] .
+
+(* `sin(x)` is `x:sin` -- prefix application is a send to its argument, and the
+ * name is an ordinary identifier rather than a word this file names. **That is
+ * what keeps the reserved-word count at nought**: a list of the mathematical
+ * functions would have had to appear here as literals, and check_syntax
+ * reserves every word-shaped literal a syntactic rule mentions, so `sin` and
+ * `cos` would have stopped being names any object may use.
+ *
+ * Exactly one argument, which is what keeps the rule free of exceptions. The
+ * two-argument cases are the ones that would have broken it -- `float:atan2` is
+ * class-side, and `pow` already has `^` -- and neither can enter a rule with no
+ * two-argument form to enter.
+ *
+ * Tried before `primary`, both beginning with an identifier, and ordered choice
+ * does the rest: `a:add(b)` fails this at the `:` and falls through. *)
+call    = identifier "(" expression ")" .
+
+(* A send with no arguments may be assigned to -- that is how a slot is bound,
+ * and it is the same `:=` as above. A send *with* arguments may not, which is
+ * why the two possibilities are inside the send rather than after the chain. *)
+send      = ":" identifier [ arguments | ":=" expression ] .
+arguments = "(" [ expression { "," expression } ] ")" .
+
+primary = identifier | integer | float | string | symbol | block | array | dictionary | group | region .
+
+(* `@expr(...)` -- the region the operators mean something in. Every one lowers
+ * to the send it reads as, so this is a second spelling and never a second
+ * semantics: `+` is `add`, `^` is `pow`, and the bytes are the bytes the chain
+ * would have produced.
+ *
+ * A term is an ordinary expression, which is why there is no prefix-call form
+ * -- `(a/2):sin` needs no rule that `sin(x)` would have needed, and the rule
+ * `sin(x)` wants breaks on `atan2`, which is class-side, and on `pow`, which
+ * takes an argument.
+ *
+ * Either delimiter opens one. `@expr(...)` answers what the expression comes to
+ * and `@expr{...}` answers a block whose body is infix, which is the language's
+ * own `(group)` and `{block}` pair rather than a rule of the region's -- so
+ * this reaches `block` instead of repeating it. *)
+region = "@expr" ( "(" expression ")" | block ) .
+
+(* Parameters, then temporaries, then the body. The leading `|` of a temporary
+ * list is what tells `{ a | ... }` from `{ | a | ... }`, and it is why
+ * parameters could not have reused the parenthesised form: `{ (a) }` would be
+ * both a one-parameter block and a block answering `a`. *)
+block       = "{" [ parameters ] [ temporaries ] body "}" .
+parameters  = identifier { "," identifier } "|" .
+temporaries = "|" identifier { "," identifier } "|" .
+
+(* An empty block answers nil, so the body may be nothing at all. *)
+body = [ expression { "." expression } [ "." ] ] .
+
+array = "[" [ expression { "," expression } ] "]" .
+
+(* `#[` is one token: the '[' must follow the '#' immediately, as a digit must.
+ * That is what makes it unambiguous -- a digit was the only thing that could
+ * ever follow a '#', so `#[` was an error in every file written before it. *)
+dictionary = "#[" [ pair { "," pair } ] "]" .
+
+(* The key is a `sum` and not an `expression`, or it would swallow the `=` that
+ * ends it -- `comparison` is where `=` lives in this grammar. Nothing is lost:
+ * a comparison is only legal inside an `@expr` region, and a region is a
+ * `primary`, so `sum` still reaches every key that could actually be written. *)
+pair = sum "=" expression .
+
+(* A group is not an empty pair of parentheses: it must hold at least one
+ * expression, since its value is the last one's. It may open with `| a, b |`,
+ * declaring temporaries of the frame it sits in -- which is the only way to
+ * declare one at the top level of a script. *)
+group = "(" [ temporaries ] expression { "." expression } [ "." ] ")" .

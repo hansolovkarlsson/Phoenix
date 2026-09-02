@@ -1,0 +1,299 @@
+(* solveig.phx -- Solveig: what it looks like, and what it builds.
+ *
+ *   bin/phx --tree languages/solveig/solveig.phx prog.sol
+ *   bin/phx --nodes languages/solveig/solveig.phx
+ *
+ * **The grammar is not this project's work.** It is
+ * `programs/check_syntax/solum.bnf` from the Solveig repository -- the
+ * published grammar, held character for character against that project's
+ * `docs/GRAMMAR.md`, and kept unmodified in `tests/grammar/` beside this file.
+ * What is added here is the `->` clauses: what each construct *builds*.
+ *
+ * ---------------------------------------------------------------------------
+ * A language shaped nothing like Pascal, which is why it is here
+ *
+ * Pascal has statements and expressions, infix with a precedence table, static
+ * types and 51 node types. Solveig has **one thing that happens** -- a message
+ * is sent -- and about a dozen. There are no operators outside `@expr( )` and
+ * no control-flow syntax at all: `ifTrue:` and `whileTrue:` are ordinary sends
+ * taking blocks.
+ *
+ * So the tree is uniform where Pascal's was various, and that is the question
+ * this description exists to answer: whether a notation that suited fifty-one
+ * node types suits twelve.
+ *)
+
+%fragment letter digit hexdigit bindigit exponent escape .
+
+letter = "a" .. "z" | "A" .. "Z" | "_" .
+digit  = "0" .. "9" .
+hexdigit    = digit | "a" .. "f" | "A" .. "F" .
+bindigit    = "0" | "1" .
+
+identifier = letter { letter | digit } .
+
+(* The tag says which reading is meant, `45` and `#45` being the same
+ * characters twice. `$` and `%` carry no tag and take no sign: they are for
+ * looking at bits, and there is no hexadecimal float to be told apart from. *)
+integer = "#" [ "-" ] digit { digit }
+        | "$" hexdigit { hexdigit }
+        | "%" bindigit { bindigit } .
+
+(* The unmarked number, and it does not claim a sign.
+ *
+ * The scanner does, outside a `@expr` region: there a leading `-` belongs to
+ * the literal, and `-` with no digit after it is a lexical error rather than a
+ * token. Inside a region it is always the operator. A lexical grammar has no
+ * regions to be inside of, so this file reads `-3` as the operator applied to
+ * `3` everywhere -- which is the same value by either reading, and is what lets
+ * one grammar describe both. What it costs is that this file also admits
+ * `a - 3` outside a region, where the compiler refuses it. That is the third
+ * entry in GRAMMAR.md's short list of things refused by the compiler rather
+ * than here. *)
+float = digit { digit } [ "." digit { digit } ] [ exponent ] .
+
+(* Optional, and it backtracks: `1e` is the float 1 followed by the identifier `e`,
+ * not a malformed number. *)
+exponent = ( "e" | "E" ) [ "+" | "-" ] digit { digit } .
+
+(* A backslash claims the character after it, so the escape has to be tried
+ * before "any character that is not a quote" -- otherwise \" ends the string.
+ * A string may span lines; nothing here says it may not. *)
+string = '"' { escape | ! '"' } '"' .
+escape = "\\" ( '"' | "\\" | "n" | "t" | "r" ) .
+
+(* A quote prefix and no closing quote, the way Lisp reads one. *)
+symbol = "'" letter { letter | digit } .
+
+(* The `@` belongs to the token, so a directive is one lexeme and never an
+ * identifier that happens to follow a symbol. *)
+directive = "@" letter { letter | digit } .
+
+comment = ";" { ! "\n" } .
+space   = ( " " | "\t" | "\r" | "\n" ) { " " | "\t" | "\r" | "\n" } .
+
+(* `:=` before `:`, or the binding would never be one token, and `#[` before
+ * anything that could take the `#` -- which is nothing, since `integer` wants a
+ * digit or a sign after it, but the ordering says the intent. *)
+punctuation = "#[" | ":=" | ":" | "(" | ")" | "{" | "}" | "[" | "]" | "|" | "," | "." .
+
+(* The five that only mean anything inside `@expr`. Four of them were not
+ * characters the language used at all; `-` was, and is the one place this file
+ * cannot say what the scanner does. `float` above claims a leading `-`, and it
+ * is tried first, so `a-3` tokenises here as an identifier and the float -3
+ * where the compiler inside a region reads a subtraction. Written with spaces
+ * -- `a - 3` -- the two agree, because `-` followed by a space is not the start
+ * of a float in either of them.
+ *
+ * A lexical grammar has no regions to be inside of, so this is a divergence to
+ * name rather than one to fix. Everything in examples/ and lib/ is spaced, and
+ * the sweep in test_cli is what holds that true. *)
+operator = "+" | "-" | "*" | "/" | "^"
+         | "<=" | "<>" | ">=" | "<" | ">" | "=" | "&" | "~" .
+
+%skip space comment .
+
+(* ------------------------------------------------------------------ *)
+(* The syntactic half. solas/src/compiler.c.                           *)
+
+%syntax .
+%start program .
+
+(* ------------------------------------------------------------------ *)
+(* What a program builds.                                             *)
+(*                                                                     *)
+(* Every construct below answers one node, and there are twelve of      *)
+(* them. `Send` is most of the language.                                *)
+
+program = s:statement { "." t:statement -> $t } [ "." ] -> Program(body: [$s, ...$2])
+        | -> Program(body: []) .
+
+statement = include | expression .
+
+include = "@include" p:string -> Include(path: $p) .
+
+(* Binding a bare name is tried before a send: both begin with an identifier
+ * and only the first goes on to want `:=`. *)
+expression = n:identifier ":=" v:expression -> Bind(name: $n, value: $v)
+           | disjunction .
+
+(* The operator ladder, which means something only inside an `@expr` region.
+ * **Each one is built as the send it reads as** -- `+` is `add`, `^` is `pow`
+ * -- because the language says they are a second spelling and never a second
+ * semantics. Building them as operators would put something in the tree that
+ * the language says is not in it.
+ *
+ * `and` and `or` take a *block*, because they short-circuit, so `&` and `|`
+ * wrap their right-hand side in one. That is the one place this lowering is
+ * more than renaming. *)
+disjunction = conjunction { "|" c:conjunction
+                              -> Send(to: $$, message: "or",
+                                      args: [Block(params: [], temps: [],
+                                                   body: [$c])]) } .
+conjunction = negation { "&" n:negation
+                           -> Send(to: $$, message: "and",
+                                   args: [Block(params: [], temps: [],
+                                                body: [$n])]) } .
+
+negation    = "~" n:negation -> Send(to: $n, message: "not", args: [])
+            | comparison .
+
+comparison  = sum [ o:relation s:sum
+                      -> Send(to: $$, message: $o, args: [$s]) ] .
+
+(* The names these read as, so that the tree carries the send and not the
+ * spelling. A table rather than six alternatives, because the shapes are
+ * identical and only the name differs. *)
+relation = "<=" -> "lessOrEqual"    | "<>" -> "notEquals"
+         | ">=" -> "greaterOrEqual" | "<"  -> "lessThan"
+         | ">"  -> "greaterThan"    | "="  -> "equals" .
+
+sum      = product { o:adding p:product -> Send(to: $$, message: $o, args: [$p]) } .
+adding   = "+" -> "add" | "-" -> "sub" .
+
+product  = unary { o:timing u:unary -> Send(to: $$, message: $o, args: [$u]) } .
+timing   = "*" -> "mul" | "/" -> "div" .
+
+(* **The one place this description departs from the published grammar**, and
+ * it departs toward the compiler.
+ *
+ * `solum.bnf` lets the ladder take the minus, so `-1.5:truncated` reads as
+ * `negated(1.5:truncated)` -- the sign applied to the whole chain. `solas`
+ * reads it as `(-1.5):truncated`, because outside a region its scanner makes
+ * no minus at all: *'-' must be followed by digits* is what it says. The two
+ * differ on `-1.5:truncated`, which is `#-1` in the language and `#1` in the
+ * grammar.
+ *
+ * The grammar file names this itself -- *"that is the looseness this ladder
+ * costs"* -- and a grammar that is checked against a *file* rather than
+ * against a compiler can afford it. A compiler cannot.
+ *
+ * So `power` is tried first: a minus in front of a number is part of the
+ * number, and the chain then hangs off the number as it should. A minus in
+ * front of anything else is still the ladder's, which is what makes
+ * `@expr(- a)` and `@expr(a - b)` work unchanged. *)
+unary    = power                                                       (* order *)
+         | "-" u:unary -> Send(to: $u, message: "negated", args: []) .
+
+(* A chain of sends, folded left. **The three shapes of a send are written out
+ * here rather than in a rule of their own**, which is where the published
+ * grammar puts them -- because a send has no receiver until the chain gives it
+ * one, and `$$` is what the chain has built so far. A `send` rule would have
+ * had to answer half a node for this to join up, and half a node in the tree
+ * is worse than three alternatives in one place.
+ *
+ * `^` groups to the right and binds tighter than the minus in front of it. *)
+power = head { ":" m:identifier "(" a:arguments ")"
+                 -> Send(to: $$, message: $m, args: $a)
+             | ":" m:identifier ":=" v:expression
+                 -> SetSlot(to: $$, name: $m, value: $v)
+             | ":" m:identifier
+                 -> Send(to: $$, message: $m, args: []) }
+        [ "^" u:unary -> Send(to: $$, message: "pow", args: [$u]) ] .
+
+head     = call | primary .
+
+(* `sin(x)` is `x:sin` -- prefix application is a send to its argument, and
+ * the grammar says so, so the tree says so too and there is no `Call` node. *)
+call     = m:identifier "(" e:expression ")" -> Send(to: $e, message: $m, args: []) .
+
+
+
+arguments = a:expression { "," b:expression -> $b } -> [$a, ...$2]
+          | -> [] .
+
+primary = "-" f:float -> Float(text: "-{}" of $f)                      (* order *)
+        | identifier -> Name(name: $1)
+        | integer    -> Integer(text: $1)
+        | float      -> Float(text: $1)
+        | string     -> Text(text: $1)
+        | symbol     -> Symbol(name: $1)
+        | block | array | dictionary | group | region .
+
+(* `@expr(...)` answers what the expression comes to, and `@expr{...}` answers
+ * a block whose body is infix. Both are already built by what is inside them,
+ * so a region adds no node: it is a **lexical** mark, and the tree it produces
+ * is the tree the sends would have produced. *)
+region = "@expr" "(" e:expression ")" -> $e
+       | "@expr" b:block               -> $b .
+
+block       = "{" p:parameters t:temporaries b:body "}"
+                -> Block(params: $p, temps: $t, body: $b) .
+
+parameters  = n:identifier { "," m:identifier -> $m } "|" -> [$n, ...$2]
+            | -> [] .
+temporaries = "|" n:identifier { "," m:identifier -> $m } "|" -> [$n, ...$3]
+            | -> [] .
+
+body = e:expression { "." f:expression -> $f } [ "." ] -> [$e, ...$2]
+     | -> [] .
+
+array = "[" e:expression { "," f:expression -> $f } "]" -> Array(items: [$e, ...$3])
+      | "[" "]" -> Array(items: []) .
+
+dictionary = "#[" p:pair { "," q:pair -> $q } "]" -> Dictionary(pairs: [$p, ...$3])
+           | "#[" "]" -> Dictionary(pairs: []) .
+
+pair = k:sum "=" v:expression -> Pair(key: $k, value: $v) .
+
+(* A group may open with `| a, b |`, declaring temporaries of the frame it sits
+ * in -- the only way to declare one at the top level of a script. *)
+group = "(" t:temporaries e:expression { "." f:expression -> $f } [ "." ] ")"
+          -> Group(temps: $t, body: [$e, ...$3]) .
+
+(* ------------------------------------------------------------------ *)
+(* Writing the tree back out as Solveig.                              *)
+(*                                                                     *)
+(* Not a pretty-printer -- a **check on the tree**. What comes out is   *)
+(* parsed again, and the two trees must be identical. That catches a    *)
+(* node built with the wrong shape, an argument list dropped, a chain   *)
+(* folded the wrong way round, and it does it over every `.sol` file    *)
+(* there is rather than over the ones somebody thought to look at.      *)
+(*                                                                     *)
+(* It is not a round trip of *source*: `@expr(a + b)` comes back as     *)
+(* `a:add(b)`, because the region is a spelling and the tree holds the  *)
+(* sends. It is a round trip of *meaning*, which is the thing worth      *)
+(* having, and it works precisely because the lowering is idempotent.   *)
+
+%pass show
+
+  Integer : show = "{}" of $text .
+  Float   : show = "{}" of $text .
+  Text    : show = "{}" of $text .
+  Symbol  : show = "{}" of $name .
+  Name    : show = "{}" of $name .
+
+  Include : show = "@include {}" of $path .
+  (* **No parentheses that were not in the source.** In Solveig `(x)` is a
+   * `Group` node, so a parenthesis put in for tidiness comes back as a node
+   * that was not there and the round trip fails. Sends chain left to right and
+   * need none. *)
+  Bind    : show = "{} := {}" of $name, $value.show .
+
+  (* A send with no arguments takes no parentheses, and one with them takes
+   * both. Two spellings, chosen by a table on the count -- there being no way
+   * to ask a pattern whether a list is empty. *)
+  Send    : argtext = lookup([[0, ""]], size($args),
+                             "({})" of join($args.show, ", "))
+          : show    = "{}:{}{}" of $to.show, $message, $argtext .
+
+  SetSlot : show = "{}:{} := {}" of $to.show, $name, $value.show .
+
+  Block   : ptext = lookup([[0, ""]], size($params),
+                           "{} | " of join($params, ", "))
+          : ttext = lookup([[0, ""]], size($temps),
+                           "| {} | " of join($temps, ", "))
+          : show  = "{{ {}{}{} }}" of $ptext, $ttext, join($body.show, ". ") .
+
+  Array      : show = "[{}]"  of join($items.show, ", ") .
+  Dictionary : show = "#[{}]" of join($pairs.show, ", ") .
+  Pair       : show = "{} = {}" of $key.show, $value.show .
+
+  Group      : gtext = lookup([[0, ""]], size($temps),
+                              "| {} | " of join($temps, ", "))
+             : show  = "({}{})" of $gtext, join($body.show, ". ") .
+
+  Program    : show = "{}" of join($body.show, ".\n")
+             : out  = "{}.\n" of $show .
+
+%driver show = show -> out .

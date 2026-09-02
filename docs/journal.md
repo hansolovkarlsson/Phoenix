@@ -1344,3 +1344,64 @@ claim; the three-line reading is right.
 integers is an error, not a conversion, and I had written it expecting a
 conversion. That is what a suite written against documentation is for: it caught
 me rather than `solas`.
+
+## 2026-09-01 — the Solveig front end, and what a second language proved
+
+`languages/solveig/solveig.phx` is the published grammar with `->` clauses
+added. **Eighteen node types where Pascal needed fifty-one**, because Solveig
+has one thing that happens and Pascal has many.
+
+Every `.sol` file there is — 75 of them, including a 2,800-line compiler
+written in Solveig — parses, renders back out, and parses to an **identical
+tree**. The twelve conformance programs get the stronger form: what comes out
+is compiled by `solas`, run, and prints what the original printed.
+
+### What the second language proved about the notation
+
+**It needed nothing new.** No library function, no check, no mechanism. That is
+the answer to the question the whole exercise was for: a notation that suited
+fifty-one node types suits eighteen, and a language with statements, types and
+infix did not shape it against a language with none of those.
+
+**And the lessons transferred exactly.** The two mistakes I made writing it were
+both ones Pascal had already taught:
+
+- the separators were in the tree, because `{ "." statement }` answers
+  everything it matched — the same fault as `{ "," identifier }`, four
+  descriptions later
+- `Reach(of:, by:)` with `Args`/`Setter`/`Plain` was the flat-list problem
+  wearing a new hat. A send has no receiver until the chain gives it one, so
+  the three shapes are written *inside* the fold and there is no half-node in
+  the tree. Four node types disappeared
+
+The second is worth stating as a rule, since it is now three for three:
+**a fold has to be where the accumulator is.** Pascal's accessors, Pascal's
+signed expression, and now Solveig's send chain.
+
+### The one real finding
+
+`solum.bnf` lets the operator ladder take a leading minus, so `-1.5:truncated`
+reads as `negated(1.5:truncated)` — the sign applied to the whole chain.
+`solas` reads it as `(-1.5):truncated`, because outside an `@expr` region its
+scanner makes no minus: *'-' must be followed by digits*. The two differ, `#-1`
+against `#1`.
+
+**The grammar file names this itself** — *"that is the looseness this ladder
+costs"* — and a grammar checked against files rather than against a compiler
+can afford it. This description follows `solas`, which is the one place it
+departs from the published grammar and the only place it should.
+
+**It was found by the round trip**, on the two conformance programs that write
+a negative float, and by nothing else: the tree round-tripped fine, and only
+running the rendering through `solas` showed the difference. That is the same
+division of labour the Pascal oracle taught — reading the output catches what
+is wrong on its face, and running it catches what is wrong only against the
+language.
+
+### And the operators are not in the tree
+
+`@expr(a + b * c)` produces `Send(a, add, [Send(b, mul, [c])])`. The language
+says the operators are a second spelling and never a second semantics, so the
+tree says so too — and `&` and `|` wrap their right side in a block, because
+`and` and `or` short-circuit. That is the one place the lowering is more than
+renaming, and it is the sort of thing a description is *for* saying.
