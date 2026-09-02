@@ -69,22 +69,14 @@
 
 %pass prepare
 
-  (* **An array parameter is by reference in C whether or not it says so**,
-   * because an array decays to a pointer when it is passed. So a Pascal
-   * `var f : Flags` is a plain `Flags f` in C and needs no dereference, while
-   * a `var n : integer` is `long *n` and every use of it is `(*n)`.
-   *
-   * `shapeof` is what the typechecker worked out this parameter's type really
-   * is, and the choice between the two spellings is a `lookup` against it --
-   * a table standing in for the conditional the notation has not got. *)
-  (* What a *caller* has to put in front of an argument for this parameter:
-   * `&` for a by-reference one that is not an array, and nothing otherwise.
-   * One entry per name, so the list lines up with the argument positions. *)
-  Param(byref: true)  : addr = each($names, lookup([["array", ""]], $shapeof, "&"))
-                      : star = lookup([["array", ""]], $shapeof, "*")
-                      : refs = bind([], $names,
-                                 each($names, lookup([["array", "{}"]], $shapeof,
-                                                     "(*{})"))) .
+  (* A `var` parameter is a pointer, every use of it is a dereference, and the
+   * caller takes its address. **Uniformly** -- an array used to be the
+   * exception, because a C array decays to a pointer and so needed neither,
+   * and wrapping arrays in a struct took that exception away along with the
+   * table that chose between the two spellings. *)
+  Param(byref: true)  : addr = each($names, "&")
+                      : star = "*"
+                      : refs = bind([], $names, each($names, "(*{})")) .
   Param(byref: false) : addr = each($names, "")
                       : star = ""
                       : refs = [] .
@@ -159,9 +151,19 @@
 
   (* `bound` is the index range the typechecker resolved -- written out or
    * named, it is a subrange by the time it reaches here. *)
-  ArrayType : pre  = $of.pre
-            : post = "[({}) - ({}) + 1]{}"
-                       of $bound.high.out, $bound.low.out, $of.post .
+  (* **An array is wrapped in a struct**, and that is not decoration.
+   *
+   * Pascal copies an array passed by value; C does not, because a C array
+   * decays to a pointer and the callee writes the caller's memory. A struct
+   * copies, so wrapping one makes the C behave the way the Pascal says --
+   * and it makes a `var` array an ordinary pointer like every other `var`
+   * parameter, which deleted the special case that existed only because
+   * arrays decayed.
+   *
+   * `.v` is the field the values live in. Every index goes through it. *)
+  ArrayType : pre  = "struct {{ {} v[({}) - ({}) + 1]{}; }}"
+                       of $of.pre, $bound.high.out, $bound.low.out, $of.post
+            : post = "" .
 
   RecordType : pre  = "struct {{ {} }}" of join($fields.out, " ")
              : post = "" .
@@ -294,10 +296,15 @@
                            ...$spelled]
          : out = "  {{\n{}\n  }}" of $body.out .
 
-  For(dir: "to")     : out = "  for ({} = {}; {} <= {}; {}++) {{\n{}\n  }}"
-                         of $var, $from.out, $var, $to.out, $var, $body.out .
-  For(dir: "downto") : out = "  for ({} = {}; {} >= {}; {}--) {{\n{}\n  }}"
-                         of $var, $from.out, $var, $to.out, $var, $body.out .
+  (* **Pascal evaluates the limit once**, before the loop, so a body that
+   * changes what the limit was computed from does not change the loop. C
+   * re-evaluates it every time round. The limit gets a variable of its own in
+   * a block of its own, so that a nested `for` shadows it rather than
+   * clashing with it. *)
+  For(dir: "to")     : out = "  {{ long phx_limit = {};\n  for ({} = {}; {} <= phx_limit; {}++) {{\n{}\n  }} }}"
+                         of $to.out, $var, $from.out, $var, $var, $body.out .
+  For(dir: "downto") : out = "  {{ long phx_limit = {};\n  for ({} = {}; {} >= phx_limit; {}--) {{\n{}\n  }} }}"
+                         of $to.out, $var, $from.out, $var, $var, $body.out .
 
   (* ---- calls ----
    *
@@ -448,7 +455,7 @@
   Variable : out = lookup($spelled, $name, $name) .
   FieldOf  : out = "{}.{}"           of $of.out, $name .
   Deref    : out = "(*{})"           of $of.out .
-  Indexed  : out = "{}[({}) - ({})]" of $of.out, at($at, 1).out, $lowbound .
+  Indexed  : out = "{}.v[({}) - ({})]" of $of.out, at($at, 1).out, $lowbound .
 
   (* ---- the whole ---- *)
 

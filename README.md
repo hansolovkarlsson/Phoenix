@@ -530,7 +530,7 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 106 checks (24 of them against fpc), including Solveig's pascal.bnf when it is present
+make test       # 106 checks (30 of them against fpc), including Solveig's pascal.bnf when it is present
 ```
 
 C11, no dependencies, and the test suite is hermetic — it reads nothing outside
@@ -653,7 +653,8 @@ what an oracle proves:
 | a set range | `[2..6]` is a run of bits, and a member is one bit, and a set constructor cannot ask which it has — so a member has a node of its own now |
 | an attribute shadowed by a field | `Subrange` has a field called `low`, so an attribute of that name was invisible from outside. The second time that has happened |
 
-And six more, of which two agreed with fpc while being wrong:
+And six more, of which two agreed with fpc while being wrong, then six more
+again:
 
 | | |
 | --- | --- |
@@ -661,6 +662,8 @@ And six more, of which two agreed with fpc while being wrong:
 | **reaching into a record lost the type** | `b.name` is a `char` and printed as `66`. The accessors were a *list*, so nothing could ask what `b.corners[2]` was before saying what `.x` is. They nest now, and each step asks the step below it |
 | a set range double-shifted | `[2..6]` is a run of bits and a member is one bit; a set constructor could not ask which it had |
 | Pascal's `mod`, widths, formats | as above |
+| **an array passed by value was not copied** | Pascal copies it; a C array decays to a pointer, so the callee wrote the caller's memory. Arrays are wrapped in a struct now, which copies — and that took away the special case `var` arrays needed, because a struct does not decay |
+| **a `for` limit was evaluated every time round** | Pascal evaluates it once, before the loop |
 
 ## Where this sits
 

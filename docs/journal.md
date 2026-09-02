@@ -1207,3 +1207,33 @@ argument for having had them. Nothing in `phoenix/` changed, and no description
 needed editing beyond the paths in its own header comment — `%import` resolves
 beside the file that names it, so the descriptions moved together and kept
 working without being told.
+
+## 2026-09-01 — an array passed by value was not copied
+
+Six more oracle programs — by-value parameters, a `for` limit, `case` on a
+char, records inside arrays inside records, expressions as loop bounds, whole
+record assignment. Thirty programs agree with `fpc -Miso`.
+
+**Two more silent wrong answers.**
+
+*Pascal copies an array passed by value and C does not*, because a C array
+decays to a pointer — so `TouchArray(r)` wrote the caller's `r`. An array is
+wrapped in a struct now: `struct { long v[5]; }`, indexed through `.v`. A struct
+copies, so the C does what the Pascal says.
+
+**And that deleted a special case rather than adding one.** `var` array
+parameters had needed different treatment from every other `var` parameter —
+no pointer and no dereference — for exactly the reason that arrays decayed.
+With a struct nothing decays, every `var` parameter is a pointer, every use is
+`(*name)`, and the table that chose between the two spellings is gone along with
+the `shapeof` attribute that fed it.
+
+*A `for` limit is evaluated once in Pascal*, before the loop, so a body that
+changes what the limit was computed from does not change the loop. C
+re-evaluates it. The limit gets a variable in a block of its own, which also
+means a nested `for` shadows it rather than clashing with it.
+
+**Neither would have been found by reading the emitted C**, which is how the
+last two were found. `a[1] := 99` inside a procedure is right-looking C, and
+`for (i = 1; i <= n; i++)` is what anyone would write. It took a program that
+asked, which is what an oracle is.
