@@ -503,7 +503,8 @@ Value *eval_expr(Eval *e, const Expr *x)
          * .phx the action that built it sits. A diagnostic from a later pass
          * points at the user's program, which is the only place worth
          * pointing at. */
-        v->pos   = e->pos;
+        v->pos    = e->pos;
+        v->endpos = e->endpos < e->pos ? e->pos : e->endpos;
 
         if (x->nkids == 0) return v;
 

@@ -11,11 +11,11 @@ predictions made here against what the evidence turned out to say.
 
 ## 1. The stages
 
-Three of these are done and are kept here rather than deleted, because what an
+All but one are done, and are kept here rather than deleted, because what an
 entry predicted and what it cost is the only way to tell whether this page is
 worth writing — and two of them predicted wrong, which is the more useful half.
-One is new, and is the first here that came from a measurement rather than from
-a design.
+What is left is [1.2](#12-compiling-the-tables-to-code), which this page has
+said twice is not worth doing.
 
 ### 1.0 A reader-level mechanism, for a target language's imports — **done**
 
@@ -145,25 +145,44 @@ question one case at a time before seeing its shape, and it is
 [3.4](#34-a-library-that-grows-without-deciding)'s number to watch going up for
 a reason worth recording.
 
-### 1.4 Where a node ends
+### 1.4 Where a node ends — **done**
 
-**The last thing between `languages/solveig/` and an oracle it agrees with on
-every byte**, and the first entry on this page that came from a measurement
-rather than from a design.
+The last thing between `languages/solveig/` and an oracle it agrees with on
+every byte, and the only entry on this page that came from a measurement rather
+than from a design.
 
-A node carries one position and that is its **first** token. `solas` writes an
-`OP_SEND` after compiling the arguments, so the line it records is where the
-argument list *ends*. Four programs fail inside a send whose arguments run over
-several lines, and name the first of them where `solas` names the last.
+The question it posed was whether a position is a point or a **span**. It is a
+span:
 
-Everything else needed is there: `otherwise` gives every node a line run, and a
-composite node can compose one from its children's. What is missing is a second
-number — and the question to answer first is whether a position is a point or a
-**span**, because `$pos.line` and `$pos.column` are the start of one either way
-and nothing has yet wanted the end.
+```
+Position(line, column, file, endline, endcolumn)
+```
 
-Not urgent. It is four traceback lines in seventy-five programs, and the four
-are counted and named rather than hidden.
+A node occupies a stretch of source, and saying only where it starts is what
+made four programs name the wrong line. `solas` records the line of the token
+it has just read, so an `OP_SEND` — written *after* its arguments — belongs to
+the line the argument list ends on. `$pos.endline` is that, and the clause that
+was wrong is now right by one word:
+
+```
+Send : runs = join([$to.runs, join($args.runs, ""),
+                    bytes(4, 4), bytes($pos.endline, 4)], "") .
+```
+
+Every composite node composes its line runs from its children's now, in the
+order it writes their bytes — which is the order it already wrote them in,
+because the bytes and the lines are the same walk.
+
+**Seventy-six programs print exactly what `solas`'s bytecode prints, and
+nothing is counted apart any more.** The oracle normalises nothing: a traceback
+names a file and a line, and both are compared like any other byte. The only
+thing still set aside is a program that does not print the same thing twice
+under `solas` either — one that reads the clock.
+
+The one thing this did not need was `endcolumn`, which came along because a
+position is a line *and* a column at both ends or at neither. It is the second
+field on that node nothing has asked for yet, and both are there for the same
+reason: a shape that is right is cheaper to keep than a shape that is minimal.
 
 ---
 

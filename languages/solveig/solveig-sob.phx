@@ -245,6 +245,16 @@
                         [...$names, [$message, size($names)]])
          (* A nested `of` is parenthesised: `of` does not chain, so without
           * them the second one would be reading the first one's arguments. *)
+         (* **A send's own four bytes go in after its arguments**, so the line
+          * they belong to is where the argument list ends rather than where
+          * the receiver began. `solas` records the line of the token it has
+          * just read, and by the time it writes an `OP_SEND` that is the `)`.
+          *
+          * Everything before those four bytes is its parts, in the order they
+          * were compiled -- which is the order this clause already writes them
+          * in, because the bytes and the lines are the same walk. *)
+       : runs = join([$to.runs, join($args.runs, ""),
+                      bytes(4, 4), bytes($pos.endline, 4)], "")
        : code = "{}{}{}{}{}" of $to.code, join($args.code, ""),
                                 bytes(11, 1), bytes($idx, 2),
                                 bytes(size($args), 1) .
@@ -299,14 +309,21 @@
    * a dictionary sends twice as many arguments as it has pairs, since a pair
    * puts its key and its value on the stack as two.
    *)
-  Array : code = "{}{}{}{}{}" of bytes(2, 1), bytes(0, 2),
+  Array : runs = join([bytes(3, 4), bytes($pos.line, 4),
+                       join($items.runs, ""),
+                       bytes(4, 4), bytes($pos.endline, 4)], "")
+        : code = "{}{}{}{}{}" of bytes(2, 1), bytes(0, 2),
                                  join($items.code, ""),
                                  ("{}{}" of bytes(11, 1), bytes(1, 2)),
                                  bytes(size($items), 1) .
 
-  Pair : code = "{}{}" of $key.code, $value.code .
+  Pair : runs = "{}{}" of $key.runs, $value.runs
+       : code = "{}{}" of $key.code, $value.code .
 
-  Dictionary : code = "{}{}{}{}{}" of bytes(2, 1), bytes(2, 2),
+  Dictionary : runs = join([bytes(3, 4), bytes($pos.line, 4),
+                            join($pairs.runs, ""),
+                            bytes(4, 4), bytes($pos.endline, 4)], "")
+             : code = "{}{}{}{}{}" of bytes(2, 1), bytes(2, 2),
                                       join($pairs.code, ""),
                                       ("{}{}" of bytes(11, 1), bytes(1, 2)),
                                       bytes(size($pairs) * 2, 1) .
@@ -331,6 +348,10 @@
                                            bytes($bdepth - $odepth, 1),
                                            bytes($oslot, 1)]], $oslot > -1,
                         "{}{}" of bytes(3, 1), bytes($idx, 2)))
+         (* The store goes in after the value, so its line is where the value
+          * ends -- the same rule as a send's, and for the same reason. *)
+       : runs = "{}{}{}" of $value.runs,
+                            bytes(size($store), 4), bytes($pos.endline, 4)
        : code = "{}{}" of $value.code, $store .
 
   (* `o:x := v` -- the object, the value, and the name to bind on it. *)
@@ -339,6 +360,8 @@
                               "{}{}{}" of $nametext, bytes(size($name), 2), $name)
           : names    = lookup([[true, $names]], defined($names, $name),
                               [...$names, [$name, size($names)]])
+          : runs = join([$to.runs, $value.runs,
+                         bytes(3, 4), bytes($pos.endline, 4)], "")
           : code = "{}{}{}{}" of $to.code, $value.code,
                                  bytes(12, 1), bytes($idx, 2) .
 
@@ -706,6 +729,12 @@
             : "a name is declared twice in one frame"
         : joined = join(each($body.code, "{}\x12"), "")
         : code   = slice($joined, 1, size($joined) - 1)
+          (* Inline, so its statements keep their own lines the way a chunk's
+           * body does -- and the last `POP` comes off the table as it comes
+           * off the code. *)
+        : rawruns = join(each($body.runs, bytes($body.pos.line, 4),
+                              "{}\x01\x00\x00\x00{}"), "")
+        : runs   = slice($rawruns, 1, size($rawruns) - 8)
           (* The frame needs room for the deepest group in it, not the last. *)
         : nslots = lookup([[true, $nslots]], $nslots > size($slotnames),
                           size($slotnames)) .

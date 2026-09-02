@@ -197,18 +197,28 @@ static bool match_pattern(Run *r, const Pattern *p, Value *v)
  *
  *     $pos.line     $pos.column     $pos.file
  *
- * and a fourth thing later is a field rather than a second reserved name.
+ * and a fifth thing later is a field rather than a second reserved name.
  * `$body.pos` over a list is a list of these, because `.` over a list already
  * means that -- so a table with a row per statement is written the way every
  * other list is.
+ *
+ * **A node is a stretch of source and not a point**, so it says where it ends
+ * as well as where it starts. That matters wherever something is emitted after
+ * the things it is about: a send's own bytes go in after its arguments, so the
+ * line they belong to is `$pos.endline` and not `$pos.line`. One file, because
+ * nothing yet ends in a different one from the one it began in and a node that
+ * did would be a construct spliced across an `@include`.
  *
  * The file is the one an `@include` put the node in, not the one the command
  * line named, because that is what the joined source already knows.
  */
 static Value *position_of(Run *r, const Value *v)
 {
-    int line, col;
+    size_t end = v->endpos < v->pos ? v->pos : v->endpos;
+
+    int line, col, endline, endcol;
     source_position(r->src, v->pos, &line, &col);
+    source_position(r->src, end,    &endline, &endcol);
 
     const char *path = source_path_at(r->src, v->pos);
     if (!path) path = "";
@@ -217,13 +227,16 @@ static Value *position_of(Run *r, const Value *v)
     p->kind   = V_NODE;
     p->type   = "Position";
     p->pos    = v->pos;
-    p->n      = 3;
-    p->items  = arena_alloc(r->a, 3 * sizeof *p->items);
-    p->fields = arena_alloc(r->a, 3 * sizeof *p->fields);
+    p->endpos = end;
+    p->n      = 5;
+    p->items  = arena_alloc(r->a, 5 * sizeof *p->items);
+    p->fields = arena_alloc(r->a, 5 * sizeof *p->fields);
 
-    p->fields[0] = "line";   p->items[0] = value_int(r->a, line);
-    p->fields[1] = "column"; p->items[1] = value_int(r->a, col);
-    p->fields[2] = "file";   p->items[2] = value_text(r->a, path, strlen(path));
+    p->fields[0] = "line";      p->items[0] = value_int(r->a, line);
+    p->fields[1] = "column";    p->items[1] = value_int(r->a, col);
+    p->fields[2] = "file";      p->items[2] = value_text(r->a, path, strlen(path));
+    p->fields[3] = "endline";   p->items[3] = value_int(r->a, endline);
+    p->fields[4] = "endcolumn"; p->items[4] = value_int(r->a, endcol);
     return p;
 }
 
@@ -446,7 +459,8 @@ static void run_clauses(Run *r, Value *v, const PassRule *rule, bool entering)
 
         if (c->kind == C_ERROR) continue;      /* done, above */
 
-        e.pos = v->pos;
+        e.pos    = v->pos;
+        e.endpos = v->endpos;
 
         Value *got = blocked ? value_error(r->a) : eval_expr(&e, c->value);
 
@@ -529,7 +543,8 @@ static void run_defaults(Run *r, Value *v, const PassRule *rule)
     const Pass *p = r->pass;
     if (!p->ndefaults) return;
 
-    Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r, .pos = v->pos };
+    Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r,
+               .pos = v->pos, .endpos = v->endpos };
 
     for (int i = 0; i < p->ndefaults; i++) {
         const Clause *c = &p->defaults[i];
@@ -688,7 +703,8 @@ static Value *rewrite_once(Run *r, const Rewrite *rw, Value *v, bool *changed)
         /* Where the built node belongs is where the one it replaces was, so
          * that a diagnostic from a later pass points at the program rather
          * than at the rule that rewrote it. */
-        Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r, .pos = v->pos };
+        Eval e = { .a = r->a, .g = r->g, .ref = run_ref, .data = r,
+                   .pos = v->pos, .endpos = v->endpos };
 
         Value *to = eval_expr(&e, rw->rules[i].to);
         if (!to) return NULL;

@@ -152,12 +152,13 @@ to nest — see [the journal](../../docs/journal.md).
 
 [`tests/bytecode.sh`](tests/bytecode.sh) compiles every `.sol` file in the
 Solveig repository twice — once with `solas`, once with this description —
-runs both under `solvm`, and requires the same output. **Seventy-one programs
-print exactly the same bytes, tracebacks included**: the file and the line a
-message points at are compared rather than normalised away, which they were
-until `$pos` gave a clause the position it needed, `%rewrite inline` made the
-frames themselves agree, and `otherwise` gave the line and file tables a row
-per statement.
+runs both under `solvm`, and requires the same output. **Every one of them
+prints exactly the same bytes, tracebacks included** — the file and the line a
+message points at are compared like any other byte, with nothing normalised and
+nothing counted apart. They were thrown away until `$pos` gave a clause the
+position it needed, `%rewrite inline` made the frames agree, `otherwise` gave
+the line and file tables a row per statement, and `$pos.endline` put a send's
+own bytes where `solas` puts them.
 
 It found two bugs in the front end, neither of them findable by rendering: the
 `-2^2` precedence above, and `self`, which is slot 0 of **every** frame rather
@@ -231,9 +232,18 @@ stays correct rather than merely unused.
 
 ### The line and file tables
 
-A chunk's line table is a run per statement — and a statement holding an
-inlined block holds several lines, so the seven nodes an inlined block became
-compose one from their parts. Every other node takes the default:
+A chunk's line table is a run per statement, and a statement holds as many
+lines as it is written over — so every composite node composes one from its
+children's, in the order it writes their bytes:
+
+```
+Send : runs = join([$to.runs, join($args.runs, ""),
+                    bytes(4, 4), bytes($pos.endline, 4)], "") .
+```
+
+**`endline`, because a send's own four bytes go in after its arguments.**
+`solas` records the line of the token it has just read, and by then that is the
+`)`. Everything with no parts of its own takes the default:
 
 ```
 otherwise runs = "{}{}" of bytes(size($code), 4), bytes($pos.line, 4)
@@ -246,10 +256,12 @@ then `$body.fileidx`, a column like any other.
 
 ### What it does not do
 
-**Say where a send's own bytes belong.** `solas` writes an `OP_SEND` after
-compiling the arguments, so its line is where the argument list *ends*; a node
-here carries one position and that is its first token. Four programs fail
-inside a send whose arguments run over several lines, and name the first of
-them where `solas` names the last — see
-[ROADMAP 1.4](../../docs/ROADMAP.md). They are the only four left that do not
-agree with the oracle on every byte.
+Nothing, against this oracle. Every `.sol` file in the Solveig repository
+compiles to bytecode that prints what `solas`'s does, tracebacks and all.
+
+What that does **not** say is that the bytes are the same: they are not, and
+they are not meant to be. This backend interns names in a different order,
+writes a constant per `and` rather than one per chunk, and carries file tables
+`solas` would have made smaller. The claim is about what a program *does*,
+which is the claim worth making — see [the oracle](../../README.md#the-oracle)
+for why the weaker one would have been easier and worth less.

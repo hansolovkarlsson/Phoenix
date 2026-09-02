@@ -200,8 +200,13 @@ the repetition builds the first element twice, and nothing downstream can tell.
 `$pos` answers a node, and reading part of it is an ordinary field read:
 
 ```
-Position(line, column, file)
+Position(line, column, file, endline, endcolumn)
 ```
+
+**A node is a stretch of source and not a point**, so it says where it ends as
+well as where it starts. That matters wherever something is emitted after the
+things it is about: a send's own bytes go in after its arguments, so the line
+they belong to is `endline`.
 
 `line` and `column` count from one; `file` is the file that stretch of source
 came from, which after an `@include` is not necessarily the file the command

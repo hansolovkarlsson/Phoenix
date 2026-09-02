@@ -2082,3 +2082,92 @@ a NUL in a grammar literal, in a pattern and in a template at once, so the next
 person to touch `emit.c` finds out from a test rather than from a `.sob`.
 
 Both fail against the previous commit. That was checked rather than assumed.
+
+## 2026-09-02 — a node is a stretch, not a point
+
+[ROADMAP 1.4](ROADMAP.md) was the only entry on that page that came from a
+measurement rather than from a design, and it posed one question: **is a
+position a point or a span?**
+
+It is a span, and four programs are what said so. All four failed inside a send
+whose arguments run over several lines, and named the line the statement
+*starts* on where `solas` names the line it *ends* on:
+
+```
+path := system:arguments:size:greaterThan(#0):ifElse(
+    { system:arguments:at(#1) },
+    { | fallback |
+      fallback := "build/example-access.log".
+      system:writeFile(fallback, sample).
+      fallback }).
+```
+
+`solas` records the line of the token it has just read. By the time it writes
+the `OP_SEND` for `ifElse`, that is the `)` on the last line — because **a
+send's own bytes go in after its arguments**. A node here carried one position,
+its first token, and had nothing to say about that.
+
+```
+Position(line, column, file, endline, endcolumn)
+```
+
+Every value now carries where it ends as well as where it starts: a token ends
+at its last byte, and a node ends at the last byte of the last token its
+sequence consumed. That is one field on `Value`, one on `Eval`, and about
+fifteen lines between `parse.c` and `run.c`.
+
+### The clause that was wrong by one word
+
+```
+Send : runs = join([$to.runs, join($args.runs, ""),
+                    bytes(4, 4), bytes($pos.endline, 4)], "") .
+```
+
+`$pos.line` to `$pos.endline`, and 71 programs became 72. `Bind` and `SetSlot`
+store after their value, so the same change took it to **76** — every `.sol`
+file in the Solveig repository. `Array`, `Dictionary`, `Pair` and `Group`
+compose theirs too, which changed nothing measurable and is right for the same
+reason: a composite node's line runs are its children's, in the order it writes
+their bytes, which is the order it already wrote them in. **The bytes and the
+lines are the same walk.**
+
+### What the test says now
+
+```
+76 programs print exactly what solas compiled prints, 0 do not
+   (1 do not repeat themselves)
+```
+
+**Nothing is normalised and nothing is counted apart.** The `sed` that replaced
+every `[...]` before comparing is gone; so is the rule that let a difference
+count as "only a traceback"; so are the categories for the format's nesting
+limit and for the call depth. A traceback names a file and a line and both are
+compared like any other byte.
+
+The one thing still set aside is a program that does not print the same thing
+twice under `solas` either — `programs/system.sol` prints how long a loop took.
+That is not a disagreement about compiling and it never was.
+
+### The field nothing asked for
+
+`endcolumn` came along with `endline` and nothing uses it. It is there because
+a position is a line *and* a column at both ends or at neither, and a shape
+that is right is cheaper to keep than a shape that is minimal. That is the
+second field on `Position` in that position — `column` was the first — and both
+were free because `$pos` answers a node.
+
+Which is the small vindication of the decision two stages ago not to make a
+position a number. Every time this has needed to say more, it has been a field.
+
+### Where that leaves the page
+
+[Section 1](ROADMAP.md) has one entry left, and it is the one that page has
+twice said is not worth doing: compiling the tables to code, measured, weak,
+and the only thing on it that would create a second implementation of the
+notation. Of the four borrowed entries, two are done and two are the two it
+said to be sceptical about.
+
+The Solveig oracle has nothing left to say. That is worth noticing: it has been
+the sharpest instrument in this repository for five stages, and it has run out
+of disagreements. **The next real evidence has to come from a language nobody
+here has described yet.**

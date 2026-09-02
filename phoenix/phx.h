@@ -489,7 +489,14 @@ struct Value {
     const char   *type;    /* V_NODE: its name                             */
     const char   *text;    /* V_TEXT: its bytes                            */
     size_t        len;
+
+    /* Where this came from: the first byte of its first token, and the last
+     * byte of its last. A node is a **stretch** of source and not a point,
+     * which matters wherever something is emitted *after* the things it is
+     * about -- a send's own bytes go in after its arguments, so the line they
+     * belong to is where the argument list ends. */
     size_t        pos;
+    size_t        endpos;
     const char  **fields;  /* V_NODE: one name per kid, or NULL throughout  */
     Value       **items;
     int           n;
@@ -516,6 +523,7 @@ struct Eval {
     Value       *(*ref)(Eval *, const Expr *);   /* $n, $name, $$, x.attr   */
     void          *data;                          /* whatever ref needs      */
     size_t         pos;   /* where in the *source* a node built here belongs */
+    size_t         endpos;/* and where it ends -- see Value.endpos           */
 };
 
 Value *eval_expr(Eval *e, const Expr *x);

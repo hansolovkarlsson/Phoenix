@@ -462,15 +462,20 @@ every message from a program it compiled said `[line 1]`. `$pos` is what reads
 it, and it answers a **node**:
 
 ```
-Position(line, column, file)
+Position(line, column, file, endline, endcolumn)
 ```
 
 which is the whole of the design. A number would have been smaller and would
 have meant nothing to a description — every use a description has for a
 position is a line or the name of a file. A node makes reading part of one an
 ordinary field read, so the notation needs no new syntax and no library
-function, and a fourth thing later is a field rather than a second reserved
-name.
+function, and a fifth thing later is a field rather than a second reserved
+name. `endline` and `endcolumn` arrived exactly that way.
+
+**A node is a stretch of source and not a point.** That matters wherever
+something is emitted after the things it is about: a send's own bytes go in
+after its arguments, so the line they belong to is where the argument list
+*ends*.
 
 `.` over a list already means "that of each", so a table with a row per
 statement is written the way every other list is:
@@ -699,7 +704,7 @@ says what goes where.
 ```sh
 make            # bin/phx
 make test       # 153 checks, covering 35 Pascal programs against fpc
-                #   and 71 Solveig programs against solas, byte for byte
+                #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
@@ -868,11 +873,12 @@ outside the subset are refused loudly rather than mistranslated.
 
 `solas` and `solvm` do the same for Solveig, and the test is stronger: not
 "does the output read correctly" but "does the compiled program print the same
-thing". Seventy-one programs compile to bytecode that prints what `solas`'s
-does, **byte for byte, tracebacks included** — the file and the line a message
-points at are compared rather than normalised away. It found two bugs in the
-front end and one in Phoenix itself, and **none of the three was reachable by
-rendering the tree back to source**:
+thing". **Every Solveig program in that repository** compiles to bytecode that
+prints what `solas`'s does, byte for byte, tracebacks included — the file and
+the line a message points at are compared like any other byte, and nothing is
+normalised or counted apart. It found two bugs in the front end and one in
+Phoenix itself, and **none of the three was reachable by rendering the tree
+back to source**:
 
 | | |
 | --- | --- |

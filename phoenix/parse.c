@@ -122,9 +122,10 @@ static Value *value_new(Parse *p, VKind kind, size_t pos)
 
 static Value *token_value(Parse *p, const Token *tok)
 {
-    Value *v = value_new(p, V_TEXT, tok->pos);
-    v->text  = tok->text;
-    v->len   = tok->len;
+    Value *v  = value_new(p, V_TEXT, tok->pos);
+    v->text   = tok->text;
+    v->len    = tok->len;
+    v->endpos = tok->pos + (tok->len ? tok->len - 1 : 0);
     return v;
 }
 
@@ -261,7 +262,8 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
     memset(slots, 0, (size_t)(n->nkids ? n->nkids : 1) * sizeof *slots);
 
     Slots gathered = { 0 };
-    size_t pos = at < p->t->n ? p->t->items[at].pos : p->src->size;
+    long   from = at;
+    size_t pos  = at < p->t->n ? p->t->items[at].pos : p->src->size;
 
     for (int i = 0; i < n->nkids; i++) {
         at = parse_match(p, n->kids[i], at, &slots[i]);
@@ -269,8 +271,18 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
         slots_add(p, &gathered, slot_value(p, n->kids[i], &slots[i], pos));
     }
 
+    /* The last byte of the last token this sequence consumed. A sequence that
+     * consumed none -- an empty alternative -- ends where it began, rather
+     * than at the token before it. */
+    size_t endpos = pos;
+    if (at > from) {
+        const Token *last = &p->t->items[at - 1];
+        endpos = last->pos + (last->len ? last->len - 1 : 0);
+    }
+
     Build b = { .p = p, .seq = n, .slots = &gathered, .acc = NULL };
-    Eval  e = { .a = p->a, .g = p->g, .ref = build_ref, .data = &b, .pos = pos };
+    Eval  e = { .a = p->a, .g = p->g, .ref = build_ref, .data = &b,
+                .pos = pos, .endpos = endpos };
 
     /* `$$` is the value the enclosing sequence built last, and the result
      * takes its place rather than following it. That is the whole of a left

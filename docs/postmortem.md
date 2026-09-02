@@ -108,8 +108,9 @@ for Solveig.
 - 35 Pascal programs agree with `fpc`; 5 out-of-subset programs are refused loudly
 - 12 Solveig conformance programs, written against the documentation
 - every `.sol` file in the Solveig repository round-trips to an identical tree
-- 71 Solveig programs compile to bytecode that prints what `solas`'s does, byte
-  for byte, tracebacks included
+- 76 Solveig programs compile to bytecode that prints what `solas`'s does, byte
+  for byte, tracebacks included -- every one in that repository, with nothing
+  normalised and nothing counted apart
 
 ---
 

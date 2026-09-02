@@ -410,13 +410,13 @@ static void note_node_type(Check *c, const Expr *x)
  * driver check finds `line` on a node type it knows, and `--nodes` says so. */
 static void seed_position_type(Check *c)
 {
-    static char *fields[] = { "line", "column", "file" };
+    static char *fields[] = { "line", "column", "file", "endline", "endcolumn" };
     Expr         shape    = { 0 };
 
     shape.kind   = X_NODE;
     shape.name   = "Position";
     shape.fields = fields;
-    shape.nkids  = 3;
+    shape.nkids  = 5;
     shape.pos    = 0;
 
     note_node_type(c, &shape);

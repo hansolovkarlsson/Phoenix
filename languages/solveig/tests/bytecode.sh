@@ -11,26 +11,19 @@
 # library those files include lives in `lib/` beside the Solveig binaries, so
 # `-I` says where -- the same thing `bin/solas` does with `bin/../lib`.
 #
-# **Locations in a traceback are compared, not normalised.** They used to be
+# **Nothing is normalised, and nothing is counted apart.** A traceback names a
+# file and a line, and those are compared like any other byte. They used to be
 # thrown away, because this backend wrote one line run for a whole chunk and no
-# file table: every message said `[line 1]`. `%include` gave a chunk more than
-# one file to be about, `$pos` gave a clause the position it needed, and
-# `%rewrite inline` made the frames themselves agree, and `otherwise` gave
-# every node a line run and a row in its chunk's file table. Seventy-one
-# programs agree on every byte of their output, tracebacks included, and a
-# message names the right file always.
+# file table: every message said `[line 1]`. Four stages closed that --
+# `%include` gave a chunk more than one file to be about, `$pos` gave a clause
+# the position it needed, `%rewrite inline` made the frames agree, `otherwise`
+# gave every node a line run and a row in its chunk's file table, and
+# `$pos.endline` put a send's own bytes where `solas` puts them, after its
+# arguments.
 #
-# What is still counted apart is one thing: **the line a send's own bytes
-# belong to**. `solas` writes an `OP_SEND` after compiling the arguments, so
-# its line is where the argument list *ends*; this backend has only where the
-# node *starts*, because a node carries one position and that is its first
-# token. Four programs fail inside a send whose arguments run over several
-# lines, and name the first of them where `solas` names the last.
-#
-# A run where **every** differing line is a traceback line is counted there;
-# anything else is a failure. And a program that does not print the same thing
-# twice under `solas` -- one that reads the clock or the file system -- is
-# counted apart too, since that is not a disagreement about compiling.
+# So the only thing counted apart is **a program that does not print the same
+# thing twice under `solas`** -- one that reads the clock or the file system,
+# which is not a disagreement about compiling. Everything else is a failure.
 #
 # **Nothing here writes outside Phoenix.** The Solveig checkout is a resource
 # that happens to be on the same computer: it is read, and its `solas` and
@@ -67,20 +60,8 @@ run() {
     ( cd "$sandbox" && perl -e 'alarm 30; exec @ARGV' "$sol/bin/solvm" "$1" 2>&1 </dev/null )
 }
 
-# Whether every line the two disagree about is a **traceback line** -- a frame,
-# which is the one thing a block that was not inlined moves. A program that
-# printed something different is not this and is a failure.
-only_traceback() {
-    printf '%s\n' "$1" > "$tmp/a"
-    printf '%s\n' "$2" > "$tmp/b"
-    diff "$tmp/a" "$tmp/b" | grep '^[<>]' > "$tmp/d"
-    [ -s "$tmp/d" ] || return 1
-    grep -qv '^[<>] *\[[^]]*\] in ' "$tmp/d" && return 1
-    return 0
-}
 
-
-same=0; differ=0; framed=0; unsteady=0
+same=0; differ=0; unsteady=0
 for f in "$sol"/examples/*.sol "$sol"/programs/*.sol "$sol"/lib/*.sol "$here"/conformance/*.sol; do
     [ -f "$f" ] || continue
     "$sol/bin/solas" "$f" -o "$tmp/oracle.sob" >/dev/null 2>&1 || continue
@@ -108,8 +89,6 @@ for f in "$sol"/examples/*.sol "$sol"/programs/*.sol "$sol"/lib/*.sol "$here"/co
         unsteady=$((unsteady+1)); continue
     fi
 
-    if only_traceback "$want" "$mine"; then framed=$((framed+1)); continue; fi
-
     differ=$((differ+1)); echo "  differs: $f"
     printf '%s\n' "$want" > "$tmp/want"; printf '%s\n' "$mine" > "$tmp/mine"
     diff "$tmp/want" "$tmp/mine" | head -6 | sed 's/^/      /'
@@ -121,6 +100,5 @@ rm -rf "$tmp"
 [ -d "$out/run" ] && printf '  (programs that wrote files left them in build/oracle/run/)\n'
 
 printf '%d programs print exactly what solas compiled prints, %d do not' "$same" "$differ"
-printf ' (%d differ only in where a traceback points, %d do not repeat' "$framed"
-printf ' themselves)\n' "$unsteady"
+printf ' (%d do not repeat themselves)\n' "$unsteady"
 [ "$differ" -eq 0 ]
