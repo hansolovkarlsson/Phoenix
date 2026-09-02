@@ -2011,3 +2011,74 @@ one is whether a position is a point or a **span** — `$pos.line` and
 the end. It is [1.4](ROADMAP.md), it is four traceback lines in seventy-five
 programs, and it is the first entry on that page that came from a measurement
 rather than from a design.
+
+## 2026-09-02 — the one thing the two of them could disagree about
+
+The README's second claim, after the notation itself, is that `phx` and the
+compiler it writes out **cannot** disagree: a generated compiler is the same
+`lex.c`, `parse.c`, `eval.c` and `run.c` over frozen tables, so there is only
+one implementation and nothing for two of them to argue about.
+
+It was not true, and finding out took asking a question nobody had asked:
+*what happens if the description that emits bytes is written out as a
+compiler?*
+
+```
+$ phx --raw --driver sob solveig-sob.phx arrays.sol   →  2552 bytes of .sob
+$ ./sobc      --driver sob arrays.sol                 →  3242 bytes of errors
+solveig-sob.phx:644:24: error: this template has 1 {} and 2 values were given
+```
+
+### A literal may hold a NUL, and the length beside it is what says so
+
+`emit.c` froze every string with `emit_string`, which measures with `strlen`.
+A template like `"{}\x01\x00\x00\x00{}"` — a line-table row, four bytes of
+little-endian one between two holes — arrived in the generated compiler as
+`"{}\001"`, with the `len` field beside it still saying eleven. So the
+generated compiler read six bytes past the end of a string `phx` never had, and
+found one `{}` where the description has two.
+
+Three kinds of thing can be one: a **grammar literal** (`phx.h` has said "a
+literal may hold a NUL" beside `GNode.len` since stage 0), a **pattern**, and a
+**template**. All three were frozen the same wrong way. The fix is that each is
+written by its length instead, which is three lines and a helper.
+
+**It had been broken since stage 7.** `solveig-sob.phx` has seeded its name
+table with `"\x05\x00array\x02\x00of\x0a\x00dictionary"` since the day the
+backend was written. Nothing noticed, because nothing had ever built that
+description as a standalone compiler.
+
+### And the flag it needed as well
+
+The generated `main` had no `--raw`. `phx` grew one when the `.sob` backend
+arrived — *a trailing newline is a kindness to a terminal and a corruption of a
+binary file* — and the generated one kept appending. So even with the strings
+right, a compiler written out from a description that emits bytes wrote a file
+`phx` would not. Same flag now, same comment, same reason.
+
+### What the test was, and what it is
+
+```
+ok    sum.calc: identical to phx, byte for byte
+ok    a Pascal compiler, and it agrees with phx
+ok    12 .sob files, byte for byte, from phx and from a compiler it wrote
+```
+
+The first two lines had been there for stages. Both compare **text a person
+could read**, and neither was ever going to notice a NUL, because a description
+without one cannot have the bug.
+
+That is the lesson worth keeping, and it is not about strings:
+
+> "There is only one implementation" is a claim about the code. That it
+> **holds** is a claim about the tests, and it is only as strong as the widest
+> thing they compare.
+
+The suite now writes `languages/solveig/solveig-sob.phx` out as a compiler and
+requires its `.sob` to be identical to `phx`'s over the twelve conformance
+programs — a binary format, where a single wrong byte has nowhere to hide.
+There is a smaller one beside it, `tests/grammars/nul-literal.phx`, which puts
+a NUL in a grammar literal, in a pattern and in a template at once, so the next
+person to touch `emit.c` finds out from a test rather than from a `.sob`.
+
+Both fail against the previous commit. That was checked rather than assumed.

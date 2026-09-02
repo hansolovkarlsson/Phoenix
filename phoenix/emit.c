@@ -73,6 +73,22 @@ static void emit_string(Emit *e, const char *s)
     emit_text(e, s, s ? strlen(s) : 0);
 }
 
+/* A literal may hold a NUL, and the length beside it is what says so -- a
+ * grammar's `"\x00"`, a pattern matching one, or a template with one in it,
+ * which is what a description emitting a **binary** format is full of.
+ *
+ * `emit_string` measures with `strlen` and would write the literal short while
+ * the length beside it still said otherwise, so the generated compiler would
+ * read past the end of a string `phx` never had. That is the one failure this
+ * whole file exists to make impossible: there is supposed to be nothing for
+ * `phx` and the compiler it writes to disagree about.
+ */
+static void emit_bytes(Emit *e, const char *s, int len)
+{
+    if (!s) { fputs("NULL", e->out); return; }
+    emit_text(e, s, (size_t)len);
+}
+
 /* ------------------------------------------------------------------ */
 /* Grammar nodes */
 
@@ -99,9 +115,20 @@ static int emit_gnode(Emit *e, const GNode *n)
     }
 
     fprintf(e->out, "static GNode g%d = {%d,", id, (int)n->kind);
-    emit_string(e, n->text);   fputc(',', e->out);
-    emit_string(e, n->upto);   fputc(',', e->out);
-    emit_string(e, n->folded); fputc(',', e->out);
+
+    /* A `G_LIT`'s text and its folded copy are `len` bytes; a `G_RANGE`'s two
+     * ends are one each, which is checked when the grammar is read. Everything
+     * else here is a name. */
+    if      (n->kind == G_LIT)   emit_bytes(e, n->text, n->len);
+    else if (n->kind == G_RANGE) emit_bytes(e, n->text, 1);
+    else                         emit_string(e, n->text);
+    fputc(',', e->out);
+
+    if (n->upto) emit_bytes(e, n->upto, 1); else emit_string(e, NULL);
+    fputc(',', e->out);
+
+    emit_bytes(e, n->folded, n->len);
+    fputc(',', e->out);
     fprintf(e->out, "%d,", n->len);
     if (nkids) fprintf(e->out, "gk%d,%d,", id, nkids);
     else       fputs("NULL,0,", e->out);
@@ -140,7 +167,8 @@ static int emit_expr(Emit *e, const Expr *x)
     }
 
     fprintf(e->out, "static Expr x%d = {%d,", id, (int)x->kind);
-    emit_string(e, x->name);
+    if (x->kind == X_TEXT) emit_bytes(e, x->name, x->len);
+    else                   emit_string(e, x->name);
     fprintf(e->out, ",%d,%d,%lldLL,", x->len, x->index, x->ival);
     fprintf(e->out, "%.17g,", x->real);
     if (nkids) fprintf(e->out, "xf%d,xk%d,%d,", id, id, nkids);
@@ -175,7 +203,8 @@ static int emit_pattern(Emit *e, const Pattern *p)
     }
 
     fprintf(e->out, "static Pattern p%d = {%d,", id, (int)p->kind);
-    emit_string(e, p->name);
+    if (p->kind == P_TEXT) emit_bytes(e, p->name, p->len);
+    else                   emit_string(e, p->name);
     fprintf(e->out, ",%d,%lldLL,", p->len, p->ival);
     if (nkids) fprintf(e->out, "pf%d,pk%d,%d,", id, id, nkids);
     else       fputs("NULL,NULL,0,", e->out);
@@ -456,6 +485,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "int main(int argc, char **argv)\n"
         "{\n"
         "    const char *path = NULL, *want = NULL;\n"
+        "    bool raw = false;\n"
         "    IncludePath look = { NULL, 0, 0 };\n"
         "    Arena *a = arena_new();\n"
         "\n"
@@ -474,6 +504,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "            include_path_add(a, &look, dir);\n"
         "            continue;\n"
         "        }\n"
+        "        if (strcmp(argv[i], \"--raw\") == 0) { raw = true; continue; }\n"
         "        if (strcmp(argv[i], \"--drivers\") == 0) {\n"
         "            for (int k = 0; k < phx_grammar.ndrivers; k++)\n"
         "                printf(\"%s\\n\", phx_grammar.drivers[k].name);\n"
@@ -487,7 +518,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    }\n"
         "\n"
         "    if (!path) {\n"
-        "        fprintf(stderr, \"usage: %s [-I dir] [--driver NAME] <file>\\n\",\n"
+        "        fprintf(stderr,\n"
+        "                \"usage: %s [-I dir] [--driver NAME] [--raw] <file>\\n\",\n"
         "                argv[0]);\n"
         "        return 2;\n"
         "    }\n"
@@ -532,7 +564,14 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    size_t len;\n"
         "    if (value_format(a, answer, &text, &len)) {\n"
         "        fwrite(text, 1, len, stdout);\n"
-        "        if (len == 0 || text[len - 1] != '\\n') fputc('\\n', stdout);\n"
+        "        /* A trailing newline is a kindness to a terminal and a\n"
+        "         * corruption of a binary file, so a description emitting one\n"
+        "         * asks for --raw -- the same flag, and the same reason, as\n"
+        "         * `phx` has. Without it here, a compiler written out from a\n"
+        "         * description that emits bytes writes a file `phx` does not,\n"
+        "         * which is exactly what this program exists not to do. */\n"
+        "        if (!raw && (len == 0 || text[len - 1] != '\\n'))\n"
+        "            fputc('\\n', stdout);\n"
         "    } else {\n"
         "        tree_dump(stdout, answer);\n"
         "    }\n"

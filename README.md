@@ -147,7 +147,19 @@ there is only one of them — and the test says so:
 ```
 ok    sum.calc: identical to phx, byte for byte
 ok    a Pascal compiler, and it agrees with phx
+ok    12 .sob files, byte for byte, from phx and from a compiler it wrote
 ```
+
+**The third line is there because the first two were not enough.** They compare
+text a person could read, and the description that emits *bytes* had never been
+written out as a compiler at all — so nothing noticed that a literal holding a
+NUL was frozen with `strlen` and arrived short, while the length beside it
+still said otherwise. `phx` and the compiler it wrote disagreed, silently,
+about a description they were both meant to be running.
+
+"There is only one implementation" is a claim about the code. That it *holds*
+is a claim about the tests, and it is only as strong as the widest thing they
+compare.
 
 What it costs is speed: the generated compiler interprets a PEG rather than
 being one. [docs/performance.md](docs/performance.md) says how much — the
@@ -686,12 +698,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 151 checks, covering 35 Pascal programs against fpc
+make test       # 153 checks, covering 35 Pascal programs against fpc
                 #   and 71 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 149 of the 151 need only what is vendored here, and the two
+repository** — 151 of the 153 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing:

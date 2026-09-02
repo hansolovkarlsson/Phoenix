@@ -439,6 +439,15 @@ over every program ever compiled with it, so a fault found while reading it is
 found before anybody else sees it. That is the whole argument for a check
 existing at all, and the reason to prefer one over a comment.
 
+**And one thing no check can reach.** A description is checked when it is read;
+what `-o` writes out is checked by *comparing* it with `phx`, and that is only
+as strong as the widest thing compared. Text was compared for a year and the
+one backend emitting **bytes** was never written out as a compiler at all, so
+nothing noticed that a literal holding a NUL was frozen with `strlen` and
+arrived short while the length beside it still said otherwise. The two
+disagreed, silently, about a description they were both running. The suite
+compares `.sob` files now.
+
 ## 5. Known warts
 
 **`pos` is a reserved field name.** Every node has a position and `$pos` is

@@ -1,0 +1,25 @@
+(* A literal may hold a NUL, and three kinds of thing here can be one: a
+ * grammar literal, a pattern, and a template.
+ *
+ * The length beside each is what says how long it is, and a generated compiler
+ * that wrote them with `strlen` would carry a shorter string than `phx` had
+ * while still saying the old length -- which is the one thing `-o` exists not
+ * to do. A description emitting a binary format is full of these. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+nul    = "\x00" .
+
+%syntax .
+%start line .
+
+line = item { i:item -> $i } -> Row(items: [$1, ...$2]) .
+item = number -> Item(text: $1)
+     | nul    -> Item(text: $1) .
+
+%pass p
+  Item(text: "\x00") : out = "NUL" .
+  Item               : out = "{}\x00{}" of $text, $text .
+  Row                : out = join($items.out, "|") .
+
+%driver d = p -> out .

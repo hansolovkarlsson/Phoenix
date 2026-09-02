@@ -558,6 +558,52 @@ else
     report fail "one file, no flags, no headers" "it did not compile"
 fi
 
+# **A literal may hold a NUL**, and three kinds of thing here can be one: a
+# grammar literal, a pattern and a template. The length beside each is what
+# says how long it is, and writing them out with `strlen` carried a shorter
+# string into the generated compiler while the length still said otherwise --
+# so it read past the end of a string `phx` never had. A description emitting a
+# binary format is full of these, and this is the shape of the one failure `-o`
+# exists not to have.
+if "$phx" "$root/tests/grammars/nul-literal.phx" -o "$tmp0/nul.c" 2>/dev/null \
+   && cc -o "$tmp0/nulc" "$tmp0/nul.c" 2>/dev/null; then
+    "$phx" --raw "$root/tests/grammars/nul-literal.phx" \
+           "$root/tests/sources/with-a-nul.txt" > "$tmp0/nul-phx" 2>/dev/null
+    "$tmp0/nulc" --raw "$root/tests/sources/with-a-nul.txt" > "$tmp0/nul-cc" 2>/dev/null
+    if cmp -s "$tmp0/nul-phx" "$tmp0/nul-cc" \
+       && [ "$(wc -c < "$tmp0/nul-phx" | tr -d ' ')" = "11" ]; then
+        report pass "a literal holding a NUL survives the freezing"
+    else
+        report fail "a literal holding a NUL survives the freezing" \
+                    "$(od -c "$tmp0/nul-cc" | head -1)"
+    fi
+else
+    report fail "a literal holding a NUL survives the freezing" "it did not build"
+fi
+
+# The conformance rule, over the one backend that emits **bytes**. Everything
+# above compares text a person could read; a `.sob` is a binary format, so this
+# is where a single wrong byte has nowhere to hide -- and it needs `--raw`,
+# which a generated compiler has for the same reason `phx` does.
+if "$phx" "$root/languages/solveig/solveig-sob.phx" -o "$tmp0/sob.c" 2>/dev/null \
+   && cc -o "$tmp0/sobc" "$tmp0/sob.c" 2>/dev/null; then
+    same=0; differ=0
+    for f in "$root"/languages/solveig/tests/conformance/*.sol; do
+        "$phx" --raw --driver sob "$root/languages/solveig/solveig-sob.phx" "$f" \
+               > "$tmp0/by-phx.sob" 2>/dev/null
+        "$tmp0/sobc" --raw --driver sob "$f" > "$tmp0/by-cc.sob" 2>/dev/null
+        if cmp -s "$tmp0/by-phx.sob" "$tmp0/by-cc.sob"; then same=$((same+1))
+        else differ=$((differ+1)); echo "  differs: $(basename "$f")"; fi
+    done
+    if [ "$differ" -eq 0 ] && [ "$same" -gt 0 ]; then
+        report pass "$same .sob files, byte for byte, from phx and from a compiler it wrote"
+    else
+        report fail "a .sob written twice" "$same the same, $differ not"
+    fi
+else
+    report fail "a .sob written twice" "the compiler did not build"
+fi
+
 # A rewrite is frozen into a generated compiler like everything else, and a
 # driver names its stages without caring which kind each one is.
 if "$phx" "$root/tests/grammars/fold.phx" -o "$tmp0/fold.c" 2>/dev/null \
