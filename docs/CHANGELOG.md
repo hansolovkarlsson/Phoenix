@@ -60,7 +60,7 @@ happens. Doing that the first time found eight defects in them.
 
 **Tests:** 176 → 189, of which 186 need nothing outside the repository.
 
-## 2026-09-02 — awk, and six notation entries
+## 2026-09-02 — awk, and five notation entries
 
 **A third language: [`languages/awk/`](../languages/awk/).** POSIX awk —
 grammar, a call check, and a compiler to C. It is the first grammar here that
@@ -68,16 +68,22 @@ was not vendored from a specification, and the oracle carries the whole weight:
 programs that e2fsprogs, ncurses and vim ship compile and print what
 `/usr/bin/awk` prints.
 
-**Notation, all six argued for by a language that needed them:**
+**Notation, all five argued for by a language that needed them:**
 
 | | |
 | --- | --- |
 | `%include` | a *target* language's own includes, spliced by the reader ([1.0](COMPLETED.md#10-a-reader-level-mechanism-for-a-target-languages-imports)) |
 | `%embed` | a file's bytes under a name, frozen at read time ([1.5](COMPLETED.md#15-a-runtime-that-is-not-a-literal)) |
-| `otherwise` | what a node answers when its own rule works nothing out ([1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)) |
 | `$pos` | where a node came from ([1.1](COMPLETED.md#11-a-nodes-position-reachable-from-a-clause)) |
 | `$pos` as a **span** | `Position(line, column, file, endline, endcolumn)` — a node is a stretch of source, not a point ([1.4](COMPLETED.md#14-where-a-node-ends)) |
 | `%rewrite` | `topdown`, `bottomup`, `innermost` — replacing a node rather than decorating it ([2.2](COMPLETED.md#22-strategies--from-stratego)) |
+
+**Settled by something already built:**
+[1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation), *a way
+for a description to share a computation*, closed with **no new notation** —
+`otherwise` had shipped at stage 2, and `languages/pascal/pascal.phx` was
+already using it twenty-one times with a comment saying why. The entry had
+framed the problem as a map over a list; it was an attribute every node has.
 
 **Fixed:** a literal holding a NUL was frozen with `strlen`, so `-o` wrote a
 compiler that disagreed with `phx` for any description with a NUL in a literal
@@ -98,7 +104,7 @@ Eight tags in one day. Each is the end of a stage rather than a release.
 | --- | --- |
 | `stage-0` | read a grammar, scan and match a file, print the tree |
 | `stage-1` | `->` actions: what a production **builds**, with no host-language splices |
-| `stage-2` | `%pass`, and clauses keyed on the vocabulary the actions build. `docs/semantics.md` specifies the meta-language's arithmetic in its own terms |
+| `stage-2` | `%pass`, clauses keyed on the vocabulary the actions build, and `otherwise`. `docs/semantics.md` specifies the meta-language's arithmetic in its own terms |
 | `stage-3` | `%driver`, passes that read each other's work, `%import`, `%require`, and `lib/expression.phx` |
 | `stage-4` | actions on Wirth's Pascal, taken from the published grammar unmodified |
 | `stage-5` | `-o`: a description written out as a C program that is its own compiler. **Tables, not code** — one implementation of the notation rather than two |
@@ -121,7 +127,8 @@ a description is written. Two changes so far would break an existing
 description:
 
 - `$pos` became a **span** — `Position` gained `endline` and `endcolumn`.
-  Reading `$pos.line` is unaffected.
+  Reading `$pos.line` is unaffected, and both landed on 2026-09-02 hours apart,
+  so only a description written between the two commits is affected at all.
 - A field that shadows a thread or a synthesised attribute is now an **error**.
   A description relying on the old silent behaviour will be refused, with a
   position.
