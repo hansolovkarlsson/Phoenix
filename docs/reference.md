@@ -1027,8 +1027,20 @@ identifiers. There is no way to import a grammar and decline its vocabulary.
 that the notation cannot describe one thing its own reader does: a production
 ending without its `.`, which needs two-token lookahead.
 
-**Ordered choice is not revisited.** Three languages later this has still not
+**Ordered choice is not revisited.** Seven grammars later this has still not
 cost anything, including awk, whose grammar is famously not LL(1) — both hard
-cases were describable by putting the specific alternative first.
+cases were describable by putting the specific alternative first, and two
+descriptions now rely on it rather than merely surviving it.
+
+**There is no iteration over data.** `%rewrite innermost` reaches a fixpoint
+over the shape of a tree; nothing does that over a table. The cost is
+transitive closure — see [ROADMAP.md § 5](ROADMAP.md#5-known-warts).
+
+**A field can shadow an attribute handed down**, so a `down` clause may hand a
+value to its children that the node itself cannot read back. A warning; the
+[threaded version](#6-passes) is an error.
+
+**`positions` is zero-based**, alone in a notation that counts from one
+everywhere else, because what it exists for is slot numbers.
 
 [ROADMAP.md § 5](ROADMAP.md#5-known-warts) is the maintained list.

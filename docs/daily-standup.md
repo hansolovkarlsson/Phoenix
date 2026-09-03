@@ -35,9 +35,6 @@ and rebuilds itself on every push that touches `docs/` or `www/`.
 Nothing is blocked, and nothing is half-finished. In the order I would pick
 them up:
 
-- [ ] **`ROADMAP.md` § 5, known warts** — likely stale. Labels, slots and
-      threads all changed this week, and two entries there describe behaviour
-      that is no longer what happens. A read-through against what is now true.
 - [ ] **Symbolic slot operands** in the assembler — `local total` rather than
       `local 1`. Deferred on purpose when slot names went in; the frame already
       knows the names, so it is small. It changes the assembly language rather

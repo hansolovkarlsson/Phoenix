@@ -301,11 +301,54 @@ the rule around it fails later, `b` is never tried. It costs nothing on an LL(1)
 grammar, which is what nearly every published grammar is, and it costs a syntax
 error on a correct file otherwise.
 
-*Three languages later this has still not cost anything*, including awk, whose
+*Seven grammars later this has still not cost anything*, including awk, whose
 grammar is famously not LL(1) — concatenation with no operator, and a `print`
 whose arguments exclude a rung the rest of the ladder has. Both were describable
 by putting the specific alternative first, which is what ordered choice asks
 for and what a published grammar written for yacc does not say.
+
+And two of the seven now **rely** on it rather than merely surviving it.
+`languages/solvm/` puts `Label` above the mnemonics because `n:word ":"` fails
+on `push` and falls through; `languages/units/` tries `slots 2` before
+`slots self, n`. Ordered choice asked for the specific alternative first in
+both, and in both that is also the clearer way to read the rule.
+
+**There is no iteration over data.** A `%rewrite innermost` reaches a fixpoint
+over the **shape of a tree** — it rewrites until nothing matches — and there is
+nothing that does the same over a *table*. Every list operation in the library
+answers in one step: `each` applies a template once per element, `flatten` opens
+one level, and none of them can be asked to run again on what it produced.
+
+The cost is transitive closure, and
+[`languages/units/`](../languages/units/) is the first thing to want one. It
+refuses a circular interface `uses` two units deep — *does the unit I use use me
+back* — and cannot refuse `A -> B -> C -> A`, because catching that means
+closing the uses graph over itself.
+[`divergent/three-cycle.pas`](../languages/units/divergent/three-cycle.pas) is
+that, written down. It is a different absence from
+[3.5](#35-conditionals-in-the-meta-language): a conditional is a thing the
+notation says *no* to on purpose, and this is a thing nothing has yet made a
+case for.
+
+**A field can shadow an attribute handed down.** A field is read before an
+attribute, so a `down` clause naming one of its own node's fields hands a value
+to that node's children which the node itself cannot read back. It is a warning
+rather than an error, because handing it down may be the whole point.
+
+The *threaded* version of the same collision is an error, and the difference is
+worth the two entries: a synthesised or inherited attribute that is shadowed is
+merely invisible somewhere, while a shadowed thread takes a value **out of the
+fold and puts a different one back** — the thread skips that node, every node
+after it carries on from a value that never went through, and nothing about the
+answer looks wrong. It was silent until a description met it, and the file that
+found it is [`tests/grammars/thread-shadowed.phx`](../tests/grammars/thread-shadowed.phx).
+
+**`positions` is zero-based**, alone in a notation that counts from one
+everywhere else — text indices, `at`, a reported line and column. It is that way
+because what it exists for is **slot numbers**, and a frame's first slot is
+zero. The inconsistency is real and is kept on purpose: making it one-based
+would mean every use of it subtracting one, which is the off-by-one this
+notation is otherwise arranged to avoid.
 
 **A description may guess where the tool will not.** `languages/awk/awk.phx`
 decides whether `/` opens a regexp by looking at the character after it,
