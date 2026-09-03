@@ -3003,3 +3003,37 @@ That is sharper than "run your documentation", and it is what this week
 actually taught.
 
 176 tests at the start of the day, 189 at the end.
+
+### A last pass over the known warts
+
+Closing the day, the standup said `ROADMAP.md` § 5 was *likely stale* — labels,
+slots and threads had all moved this week, so surely two of the five entries
+described behaviour that no longer happens.
+
+**Checking found one, and it was a count.** *Three languages later this has
+still not cost anything* is now seven grammars, and the claim is stronger than
+when it was written: `languages/solvm/` puts `Label` above the mnemonics
+because `n:word ":"` fails on `push` and falls through, and
+`languages/units/` tries `slots 2` before `slots self, n`. Two descriptions
+now **rely** on ordered choice rather than merely surviving it.
+
+One sentence had become true again by accident, which is worth recording as
+such: *`languages/awk/tests/divergent/` holds all three* was wrong yesterday,
+when that directory held four, and closing 1.6 moved `getline-pipe.awk` out of
+it. The remaining three entries had not moved at all.
+
+The real gap was omission. Three warts were missing, all found this week:
+
+- **There is no iteration over data.** A `%rewrite innermost` reaches a
+  fixpoint over the shape of a tree, and nothing does that over a table — so
+  transitive closure cannot be written, which is why `languages/units/` refuses
+  a two-unit interface cycle and cannot refuse a three-unit one. Distinct from
+  3.5: a conditional is a thing the notation says no to on purpose, and this is
+  a thing nothing had yet made a case for.
+- **A field can shadow an attribute handed down**, so a `down` clause may hand
+  its children a value the node itself cannot read back.
+- **`positions` is zero-based**, alone in a notation that counts from one
+  everywhere else, and kept that way because what it exists for is slot numbers.
+
+`docs/reference.md` mirrors the list and carried the same stale count; it is
+corrected and gains the three in brief.

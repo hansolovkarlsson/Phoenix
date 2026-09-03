@@ -29,6 +29,8 @@ and rebuilds itself on every push that touches `docs/` or `www/`.
 | `ee5c993` | **roadmap 1.6** — `\|` as an expression operator, for awk's `getline` |
 | `34bb73b` | **roadmap 2.3** — Pascal units, settled against |
 | `5a873a5` | `docs/reference.md` § 11 made executable — 66 claims |
+| `3025bec` | this closeout: the day in `journal.md`, the scoring in `postmortem.md` § 6 |
+| `82dc15e` | known warts: the count corrected, and the three this week found |
 
 ## What is outstanding
 
@@ -53,13 +55,14 @@ them up:
 confusing few minutes. Not worth fixing; worth remembering before backgrounding
 one.
 
-**The `day-closeout` skill would have damaged this repository.** Its
-`_write_roadmap` targets `docs/roadmap.md`, and this filesystem is
+**The `day-closeout` skill would damage this repository, so it is not run.**
+Its `_write_roadmap` targets `docs/roadmap.md`, and this filesystem is
 case-insensitive — that *is* `docs/ROADMAP.md`. Its `_write_postmortem` targets
-a file that already exists here with a different meaning. This closeout was
-written into the repository's own conventions instead: the day went to
-`journal.md`, the scoring to `postmortem.md` § 6, and `COMPLETED.md` and
-`ROADMAP.md` were already current.
+a file that already exists here with a different meaning, and its parser is
+regex keyword-matching over chat text. The closeout goes into the
+repository's own conventions instead: the day to `journal.md`, the scoring to
+`postmortem.md` § 6, and `COMPLETED.md` and `ROADMAP.md` kept current as the
+work lands. Anyone running it again should do the same.
 
 ## The one thing worth carrying forward
 

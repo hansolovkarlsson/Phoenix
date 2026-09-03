@@ -358,3 +358,20 @@ print.
 
 Section 2 of the roadmap is now empty and section 1 holds one entry, which is a
 measurement rather than work.
+
+### A small one, scored the same way
+
+The day's closeout predicted that § 5's known warts were *likely stale*,
+reasoning that labels, slots and threads had all changed during the week.
+**Checking found one stale entry and it was a count** — the other four were
+exactly as true as when they were written.
+
+The real defect in that section was **omission**: three warts had accumulated
+without being written down, and the newest of them — that nothing in the
+notation iterates over *data* — had a worked example and a `divergent/` file
+before it had an entry.
+
+It is a small thing, but it is the same shape as the tutorials: the guess about
+what had rotted was wrong in both directions at once, and only reading the
+actual text settled it. **A page is not stale because the code around it moved;
+it is stale where a specific sentence stopped being true.**
