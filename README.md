@@ -12,6 +12,12 @@ myprogram.pas ──────────────────────
 C11, no dependencies, and nothing outside this repository is needed to build it
 or to run its tests.
 
+**Start here:** [docs/tutorial-picture.md](docs/tutorial-picture.md) builds a
+language and its compiler from nothing in half an hour.
+[docs/manual.md](docs/manual.md) explains the notation,
+[docs/reference.md](docs/reference.md) is the lookup, and
+[docs/cheatsheet.md](docs/cheatsheet.md) is one page.
+
 ## The name
 
 **Phoenix is a *compiler-compiler*, and that is a claim rather than a
@@ -952,6 +958,11 @@ including the one that was settled *against* building it.
 
 | | |
 | --- | --- |
+| [manual.md](docs/manual.md) | the notation, explained in the order you would learn it |
+| [reference.md](docs/reference.md) | every directive, clause form, operator and library function |
+| [cheatsheet.md](docs/cheatsheet.md) | one page |
+| [tutorial-picture.md](docs/tutorial-picture.md) | a language and a compiler, from nothing, in half an hour |
+| [tutorial-assembler.md](docs/tutorial-assembler.md) | two passes, a thread, and a forward reference |
 | [COMPLETED.md](docs/COMPLETED.md) | what exists, and what each piece cost against what it was predicted to cost |
 | [ROADMAP.md](docs/ROADMAP.md) | what does not, and why |
 | [journal.md](docs/journal.md) | the day-by-day, including every wrong turn |
