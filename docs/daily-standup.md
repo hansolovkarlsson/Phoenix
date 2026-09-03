@@ -62,20 +62,10 @@ so the next person can re-check it in a minute.
 `build/oracle/`, and racing them gave three spurious failures. Not worth
 fixing; worth remembering before backgrounding one.
 
-**The `day-closeout` skill would damage this repository, and this was checked
-rather than assumed.**
-
-- `_write_roadmap` opens `docs/roadmap.md`. This filesystem is
-  case-insensitive, so that path exists, it *is* `docs/ROADMAP.md`, there is no
-  `## Immediate` heading in it, and the scraped items land at the end.
-- `_write_postmortem` finds a `# Postmortem` header and appends
-  `**Learnings**: [Add learnings here]` stubs to a 19K curated document.
-- `_write_standup` overwrites this file outright.
-
-The closeout goes into the repository's own conventions instead: the day to
-[journal.md](journal.md), the scoring to [postmortem.md](postmortem.md), and
-[COMPLETED.md](COMPLETED.md) and [ROADMAP.md](ROADMAP.md) kept current as the
-work lands. **Anyone running it again should do the same.**
+**The closeout is written by hand**, into this repository's own conventions:
+the day to [journal.md](journal.md), the scoring to
+[postmortem.md](postmortem.md), and [COMPLETED.md](COMPLETED.md) and
+[ROADMAP.md](ROADMAP.md) kept current as the work lands.
 
 ## The one thing worth carrying forward
 
