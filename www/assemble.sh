@@ -41,6 +41,13 @@ for f in "$root"/docs/*.md; do
         printf -- 'source: %s.md\n' "$name"
         printf -- '---\n\n'
 
+        # Liquid is off for the body of every document, and has to be. The
+        # notation writes a literal brace as `{{`, so a page explaining `of`
+        # is full of what Liquid reads as the start of a variable -- and it
+        # said so: *Variable '{{\n{}' was not properly terminated*. Nothing
+        # under docs/ wants templating, so none of it gets any.
+        printf -- '{%% raw %%}\n'
+
         # Two rewrites, in this order. A link out of docs/ goes to GitHub and
         # keeps its .md; a link within docs/ becomes the page beside it. The
         # second cannot touch the first, because a URL has characters the
@@ -49,6 +56,8 @@ for f in "$root"/docs/*.md; do
             -e "s@\]\(\.\./([^)]+)\)@](${repo}/\1)@g" \
             -e 's@\]\(([A-Za-z0-9._-]+)\.md(#[^)]*)?\)@](\1.html\2)@g' \
             "$f"
+
+        printf -- '\n{%% endraw %%}\n'
     } > "$out/$name.md"
 done
 
