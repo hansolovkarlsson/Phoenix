@@ -250,7 +250,7 @@ Take `layout` out of the driver and see what happens:
 
 ```sh
 $ phx asm.phx sum.asm
-asm.phx:64:27: error: nothing here is called 'labels' -- not a binding, a field of Program, an attribute of it, a threaded attribute, one handed down, or a file this description embeds
+asm.phx:41:27: error: nothing here is called 'labels' -- not a binding, a field of Program, an attribute of it, a threaded attribute, one handed down, or a file this description embeds
     Program : down table = $labels
                             ^
 ```
@@ -313,10 +313,14 @@ Nine bytes, and the `05 08` in the middle is the jump, resolved to the address
 pass one worked out.
 
 `bytes` also takes a **list** of numbers and answers a list of encodings, which
-is what a column of a table in a binary format is:
+is what a column of a table in a binary format is. That is a pass and a driver
+of its own:
 
 ```
-Program : lines = join(bytes($items.pos.line, 2)) .
+%pass linetable
+  Program : lines = join(bytes($items.pos.line, 2)) .
+
+%driver lt = linetable -> lines .
 ```
 
 ```sh

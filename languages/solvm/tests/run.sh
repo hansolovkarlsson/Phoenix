@@ -93,6 +93,8 @@ refuse two-blocks-one-name.sasm "have the same name"
 refuse slot-too-big.sasm        "a slot has to fit one byte"
 refuse block-without-return.sasm "has to end with return"
 refuse too-few-slots.sasm       "the receiver is slot 0"
+refuse two-labels-one-name.sasm "two labels in the script have the same name"
+refuse slot-past-frame.sasm     "slot 4 is past this frame, which has 2"
 
 # ---- 4. and agrees with solas, which is the oracle -----------------------
 

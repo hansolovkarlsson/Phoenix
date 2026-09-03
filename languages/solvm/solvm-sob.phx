@@ -139,7 +139,10 @@
 
   (* The two items that occupy no space: one names an address, the other fills
    * a slot in the methods table. *)
-  Label : addr = $pc : entry = [[$name, $pc]] .
+  (* `entry` is the table a jump resolves against; `lname` is the same names
+   * without their addresses, because `positions` dedupes whole values and two
+   * labels of one name at two addresses are two different pairs. *)
+  Label : addr = $pc : entry = [[$name, $pc]] : lname = [$name] .
 
   (* ---- a constant, as the bytes it will be written as ----
    *
@@ -182,6 +185,7 @@
   otherwise bdef    = []
   otherwise outs    = []
   otherwise entry   = []
+  otherwise lname   = []
   otherwise sl      = []
   otherwise haltend = []
   otherwise retend  = []
@@ -253,6 +257,11 @@
            ! size(positions(flatten($items.bdef)))
                < size(flatten($items.bdef))
                : "two blocks in '{}' have the same name" of $name
+             (* Both resolve to the first, and nothing downstream can tell --
+              * so it is refused rather than left as a wart. *)
+           ! size(positions(flatten($items.lname)))
+               < size(flatten($items.lname))
+               : "two labels in '{}' have the same name" of $name
            ! size($items) = 0 : "a block needs at least one instruction"
            ! size(flatten($items.retend)) = 0
                : "block '{}' has to end with return" of $name
@@ -297,6 +306,8 @@
 
        ! size(positions(flatten($items.bdef))) < size(flatten($items.bdef))
            : "two blocks in the script have the same name"
+       ! size(positions(flatten($items.lname))) < size(flatten($items.lname))
+           : "two labels in the script have the same name"
        ! size($items) = 0 : "there is nothing here to assemble"
        ! size(flatten($items.haltend)) = 0
            : "the script has to end with halt"
@@ -319,8 +330,14 @@
   Nil       : code = bytes(1, 1) .
   Global    : code = "{}{}" of bytes(2, 1), bytes($nidx, 2) .
   SetGlobal : code = "{}{}" of bytes(3, 1), bytes($nidx, 2) .
-  Local     : code = "{}{}" of bytes(4, 1), bytes(int($slot), 1) .
-  SetLocal  : code = "{}{}" of bytes(5, 1), bytes(int($slot), 1) .
+  (* The frame is declared, so a slot past it is knowable here rather than at
+   * load. Slots count from zero, and slot 0 is the receiver. *)
+  Local     : code = "{}{}" of bytes(4, 1), bytes(int($slot), 1)
+            ! int($slot) > $nslots - 1
+                : "slot {} is past this frame, which has {}" of $slot, $nslots .
+  SetLocal  : code = "{}{}" of bytes(5, 1), bytes(int($slot), 1)
+            ! int($slot) > $nslots - 1
+                : "slot {} is past this frame, which has {}" of $slot, $nslots .
   Outer     : code = "{}{}{}"
                 of bytes(6, 1), bytes(int($depth), 1), bytes(int($slot), 1) .
   SetOuter  : code = "{}{}{}"
@@ -398,6 +415,7 @@
    *)
   BlockDef : down labels   = $ownlabels
            : down blocktab = $ownblocktab
+           : down nslots   = int($slots)
            : bodycode = join($items.code)
            : lineruns = join(each(bytes(sizes($items.code), 4),
                                   bytes($items.pos.line, 4), "{}{}"))
@@ -419,6 +437,7 @@
 
   Unit : down labels   = $ownlabels
        : down blocktab = $ownblocktab
+       : down nslots   = $ownnslots
        : bodycode = join($items.code)
        : lineruns = join(each(bytes(sizes($items.code), 4),
                               bytes($items.pos.line, 4), "{}{}"))

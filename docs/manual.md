@@ -859,6 +859,13 @@ eight Pascal programs found six bugs at once, every one of them a place C's
 obvious answer is not Pascal's, and none of them findable by reading the output
 and thinking it looked right.
 
+**And run the documentation.** Both tutorials on this page are executed by
+`tests/tutorials.sh`, which builds every file they say to build, runs every
+command they show, and checks that what came back appears *verbatim in the
+page*. It was added after reading them had missed three defects that running
+them found in one pass — including a command using a driver the page never
+told the reader to write.
+
 A round trip is *not* a substitute. Three tests agreed with each other for
 months because they all asked the same wrong question: a miscounted `...`
 spread built a wrong tree, wrote it back out wrongly *in the same way*, and

@@ -1109,6 +1109,19 @@ else
     printf '  --    the conformance suite needs Solveig, which is not here\n'
 fi
 
+# The two tutorials in docs/, run rather than read. Each step builds the file
+# the page says to build, runs the command it shows, and checks that what came
+# back appears verbatim in the page -- so a pasted output that drifts fails
+# here. Reading them did not find what running them did.
+echo "Tutorials"
+if tut=$("$root/tests/tutorials.sh" 2>&1); then
+    n=$(printf '%s' "$tut" | grep -c '^  ok')
+    report pass "$n steps of docs/tutorial-picture.md and docs/tutorial-assembler.md"
+else
+    report fail "the tutorials do what they say"
+    printf '%s\n' "$tut" | grep -A6 FAIL | sed 's/^/        /' | head -14
+fi
+
 # The assembler: SolVM assembly to `.sob`, which is the *producing* half of a
 # format Phoenix cannot read -- a length-prefixed binary needs the match to
 # depend on a count it has just read, and the notation cannot say that. So

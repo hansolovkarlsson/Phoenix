@@ -58,7 +58,7 @@ Read the file back:
 ```sh
 $ phx picture.phx
 picture.phx:1:1: warning: 'digit' is used only by other lexical rules and is not a %fragment -- it will be returned as a token of its own
-  digit = "0" .. "9" .
+  digit   = "0" .. "9" .
   ^
 phx: add `%fragment digit` if it is a helper rather than a token
 ```

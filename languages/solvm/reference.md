@@ -173,8 +173,8 @@ and a block's labels are invisible from outside it.
 A label may be used before it is defined — that is the whole reason the
 assembler is two passes.
 
-Two labels of one name in one chunk both resolve to the first, silently. That
-is the one thing on this page worth calling a wart.
+Two labels of one name in one chunk are refused. Both would have resolved to
+the first and nothing downstream could have told.
 
 ---
 
@@ -435,6 +435,8 @@ Each names a line and a column of assembly, with a caret.
 | `a block reserves at most 255 slots, and 'b' asks for n` | |
 | `'b' takes n arguments, so it needs at least n+1 slots -- the receiver is slot 0` | |
 | `'b' is nested n deep, and SolVM follows at most 16 frames` | |
+| `slot n is past this frame, which has m` | `local`, `setlocl` |
+| `two labels in the script have the same name` | or `two labels in 'b' …` |
 
 ---
 
@@ -458,7 +460,7 @@ The verifier's other conditions are checked here, or hold by construction:
 | every instruction fits inside the chunk | by construction |
 | every operand indexes something that exists | by construction — indices come from the tables |
 | every jump lands on an instruction boundary | by construction — offsets come from labels |
-| every `local`/`setlocl` addresses a slot the frame has | **not checked**: `.slots` is taken at its word, and a slot past it is a load error |
+| every `local`/`setlocl` addresses a slot the frame has | checked, against the frame this chunk declared |
 | the last instruction stops the machine | checked, and more strictly |
 | a method has at least `arity + 1` slots | checked |
 | nesting is at most 16 frames | checked |

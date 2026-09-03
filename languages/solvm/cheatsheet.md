@@ -94,8 +94,7 @@ cannot leave its chunk.
 > arguments, then locals.
 
 `slots` is the whole frame: at least `arity + 1`, at most 255. Nesting is at
-most 16 frames deep. **`local` is not checked against `slots`** — a slot past
-the end is a load error.
+most 16 frames deep, and a `local` past the frame you declared is refused.
 
 ## The six inlined constructs
 
@@ -140,10 +139,10 @@ program can be compared line for line.
 
 ## What is checked, and what is not
 
-**Checked:** an unknown label · a jump in the wrong direction · a slot, depth
-or argc over 255 · an unknown block · two blocks of one name · a script not
-ending in `halt`, a block not in `return` · `slots < arity + 1` · nesting over
-16 · a chunk over 65535 bytes.
+**Checked:** an unknown label · a label defined twice · a jump in the wrong
+direction · a slot past the frame · a slot, depth or argc over 255 · an unknown
+block · two blocks of one name · a script not ending in `halt`, a block not in
+`return` · `slots < arity + 1` · nesting over 16 · a chunk over 65535 bytes.
 
 **Not checked — the verifier's, at load:**
 

@@ -511,14 +511,11 @@ Which usually means a `nil` in the arm that has nothing to say. Look at
 `whileTrue` re-evaluates it every pass, so it is emitted after the label that
 `loop` goes back to, not before it. Putting it above `top:` tests once.
 
-### `local` is not checked against `.slots`
+### Declare the frame you actually use
 
-The assembler takes `.slots` at its word. A `local 4` in a frame of 2 assembles
-cleanly and is refused at load. Count the frame and declare it.
-
-### A label used twice resolves to the first
-
-Silently. It is the one wart on this page.
+`local 4` in a frame of 2 is refused, and named — but the assembler can only
+check against the number you wrote, so `.slots` being too *large* costs a
+little stack and nothing tells you.
 
 ### Write the selector an inlined jump stands for
 
