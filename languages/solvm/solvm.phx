@@ -206,16 +206,37 @@ constant = intlit   -> IntConst(text: $1)
 
 %pass frames
 
-  (* Gathered up. A `.slots` is the only item that contributes, and it can
-   * only appear at the top: a block declares its frame in its header. *)
-  Slots     : snames = $slotnames .
+  (* Gathered up: a frame's names, and its size. A `.slots` is the only item
+   * that contributes either, and it can only appear at the top -- a block
+   * declares its frame in its header.
+   *
+   * **The size is worked out here and not in the assembler** for the reason
+   * the names are: a frame's size comes from a declaration in the source, so
+   * everything downstream of the declaration is a fact about the program.
+   * `layout` and `sob` read `$ownnslots` from here rather than computing it
+   * again, which is what keeps one definition of it. *)
+  Slots     : snames = $slotnames
+            : n      = lookup([[0, size($slotnames)]], int($count), int($count))
+            : sl     = [$n] .
   otherwise snames = [] .
+  otherwise sl     = [] .
 
   Unit     : ownsnames = flatten($items.snames)
+           : declared  = flatten($items.sl)
+
+             (* `.slots` said once, or not at all -- and a frame has the
+              * receiver in slot 0 whether or not anybody says so. Prepending
+              * the default is what makes "the last one, or 1" an ordinary
+              * index. *)
+           : ownnslots = at([1, ...$declared], size($declared) + 1)
+
+           ! size(flatten($items.sl)) > 1
+               : "the script's frame is declared more than once"
            ! size(positions(flatten($items.snames))) < size(flatten($items.snames))
                : "two slots in the script's frame have the same name" .
 
   BlockDef : ownsnames = $slotnames
+           : ownnslots = lookup([[0, size($slotnames)]], int($slots), int($slots))
            ! size(positions($slotnames)) < size($slotnames)
                : "two slots in '{}' have the same name" of $name .
 
@@ -237,7 +258,8 @@ constant = intlit   -> IntConst(text: $1)
   Unit : down bdepth = 0
        : down ftable = positions(each($ownsnames, "0 {}"))
        : down fnames = [[0, lookup([[0, "nothing named"]], size($ownsnames),
-                                   join($ownsnames, ", "))]] .
+                                   join($ownsnames, ", "))]]
+       : down fsizes = [[0, $ownnslots]] .
 
   (* Written before `bdepth` is advanced, so `$bdepth + 1` says this block's
    * own depth once rather than reading a value that has just changed
@@ -248,6 +270,7 @@ constant = intlit   -> IntConst(text: $1)
            : down fnames = [[$bdepth + 1,
                               lookup([[0, "nothing named"]], size($slotnames),
                                      join($slotnames, ", "))], ...$fnames]
+           : down fsizes = [[$bdepth + 1, $ownnslots], ...$fsizes]
            : down bdepth = $bdepth + 1 .
 
   (* Which frame the operand below is to be read against. This is the whole
@@ -278,7 +301,23 @@ constant = intlit   -> IntConst(text: $1)
                : "depth {} reaches past the outermost frame, and this chunk is nested {} deep"
                    of $depth, $bdepth .
 
-  SlotNum  : num = int($text) .
+  (* **The bound on a slot, for every instruction that takes one.** It used to
+   * sit in the `sob` pass and cover `local` and `setlocl` only, which left
+   * `outer 1, 99` into a frame of two to SolVM's loader -- `serialize.c`
+   * checks `slot >= ancestors[d - 1]` right beside the depth. It belongs here
+   * on both counts: the bound comes from a `slots` in the source rather than
+   * from the container, and this is the pass that knows every frame on the
+   * chain. Written once, because it is about an operand rather than about any
+   * one opcode.
+   *
+   * A name needs no such check -- it resolved against that frame's own list,
+   * so it cannot be past it. The default of 256 is what keeps a depth the
+   * check above has already refused from complaining twice. *)
+  SlotNum  : num = int($text)
+           ! $fdepth >= 0
+             and int($text) > lookup($fsizes, $fdepth, 256) - 1
+               : "slot {} is past this frame, which has {}"
+                   of $text, lookup($fsizes, $fdepth, 256) .
 
   (* Three things about the four lines below.
    *

@@ -126,7 +126,8 @@ test says the same thing a build-time read would have, at the same moment.
 
 It refuses a label that is not defined, a `jump` whose target is behind it
 (that is `loop`) and a `loop` whose target is ahead (that is `jump`), a slot,
-depth or argument count that will not fit its byte, a block named twice in one
+depth or argument count that will not fit its byte, a slot past the frame it
+addresses — `outer 1, 99` into a frame of two as well as `local 99` — a block named twice in one
 chunk, a `block` naming no definition, a script that does not end in `halt`, a
 block that does not end in `return`, a chunk too long for a two-byte offset,
 and an `outer` depth past the outermost frame — the lexical chain is as long

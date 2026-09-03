@@ -3162,3 +3162,48 @@ chain declared its size, and `slotrefs` already carries a table keyed by depth.
 It is left open rather than folded in because it would widen *slot n is past
 this frame, which has m* from `local` to `outer`, and that message has a test
 naming it.
+
+### The sibling check, and the bound it made unreachable
+
+Closing the gap left open above turned out to be a boundary correction rather
+than an addition. `serialize.c` checks two things about an `outer`, and the
+assembler checked one; the reason the other was missing is that it lived in the
+wrong file.
+
+`! $slot.num > $nslots - 1` sat in the `sob` pass. Its bound comes from a
+`slots` **in the source**, not from the container — and `solvm-sob.phx`'s own
+header says the file is *only the two passes that make bytes*, with the checks
+about the program in `solvm.phx`. Moving it to `slotrefs` put it where the
+frames already are, so it covers `outer` and `setoutr` for free:
+
+```
+$ phx --driver check ... w.sasm
+error: slot 99 is past this frame, which has 2
+          outer   1, 99
+```
+
+One check, one message, all four instructions — instead of the two-places-one-
+job the other shape would have left.
+
+**And it made a bound unreachable, which is worth saying out loud.** `layout`
+also refused a slot wider than a byte. A frame is at most 255 slots, so *past
+the frame it was declared in* is strictly tighter: there is no program the byte
+bound catches that the frame bound does not, and the frame bound says something
+useful when it fires. It only ever fired before because it ran first.
+
+So it is gone, and `tests/slot-too-big.sasm` with it — its subject is not a
+reachable state any more. The depth keeps its byte bound, because nothing
+bounds a depth more tightly than the nesting does.
+
+> **A check that only fires because it runs first is not a check, it is an
+> ordering.** Moving the tighter one earlier is what exposed which was which.
+
+The goldens did not move. 189 tests; the assembler's own count 59 -> 58, one
+refusal retired and its subject folded into a message that already existed.
+
+**And a count to correct, in the entry above rather than here.** `1db93b8`'s
+message says the depth-zero test took the assembler from 58 to 60. It took it
+from 58 to **59** — one test, one check. The number was written from memory
+instead of from `grep -c '^  ok'`, which is the third counting error this week
+and the second in a commit message, where it cannot be edited afterwards. The
+run is cheap and the claim is not; there is no reason to have guessed.

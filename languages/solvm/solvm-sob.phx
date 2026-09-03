@@ -98,12 +98,15 @@
   Return : addr = $pc : retend = [$pc + 1] : pc = $pc + 1 .
   Halt   : addr = $pc : haltend = [$pc + 1] : pc = $pc + 1 .
 
-  Local    : addr = $pc : pc = $pc + 2
-           ! $slot.num > 255
-               : "a slot has to fit one byte, and {} does not" of $slot.num .
-  SetLocal : addr = $pc : pc = $pc + 2
-           ! $slot.num > 255
-               : "a slot has to fit one byte, and {} does not" of $slot.num .
+  (* No one-byte bound on a slot here, and it is not an omission. A frame is
+   * at most 255 slots, so *past the frame it was declared in* is strictly
+   * tighter than *wider than a byte* -- and `slotrefs` in `solvm.phx` checks
+   * the first, in an earlier pass. There is no program the byte bound could
+   * catch that the frame bound does not, and the frame bound says something
+   * useful when it fires. The depth keeps its byte bound below, because
+   * nothing bounds a depth more tightly than the nesting does. *)
+  Local    : addr = $pc : pc = $pc + 2 .
+  SetLocal : addr = $pc : pc = $pc + 2 .
 
   (* Reading an enclosing frame is what the `CAPTURES` flag records, and the
    * flag is about **this chunk only**. `solas`'s own comment on it: *a nested
@@ -114,15 +117,11 @@
   Outer    : addr = $pc : pc = $pc + 3
            : outs = [true]
            ! int($depth) > 255
-               : "a depth has to fit one byte, and {} does not" of $depth
-           ! $slot.num > 255
-               : "a slot has to fit one byte, and {} does not" of $slot.num .
+               : "a depth has to fit one byte, and {} does not" of $depth .
   SetOuter : addr = $pc : pc = $pc + 3
            : outs = [true]
            ! int($depth) > 255
-               : "a depth has to fit one byte, and {} does not" of $depth
-           ! $slot.num > 255
-               : "a slot has to fit one byte, and {} does not" of $slot.num .
+               : "a depth has to fit one byte, and {} does not" of $depth .
 
   Jump      : addr = $pc : pc = $pc + 3 .
   ExitFalse : addr = $pc : pc = $pc + 3 .
@@ -175,13 +174,12 @@
   (* A frame is written as a count or as its slots' names; `"0"` is what the
    * grammar leaves in `count` for the second, since a frame of no slots is
    * refused either way. *)
-  Slots : n  = lookup([[0, size($slotnames)]], int($count), int($count))
-        : sl = [$n]
-        ! lookup([[0, size($slotnames)]], int($count), int($count)) < 1
+  (* `$n` is the declared size, from `frames`. What stays here are the two
+   * bounds the *format* imposes on it. *)
+  Slots ! $n < 1
             : "a frame has at least one slot, for the receiver"
-        ! lookup([[0, size($slotnames)]], int($count), int($count)) > 255
-            : "a frame reserves at most 255 slots, and this asks for {}"
-                of lookup([[0, size($slotnames)]], int($count), int($count)) .
+        ! $n > 255
+            : "a frame reserves at most 255 slots, and this asks for {}" of $n .
 
   (* ---- interning, said once ----
    *
@@ -201,7 +199,6 @@
   otherwise outs    = []
   otherwise entry   = []
   otherwise lname   = []
-  otherwise sl      = []
   otherwise haltend = []
   otherwise retend  = []
 
@@ -254,7 +251,6 @@
            : ownconsttext = $consttext
            : ownsize      = $pc
            : ownretend    = flatten($items.retend)
-           : ownnslots    = lookup([[0, size($slotnames)]], int($slots), int($slots))
 
            : owncaptures  = size(flatten($items.outs)) > 0
 
@@ -295,10 +291,10 @@
            ! int($arity) > 255
                : "a block takes at most 255 arguments, and '{}' declares {}"
                    of $name, $arity
-           ! lookup([[0, size($slotnames)]], int($slots), int($slots)) > 255
+           ! $ownnslots > 255
                : "a block reserves at most 255 slots, and '{}' asks for {}"
-                   of $name, lookup([[0, size($slotnames)]], int($slots), int($slots))
-           ! lookup([[0, size($slotnames)]], int($slots), int($slots)) < int($arity) + 1
+                   of $name, $ownnslots
+           ! $ownnslots < int($arity) + 1
                : "'{}' takes {} arguments, so it needs at least {} slots -- the receiver is slot 0"
                    of $name, $arity, int($arity) + 1
            ! $bdepth > 16
@@ -313,15 +309,7 @@
        : ownnconsts   = size($consts)
        : ownconsttext = $consttext
        : ownsize      = $pc
-       : declared     = flatten($items.sl)
 
-         (* `.slots` said once, or not at all -- and a frame has the receiver
-          * in slot 0 whether or not anybody says so. Prepending the default
-          * is what makes "the last one, or 1" an ordinary index. *)
-       : ownnslots    = at([1, ...$declared], size($declared) + 1)
-
-       ! size(flatten($items.sl)) > 1
-           : "the script's frame is declared more than once"
        ! size(positions(flatten($items.bdef))) < size(flatten($items.bdef))
            : "two blocks in the script have the same name"
        ! size(positions(flatten($items.lname))) < size(flatten($items.lname))
@@ -348,14 +336,8 @@
   Nil       : code = bytes(1, 1) .
   Global    : code = "{}{}" of bytes(2, 1), bytes($nidx, 2) .
   SetGlobal : code = "{}{}" of bytes(3, 1), bytes($nidx, 2) .
-  (* The frame is declared, so a slot past it is knowable here rather than at
-   * load. Slots count from zero, and slot 0 is the receiver. *)
-  Local     : code = "{}{}" of bytes(4, 1), bytes($slot.num, 1)
-            ! $slot.num > $nslots - 1
-                : "slot {} is past this frame, which has {}" of $slot.num, $nslots .
-  SetLocal  : code = "{}{}" of bytes(5, 1), bytes($slot.num, 1)
-            ! $slot.num > $nslots - 1
-                : "slot {} is past this frame, which has {}" of $slot.num, $nslots .
+  Local     : code = "{}{}" of bytes(4, 1), bytes($slot.num, 1) .
+  SetLocal  : code = "{}{}" of bytes(5, 1), bytes($slot.num, 1) .
   Outer     : code = "{}{}{}"
                 of bytes(6, 1), bytes(int($depth), 1), bytes($slot.num, 1) .
   SetOuter  : code = "{}{}{}"
@@ -433,7 +415,6 @@
    *)
   BlockDef : down labels   = $ownlabels
            : down blocktab = $ownblocktab
-           : down nslots   = $ownnslots
            : bodycode = join($items.code)
            : lineruns = join(each(bytes(sizes($items.code), 4),
                                   bytes($items.pos.line, 4), "{}{}"))
@@ -456,7 +437,6 @@
 
   Unit : down labels   = $ownlabels
        : down blocktab = $ownblocktab
-       : down nslots   = $ownnslots
        : bodycode = join($items.code)
        : lineruns = join(each(bytes(sizes($items.code), 4),
                               bytes($items.pos.line, 4), "{}{}"))

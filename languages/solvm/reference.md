@@ -430,7 +430,6 @@ Each names a line and a column of assembly, with a caret.
 | `'x' is behind this, and a backward jump is` `loop` | on `jump`, `jumpf`, `exitf` |
 | `'x' is ahead of this, and a forward jump is` `jump` | on `loop` |
 | `no block called 'x' is defined in this chunk` | on `block` |
-| `a slot has to fit one byte, and n does not` | `local`, `setlocl`, `outer`, `setoutr` |
 | `no slot is called 'x' here -- the frame has ...` | a name against a frame that has not got it, or against one declared as a count. The tail names what the frame does have, or `nothing named` |
 | `two slots in the script's frame have the same name` | `.slots self, n, n` — both would resolve to the first |
 | `two slots in 'b' have the same name` | the same, in a block's header |
@@ -463,7 +462,7 @@ Each names a line and a column of assembly, with a caret.
 | `a block reserves at most 255 slots, and 'b' asks for n` | |
 | `'b' takes n arguments, so it needs at least n+1 slots -- the receiver is slot 0` | |
 | `'b' is nested n deep, and SolVM follows at most 16 frames` | |
-| `slot n is past this frame, which has m` | `local`, `setlocl` |
+| `slot n is past this frame, which has m` | `local`, `setlocl`, `outer`, `setoutr` — for `outer D` it is the frame `D` out, whose size that frame declared. There is no separate one-byte bound on a slot: a frame is at most 255 slots, so this is strictly tighter and always fires first |
 | `two labels in the script have the same name` | or `two labels in 'b' …` |
 
 ---
@@ -488,7 +487,8 @@ The verifier's other conditions are checked here, or hold by construction:
 | every instruction fits inside the chunk | by construction |
 | every operand indexes something that exists | by construction — indices come from the tables |
 | every jump lands on an instruction boundary | by construction — offsets come from labels |
-| every `local`/`setlocl` addresses a slot the frame has | checked, against the frame this chunk declared |
+| every slot addresses one the frame it names has | checked, for `local` and `setlocl` against this chunk's declaration and for `outer D`/`setoutr D` against the one `D` out — which is `serialize.c`'s `slot >= ancestors[d - 1]`, made static |
+| every `outer` depth is one the lexical chain has | checked at both ends, which is `serialize.c`'s `d < 1 \|\| d > ancestor_count` |
 | every slot written as a name is one the addressed frame declared | checked, and the name resolves to the number that name has |
 | the last instruction stops the machine | checked, and more strictly |
 | a method has at least `arity + 1` slots | checked |

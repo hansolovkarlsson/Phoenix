@@ -51,18 +51,13 @@ them up:
       checks the two agree. Worth revisiting only if the version moves.
 - [ ] **ROADMAP 1.2** — compiling the tables to code. The only entry left, and
       it is a measurement that has come out the same way three times.
-- [ ] **`outer d, <number>` past that frame's slots** is still accepted here
-      and refused at load. `serialize.c` checks two things about an `outer` —
-      `d < 1 || d > ancestor_count`, now checked here, and
-      `slot >= ancestors[d - 1]`, not. It is knowable statically: every frame
-      on the chain declared its size and `slotrefs` already keys a table by
-      depth. Left open because it widens *slot n is past this frame, which has
-      m* from `local` to `outer`, and that message has a test naming it —
-      which is a decision rather than a typing job.
-
-The assembler owes nothing else. Symbolic slot operands were the last deferred
-piece, and they went in with three refusals and two static checks the feature
-had not asked for.
+That is the whole list. **The assembler owes nothing.** Both of `serialize.c`'s
+rules about an `outer` are now static here — `d < 1 || d > ancestor_count` and
+`slot >= ancestors[d - 1]` — and the second arrived as a boundary correction
+rather than an addition: the bound came from a `slots` in the source, so it
+belonged in `solvm.phx` and not in the file that makes bytes. Moving it there
+covered `outer` for free and made `layout`'s one-byte slot bound unreachable,
+since a frame is at most 255 slots. That check and its test are retired.
 
 ## Nothing is on fire, but two things to know
 

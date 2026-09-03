@@ -150,7 +150,8 @@ program can be compared line for line.
 ## What is checked, and what is not
 
 **Checked:** an unknown label · a label defined twice · a jump in the wrong
-direction · a slot past the frame · a slot, depth or argc over 255 · an unknown
+direction · a slot past the frame it addresses, `outer` included · a depth or
+argc over 255 · an unknown
 block · two blocks of one name · a script not ending in `halt`, a block not in
 `return` · `slots < arity + 1` · nesting over 16 · a chunk over 65535 bytes ·
 a slot name the addressed frame has not got · two slots of one name · an
