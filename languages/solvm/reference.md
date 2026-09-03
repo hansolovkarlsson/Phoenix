@@ -108,21 +108,31 @@ booleans *as globals*, so `global true` and `global false` have to work.
 
 ## 3. Directives
 
-### `.slots n`
+### `.slots` — a count, or the slots' names
 
 How many frame slots the **script** addresses, at least 1 and at most 255.
 Default 1. Only valid at the top level; a block declares its own frame in its
-header.
+header. Declaring it twice is refused.
 
 ```
 .slots 3
+.slots self, total, i
 ```
 
-The count is the whole frame: slot 0, then the arguments, then any locals.
-A script has no receiver, so its slot 0 is unused but still counted.
+Both say three slots. The second also **names** them, in slot order, and those
+names go into the chunk's `slotnames` table — which is what lets `solvm
+--trace` write `value(n: #41)` where it would otherwise write `value(#41)`.
 
-Said more than once, the last one wins. That is a consequence of how it is
-gathered rather than a feature; write it once, at the top.
+The count is the whole frame: slot 0, then the arguments, then any locals. A
+script has no receiver, so its slot 0 is unused but still counted — and named
+`self` by convention, since the table is positional and the first name *is*
+slot 0.
+
+**Names are for reading, not for addressing.** An instruction still says
+`local 1`; nothing resolves a name to a slot.
+
+Comma-separated rather than juxtaposed, because a list that ended wherever a
+name stopped could not tell its last entry from the label on the line below.
 
 ### `.block name arity a slots s` … `.end`
 
@@ -143,7 +153,7 @@ where it stands — it fills a slot in the enclosing chunk's method table, and
 | --- | --- |
 | `name` | what the method is called. It is what `solvm --dump` prints as the chunk's title and what a traceback names, so it is worth spelling properly |
 | `arity` | how many arguments, 0 to 255. A `value` send with a different count is a run-time arity error |
-| `slots` | the whole frame: 1 for the receiver, then the arguments, then locals. At least `arity + 1`, at most 255 |
+| `slots` | the whole frame: 1 for the receiver, then the arguments, then locals. At least `arity + 1`, at most 255. Takes a count or the slots' names, the same as `.slots` — `slots self, n` |
 
 Definitions **nest**, and a definition may appear anywhere in the chunk that
 owns it — before or after the `block` that pushes it, since a block name is
@@ -373,7 +383,7 @@ What this assembler puts in each:
 | --- | --- |
 | **lines** | one run per item, so a diagnostic from `solvm` names the line of **assembly** it came from. A label contributes a run of no bytes, which the loader accepts |
 | **files** | one entry, the path the assembler was given, and one run covering the whole chunk |
-| **slotnames** | none. SolVM prints `slot 3` rather than a name in a traceback; naming them is not yet expressible in this syntax |
+| **slotnames** | whatever the frame was named, in slot order — empty when it was written as a count. `solvm --trace` reads slots 1..arity to name a call's arguments |
 
 ### The version is an equality, not a floor
 
@@ -431,6 +441,7 @@ Each names a line and a column of assembly, with a caret.
 | --- | --- |
 | `a frame has at least one slot, for the receiver` | `.slots 0` |
 | `a frame reserves at most 255 slots, and this asks for n` | |
+| `the script's frame is declared more than once` | |
 | `a block takes at most 255 arguments, and 'b' declares n` | |
 | `a block reserves at most 255 slots, and 'b' asks for n` | |
 | `'b' takes n arguments, so it needs at least n+1 slots -- the receiver is slot 0` | |

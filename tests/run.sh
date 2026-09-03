@@ -81,6 +81,8 @@ refuses "a literal nothing spells" "no token rule spells" "$root/tests/grammars/
 # *when* a clause runs.
 warns   "an attribute with a field's name" "is already a field of" \
         "$root/tests/grammars/attribute-shadows-field.phx"
+refuses "a field of a threaded attribute's name" "does not pass through here" \
+        "$root/tests/grammars/thread-shadowed.phx"
 refuses "an inherited clause reading its own rule's work" \
         "an inherited clause runs on the way in" \
         "$root/tests/grammars/down-reads-own.phx"

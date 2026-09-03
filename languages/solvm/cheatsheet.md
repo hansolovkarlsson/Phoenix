@@ -18,6 +18,7 @@ solvm p.sob                                                       # run it
 ```
 ; a comment, to the end of the line
 .slots 2                        ; the script's frame. 1..255, default 1
+.slots self, total              ; or its slots' names -- same thing, named
 
         const   #45
         setglob answer
@@ -92,6 +93,10 @@ cannot leave its chunk.
 
 > **Slot 0 is the receiver** — `self` in a block, unused in a script. Then the
 > arguments, then locals.
+
+A frame is written as a count or as its slots' names — `slots self, n` — and
+the names reach `solvm --trace`, which writes `value(n: #41)` rather than
+`value(#41)`. Names are for reading; `local` still takes a number.
 
 `slots` is the whole frame: at least `arity + 1`, at most 255. Nesting is at
 most 16 frames deep, and a `local` past the frame you declared is refused.

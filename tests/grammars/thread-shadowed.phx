@@ -1,0 +1,29 @@
+(* A field of a threaded attribute's name.
+ *
+ * A field is read before an attribute, so on this node type `$env` is the
+ * field -- and the clause meant to update the thread reads the field instead.
+ * The thread does not pass through here, and every node after it carries on
+ * from a value that never went through this one.
+ *
+ * Nothing complained until a real description met it: `solvm-sob.phx` grew a
+ * `slotnames` field called `names` on the node whose clauses save and restore
+ * the interned `names` table, and the chunk it wrote had a name count of zero
+ * with the names still in it. Three bytes wrong, no diagnostic, and a file
+ * SolVM would not load.
+ *)
+%fragment letter .
+letter = "a" .. "z" .
+word   = letter { letter } .
+space  = " " { " " } .
+%skip space .
+
+%syntax .
+%start line .
+line = { w:word -> W(env: $w) } -> L(items: $1) .
+
+%pass p
+  thread env = []
+  W : env = bind($env, "x", 1) .
+  L : out = "{}\n" of size($env) .
+
+%driver d = p -> out .

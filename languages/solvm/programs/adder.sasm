@@ -6,7 +6,11 @@
 ; rather than asking for it. The inner block is called while that frame is
 ; still alive; a block that outlives its home frame is a run-time error in
 ; SolVM, and no flag changes that.
-.slots 1
+;
+; The frames are written as their slots' names rather than as a count, which is
+; what puts `n` and `m` in the chunk -- so `solvm --trace` writes
+; `value(n: #2)` where it would otherwise write `value(#2)`.
+.slots self
 
         block   outer-block
         const   #2
@@ -15,13 +19,13 @@
         pop
         halt
 
-.block outer-block arity 1 slots 2
+.block outer-block arity 1 slots self, n
         block   inner-block
         const   #40
         send    value, 1
         return
 
-    .block inner-block arity 1 slots 2
+    .block inner-block arity 1 slots self, m
         outer   1, 1
         local   1
         send    add, 1

@@ -88,11 +88,25 @@ unit = { top } -> Unit(items: $1) .
 (* `.slots` belongs to the script and to nothing else: a block declares its
  * own frame in its header, so the grammar puts the directive where it means
  * something rather than accepting it anywhere and complaining later. *)
-top = ".slots" n:integer -> Slots(count: $n)
+top = ".slots" n:integer   -> Slots(count: $n, slotnames: [])
+    | ".slots" s:slotnames -> Slots(count: "0", slotnames: $s)
     | item .
 
+(* A frame may be declared as a count, or as the names of its slots in slot
+ * order -- `self, total, i` is three slots, and the first is slot 0. The names
+ * go into the chunk so that `solvm --trace` can write `value(n: #41)` where it
+ * would otherwise write `value(#41)`; nothing in an *instruction* refers to
+ * them, and a slot is still addressed by number.
+ *
+ * Comma-separated rather than juxtaposed, because a list that ended wherever a
+ * name stopped could not tell its last entry from the label on the line below
+ * it. *)
+slotnames = a:name { "," b:name -> $b } -> [$a, ...$2] .
+
 item = ".block" b:name "arity" a:integer "slots" s:integer c:{ item } ".end"
-         -> BlockDef(name: $b, arity: $a, slots: $s, items: $c)
+         -> BlockDef(name: $b, arity: $a, slots: $s, slotnames: [], items: $c)
+     | ".block" b:name "arity" a:integer "slots" n:slotnames c:{ item } ".end"
+         -> BlockDef(name: $b, arity: $a, slots: "0", slotnames: $n, items: $c)
      | l:name ":" -> Label(name: $l)
      | instruction .
 
@@ -201,10 +215,16 @@ constant = intlit   -> IntConst(text: $1)
   Halt       : out = "    halt" .
 
   Label      : out = "{}:" of $name .
-  Slots      : out = ".slots {}" of $count .
+
+  (* `"0"` is what the grammar puts in `count` when the frame was written as
+   * names, since a frame of no slots is refused anyway. *)
+  Slots      : out = ".slots {}"
+                 of lookup([[0, join($slotnames, ", ")]], int($count), $count) .
 
   BlockDef   : out = ".block {} arity {} slots {}\n{}\n.end"
-                 of $name, $arity, $slots, join($items.out, "\n") .
+                 of $name, $arity,
+                    lookup([[0, join($slotnames, ", ")]], int($slots), $slots),
+                    join($items.out, "\n") .
 
   Unit       : out = join($items.out, "\n") .
 

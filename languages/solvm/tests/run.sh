@@ -95,6 +95,7 @@ refuse block-without-return.sasm "has to end with return"
 refuse too-few-slots.sasm       "the receiver is slot 0"
 refuse two-labels-one-name.sasm "two labels in the script have the same name"
 refuse slot-past-frame.sasm     "slot 4 is past this frame, which has 2"
+refuse frame-declared-twice.sasm "declared more than once"
 
 # ---- 4. and agrees with solas, which is the oracle -----------------------
 
@@ -150,6 +151,20 @@ for s in $lang/oracle/*.sol; do
     else
         no "$n compiles to the same instructions solas emits"
         diff "$tmp/$n.dis.a" "$tmp/$n.dis.b" | sed 's/^/        /' | head -10
+    fi
+
+    # And the same call trace, which is where slot names surface: a frame
+    # written as its slots' names puts them in the chunk, so `--trace` says
+    # `value(n: #2)` rather than `value(#2)`. The `[file:line]` prefix is the
+    # one thing two producers of one program are entitled to differ on.
+    strip() { sed -E 's/\[[^]]*\] //' ; }
+    "$sol/bin/solvm" --trace "$tmp/$n-solas.sob" 2>&1 | strip > "$tmp/$n.tr.a"
+    "$sol/bin/solvm" --trace "$tmp/$n.sob"       2>&1 | strip > "$tmp/$n.tr.b"
+    if cmp -s "$tmp/$n.tr.a" "$tmp/$n.tr.b"; then
+        ok "$n traces the same, argument names included"
+    else
+        no "$n traces the same, argument names included"
+        diff "$tmp/$n.tr.a" "$tmp/$n.tr.b" | sed 's/^/        /' | head -8
     fi
 done
 

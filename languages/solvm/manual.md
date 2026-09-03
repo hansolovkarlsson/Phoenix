@@ -143,6 +143,23 @@ After slot 0 come the arguments, in order, and then any locals the code needs.
 That is the whole layout, and `.slots n` (or a block's `slots n`) is how many
 there are. A frame of more than 255 is refused.
 
+### Naming the slots
+
+A frame may be written as its slots' names instead of a count:
+
+```
+.slots self, total, i
+.block twice arity 1 slots self, n
+```
+
+Three slots either way. The names go into the chunk, and **`solvm --trace`
+reads them to name a call's arguments** — `value(n: #41)` rather than
+`value(#41)`, which is what `solas` produces and what this matches. They are
+for reading only: an instruction still says `local 1`.
+
+The table is positional, so the first name *is* slot 0 — the receiver, which
+SolVM never reads a name for. `self` is the convention.
+
 ### Three ways to reach a variable, and they are different instructions
 
 | | |

@@ -564,7 +564,27 @@ static void check_clause_order(Check *c)
 
             for (int a = 0; a < rule->nclauses; a++) {
                 const Clause *def = &rule->clauses[a];
-                if (def->kind != C_SYNTH || !def->attr) continue;
+                if (!def->attr) continue;
+
+                /* 1a. A **threaded** attribute with a field's name is the
+                 * sharper version of the same hazard, and it was silent until
+                 * a real description met it: on this node type `$name` is the
+                 * field, so the clause updating the thread reads the field
+                 * rather than the thread, and every later node carries on from
+                 * a value that never went through here. Nothing complains --
+                 * the wrong answer is a well-typed one. */
+                if (def->kind == C_THREAD && type_has_field(type, def->attr)) {
+                    diag_error(&g->src, def->pos,
+                               "'%s' is a threaded attribute and also a field "
+                               "of '%s' -- a field is read first, so this reads "
+                               "the field and the thread does not pass through "
+                               "here", def->attr, type);
+                    diag_note("rename one of them; the thread is the one the "
+                              "rest of the pass shares");
+                    c->ok = false;
+                }
+
+                if (def->kind != C_SYNTH) continue;
 
                 /* 1. An attribute with a field's name is invisible from
                  * outside: `$x.name` reads a field first. */
