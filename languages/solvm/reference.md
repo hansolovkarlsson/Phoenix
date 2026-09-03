@@ -345,7 +345,9 @@ table.
 **`block B` captures the running frame as the block's home**, which is what
 makes `self` and the enclosing locals still mean the right thing whenever the
 block is eventually run. `outer D, S` walks that chain: depth 1 is the frame
-the block was written in, 2 is the one outside that.
+the block was written in, 2 is the one outside that. **There is no depth 0** — the
+loader refuses `d < 1` and indexes the chain as `ancestors[d - 1]`, and this
+frame is what `local` reaches.
 
 ### The flags, and the one the assembler works out
 
@@ -433,6 +435,7 @@ Each names a line and a column of assembly, with a caret.
 | `two slots in the script's frame have the same name` | `.slots self, n, n` — both would resolve to the first |
 | `two slots in 'b' have the same name` | the same, in a block's header |
 | `depth n reaches past the outermost frame, and this chunk is nested m deep` | `outer`, `setoutr`. The lexical chain is as long as the nesting, so this is knowable here |
+| `a depth counts from one, and this frame's own slots are `local`` | `outer 0`, `setoutr 0`. SolVM refuses `d < 1`; this frame is what `local` reaches |
 | `a depth has to fit one byte, and n does not` | `outer`, `setoutr` |
 | `an argument count has to fit one byte, and n does not` | `send` |
 | `no constant is spelled 'x' -- they are #true, #false and #nil` | a fourth `#word` |

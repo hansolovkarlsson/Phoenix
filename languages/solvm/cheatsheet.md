@@ -72,7 +72,7 @@ instruction. `global` is the one lookup.
 | --- | --- |
 | constant | `#42` `#-7` `3.5` `-1.25` `#true` `#false` `#nil` |
 | selector, global, string | a name, or a text literal: `add`, `"return"`, `"hi"` |
-| slot, depth, argc | `0`–`255`. Depth 0 is this frame, 1 is the frame it was written in |
+| slot, depth, argc | `0`–`255`. A **depth counts from one**: 1 is the frame it was written in. Depth 0 is refused, and this frame is `local` |
 | slot, by name | where the addressed frame was declared as names, one of them: `local total`, `outer 1, n` |
 | label, block | a name |
 

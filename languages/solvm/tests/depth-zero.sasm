@@ -1,0 +1,15 @@
+; A depth counts from one. SolVM's loader refuses `d < 1` and indexes the
+; chain as `ancestors[d - 1]`, so depth 0 names no frame at all -- and this
+; frame's own slots are what `local` is for. The manual claimed the opposite
+; until a slot written as a name went looking for which frame to look in.
+.slots self, total
+        block   b
+        const   #2
+        send    value, 1
+        pop
+        halt
+
+.block b arity 1 slots self, n
+        outer   0, n
+        return
+.end

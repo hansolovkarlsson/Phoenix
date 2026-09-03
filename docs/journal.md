@@ -3115,3 +3115,50 @@ accepted until then, numeric spelling included.
 repository. Both were quoted output, which is the kind that goes stale in
 silence — the same lesson the tutorials taught this week, one level up.
 `COMPLETED.md`'s table of languages had no `solvm/` row at all.
+
+### And then the check found a claim the manual had wrong
+
+Asked whether anything was still open, the honest way to answer was to exercise
+the three operand forms the day had not: `setlocl` by name, `setoutr` by name,
+and `outer 0`. The first two resolved to the same bytes as their numbers, which
+is what the rest of the feature already said they would.
+
+**`outer 0, n` assembled cleanly and SolVM refused to load it.**
+
+`solum/src/serialize.c:817` is `if (d < 1 || d > ancestor_count)`, and the
+chain is indexed `ancestors[d - 1]` — so a depth counts from **one**, and depth
+0 names no frame at all. The manual said the opposite in as many words: *Depth
+0 is this frame, so `outer 0, s` is a roundabout `local s`.* It never was. The
+cheatsheet's operand table said it too.
+
+The check written an hour earlier had the upper bound and not the lower, which
+is the same mistake in a smaller place: `d > ancestor_count` was transcribed
+from the *behaviour* — a chunk cannot reach past its own nesting — rather than
+from the line of C that states both halves. Reading the source would have given
+both at once.
+
+> **A bound taken from reasoning has one end. A bound taken from the code that
+> enforces it has two.**
+
+What makes this the third time this week: nothing about the feature required
+`outer 0` to be considered. It came up because a slot written as a name has to
+ask *which frame*, and asking that question out loud is what made the depth
+worth looking at.
+
+### One left, and it is the sibling of the one just fixed
+
+`serialize.c` checks two things about an `outer`, and the assembler now checks
+one of them. The other is `slot >= ancestors[d - 1]` — an `outer 1, 99` into a
+frame of two — and it is still accepted here and refused at load:
+
+```
+$ phx --driver check ... w.sasm      # accepted
+$ solvm w.sob
+solvm: cannot load: an outer access names a slot that frame has not got
+```
+
+It is knowable statically for the same reason the depth is: every frame on the
+chain declared its size, and `slotrefs` already carries a table keyed by depth.
+It is left open rather than folded in because it would widen *slot n is past
+this frame, which has m* from `local` to `outer`, and that message has a test
+naming it.

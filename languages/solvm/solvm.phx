@@ -259,12 +259,21 @@ constant = intlit   -> IntConst(text: $1)
    * lexical chain is a fact about the *text*: a chunk nested `n` deep has `n`
    * frames outside it and no more, whenever it runs. Without this a name one
    * step too far out would be reported as a name the frame has not got, which
-   * is true and is not the mistake. *)
+   * is true and is not the mistake.
+   *
+   * **Both ends, because SolVM checks both ends.** `serialize.c` refuses
+   * `d < 1 || d > ancestor_count`, and it indexes the chain as `ancestors[d
+   * - 1]` -- so depth is one-based and depth 0 is not this frame, it is
+   * nothing. Reaching this frame is what `local` is for. *)
   Outer    : down fdepth = $bdepth - int($depth)
+           ! int($depth) < 1
+               : "a depth counts from one, and this frame's own slots are `local`"
            ! int($depth) > $bdepth
                : "depth {} reaches past the outermost frame, and this chunk is nested {} deep"
                    of $depth, $bdepth .
   SetOuter : down fdepth = $bdepth - int($depth)
+           ! int($depth) < 1
+               : "a depth counts from one, and this frame's own slots are `setlocl`"
            ! int($depth) > $bdepth
                : "depth {} reaches past the outermost frame, and this chunk is nested {} deep"
                    of $depth, $bdepth .

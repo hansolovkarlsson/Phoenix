@@ -203,8 +203,11 @@ needs; that is most of what `solveig-sob.phx` is. **In assembly you say which**,
 which is why an assembler is a much smaller description than a compiler.
 
 `outer 1, 1` is *the frame I was written in, slot 1* — or `outer 1, n`, if
-that frame named its slots. Depth 0 is this frame, so `outer 0, s` is a
-roundabout `local s`.
+that frame named its slots. **A depth counts from one**: `outer 0, s` is not a
+roundabout `local s`, it is refused — SolVM's loader checks `d < 1` alongside
+`d > ancestor_count`, and indexes the chain as `ancestors[d - 1]`. This page
+said the opposite until a slot written as a name went looking for which frame
+to look in.
 
 ### Every assignment leaves its value
 

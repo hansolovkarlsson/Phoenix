@@ -99,6 +99,7 @@ refuse frame-declared-twice.sasm "declared more than once"
 refuse no-such-slot.sasm        "no slot is called 'total' here -- the frame has self, n"
 refuse two-slots-one-name.sasm  "two slots in the script's frame have the same name"
 refuse depth-past-outermost.sasm "depth 1 reaches past the outermost frame"
+refuse depth-zero.sasm          "a depth counts from one"
 
 # ---- and a name means the slot a number would have meant ----------------
 #

@@ -51,10 +51,18 @@ them up:
       checks the two agree. Worth revisiting only if the version moves.
 - [ ] **ROADMAP 1.2** — compiling the tables to code. The only entry left, and
       it is a measurement that has come out the same way three times.
+- [ ] **`outer d, <number>` past that frame's slots** is still accepted here
+      and refused at load. `serialize.c` checks two things about an `outer` —
+      `d < 1 || d > ancestor_count`, now checked here, and
+      `slot >= ancestors[d - 1]`, not. It is knowable statically: every frame
+      on the chain declared its size and `slotrefs` already keys a table by
+      depth. Left open because it widens *slot n is past this frame, which has
+      m* from `local` to `outer`, and that message has a test naming it —
+      which is a decision rather than a typing job.
 
-That is the whole list. The assembler owes nothing now: symbolic slot operands
-were the last deferred piece, and they went in with two refusals and a static
-check the feature had not asked for.
+The assembler owes nothing else. Symbolic slot operands were the last deferred
+piece, and they went in with three refusals and two static checks the feature
+had not asked for.
 
 ## Nothing is on fire, but two things to know
 
@@ -98,4 +106,15 @@ cleanly.
 > **A diagnosis that is true and is not the mistake is a bug in the
 > diagnosis** — and chasing one is how you find the check nobody wrote.
 
-Three times this week a page or a message has found a defect the code did not.
+Then the same hour did it again, one level down. The depth check written that
+way had the upper bound and not the lower, because `d > ancestor_count` was
+transcribed from *reasoning about the behaviour* rather than from
+`serialize.c:817`, which states both halves on one line. `outer 0, n`
+assembled cleanly and SolVM refused to load it — and the manual had said, in
+as many words, that it was a roundabout `local s`. It never was.
+
+> **A bound taken from reasoning has one end. A bound taken from the code that
+> enforces it has two.**
+
+Three times this week a page or a message has found a defect the code did not;
+this makes four.
