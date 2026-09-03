@@ -12,7 +12,9 @@ myprogram.pas ──────────────────────
 C11, no dependencies, and nothing outside this repository is needed to build it
 or to run its tests.
 
-**Start here:** [docs/tutorial-picture.md](docs/tutorial-picture.md) builds a
+**Start here:** [hansolovkarlsson.github.io/Phoenix](https://hansolovkarlsson.github.io/Phoenix/)
+is the same documentation with a front page in front of it.
+[docs/tutorial-picture.md](docs/tutorial-picture.md) builds a
 language and its compiler from nothing in half an hour.
 [docs/manual.md](docs/manual.md) explains the notation,
 [docs/reference.md](docs/reference.md) is the lookup, and
