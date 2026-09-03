@@ -4,18 +4,21 @@
 overwritten each time; the durable record is [journal.md](journal.md) and the
 scoring is [postmortem.md](postmortem.md).*
 
+**This day was closed out twice.** The first closeout was written at `3025bec`
+and the work below it kept going for another hour, so this replaces it rather
+than following it. [journal.md](journal.md) has two entries for today, which is
+what that looks like in the durable record.
+
 ## Where the tree is
 
-`main`, clean, pushed. **189 tests, 0 failing** — 186 of them need nothing
-outside the repository. Started the day at 176.
-
-*Since: 2026-09-04 added symbolic slot operands to the assembler. Still 189
-reports; the assembler's own count went 49 → 58, and
-[journal.md](journal.md) has the day.*
+`main`, clean, **pushed** — `bd13341`. **189 tests, 0 failing**; 186 of them
+need nothing outside the repository. Started the day at 176.
 
 The website is live at
 [hansolovkarlsson.github.io/Phoenix](https://hansolovkarlsson.github.io/Phoenix/)
-and rebuilds itself on every push that touches `docs/` or `www/`.
+and the last build was checked *by fetching the pages*, not by reading the
+workflow's green tick: `journal.html`, `postmortem.html` and `COMPLETED.html`
+each serve today's new text.
 
 ## What went in
 
@@ -33,26 +36,25 @@ and rebuilds itself on every push that touches `docs/` or `www/`.
 | `ee5c993` | **roadmap 1.6** — `\|` as an expression operator, for awk's `getline` |
 | `34bb73b` | **roadmap 2.3** — Pascal units, settled against |
 | `5a873a5` | `docs/reference.md` § 11 made executable — 66 claims |
-| `3025bec` | this closeout: the day in `journal.md`, the scoring in `postmortem.md` § 6 |
+| `3025bec` | the first closeout: the day, the scoring in `postmortem.md` § 6 |
 | `82dc15e` | known warts: the count corrected, and the three this week found |
+| `bd13341` | **symbolic slot operands** — `local total`, `outer 1, n`, and the depth check writing the message found |
 
 ## What is outstanding
 
 Nothing is blocked, and nothing is half-finished. In the order I would pick
 them up:
 
-- [x] **Symbolic slot operands** in the assembler — `local total` rather than
-      `local 1`. **Done 2026-09-04**; the estimate held, and
-      [postmortem.md](postmortem.md) § 7 says why that is a claim about the
-      mechanisms rather than about the change. It brought two refusals and a
-      static check on `outer` depth that the feature did not ask for. The
-      assembler's suite went 49 → 58 and the goldens did not move.
 - [ ] **Read `SOL_SOB_VERSION` rather than writing 14** into two descriptions.
       `PRODUCING.md` asks for it; the trade was made deliberately (it would
       couple a description to a path outside this repository) and the suite
       checks the two agree. Worth revisiting only if the version moves.
 - [ ] **ROADMAP 1.2** — compiling the tables to code. The only entry left, and
       it is a measurement that has come out the same way three times.
+
+That is the whole list. The assembler owes nothing now: symbolic slot operands
+were the last deferred piece, and they went in with two refusals and a static
+check the feature had not asked for.
 
 ## Nothing is on fire, but two things to know
 
@@ -61,22 +63,39 @@ them up:
 confusing few minutes. Not worth fixing; worth remembering before backgrounding
 one.
 
-**The `day-closeout` skill would damage this repository, so it is not run.**
-Its `_write_roadmap` targets `docs/roadmap.md`, and this filesystem is
-case-insensitive — that *is* `docs/ROADMAP.md`. Its `_write_postmortem` targets
-a file that already exists here with a different meaning, and its parser is
-regex keyword-matching over chat text. The closeout goes into the
-repository's own conventions instead: the day to `journal.md`, the scoring to
-`postmortem.md` § 6, and `COMPLETED.md` and `ROADMAP.md` kept current as the
-work lands. Anyone running it again should do the same.
+**The `day-closeout` skill would damage this repository, and this was checked
+rather than assumed.** Running it again is not a small mistake:
+
+- `_write_roadmap` opens `docs/roadmap.md`. This filesystem is
+  case-insensitive, so `Path("docs/roadmap.md").exists()` is **True** and that
+  file *is* `docs/ROADMAP.md`. It looks for a `## Immediate` heading, does not
+  find one, and appends regex-scraped `- [ ]` lines to the end of it.
+- `_write_postmortem` opens `docs/postmortem.md`, which exists here with a
+  different meaning and does start with `# Postmortem` — so it appends
+  `**Learnings**: [Add learnings here]` stubs to a 19K curated document.
+- `_write_standup` overwrites this file outright.
+
+All of it is recoverable from git, and none of it should have to be. The
+closeout goes into the repository's own conventions instead: the day to
+[journal.md](journal.md), the scoring to [postmortem.md](postmortem.md),
+and [COMPLETED.md](COMPLETED.md) and [ROADMAP.md](ROADMAP.md) kept current as
+the work lands. **Anyone running it again should do the same.**
 
 ## The one thing worth carrying forward
 
-Three tutorials and one reference section were made executable this week. The
-tutorials had eight defects between them; the reference had none.
+The morning's lesson was about running documentation — three tutorials had
+eight defects between them and the reference had none, because a tutorial's
+subject is a session and a reference's subject is a tool that has tests. That
+still holds and is in [postmortem.md](postmortem.md) § 6.
 
-> **Run the documentation whose claims are not already held by something else.**
+The afternoon sharpened it into something smaller and stranger. Adding
+symbolic slots, the first message written for `outer 3, x` was *no slot is
+called `x` here*. That is true. It is also not the mistake — the chunk is
+nested none deep and cannot reach out at all — and noticing that turned up a
+gap older than the feature: `outer 5, 1`, numeric, had always assembled
+cleanly.
 
-A tutorial's subject is a session — a sequence of commands in a directory —
-so it goes stale when anything around it moves. A reference's subject is the
-tool, and the tool has tests.
+> **A diagnosis that is true and is not the mistake is a bug in the
+> diagnosis** — and chasing one is how you find the check nobody wrote.
+
+Three times this week a page or a message has found a defect the code did not.

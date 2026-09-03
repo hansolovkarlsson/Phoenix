@@ -3040,9 +3040,11 @@ corrected and gains the three in brief.
 
 ---
 
-## 2026-09-04 — a slot with a name
+## 2026-09-03 — a slot with a name, after the day was closed
 
-The last thing the assembler was left owing. `.slots self, total, i` had put
+The second entry for this day, and the closeout above it was already written
+when this began — which is the only reason it is worth saying so. The last
+thing the assembler was left owing. `.slots self, total, i` had put
 the names in the chunk since the day slot names went in — `solvm --trace` reads
 them to write `value(n: #41)` — but an instruction still said `local 1`, and
 the page said so in as many words: *names are for reading, not for addressing.*
