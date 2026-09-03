@@ -9,9 +9,10 @@ here with a verdict. [journal.md](journal.md) records what each stage cost and
 what it got wrong first; [postmortem.md](postmortem.md) scores the predictions.
 
 Three languages are described and compiled: Pascal against `fpc`, Solveig
-against `solas`, awk against `/usr/bin/awk`. What remains on this page is one
-measurement that keeps coming out the same way and one borrowed idea nothing
-has asked for. **There is no unfinished work in any language described here.**
+against `solas`, awk against `/usr/bin/awk`. What remains on this page is **one
+measurement that keeps coming out the same way**, and nothing else. There is no
+unfinished work in any language described here, and nothing borrowed is left to
+borrow.
 
 ---
 
@@ -64,37 +65,16 @@ implementations appear.
 ## 2. Borrowed, and worth borrowing
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
-whose. Three of the four are settled — two built, one **tested and refused** —
-and what is left is the one this page has always said to be sceptical about.
+whose. **All four are settled** — two built and two tested and refused. Nothing
+is left in this section.
 
 | | |
 | --- | --- |
 | [2.1](COMPLETED.md#21-reference-attributes--from-jastadd) | reference attributes, from JastAdd — settled **against**: awk needed a forward reference and two passes gave it |
 | [2.2](COMPLETED.md#22-strategies--from-stratego) | strategies, from Stratego — `%rewrite` |
+| [2.3](COMPLETED.md#23-scope-graphs--from-statix) | scope graphs, from Statix — settled **against**: Pascal units were described to test it, and resolution stayed a list |
 | [2.4](COMPLETED.md#24-inlining-a-block--from-solas) | inlining a block, from `solas` |
 
-### 2.3 Scope graphs — from Statix
-
-**Further off than it looked**, and further still after a third language.
-
-`with` blocks that reopen a record's namespace were named here as the thing
-that would break threading, and Pascal has them — and they turned out to need
-nothing but an environment that binds names to nodes, which was already
-expressible.
-
-A scope graph earns its place when resolution stops being a search through a
-list that the walk built in order: modules that import each other, scopes
-visible from more than one place, a name whose meaning depends on which path
-you reached it by. Pascal has none of those. **Solveig has one flat global
-namespace and awk has two** — globals, and a function's parameters — and awk's
-is resolved by C's own block scoping in the backend, without the description
-saying anything at all.
-
-Three languages, and the shape that would want this has not appeared. After the
-`with` case and after awk, it is worth being sceptical that the next one will
-either.
-
----
 
 ## 3. What is deliberately not here
 

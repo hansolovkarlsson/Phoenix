@@ -1,0 +1,229 @@
+(* units.phx -- Turbo Pascal's unit system, and nothing else.
+ *
+ *   phx languages/units/units.phx prog.pas
+ *
+ * **This description exists to answer a question**, and the question is
+ * [ROADMAP 2.3](../../docs/ROADMAP.md): does name resolution here ever stop
+ * being a search through a list the walk built in order, and start needing a
+ * scope graph?
+ *
+ * The entry names three things that would make one earn its place -- modules
+ * that import each other, scopes visible from more than one place, and a name
+ * whose meaning depends on which path you reached it by. Pascal as described
+ * in `../pascal/` has none of them. **Pascal with units has all three**, and
+ * they are not invented for the occasion: they are Turbo Pascal's, and `fpc
+ * -Mtp` compiles every program under `tests/` here.
+ *
+ * ---------------------------------------------------------------------------
+ * The five rules, every one of them settled against `fpc -Mtp`
+ *
+ *   1. `uses a, b` and both export `x`  ->  **b wins**. Later in the list
+ *      shadows earlier.
+ *   2. A unit's or a program's own declarations shadow anything it uses.
+ *   3. **Visibility is not transitive.** `uses c`, where `c`'s *interface*
+ *      uses `b`, does not give you `b`'s names. Each used unit contributes
+ *      exactly its own interface and nothing it reached through.
+ *   4. A cycle between two **implementation** `uses` clauses is legal, and
+ *      real programs have them.
+ *   5. A cycle between two **interface** `uses` clauses is refused:
+ *      *Circular unit reference between ug and uf*.
+ *
+ * ---------------------------------------------------------------------------
+ * What is left out, and why it is not a dodge
+ *
+ * **Several units in one file.** Turbo Pascal puts each in its own, and
+ * reading a second file before there is a tree to walk is `%include`'s
+ * question -- already answered, and answered the same way a cycle in rule 4
+ * ends: a file is read once however many ways it is reached. Re-proving that
+ * would not tell us anything about resolution, which is what 2.3 is about.
+ *
+ * Types, statements and code generation are gone for the same reason. What is
+ * left is declarations, `uses`, and names that refer to them -- which is the
+ * whole of the question and none of the rest of Pascal.
+ *)
+
+%import "lexical.phx" .
+%skip space brace-comment .
+
+symbol = ":=" | ";" | "," | ":" | "." | "(" | ")" | "=" .
+
+string = "'" { ! "'" } "'" .
+
+%syntax .
+%start file .
+
+(* A file is the units and then the program, which is the order a compiler
+ * meets them in when it follows `uses` from the program down. *)
+file = u:{ unit } p:program -> File(units: $u, main: $p) .
+
+(* **The interface and the implementation are nodes**, and that is the first
+ * thing the notation asked for rather than the first thing I wrote. A `down`
+ * clause is about a node and reaches all of it, so a `Unit` that held four
+ * lists could not hand one environment to its interface declarations and a
+ * larger one to its implementation's. Splitting them is what the language
+ * meant anyway. *)
+unit = "unit" n:name ";" i:interface m:implementation "end" "." 
+         -> Unit(name: $n, iface: $i, impl: $m) .
+
+interface      = "interface" u:usesopt d:{ decl } -> Interface(uses: $u, decls: $d) .
+(* A unit's **initialisation section** is where a name gets used inside an
+ * implementation, and it is the only place this description can ask which of
+ * the four scopes wins. Real Turbo Pascal, and `fpc -Mtp` runs it before the
+ * program's own body. *)
+implementation = "implementation" u:usesopt d:{ decl } i:initopt
+                   -> Implementation(uses: $u, decls: $d, init: $i) .
+
+initopt = "begin" b:{ stmt } -> Init(body: $b)
+        | -> Init(body: []) .
+
+program = "program" n:name ";" u:usesopt d:{ decl }
+          "begin" b:{ stmt } "end" "."
+            -> Program(name: $n, uses: $u, decls: $d, body: Init(body: $b)) .
+
+(* Each used unit is a **node**, which is what makes rule 1 fall out of the
+ * walk instead of needing a list reversed. See the `resolve` pass. *)
+usesopt = "uses" u:unitref { "," v:unitref -> $v } ";" -> [$u, ...$3]
+        | -> [] .
+unitref = n:name -> UnitRef(name: $n) .
+
+decl = "const" n:name "=" v:string ";" -> Const(name: $n, value: $v) .
+
+stmt = "writeln" "(" e:expr ")" ";" -> Writeln(value: $e) .
+
+expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
+     | n:name            -> Use(name: $n) .
+
+(* ------------------------------------------------------------------ *)
+(* Pass one: what does each unit's interface export?                  *)
+(*                                                                     *)
+(* Gathered on the way up, because a program uses units declared        *)
+(* above it and units use each other -- so nothing can be resolved      *)
+(* until every interface is known. The same two-pass shape a symbol      *)
+(* table has always needed here.                                        *)
+
+%pass interfaces
+
+  Const : entry = [[$name, $value]] .
+  otherwise entry = []
+
+  (* A unit's interface is exactly its own declarations. **Not what it
+   * reaches through**: rule 3 says visibility does not compose, so this
+   * is the one place where a graph would have had to be walked and is
+   * not. *)
+  Interface : exports = flatten($decls.entry)
+            : uses-of = $uses.name .
+  Unit      : export-of = [[$name, $iface.exports]]
+            : iuses-of  = [[$name, $iface.uses-of]] .
+  otherwise export-of = []
+  otherwise iuses-of  = []
+
+  File : interface-uses = flatten($units.iuses-of)
+       : units-by-name = flatten($units.export-of)
+       ! size(positions(flatten($units.export-of))) < size(flatten($units.export-of))
+           : "two units have the same name" .
+
+(* ------------------------------------------------------------------ *)
+(* Pass two: what does each name refer to?                            *)
+
+%pass resolve
+
+  (* The environment as it is being built, prepended to. A `UnitRef` is a
+   * node, so walking a `uses` clause **is** the fold: `uses a, b` visits
+   * `a` and then `b`, each putting its exports on the front, so `b` is
+   * found first. That is rule 1, and it needed no list reversed -- which
+   * is worth saying because the library has no way to reverse one. *)
+  thread env = []
+
+  (* ---- rule 5, and the one thing here the notation cannot finish ----
+   *
+   * `fpc` refuses an interface `uses` that comes back round: *Circular unit
+   * reference between ug and uf*. The reason is **separate compilation** --
+   * neither `.ppu` can be written without the other -- and not resolution, so
+   * in a single file it constrains nothing. It is checked anyway, for
+   * fidelity, and it is checked **only two units deep**:
+   *
+   *     A's interface uses B, and B's interface uses A back.
+   *
+   * `A -> B -> C -> A` is not caught. Catching one needs the transitive
+   * closure of the uses graph, and closure needs iteration to a fixpoint,
+   * which nothing in this notation does over *data*. `tests/three-cycle.pas`
+   * is that divergence, written down rather than hidden.
+   *
+   * It is worth being exact about what this shows: the limit is **graph
+   * reachability**, not name resolution. Resolution never needed a walk. *)
+  UnitRef : env = [...lookup($table, $name, []), ...$env]
+          ! not defined($table, $name)
+              : "no unit called '{}'" of $name
+          ! $in-interface
+            and defined(positions(lookup($iusestab, $name, [])), $mine)
+              : "circular unit reference between {} and {}" of $name, $mine .
+
+  (* Every unit's exports, by name, handed down from the root -- which is
+   * what pass one was for. *)
+  File : down table  = $units-by-name
+       : down iusestab = $interface-uses
+       : out = join([...$units.out, $main.out], "") .
+
+  (* A unit's interface sees its interface `uses` and its own interface
+   * declarations. Its implementation sees those **and** its own, which is
+   * why `down` had to be able to say two different things -- and why the
+   * two are separate nodes. *)
+  (* **An implementation needs its interface's exports, and a clause cannot
+   * reach a sibling.** What makes it reachable is that `exports` was worked
+   * out in the pass before this one -- so the parent can read a child's
+   * attribute on the way *in* and hand it to the other child. That is the
+   * same answer a forward reference gets, one pass earlier, and it is the
+   * first place this description needed anything at all. *)
+  Unit : down env  = []
+       : down mine  = $name
+       : down ifexp = $iface.exports
+       : out = "{}{}" of $iface.out, $impl.out .
+
+  Interface : down in-interface = true
+            : out = "" .
+
+  (* Its own declarations, handed to the initialisation section the same way
+   * the interface's are -- and for the same reason: they are a sibling of the
+   * statements that need them, and pass one already worked them out. *)
+  Implementation : down in-interface = false
+                 : down implexp = flatten($decls.entry)
+                 : out = $init.out .
+
+  Program : down env    = []
+          : down mine   = $name
+          : down in-interface = false
+          : down ifexp  = []
+          : down implexp = flatten($decls.entry)
+          : out = $body.out .
+
+  (* **The four scopes, in the order `fpc -Mtp` puts them.** The thread
+   * arriving here is what the `uses` clauses prepended, later-used first; the
+   * two lists in front of it are this unit's own, and they shadow it. Every
+   * one of those four positions was checked against fpc rather than reasoned
+   * out -- and the last of them, that a unit's own interface shadows what its
+   * implementation uses, is the one a reading would get wrong. *)
+  Init : down env = [...$implexp, ...$ifexp, ...$env]
+       : out = join($body.out, "") .
+
+  Writeln : out = $value.out .
+
+  (* A name is looked up in the environment as it stands where the name is,
+   * which for a program body is: its own declarations, then the units it
+   * uses, later-used first. `bind` puts a pair on the front, so the
+   * declarations shadow the uses without anybody arranging it. *)
+  Use : out = "{}\n" of slice(lookup($env, $name, "'?'"), 2,
+                              size(lookup($env, $name, "'?'")) - 1)
+      ! not defined($env, $name)
+          : "identifier not found \"{}\"" of $name .
+
+  Qualified : out = "{}\n"
+                of slice(lookup(lookup($table, $unit, []), $name, "'?'"), 2,
+                         size(lookup(lookup($table, $unit, []), $name, "'?'")) - 1)
+            ! not defined($table, $unit) : "no unit called '{}'" of $unit
+            ! defined($table, $unit)
+              and not defined(lookup($table, $unit, []), $name)
+                : "'{}' does not export '{}'" of $unit, $name .
+
+  otherwise out = "" .
+
+%driver run = interfaces, resolve -> out .

@@ -726,6 +726,7 @@ languages/    one directory per language described
   solveig/      a front end and a bytecode backend, against that project's own
   awk/          pattern-action rules, and a compiler to C, against /usr/bin/awk
   solvm/        an assembler for Solveig's .sob bytecode, against solas
+  units/        Turbo Pascal's units, described to answer a roadmap question
   calc/         the smallest language worth having a compiler for
   phx/          the notation described in itself
 tests/        tests of Phoenix rather than of any language
@@ -743,12 +744,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 184 checks, covering 35 Pascal programs against fpc
+make test       # 186 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 181 of the 184 need only what is vendored here, and the two
+repository** — 183 of the 186 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing. The assembler is in the 177:

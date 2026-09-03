@@ -1117,6 +1117,20 @@ else
     printf '  --    the conformance suite needs Solveig, which is not here\n'
 fi
 
+# Pascal units, which is an experiment rather than a language anybody wants
+# compiled: does resolution here need a scope graph? `fpc -Mtp` is the arbiter,
+# and it sees real separate units because the runner splits the file back into
+# them. languages/units/README.md has the answer.
+echo "Pascal units"
+accepts "the description reads" "$root/languages/units/units.phx"
+if un=$("$root/languages/units/tests/run.sh" 2>&1); then
+    n=$(printf '%s' "$un" | grep -c '^  ok')
+    report pass "$n checks, and the two divergences are still the ones written down"
+else
+    report fail "the unit experiment holds"
+    printf '%s\n' "$un" | grep -A5 FAIL | sed 's/^/        /' | head -14
+fi
+
 # The two tutorials in docs/, run rather than read. Each step builds the file
 # the page says to build, runs the command it shows, and checks that what came
 # back appears verbatim in the page -- so a pasted output that drifts fails

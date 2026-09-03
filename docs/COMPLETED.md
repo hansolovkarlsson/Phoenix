@@ -201,6 +201,57 @@ What the entry did not anticipate is that it needed **list patterns**: a value
 can be a list and a pattern could not be one, so the shape every optimisation
 over a message send asks about was not sayable.
 
+### 2.3 Scope graphs — from Statix
+
+**Settled against, and the way it was settled is the point.** The entry named
+three things that would make a scope graph earn its place: modules that import
+each other, scopes visible from more than one place, and a name whose meaning
+depends on which path you reached it by. Pascal has none, Solveig has one flat
+namespace, awk has two — so the entry had scepticism and no evidence.
+
+**Turbo Pascal's units have all three**, so they were described:
+[`languages/units/`](../languages/units/). Every rule was settled against
+`fpc -Mtp` before a line of grammar was written, including one a reading of the
+others gets wrong — inside a unit's initialisation section, the unit's own
+interface shadows what its implementation uses.
+
+Resolution stayed a list. All four scopes compose into one:
+
+    Init : down env = [...$implexp, ...$ifexp, ...$env] .
+
+*Later in a `uses` clause shadows earlier* needed no list reversed, which
+matters because there is no way to reverse one: each used unit is a **node**,
+so walking the clause **is** the fold.
+
+**And a cycle between two implementations costs nothing**, which is the whole
+finding. Because visibility does not compose — using `c` does not give you what
+`c`'s interface used — resolving a `uses` is one lookup in a table the first
+pass built, not a walk. *There is no traversal for a cycle to be a cycle in.*
+
+So the entry's first criterion, *modules that import each other*, turns out
+**not to be sufficient**. A cycle is only dangerous to a resolver that has to
+follow it.
+
+The description needed two things and both already existed: `interface` and
+`implementation` had to be **nodes**, because a `down` clause reaches a whole
+subtree and they need different environments — which is a truer tree anyway;
+and an implementation needs its **sibling** interface's exports, which a parent
+hands across because the earlier pass had already worked them out. The same
+answer a forward reference gets.
+
+**Two things here are graph-shaped, and neither is resolution.** Refusing a
+circular *interface* `uses` is reachability, and this description manages it
+only two units deep — a longer cycle needs transitive closure, and closure
+needs a fixpoint over *data*, which nothing in this notation does. And
+initialisation order is a topological sort. Both are in
+[`divergent/`](../languages/units/divergent/), written down rather than hidden,
+and the suite checks they are still the divergences they say they are.
+
+**What to look for instead**, if this is ever reopened: a language where
+visibility *composes* — Rust's `pub use`, ML's `open` inside a signature, a
+class hierarchy several classes share. That is criterion two and three, and
+Pascal units are not it.
+
 ### 2.4 Inlining a block — from `solas`
 
 Seven rewrite rules and a clause each. `solas` compiles the block of an
