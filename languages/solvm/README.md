@@ -8,6 +8,16 @@ bin/phx --raw languages/solvm/solvm-sob.phx prog.sasm > prog.sob
 solvm prog.sob
 ```
 
+## Writing for it
+
+| | |
+| --- | --- |
+| [manual.md](manual.md) | the machine and how to write for it, in the order you would learn it — including the six shapes `solas` inlines |
+| [reference.md](reference.md) | every mnemonic, directive and diagnostic |
+| [cheatsheet.md](cheatsheet.md) | one page |
+
+## Building it
+
 | | |
 | --- | --- |
 | [`solvm.phx`](solvm.phx) | the language: the grammar, the tree, and a pass that writes it back out |

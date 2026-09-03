@@ -1,0 +1,110 @@
+; All six constructs `solas` inlines, written out from the recipes in
+; manual.md -- which is the point of this program: if a recipe there is wrong,
+; this stops assembling to what solas emits.
+;
+; `languages/solvm/oracle/control.sol` is the Solveig it was written from.
+.slots 1
+
+; a := #5.
+        const   #5
+        setglob a
+        pop
+
+; a:greaterThan(#3):ifTrue({ "gt":display }).
+        global  a
+        const   #3
+        send    greaterThan, 1
+        jumpf   t-else, ifTrue
+        string  "gt"
+        send    display, 0
+        jump    t-end
+t-else:
+        nil
+t-end:
+        pop
+
+; a:greaterThan(#9):ifFalse({ "not gt":display }).
+        global  a
+        const   #9
+        send    greaterThan, 1
+        jumpf   f-body, ifFalse
+        nil
+        jump    f-end
+f-body:
+        string  "not gt"
+        send    display, 0
+f-end:
+        pop
+
+; a:greaterThan(#3):ifElse({ "big" }, { "small" }):display.
+        global  a
+        const   #3
+        send    greaterThan, 1
+        jumpf   e-two, ifElse
+        string  "big"
+        jump    e-end
+e-two:
+        string  "small"
+e-end:
+        send    display, 0
+        pop
+
+; i := #0.
+        const   #0
+        setglob i
+        pop
+
+; { i:lessThan(#2) }:whileTrue({ i := i:add(#1) }).
+w-top:
+        global  i
+        const   #2
+        send    lessThan, 1
+        exitf   w-done
+        global  i
+        const   #1
+        send    add, 1
+        setglob i
+        pop
+        loop    w-top
+w-done:
+        nil
+        pop
+
+; i:display.
+        global  i
+        send    display, 0
+        pop
+
+; a:greaterThan(#3):and({ a:lessThan(#9) }):display.
+        global  a
+        const   #3
+        send    greaterThan, 1
+        jumpf   a-short, and
+        global  a
+        const   #9
+        send    lessThan, 1
+        chkbool and
+        jump    a-done
+a-short:
+        const   #false
+a-done:
+        send    display, 0
+        pop
+
+; a:greaterThan(#9):or({ a:lessThan(#9) }):display.
+        global  a
+        const   #9
+        send    greaterThan, 1
+        jumpf   o-long, or
+        const   #true
+        jump    o-done
+o-long:
+        global  a
+        const   #9
+        send    lessThan, 1
+        chkbool or
+o-done:
+        send    display, 0
+        pop
+
+        halt

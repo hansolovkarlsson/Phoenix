@@ -161,7 +161,9 @@
                  : "no constant is spelled '{}' -- they are #true, #false and #nil" of $text .
 
   Slots : sl = [int($count)]
-        ! int($count) < 1 : "a frame has at least one slot, for the receiver" .
+        ! int($count) < 1 : "a frame has at least one slot, for the receiver"
+        ! int($count) > 255
+            : "a frame reserves at most 255 slots, and this asks for {}" of $count .
 
   (* ---- interning, said once ----
    *
@@ -211,7 +213,8 @@
    *
    * A definition emits nothing where it stands, so `pc` goes back untouched.
    *)
-  BlockDef : down heldpc = $pc
+  BlockDef : down bdepth = $bdepth + 1
+           : down heldpc = $pc
            : down heldnm = $names
            : down heldnt = $nametext
            : down heldks = $consts
@@ -258,9 +261,27 @@
                : "block '{}' has to end with return" of $name
            ! $pc > 65535
                : "block '{}' is {} bytes, and a jump offset is two bytes"
-                   of $name, $pc .
+                   of $name, $pc
 
-  Unit : ownlabels    = flatten($items.entry)
+             (* Three bounds the verifier enforces, checked here so that they
+              * arrive with a line of assembly rather than as a refusal to
+              * load. A frame holds the receiver and then the arguments, so it
+              * cannot be smaller than both. *)
+           ! int($arity) > 255
+               : "a block takes at most 255 arguments, and '{}' declares {}"
+                   of $name, $arity
+           ! int($slots) > 255
+               : "a block reserves at most 255 slots, and '{}' asks for {}"
+                   of $name, $slots
+           ! int($slots) < int($arity) + 1
+               : "'{}' takes {} arguments, so it needs at least {} slots -- the receiver is slot 0"
+                   of $name, $arity, int($arity) + 1
+           ! $bdepth > 16
+               : "'{}' is nested {} deep, and SolVM follows at most 16 frames"
+                   of $name, $bdepth .
+
+  Unit : down bdepth    = 0
+       : ownlabels    = flatten($items.entry)
        : ownblocktab  = positions(flatten($items.bdef))
        : ownnnames    = size($names)
        : ownnametext  = $nametext
