@@ -724,6 +724,7 @@ languages/    one directory per language described
   pascal/       the grammar, a typechecker, a compiler to C, and its tests
   solveig/      a front end and a bytecode backend, against that project's own
   awk/          pattern-action rules, and a compiler to C, against /usr/bin/awk
+  solvm/        an assembler for Solveig's .sob bytecode, against solas
   calc/         the smallest language worth having a compiler for
   phx/          the notation described in itself
 tests/        tests of Phoenix rather than of any language
@@ -741,18 +742,20 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 176 checks, covering 35 Pascal programs against fpc
+make test       # 179 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 174 of the 176 need only what is vendored here, and the two
+repository** — 177 of the 179 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
-skipped when it is absent rather than failing:
+skipped when it is absent rather than failing. The assembler is in the 177:
+its programs are held against the bytes they assembled to last time, so it is
+tested without SolVM and held *against* SolVM when there is one.
 
 ```sh
-SOLVEIG=/path/to/Solveig make test    # the other two, and every .sol there round-tripped
+SOLVEIG=/path/to/Solveig make test    # the other two, and the assembler against solas
 PHX_TEST_SOLVEIG=1 make test          # also emit Solveig from calc.phx and compile it
 ```
 
@@ -1000,6 +1003,27 @@ e2fsprogs uses to generate C error tables; compiled by
 [`languages/awk/awk-c.phx`](languages/awk/awk-c.phx) it becomes 1,149 lines of
 C and prints the same 56 lines that `/usr/bin/awk` does. **Nobody involved in
 writing it had heard of this project.**
+
+**And the fourth is a target rather than a language.**
+[`languages/solvm/`](languages/solvm/) is an assembler for Solveig's `.sob`
+bytecode: 21 mnemonics, labels, and blocks whose chunks nest. It is the
+tutorial's two-pass shape at full size — a threaded byte counter for the
+addresses, a gathered table for the labels — and the oracle is the same program
+written twice, in Solveig for `solas` and in assembly for this, compared
+*instruction by instruction* rather than only on what it prints:
+
+```
+ok    25 checks: the bytes, the round trip, the refusals, and solas
+```
+
+`count.sasm` is the loop and conditional whose disassembly is printed in
+SolVM's own `docs/BYTECODE.md`, written back out by hand — and it assembles to
+that listing exactly, `EXITIFF 17 -> 37` and `LOOP 30 -> 7` included.
+**Phoenix can emit `.sob` and cannot read it**, which is a fact about the
+notation rather than a gap: a length-prefixed format needs the match to depend
+on a count it has just read, and there is no computed repetition to say that
+with. So `solvm --dump` is the reading half, and comparing what it prints for
+two producers of one program is what makes the check above possible.
 
 The strongest available check that this reads real published grammars rather
 than only its own examples: [`languages/pascal/tests/grammar/pascal.bnf`](languages/pascal/tests/grammar/) is

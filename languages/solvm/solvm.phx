@@ -1,0 +1,211 @@
+(* solvm.phx -- an assembly language for SolVM, and the tree it builds.
+ *
+ *   phx --tree languages/solvm/solvm.phx prog.sasm
+ *   phx --driver render languages/solvm/solvm.phx prog.sasm
+ *
+ * **The language, and nothing about the file format.** The grammar, the tree,
+ * the checks that are about the *program* rather than about `.sob`, and a pass
+ * that writes the program back out. `solvm-sob.phx` imports this and adds the
+ * two passes that turn it into bytecode.
+ *
+ * ---------------------------------------------------------------------------
+ * What this is for
+ *
+ * SolVM's instruction set is documented in one place --
+ * `solum/include/solum/bytecode.h` in the Solveig repository -- and its
+ * container in another, `solum/include/solum/serialize.h`. There was a
+ * compiler that produced `.sob` (`solas`), a disassembler that read it
+ * (`solvm --dump`), and nothing in between: no way to write a chunk by hand
+ * and no way to hand-check what a code generator ought to have emitted.
+ *
+ * **Phoenix can emit `.sob` and cannot read it**, and that is not an
+ * oversight. The format is length-prefixed -- a count, then that many things
+ * -- so parsing one needs the match to depend on a number it has just read,
+ * and there is no way to say that in this notation. So this is the producing
+ * half only; `solvm --dump` stays the reading half.
+ *
+ * ---------------------------------------------------------------------------
+ * The one thing to know about the syntax
+ *
+ * **Every mnemonic is a reserved word**, worked out from this grammar rather
+ * than declared -- so a label cannot be called `loop` and `arity` and `slots`
+ * are spoken for. A *selector* that collides with one is written in quotes:
+ * `send "return", 0`.
+ *)
+
+(* ------------------------------------------------------------------ *)
+(* Characters to tokens.                                              *)
+
+%fragment letter digit escape .
+
+letter = "a" .. "z" | "A" .. "Z" | "_" .
+digit  = "0" .. "9" .
+
+name = letter { letter | digit | "-" } .
+
+(* A frame slot, an argument count, a nesting depth, a line: all bare. *)
+integer = digit { digit } .
+
+(* `#45` is an integer constant and `45.5` is a float one, which is Solveig's
+ * own spelling and is what `solvm --dump` prints. Longest match settles `45`
+ * against `45.5` without either rule knowing about the other. *)
+intlit  = "#" [ "-" ] digit { digit } .
+reallit = [ "-" ] digit { digit } "." digit { digit } .
+
+(* `#true`, `#false` and `#nil`. **A word-shaped literal in the syntactic half
+ * becomes a reserved word**, so spelling these `true` and `false` would take
+ * those names away from every other position -- and Solveig reaches its
+ * booleans *as globals*, so `global true` is the first thing anybody writes.
+ * The marker keeps them out of the way, and which ones there are is a clause
+ * rather than a set of literals, so the complaint about a fourth one can say
+ * what the three are. *)
+valuelit = "#" letter { letter } .
+
+(* Enumerated rather than "a backslash and then anything": `! ""` never
+ * matches, since an empty literal always matches and so *one character
+ * provided nothing matches here* always fails. *)
+escape = "\\" ( "\"" | "\\" | "n" | "t" | "r" ) .
+text   = "\"" { escape | ! "\"" } "\"" .
+
+(* A directive is a word with a dot in front, which is what keeps `.end` from
+ * having to be told apart from a label called `end`. *)
+directive = "." letter { letter } .
+
+symbol  = ":" | "," .
+comment = ";" { ! "\n" } .
+space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+
+%skip space comment .
+
+(* ------------------------------------------------------------------ *)
+(* Tokens to a chunk.                                                 *)
+
+%syntax .
+%start unit .
+
+unit = { top } -> Unit(items: $1) .
+
+(* `.slots` belongs to the script and to nothing else: a block declares its
+ * own frame in its header, so the grammar puts the directive where it means
+ * something rather than accepting it anywhere and complaining later. *)
+top = ".slots" n:integer -> Slots(count: $n)
+    | item .
+
+item = ".block" b:name "arity" a:integer "slots" s:integer c:{ item } ".end"
+         -> BlockDef(name: $b, arity: $a, slots: $s, items: $c)
+     | l:name ":" -> Label(name: $l)
+     | instruction .
+
+(* The instruction set, in opcode order, which is the order
+ * `bytecode.h` declares it in. *)
+instruction =
+    "const"   k:constant                -> Const(value: $k)
+  | "nil"                               -> Nil
+  | "global"  n:sel                     -> Global(sel: $n)
+  | "setglob" n:sel                     -> SetGlobal(sel: $n)
+  | "local"   s:integer                 -> Local(slot: $s)
+  | "setlocl" s:integer                 -> SetLocal(slot: $s)
+  | "outer"   d:integer "," s:integer   -> Outer(depth: $d, slot: $s)
+  | "setoutr" d:integer "," s:integer   -> SetOuter(depth: $d, slot: $s)
+  | "block"   b:name                    -> PushBlock(name: $b)
+  | "string"  t:sel                     -> Str(sel: $t)
+  | "symbol"  n:sel                     -> Sym(sel: $n)
+  | "send"    n:sel "," a:integer       -> Send(sel: $n, argc: $a)
+  | "setslot" n:sel                     -> SetSlot(sel: $n)
+  | "jump"    t:name                    -> Jump(target: $t)
+  | "jumpf"   t:name "," s:sel          -> JumpFalse(target: $t, sel: $s)
+  | "exitf"   t:name                    -> ExitFalse(target: $t)
+  | "chkbool" s:sel                     -> CheckBool(sel: $s)
+  | "loop"    t:name                    -> Loop(target: $t)
+  | "pop"                               -> Pop
+  | "return"                            -> Return
+  | "halt"                              -> Halt .
+
+(* A name, or -- for a selector a reserved word has taken, or one with a
+ * character a name cannot hold -- a text literal. *)
+sel = n:name -> Bare(word: $n)
+    | t:text -> Quoted(raw: $t) .
+
+constant = intlit   -> IntConst(text: $1)
+         | reallit  -> RealConst(text: $1)
+         | valuelit -> NamedConst(text: $1) .
+
+(* ------------------------------------------------------------------ *)
+(* What a selector's text actually is.                                *)
+(*                                                                     *)
+(* Its own pass, because both backends need it and neither should       *)
+(* work it out again -- and because the quotes come off in a clause,     *)
+(* which is the only place that knows how this language spells a         *)
+(* string.                                                              *)
+
+%pass selectors
+
+  (* `Bare` needs no clause: it carries a **field** called `word`, and a field
+   * is read before an attribute, so the node answers for itself. That is what
+   * the `otherwise` at the foot of this pass is "otherwise" to. *)
+
+  (* `\n`, `\t` and `\"` come off; a doubled backslash is refused rather
+   * than guessed at. Unescaping in a notation with no conditional is a
+   * chain of split-and-join, and each step here can only ever fire on
+   * what the step before it left -- which holds because `\\` is not
+   * accepted, so nothing can produce another escape's trigger. *)
+  Quoted : inner = slice($raw, 2, size($raw) - 1)
+         : nl    = join(split($inner, "\\n"), "\n")
+         : tab   = join(split($nl, "\\t"), "\t")
+         : cr    = join(split($tab, "\\r"), "\r")
+         : word  = join(split($cr, "\\\""), "\"")
+         ! size(split($raw, "\\\\")) > 1
+             : "a doubled backslash in a text literal is not supported" .
+
+  otherwise word = "" .
+
+(* ------------------------------------------------------------------ *)
+(* Writing it back out.                                               *)
+(*                                                                     *)
+(* Not decoration: a program that parses, renders and parses to the     *)
+(* same tree is the cheapest evidence the grammar reads what it looks    *)
+(* like it reads -- and it is the half of the testing that needs no      *)
+(* SolVM. It is deliberately *not* the same shape as `solvm --dump`,     *)
+(* which prints resolved offsets and side-table entries: that is a       *)
+(* listing of a chunk, and this is the source of one.                    *)
+
+%pass render
+
+  Bare       : out = $word .
+  Quoted     : out = "{}" of $raw .
+
+  IntConst   : out = $text .
+  RealConst  : out = $text .
+  NamedConst : out = $text .
+
+  Const      : out = "    const   {}" of $value.out .
+  Nil        : out = "    nil" .
+  Global     : out = "    global  {}" of $sel.out .
+  SetGlobal  : out = "    setglob {}" of $sel.out .
+  Local      : out = "    local   {}" of $slot .
+  SetLocal   : out = "    setlocl {}" of $slot .
+  Outer      : out = "    outer   {}, {}" of $depth, $slot .
+  SetOuter   : out = "    setoutr {}, {}" of $depth, $slot .
+  PushBlock  : out = "    block   {}" of $name .
+  Str        : out = "    string  {}" of $sel.out .
+  Sym        : out = "    symbol  {}" of $sel.out .
+  Send       : out = "    send    {}, {}" of $sel.out, $argc .
+  SetSlot    : out = "    setslot {}" of $sel.out .
+  Jump       : out = "    jump    {}" of $target .
+  JumpFalse  : out = "    jumpf   {}, {}" of $target, $sel.out .
+  ExitFalse  : out = "    exitf   {}" of $target .
+  CheckBool  : out = "    chkbool {}" of $sel.out .
+  Loop       : out = "    loop    {}" of $target .
+  Pop        : out = "    pop" .
+  Return     : out = "    return" .
+  Halt       : out = "    halt" .
+
+  Label      : out = "{}:" of $name .
+  Slots      : out = ".slots {}" of $count .
+
+  BlockDef   : out = ".block {} arity {} slots {}\n{}\n.end"
+                 of $name, $arity, $slots, join($items.out, "\n") .
+
+  Unit       : out = join($items.out, "\n") .
+
+%driver render = selectors, render -> out .

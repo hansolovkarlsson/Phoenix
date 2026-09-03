@@ -1,0 +1,55 @@
+; Everything the other programs do not reach: a symbol, float constants, an
+; inlined `and` with its CHKBOOL, and a slot written on an object.
+;
+; The interning order is what makes the side-table indices come out the same
+; as `solas`'s -- a name lands where it is first seen, so writing the
+; instructions in the same order gives the same table.
+;
+; `languages/solvm/oracle/mixed.sol` is the Solveig this was written from:
+;
+;   'greeting:display.
+;   3.5:add(1.25):display.
+;   true:and({ false }):display.
+;   obj := object:new.
+;   obj:size := #7.
+;   obj:size:display.
+.slots 1
+
+        symbol  greeting
+        send    display, 0
+        pop
+
+        const   3.5
+        const   1.25
+        send    add, 1
+        send    display, 0
+        pop
+
+; `true` and `false` are globals, and the value an inlined `and` answers when
+; it short-circuits is a boolean *constant* -- so both spellings turn up here.
+        global  true
+        jumpf   and-false, and
+        global  false
+        chkbool and
+        jump    and-done
+and-false:
+        const   #false
+and-done:
+        send    display, 0
+        pop
+
+        global  object
+        send    new, 0
+        setglob obj
+        pop
+
+        global  obj
+        const   #7
+        setslot size
+        pop
+
+        global  obj
+        send    size, 0
+        send    display, 0
+        pop
+        halt

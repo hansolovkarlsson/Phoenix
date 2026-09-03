@@ -332,9 +332,16 @@ wherever something is emitted after the things it is about: the line a jump's
 own bytes belong to is where its operand *ends*.
 
 That one clause is a line-number table.
+
+**And this whole tutorial exists at full size.**
+[`languages/solvm/`](../languages/solvm/) is an assembler for that same
+bytecode — 21 mnemonics, labels, and blocks that nest — built out of exactly
+the two passes above: a threaded byte counter and a gathered label table,
+plus `down` on a *threaded* attribute where a block restarts its chunk's
+tables. It assembles the loop-and-conditional listing printed in SolVM's own
+documentation to that listing exactly, offset for offset.
 [`languages/solveig/solveig-sob.phx`](../languages/solveig/solveig-sob.phx) is
-this at full size: a length-prefixed bytecode with nested method chunks, which
-`solvm` runs.
+the harder direction: a whole language down to the same format.
 
 ## 6. Writing it out, and what that proves
 

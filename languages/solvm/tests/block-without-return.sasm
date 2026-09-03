@@ -1,0 +1,5 @@
+.slots 1
+    halt
+.block b arity 0 slots 1
+    nil
+.end

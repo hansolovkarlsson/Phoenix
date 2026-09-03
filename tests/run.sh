@@ -1095,6 +1095,22 @@ else
     printf '  --    the conformance suite needs Solveig, which is not here\n'
 fi
 
+# The assembler: SolVM assembly to `.sob`, which is the *producing* half of a
+# format Phoenix cannot read -- a length-prefixed binary needs the match to
+# depend on a count it has just read, and the notation cannot say that. So
+# `solvm --dump` is the reading half, and comparing what it prints for two
+# producers of one program is the oracle. See languages/solvm/README.md.
+echo "SolVM assembly"
+accepts "the language reads"  "$root/languages/solvm/solvm.phx"
+accepts "and the assembler"   "$root/languages/solvm/solvm-sob.phx"
+if sa=$("$root/languages/solvm/tests/run.sh" 2>&1); then
+    n=$(printf '%s' "$sa" | grep -c '^  ok')
+    report pass "$n checks: the bytes, the round trip, the refusals$(printf '%s' "$sa" | grep -q 'solas' && printf ', and solas')"
+else
+    report fail "the assembler agrees with solas"
+    printf '%s\n' "$sa" | grep -A4 FAIL | sed 's/^/        /' | head -14
+fi
+
 # awk: the third language, and the first whose grammar is not vendored -- there
 # is no awk grammar on this machine to hold it against, so the oracle carries
 # the whole weight. `/usr/bin/awk` is the arbiter of what awk means, and

@@ -1,0 +1,8 @@
+.slots 1
+    halt
+.block b arity 0 slots 1
+    return
+.end
+.block b arity 0 slots 1
+    return
+.end

@@ -1,0 +1,41 @@
+; The loop and the conditional from docs/BYTECODE.md in the Solveig
+; repository, written out by hand. `solas` compiles this from
+;
+;   i := #0.
+;   { i:lessThan(#3) }:whileTrue({ i := i:add(#1) }).
+;   i:greaterThan(#1):ifElse({ "big" }, { "small" }):display.
+;
+; and neither block is ever built: the condition is inline, `loop` goes back
+; to it, and `ifElse` is a `jumpf` past the first arm and a `jump` over the
+; second.
+.slots 1
+
+        const   #0
+        setglob i
+        pop
+top:
+        global  i
+        const   #3
+        send    lessThan, 1
+        exitf   done
+        global  i
+        const   #1
+        send    add, 1
+        setglob i
+        pop
+        loop    top
+done:
+        nil
+        pop
+        global  i
+        const   #1
+        send    greaterThan, 1
+        jumpf   else, ifElse
+        string  "big"
+        jump    endif
+else:
+        string  "small"
+endif:
+        send    display, 0
+        pop
+        halt

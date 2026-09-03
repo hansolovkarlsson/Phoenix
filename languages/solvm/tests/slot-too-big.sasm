@@ -1,0 +1,4 @@
+.slots 1
+    local   300
+    pop
+    halt

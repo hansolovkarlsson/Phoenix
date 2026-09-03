@@ -1,0 +1,4 @@
+.slots 1
+    block   missing
+    pop
+    halt

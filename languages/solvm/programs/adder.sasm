@@ -1,0 +1,30 @@
+; A block that reads the frame it was written in, which is the case that makes
+; every table nest: `{ n | { m | n:add(m) }:value(#40) }:value(#2)`.
+;
+; The inner block reads `n` one frame out with `outer 1, 1`, so `outer-block`
+; carries the CAPTURES flag -- which the assembler works out from the `outer`
+; rather than asking for it. The inner block is called while that frame is
+; still alive; a block that outlives its home frame is a run-time error in
+; SolVM, and no flag changes that.
+.slots 1
+
+        block   outer-block
+        const   #2
+        send    value, 1
+        send    display, 0
+        pop
+        halt
+
+.block outer-block arity 1 slots 2
+        block   inner-block
+        const   #40
+        send    value, 1
+        return
+
+    .block inner-block arity 1 slots 2
+        outer   1, 1
+        local   1
+        send    add, 1
+        return
+    .end
+.end

@@ -1,0 +1,7 @@
+; The smallest program that says anything.
+.slots 1
+
+    string  "hello, world"
+    send    display, 0
+    pop
+    halt
