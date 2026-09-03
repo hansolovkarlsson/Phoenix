@@ -125,13 +125,41 @@ test says the same thing a build-time read would have, at the same moment.
 ## What the assembler checks, and what it cannot
 
 It refuses a label that is not defined, a `jump` whose target is behind it
-(that is `loop`) and a `loop` whose target is ahead (that is `jump`), a slot,
-depth or argument count that will not fit its byte, a slot past the frame it
-addresses — `outer 1, 99` into a frame of two as well as `local 99` — a block named twice in one
-chunk, a `block` naming no definition, a script that does not end in `halt`, a
-block that does not end in `return`, a chunk too long for a two-byte offset,
-and an `outer` depth past the outermost frame — the lexical chain is as long
-as the nesting, so how far out a chunk can reach is knowable from the text.
+(that is `loop`) and a `loop` whose target is ahead (that is `jump`), a depth
+or argument count that will not fit its byte, a slot past the frame it
+addresses — `outer 1, 99` into a frame of two as well as `local 99` — a block
+named twice in one chunk, a `block` naming no definition, a script that does
+not end in `halt`, a block that does not end in `return`, a chunk too long for
+a two-byte offset, and an `outer` depth past the outermost frame or short of
+the innermost.
+
+### Held against the verifier, rule by rule
+
+`verify_chunk` in `solum/src/serialize.c` is the list this is measured against,
+and every rule in it is accounted for here:
+
+| what the loader refuses | here |
+| --- | --- |
+| a byte that is not an opcode; an instruction running off the end | by construction |
+| a constant, name or selector index the chunk has not got | by construction — indices come from the interning tables |
+| `slot >= slot_count` for `local`/`setlocl` | **checked** |
+| `d < 1 \|\| d > ancestor_count` for `outer`/`setoutr` | **checked**, both ends |
+| `slot >= ancestors[d - 1]` for `outer`/`setoutr` | **checked** |
+| a block index the chunk has not got | **checked** |
+| `OP_BLOCK` naming a method that is not a block | by construction — the flag is always set |
+| a jump outside the code, or into the middle of an instruction | by construction — offsets come from labels |
+| code not ending in `HALT`/`RETURN` | **checked**, and more strictly |
+| `slot_count < arity + 1`, or over 255 | **checked** |
+| `verify_stack_heights` | **not checked** — see below |
+
+`SOL_MAX_NESTING` is 16 and this refuses a chunk nested deeper, which is the
+same bound; a chunk 16 deep doing `outer 16` assembles, loads and runs, and
+`outer 17` from it does not.
+
+**There is no one-byte bound on a slot, and that is not an omission.** A frame
+is at most 255 slots, so *past the frame it was declared in* is strictly
+tighter — no program the byte bound would catch escapes the frame bound, and
+the frame bound says something useful when it fires.
 
 It also refuses a **slot named as something the frame has not got**. A frame
 may be declared as its slots' names — `slots self, n` — and where it is, an

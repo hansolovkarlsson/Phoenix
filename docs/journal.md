@@ -3207,3 +3207,44 @@ from 58 to **59** — one test, one check. The number was written from memory
 instead of from `grep -c '^  ok'`, which is the third counting error this week
 and the second in a commit message, where it cannot be edited afterwards. The
 run is cheap and the claim is not; there is no reason to have guessed.
+
+### Asked a third time whether anything was open, and this time nothing was
+
+Twice today "anything still open?" found a defect, so the third asking got a
+method instead of a memory. Two sweeps.
+
+**Every attribute in both descriptions is defined and read.** The refactor
+moved `snames`, `sl`, `declared` and `ownnslots` between passes, and a move is
+where a stranded definition hides. Counting definitions against reads found
+none stranded, and `sl` reads only through `$items.sl`, which is what it is
+for.
+
+**Every rule in `verify_chunk` is accounted for.** `solum/src/serialize.c` is
+the list the assembler is really measured against, and it had never been walked
+end to end — the README's *what it checks, and what it cannot* was written from
+what had been implemented rather than from what the loader refuses. Reading it
+against the code: eleven rules, of which four are guaranteed by construction,
+six are checked, and one is `verify_stack_heights`.
+
+That last one was already named as out of reach, and the reason stands: two
+paths reaching one instruction at different depths is a dataflow analysis, not
+a walk over a tree. What changed is that it is now the *only* one, which is a
+much stronger sentence than the list it replaces — and the README says so as a
+table, so the next person can check it in a minute rather than an hour.
+
+### The nesting bound, generated rather than reasoned about
+
+`SOL_MAX_NESTING` is 16 and this refuses `$bdepth > 16`, which looks like the
+same bound and is the kind of looking that was wrong twice today. So the
+programs got generated: sixteen nested blocks with `outer 16, 0` at the bottom.
+
+It assembles, loads and runs — `OUTER 0 ^16` in the dump, sixteen chunks.
+Seventeen deep is refused here, and `outer 17` from the sixteen-deep one is
+refused here. The edge is exact at both ends, and the `child_count` clamp in
+`serialize.c` that looked like an off-by-one is unreachable: it bites at an
+ancestor count of 16, whose children are 17 deep and already refused.
+
+> **Two of today's three bugs came from reading a bound instead of running
+> one.** Generating the program at the boundary costs a minute and settles it.
+
+189 tests, `main` clean at `28f0045`.

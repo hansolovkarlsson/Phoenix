@@ -415,3 +415,59 @@ predates the feature: `outer 5, 1`, numeric, at the top level, had always
 assembled cleanly. **Writing a message forced the question the feature had not
 raised**, which is the third time this week a page or a message has found a
 defect the code did not.
+
+## 8. Three predictions in one afternoon, and what each was worth
+
+The afternoon made three calls in a row and got a different kind of answer to
+each. Together they say something the individual entries do not.
+
+### Right, and for a reason that generalises
+
+Deferring the `outer` slot bound was called *a decision rather than a typing
+job*, on the grounds that it widens **slot n is past this frame, which has m**
+from `local` to `outer` and that message has a test naming it. That held. What
+it did not anticipate is *why* it was a decision: the bound was in the wrong
+file. It came from a `slots` in the source, so it was a program check sitting
+in the pass that makes bytes, and moving it to `solvm.phx` covered `outer` as a
+side effect rather than as work.
+
+**The estimate was right about the shape and wrong about the cause.** It was
+called a decision because of a test; it was a decision because of a boundary.
+
+### Wrong in a direction worth having
+
+The change made another check **unreachable** — `layout`'s one-byte bound on a
+slot, which a frame of at most 255 slots strictly dominates. That was not
+predicted at all, and it is the more interesting half: the byte bound had never
+been a check, only an ordering. It fired first because it *ran* first.
+
+Nothing about writing the feature would have surfaced that. It surfaced because
+a test failed with a *better* message than the one it expected, and the failing
+test was read rather than repaired.
+
+> **A test that fails with a better answer than it asked for is reporting a
+> design change, not a regression.**
+
+### Not a prediction at all, which is the point
+
+The third was refusing to answer *anything open?* from memory. Twice that
+question had already found a defect the same day, so the third asking got a
+method: count every attribute's definitions against its reads, and walk
+`verify_chunk` rule by rule instead of consulting the README's summary of it.
+
+It found nothing wrong — and that is the first time this week the answer has
+been *nothing*, said with something behind it. The README now carries the
+verifier as a table so the claim is re-checkable in a minute.
+
+### What the three have in common
+
+Two of the day's three defects came from **reading a bound rather than running
+one**: `d < 1` in a line of C that was summarised instead of quoted, and a
+nesting limit that looked identical on both sides. The third came from writing
+a number from memory that `grep -c` would have given exactly.
+
+The repository already knew this about documentation — *run the documentation
+whose claims are not already held by something else*, § 6. Today extended it to
+bounds, which are documentation of a sort:
+
+> **A bound is a claim. Generate the program that sits on it.**
