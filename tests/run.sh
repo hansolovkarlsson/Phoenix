@@ -505,6 +505,32 @@ else
     report pass "and every refusal it names"
 fi
 
+# docs/reference.md § 11, the same way. The library was held by nothing:
+# eighteen of its twenty-two functions had no executable check at all, and that
+# page is full of the claims that rot -- `each` running to the longer of two
+# lists is written down *because* taking the shorter turned `abs(i)` into
+# `abs()`, and `lookup` comparing the way `=` compares is there because
+# comparing text only meant an integer key never matched and never said so.
+lclaims=$(grep -c '^ *! ' "$root/tests/grammars/library.phx")
+accepts "$lclaims claims from docs/reference.md section 11 hold" \
+        "$root/tests/grammars/library.phx" "$root/tests/sources/one-node.txt"
+
+lrefusals="$root/tests/grammars/library-refused.phx"
+lout=$("$phx" --quiet "$lrefusals" "$root/tests/sources/one-node.txt" 2>&1)
+lmissing=""
+for want in "does not narrow a float" \
+            "cannot split on nothing" \
+            "writes one to eight bytes, not 9" \
+            "writes one to eight bytes, not 0" \
+            "a float is four or eight bytes"; do
+    printf '%s' "$lout" | grep -qF -- "$want" || lmissing="$lmissing [$want]"
+done
+if [ -z "$lmissing" ]; then
+    report pass "and the refusals it names"
+else
+    report fail "and the refusals it names" "missing:$lmissing"
+fi
+
 # The conformance rule, applied to the page the rule is *about*: the same
 # claims, and the same complaints about breaking them, from `phx` and from a
 # compiler `phx` wrote.
@@ -517,6 +543,15 @@ if "$phx" "$root/tests/grammars/semantics.phx" -o "$tmp0/sem.c" 2>/dev/null \
         report pass "and hold in a compiler phx wrote"
     else
         report fail "and hold in a compiler phx wrote"
+    fi
+
+    # The library's claims through the same two implementations.
+    if "$phx" "$root/tests/grammars/library.phx" -o "$tmp0/lib.c" 2>/dev/null \
+       && cc -o "$tmp0/libc" "$tmp0/lib.c" 2>/dev/null \
+       && "$tmp0/libc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+        report pass "and the library's do too"
+    else
+        report fail "and the library's do too"
     fi
 
     "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-phx" >/dev/null

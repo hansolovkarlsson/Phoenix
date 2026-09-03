@@ -1,0 +1,39 @@
+(* The other half of docs/reference.md § 11: what that page says is an
+ * **error**.
+ *
+ * Four refusals are named there in so many words, and each is a place the
+ * obvious answer would be wrong rather than absent -- a narrowing with no
+ * direction, a split with nothing to split on, a width that cannot hold what
+ * it is given. A library that quietly did any of them would be a library two
+ * backends could disagree about.
+ *
+ * One clause per refusal, all in one pass: a clause whose value cannot be
+ * worked out reports and leaves a failure behind, and the clauses after it
+ * still run.
+ *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%pass refused
+
+  (* "An integer answers itself; **a float is refused** -- narrowing has a
+   * direction, so it is named." *)
+  Case : a = int(1.5)
+
+         (* "Splitting on nothing is an error." *)
+       : b = split("a,b", "")
+
+         (* "Width is 1 to 8." *)
+       : c = bytes(1, 9)
+       : d = bytes(1, 0)
+
+         (* "A float is written as its IEEE 754 bits, at width 8 or 4. Narrower
+          * is refused rather than quietly rounded." *)
+       : e = bytes(1.0, 2) .
+
+%driver check = refused .

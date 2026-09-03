@@ -871,6 +871,10 @@ page*. It was added after reading them had missed three defects that running
 them found in one pass — including a command using a driver the page never
 told the reader to write.
 
+[semantics.md](semantics.md) and [reference.md § 11](reference.md#11-the-library)
+are executable for the same reason, and between them 110 claims and their
+refusals run on every build, through `phx` and through a compiler `phx` wrote.
+
 A round trip is *not* a substitute. Three tests agreed with each other for
 months because they all asked the same wrong question: a miscounted `...`
 spread built a wrong tree, wrote it back out wrongly *in the same way*, and

@@ -1,0 +1,151 @@
+(* docs/reference.md § 11, made executable.
+ *
+ * `semantics.phx` does this for docs/semantics.md -- the arithmetic, the
+ * comparisons, the formatting. **The library was held by nothing**: eighteen of
+ * its twenty-two functions had no executable check at all, and the page
+ * describing them is full of exactly the claims that rot, because nearly every
+ * one is an edge case written down *because somebody got it wrong*.
+ *
+ * `each` running to the longer of two lists is on that page because taking the
+ * shorter turned `abs(i)` into `abs()`. `lookup` comparing the way `=` compares
+ * is there because comparing text only meant an integer key never matched and
+ * never said so. Those are the sentences this file is about.
+ *
+ * One check per claim, in the order the page makes them. A check that fires
+ * names the sentence it came from.
+ *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%pass claims
+
+  (* ---- environments ---- *)
+  Case ! not (size(empty) = 0)          : "empty is the empty environment"
+       ! not (empty() = empty)          : "and empty() is the same thing"
+
+         (* "bind puts a pair on the front, so shadowing is what naturally
+          * happens and nobody implemented it" *)
+       ! not (lookup(bind(bind(empty, "a", 1), "a", 2), "a") = 2)
+           : "bind puts a pair on the front, so the later one shadows"
+       ! not (size(bind(bind(empty, "a", 1), "a", 2)) = 2)
+           : "and the earlier one is still there under it"
+
+         (* "name may be a list of names -- as many values as names binds them
+          * pairwise, one value binds every name to it" *)
+       ! not (lookup(bind(empty, ["a", "b"], [1, 2]), "b") = 2)
+           : "as many values as names binds them pairwise"
+       ! not (lookup(bind(empty, ["a", "b"], 7), "a") = 7)
+           : "and one value binds every name to it"
+       ! not (lookup(bind(empty, ["a", "b"], 7), "b") = 7)
+           : "every name, not the first"
+
+       ! not (lookup(bind(empty, "k", 5), "k") = 5) : "lookup answers the value"
+       ! not (lookup(empty, "k") = nil)             : "or nil"
+       ! not (lookup(empty, "k", "fallback") = "fallback")
+           : "or the default it was given"
+       ! not (defined(bind(empty, "k", 5), "k"))    : "defined answers a boolean"
+       ! not (defined(empty, "k") = false)          : "and false when it is absent"
+
+         (* "The index is zero-based, which is what turns a list of names into
+          * slot numbers." The one exception in a one-based notation. *)
+       ! not (lookup(positions(["a", "b", "c"]), "a") = 0)
+           : "positions is zero-based"
+       ! not (lookup(positions(["a", "b", "c"]), "c") = 2)
+           : "and counts along the list"
+       ! not (lookup(positions(["a", "b", "a"]), "a") = 0)
+           : "a repeated element keeps its first position"
+       ! not (size(positions(["a", "b", "a"])) = 2)
+           : "and is one entry, not two"
+
+         (* "Keys are compared the way `=` compares, not as text only." An
+          * integer key used to never match and never say so. *)
+       ! not (lookup([[1, "int"]], 1) = "int")   : "a key is compared the way = compares"
+       ! not (lookup([[1, "int"]], "1", "no") = "no")
+           : "so text and an integer are different keys"
+
+  (* ---- conversions ---- *)
+       ! not (int("45") = 45)          : "int reads text"
+       ! not (int("-3") = 0 - 3)       : "including a negative"
+       ! not (int(45) = 45)            : "an integer answers itself"
+       ! not (int("ff", 16) = 255)     : "int takes a base"
+       ! not (int("1010", 2) = 10)     : "as low as 2"
+       ! not (int("z", 36) = 35)       : "and as high as 36"
+       ! not (float("1.5") = 1.5)      : "float reads text"
+       ! not (float(3) = 3.0)          : "and widens an integer"
+       ! not (text(45) = "45")         : "text writes a value"
+       ! not (text(true) = "true")     : "including a boolean"
+
+         (* "a float to an integer, saying which direction" *)
+       ! not (floor(1.7) = 1)          : "floor goes down"
+       ! not (floor(0.0 - 1.2) = 0 - 2)  : "and down for a negative too"
+       ! not (ceiling(1.2) = 2)        : "ceiling goes up"
+       ! not (ceiling(0.0 - 1.7) = 0 - 1) : "and up for a negative"
+       ! not (round(1.5) = 2)          : "round goes to the nearest"
+       ! not (truncate(1.7) = 1)       : "truncate goes toward zero"
+       ! not (truncate(0.0 - 1.7) = 0 - 1) : "from either side"
+
+  (* ---- arithmetic the target's way ---- *)
+       ! not (quotient(0 - 7, 2) = 0 - 3)  : "quotient truncates toward zero"
+       ! not (remainder(0 - 7, 2) = 0 - 1) : "and remainder carries the sign of the left"
+
+  (* ---- text ---- *)
+       ! not (size("hello") = 5)              : "size counts bytes"
+       ! not (slice("abcdef", 2, 4) = "bcd")  : "slice is one-based, both ends included"
+       ! not (slice("abc", 0, 99) = "abc")    : "out-of-range ends are clamped"
+       ! not (slice("abc", 3, 1) = "")        : "and a backwards range is empty"
+       ! not (size(split("a,b,c", ",")) = 3)  : "split answers a list"
+       ! not (at(split("a,b,c", ","), 2) = "b") : "of the pieces between"
+       ! not (size(split("abc", ",")) = 1)    : "a separator that is absent gives one piece"
+       ! not (at(split(",a", ","), 1) = "")   : "and one at the start gives an empty first"
+       ! not (join(["a", "b", "c"]) = "abc")  : "join puts them together"
+       ! not (join(["a", "b"], "-") = "a-b")  : "with what it was given between"
+
+         (* The page's own worked example: `'it''s'` to `it's`, which cannot be
+          * written any other way here. *)
+       ! not (join(split(slice("'it''s'", 2, size("'it''s'") - 1), "''"), "'")
+                = "it's")
+           : "the Pascal quote idiom on the page"
+
+  (* ---- lists ---- *)
+       ! not (size([1, 2, 3]) = 3)              : "size counts a list's elements"
+       ! not (size(Pair(a: 1, b: 2)) = 2)       : "and a node's fields"
+       ! not (sizes(["ab", "c", ""]) = [2, 1, 0]) : "sizes does that for each"
+       ! not (at([7, 8, 9], 1) = 7)             : "at is one-based"
+       ! not (at([7, 8, 9], 3) = 9)             : "to the end"
+
+         (* "one level only, because a deeper one would be guessing" *)
+       ! not (flatten([[1, 2], [3]]) = [1, 2, 3]) : "flatten opens one level"
+       ! not (flatten([[[1]], [2]]) = [[1], 2])   : "and only one"
+       ! not (flatten([1, [2, 3]]) = [1, 2, 3])   : "an element that is not a list passes through"
+
+       ! not (each(["a", "b"], "<{}>") = ["<a>", "<b>"])
+           : "each fills the template's hole with the element"
+       ! not (each([1, 2], ["x", "y"], "{}{}") = ["1x", "2y"])
+           : "two lists run in step, one hole from each"
+
+         (* "It runs to the longer of the two; a list that runs out contributes
+          * nothing rather than ending the walk." Taking the shorter is how
+          * `abs(i)` came out as `abs()`. *)
+       ! not (size(each([], ["x", "y"], "{}{}")) = 2)
+           : "each runs to the longer of the two"
+       ! not (each([], ["x", "y"], "{}{}") = ["x", "y"])
+           : "and a list that runs out contributes nothing"
+       ! not (each([1], ["x", "y"], "{}{}") = ["1x", "y"])
+           : "which is per element, not all or nothing"
+
+  (* ---- bytes ---- *)
+       ! not (bytes(1, 2) = "\x01\x00")   : "bytes writes least significant first"
+       ! not (bytes(258, 2) = "\x02\x01") : "which is what little-endian means"
+       ! not (size(bytes(7, 8)) = 8)      : "as many bytes as it was asked for"
+       ! not (size(bytes(7, 1)) = 1)      : "from one"
+       ! not (bytes([1, 2], 1) = ["\x01", "\x02"])
+           : "a list of numbers answers a list of encodings"
+       ! not (bytes(1.0, 8) = "\x00\x00\x00\x00\x00\x00\xf0\x3f")
+           : "a float is written as its IEEE 754 bits" .
+
+%driver check = claims .

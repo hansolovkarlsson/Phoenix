@@ -850,6 +850,19 @@ header says why the line is drawn: *a library nobody drew a line around is a
 language nobody can reimplement.* See
 [ROADMAP 3.4](ROADMAP.md#34-a-library-that-grows-without-deciding).
 
+**And this section is executable.**
+[`tests/grammars/library.phx`](../tests/grammars/library.phx) is every claim
+below as a check, in the order they are made, and
+[`library-refused.phx`](../tests/grammars/library-refused.phx) is every refusal
+it names. Both run under `make test`, through `phx` *and* through a compiler
+`phx` wrote — which is what the conformance rule says has to hold.
+
+It was added because the library was held by nothing: eighteen of the
+twenty-two functions had no executable check at all, and nearly every sentence
+here is an edge case written down *because somebody got it wrong*. `each`
+running to the longer of two lists is on this page because taking the shorter
+turned `abs(i)` into `abs()`.
+
 An **environment** is an association list — a list of `[name, value]` pairs,
 most recent first. `bind` puts a pair on the front, so shadowing is what
 naturally happens and nobody implemented it.
