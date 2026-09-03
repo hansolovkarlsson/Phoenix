@@ -98,6 +98,17 @@ refused with the message it is refused for.
 `REGOLD=1 languages/solvm/tests/run.sh` rewrites those bytes, which is what to
 do after SolVM's format version rises.
 
+**And the tutorial is run too.** `tests/tutorial.sh` builds every file
+[tutorial.md](tutorial.md) says to build, runs every command it says to run,
+and then checks that the output it got **appears in the page** — so a pasted
+output that drifts from the real one fails the suite rather than misleading
+somebody following along. That check exists because the first version of the
+page had four defects a careful read did not find: a `solvm` invoked on
+bytecode nothing had assembled, three places where the source had changed and
+the reader would have run the previous build, a caret line two spaces short,
+and a closing comparison against a Solveig program that no longer said the same
+thing.
+
 ## The format version is an equality
 
 `.sob` carries a version, and **a build reads exactly its own and refuses every

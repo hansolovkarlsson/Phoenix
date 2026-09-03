@@ -151,4 +151,8 @@ for s in $lang/oracle/*.sol; do
     fi
 done
 
+# ---- 5. and the tutorial does what it says ------------------------------
+
+"$root/$lang/tests/tutorial.sh" || fail=$((fail + 1))
+
 [ "$fail" -eq 0 ]

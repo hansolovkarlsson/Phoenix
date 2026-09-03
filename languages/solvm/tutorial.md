@@ -12,8 +12,16 @@ You need `bin/phx` (`make` at the top of the repository builds it) and, for the
 last step only, a [Solveig](https://github.com/hansolovkarlsson/Solveig)
 checkout for `solas` and `solvm`.
 
-The examples say `phx` and `solvm`; either put `bin/` and Solveig's `bin/` on
-your path, or write the paths out.
+Set these up once, in the directory you are working in — the commands below
+use both:
+
+```sh
+$ export PATH=/path/to/Phoenix/bin:/path/to/Solveig/bin:$PATH
+$ asm=/path/to/Phoenix/languages/solvm/solvm-sob.phx
+```
+
+`$asm` is the assembler: a description Phoenix reads. It stays the same for
+every command on this page.
 
 ---
 
@@ -33,7 +41,7 @@ this in `sum.sasm`:
 ```
 
 ```sh
-$ phx --raw languages/solvm/solvm-sob.phx sum.sasm > sum.sob
+$ phx --raw "$asm" sum.sasm > sum.sob
 $ solvm sum.sob
 42
 ```
@@ -62,7 +70,7 @@ Take out the `const #40`:
 ```
 
 ```sh
-$ phx --raw languages/solvm/solvm-sob.phx sum.sasm > sum.sob
+$ phx --raw "$asm" sum.sasm > sum.sob
 $ solvm sum.sob
 solvm: cannot load 'sum.sob': bytecode is internally inconsistent -- an instruction takes more from the stack than is on it
 ```
@@ -87,6 +95,7 @@ whose value nobody wants — so it is followed by `pop`. That is the `pop` befor
 Take it out and the program still runs:
 
 ```sh
+$ phx --raw "$asm" sum.sasm > sum.sob
 $ solvm sum.sob
 42
 ```
@@ -166,6 +175,7 @@ done:
 ```
 
 ```sh
+$ phx --raw "$asm" sum.sasm > sum.sob
 $ solvm sum.sob
 15
 ```
@@ -185,10 +195,10 @@ about the program, and the assembler will tell you when you get it wrong. Try
 `jump top` instead:
 
 ```sh
-$ phx --driver check languages/solvm/solvm-sob.phx sum.sasm
+$ phx --driver check "$asm" sum.sasm
 sum.sasm:23:9: error: 'top' is behind this, and a backward jump is `loop`
-        jump    top
-        ^
+          jump    top
+          ^
 ```
 
 `--driver check` assembles and throws the bytes away — the exit status is the
@@ -218,6 +228,7 @@ otherwise:
 ```
 
 ```sh
+$ phx --raw "$asm" t.sasm > t.sob
 $ solvm t.sob
 solvm: cannot load 't.sob': bytecode is internally inconsistent -- two paths reach one instruction with different stack depths
 ```
@@ -244,6 +255,7 @@ endif:
 ```
 
 ```sh
+$ phx --raw "$asm" t.sasm > t.sob
 $ solvm t.sob
 yes
 ```
@@ -282,6 +294,7 @@ before the `halt`:
 ```
 
 ```sh
+$ phx --raw "$asm" sum.sasm > sum.sob
 $ solvm sum.sob
 30
 ```
@@ -326,8 +339,8 @@ naming them is something writing assembly buys you.
 This is the step that makes the rest trustworthy, and it is the habit worth
 taking away.
 
-Write the same program in Solveig, as `sum.sol` — without the block, so the two
-are the same program:
+Write the same program in Solveig, as `sum.sol` — the block included, so that
+the two really are the same program:
 
 ```
 total := #0.
@@ -336,13 +349,13 @@ i := #1.
   total := total:add(i).
   i := i:add(#1)
 }).
-total:display.
+{ n | n:add(n) }:value(total):display.
 ```
 
 ```sh
 $ solas sum.sol -o solas.sob
 $ solvm solas.sob
-15
+30
 ```
 
 Same answer — which proves less than it looks like. **Two wrong encodings can

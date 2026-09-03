@@ -1119,7 +1119,7 @@ accepts "the language reads"  "$root/languages/solvm/solvm.phx"
 accepts "and the assembler"   "$root/languages/solvm/solvm-sob.phx"
 if sa=$("$root/languages/solvm/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$sa" | grep -c '^  ok')
-    report pass "$n checks: the bytes, the round trip, the refusals$(printf '%s' "$sa" | grep -q 'solas' && printf ', and solas')"
+    report pass "$n checks: the bytes, the round trip, the refusals$(printf '%s' "$sa" | grep -q 'solas' && printf ', solas, and the tutorial')"
 else
     report fail "the assembler agrees with solas"
     printf '%s\n' "$sa" | grep -A4 FAIL | sed 's/^/        /' | head -14
