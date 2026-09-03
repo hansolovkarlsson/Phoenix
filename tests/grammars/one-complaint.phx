@@ -1,0 +1,29 @@
+(* A failed check is reported once.
+ *
+ * A check names a line of the file being compiled; the attributes around it
+ * still evaluate, and what they answer is a **failure** value. `join` has
+ * always passed one through -- it has been reported, and once is the right
+ * number -- but `sizes`, `each` and `bytes` over a list complained about it
+ * instead, naming a line of the *description*. So a correct diagnosis about
+ * somebody's program was followed by what read as an internal error.
+ *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+
+%syntax .
+%start line .
+line = { number -> N(text: $1) } -> L(items: $1) .
+
+%pass p
+  N : out = "{}" of $text
+    ! $text = "0" : "zero is refused, and this is the only complaint" .
+
+  (* Each of these met the failure and used to add a complaint of its own. *)
+  L : out = "{} {} {}" of join($items.out),
+                          join(each($items.out, "<{}>")),
+                          join(sizes($items.out), ",") .
+
+%driver d = p -> out .

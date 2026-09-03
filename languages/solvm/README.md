@@ -12,6 +12,7 @@ solvm prog.sob
 
 | | |
 | --- | --- |
+| [tutorial.md](tutorial.md) | one program in seven steps, and four mistakes made on purpose |
 | [manual.md](manual.md) | the machine and how to write for it, in the order you would learn it — including the six shapes `solas` inlines |
 | [reference.md](reference.md) | every mnemonic, directive and diagnostic |
 | [cheatsheet.md](cheatsheet.md) | one page |

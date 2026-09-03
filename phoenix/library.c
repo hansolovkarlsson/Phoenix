@@ -359,6 +359,7 @@ Value *eval_call(Eval *e, const Expr *x)
             Value **items = arena_alloc(a, (size_t)(args[0]->n ? args[0]->n : 1)
                                              * sizeof *items);
             for (int i = 0; i < args[0]->n; i++) {
+                if (value_failed(args[0]->items[i])) return args[0]->items[i];
                 Value *one = bytes_of(e, x, a, args[0]->items[i], width);
                 if (!one) return NULL;
                 items[i] = one;
@@ -460,6 +461,13 @@ Value *eval_call(Eval *e, const Expr *x)
                                          * sizeof *items);
         for (int i = 0; i < args[0]->n; i++) {
             const Value *it = args[0]->items[i];
+            /* A failure among the elements has already been reported once, and
+             * once is the right number -- so it passes through rather than
+             * becoming a second complaint about the element's kind. `join` has
+             * always done this; these did not, and the difference showed as a
+             * diagnostic naming a line of the *description* after a check in it
+             * had correctly named a line of the user's program. */
+            if (value_failed(it)) return (Value *)it;
             switch (it->kind) {
             case V_TEXT: items[i] = value_int(a, (long long)it->len); break;
             case V_LIST:
@@ -570,6 +578,11 @@ Value *eval_call(Eval *e, const Expr *x)
         for (int i = 0; i < n; i++) {
             char  *pieces[2] = { "", "" };
             size_t lens[2]   = { 0, 0 };
+
+            if (i < args[0]->n && value_failed(args[0]->items[i]))
+                return args[0]->items[i];
+            if (two && i < second->n && value_failed(second->items[i]))
+                return second->items[i];
 
             if (i < args[0]->n
                 && !value_format(a, args[0]->items[i], &pieces[0], &lens[0]))

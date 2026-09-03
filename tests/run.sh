@@ -93,6 +93,20 @@ refuses "a clause nothing can reach" "can never match" \
 refuses "a fold with nothing to fold onto" "nothing to fold onto" \
         "$root/tests/grammars/fold-in-action.phx"
 
+# A failed check is reported once. `join` has always passed a failure through;
+# `sizes`, `each` and `bytes` over a list complained about it instead, so a
+# correct diagnosis about the user's program was followed by one naming a line
+# of the description.
+if out=$("$phx" --quiet "$root/tests/grammars/one-complaint.phx" \
+            "$root/tests/sources/has-a-zero.txt" 2>&1); then
+    report fail "a failed check is reported once" "it was accepted"
+elif [ "$(printf '%s' "$out" | grep -c 'error:')" = 1 ]; then
+    report pass "a failed check is reported once"
+else
+    report fail "a failed check is reported once" \
+                "$(printf '%s' "$out" | grep -c 'error:') complaints"
+fi
+
 echo "grammars it should warn about"
 warns "alternatives in the wrong order" "will always win" "$root/tests/grammars/order.phx"
 warns "a fragment not declared one"     "%fragment"       "$root/tests/grammars/fragment-forgotten.phx"
