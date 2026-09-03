@@ -59,19 +59,36 @@ Everything below is built, and each line names the entry that argued for it.
 
 ## The stages
 
-Seven were planned. [journal.md](journal.md) has the day-by-day; this is the
-shape.
+Seven were planned, after a stage 0 that was the groundwork.
+[journal.md](journal.md) has the day-by-day; this is the shape, and the tags
+`stage-0` … `stage-7` are where each one ends.
 
 | | |
 | --- | --- |
 | 0 | read a grammar, scan and match a file, print the tree |
 | 1 | `->` actions: what a production builds |
 | 2 | `%pass`: clauses keyed on the vocabulary the actions build |
-| 3 | `%driver`, and passes that read each other's work |
-| 4 | `-o`: the description as a C program |
-| 5 | Pascal, taken seriously — and `fpc` as an oracle |
-| 6 | `%import`, and one directory per language |
+| 3 | `%driver`, passes that read each other's work, and `%import` with `%require` |
+| 4 | actions on Wirth's Pascal, taken from the published grammar unmodified |
+| 5 | `-o`: the description written out as a C program that is its own compiler |
+| 6 | Pascal taken seriously — typechecking, a C backend, and `fpc` as an oracle — one directory per language, the notation described in itself, and a Solveig front end |
 | 7 | Solveig, and a binary target |
+
+*Rows 3 to 6 were corrected on 2026-09-03, when
+[CHANGELOG.md](CHANGELOG.md) was written from the tags and found them
+disagreeing: this table had `-o` at 4 and Pascal at 5, where both the tags and
+`journal.md` have Pascal at 4 and `-o` at 5 — the journal has no stage 4 entry
+at all, and its stage 5 entry is `-o`. `%import` was credited to 6; the commit
+adding it is inside 3.*
+
+**The [README](../README.md#where-it-is) numbers these differently, and is not
+wrong.** Its table is the *plan*, ticked off as each row was delivered; this
+one is the *delivery*, keyed to the tags. They agree everywhere except stage 4:
+the plan put an emit pass writing C there, and that arrived early —
+`examples/calc-c.phx` is already present at tag `stage-3` — so the `stage-4`
+tag went onto the Pascal work instead. **A plan and a delivery that diverge by
+one stage is not an error in either; it is the thing worth knowing, and neither
+table said it before.**
 
 What came after was not planned as stages, and each one is an entry below.
 
