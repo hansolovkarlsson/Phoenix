@@ -3037,3 +3037,79 @@ The real gap was omission. Three warts were missing, all found this week:
 
 `docs/reference.md` mirrors the list and carried the same stale count; it is
 corrected and gains the three in brief.
+
+---
+
+## 2026-09-04 — a slot with a name
+
+The last thing the assembler was left owing. `.slots self, total, i` had put
+the names in the chunk since the day slot names went in — `solvm --trace` reads
+them to write `value(n: #41)` — but an instruction still said `local 1`, and
+the page said so in as many words: *names are for reading, not for addressing.*
+
+### What it cost, and what it did not
+
+The resolving is two passes, and it is the same two the assembler already is.
+The script's frame is declared by a `.slots` that is a **sibling** of the
+instructions using it and very often below them, so the names are gathered on
+the way up in one pass and handed back down in the next — which is exactly what
+`layout` and `sob` do for labels. A block needs neither pass, its frame being
+in its own header; the mechanism is written once for the case that needs it.
+
+Three things made it smaller than expected:
+
+- **`positions` already existed and already answers slot numbers.** It returns
+  `[value, index]` pairs and its index is zero-based — kept that way, says the
+  warts list, *because what it exists for is slot numbers*. That is the whole
+  of the name-to-number step.
+- **The operand became a node**, `SlotNum` / `SlotName`, which is what `sel`
+  already does for a selector written bare or quoted. Every instruction reads
+  `$slot.num` without knowing which spelling it was given, so `layout` and
+  `sob` changed by one token each rather than gaining a rule apiece.
+- **A stack of frames did not need a stack.** `lookup` takes a table, and a
+  list of tables would have wanted a second mechanism to index. Keying one flat
+  table by `"<depth> <name>"` avoids it — a space occurs in neither half — and
+  the chain from root to any node has strictly increasing depths, so the
+  entries cannot collide.
+
+### The evidence is that nothing changed
+
+`REGOLD=1` rewrote the goldens and **git reported one new file and no
+modifications**: five programs, byte for byte, through a rewrite that moved
+every slot operand from a field to a child node. `programs/adder-named.sasm` is
+`adder.sasm` with `outer 1, 1` and `local 1` written `outer 1, n` and
+`local m`, and the suite puts both at one path — a chunk records the file it
+came from — and compares the bytes.
+
+The tutorial's step 6 now has a 6c that renames the block's frame and
+re-assembles, and step 7 compares **that** build against `solas`: the named
+spelling produces the instruction stream the compiler produces.
+
+### The check that pays for it
+
+`local 0` in a frame of two is a valid instruction that pushes the receiver
+instead of the argument, and nothing catches it. `local nn` is not an
+instruction at all. That is the only thing a name buys that the number does not
+— the byte is identical — and it is worth the two passes.
+
+Two refusals came with it and one came out of writing the message. A frame with
+two slots of one name is refused, for the reason two labels of one name are.
+And `outer 3, x` at the top level first reported *no slot is called `x` here*,
+which is true and is not the mistake: **the lexical chain is as long as the
+nesting**, so a chunk `n` deep has `n` frames outside it whenever it runs, and
+a depth past that is knowable from the text. `outer 5, 1` had been silently
+accepted until then, numeric spelling included.
+
+> **A diagnosis that is true and not the mistake is a bug in the diagnosis.**
+> The `$fdepth >= 0` guard on the slot-name check exists only to let the
+> depth complaint win, which is the one that names what is wrong.
+
+189 tests, unchanged — the assembler's own count went 49 → 58.
+
+### Two stale numbers, found on the way past
+
+`README.md` quoted the assembler's suite as `25 checks` and said it was among
+`the 177`; the suite reports 58 and there are 186 that need nothing outside the
+repository. Both were quoted output, which is the kind that goes stale in
+silence — the same lesson the tutorials taught this week, one level up.
+`COMPLETED.md`'s table of languages had no `solvm/` row at all.

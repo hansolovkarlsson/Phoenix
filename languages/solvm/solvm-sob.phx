@@ -17,6 +17,15 @@
  * `layout` threads a byte counter, interns the side tables, and gathers the
  * label table. `sob` takes that table back *down* and writes the bytes.
  *
+ * **A third pair of passes is imported rather than written here.** A slot may
+ * be named instead of numbered, and the script's frame is declared by a
+ * `.slots` that is a sibling of the instructions using it -- the same
+ * declared-below-its-use shape, so it wants the same two passes. It is in
+ * `solvm.phx` because a name no slot answers to is a mistake in the *program*,
+ * which makes it `--driver render`'s business as much as this file's. What
+ * arrives here from it is `$slot.num` on every slot operand and `$ownsnames`
+ * on every chunk; the drivers at the foot name the order.
+ *
  * ---------------------------------------------------------------------------
  * Why the tables are threads and the labels are not
  *
@@ -90,11 +99,11 @@
   Halt   : addr = $pc : haltend = [$pc + 1] : pc = $pc + 1 .
 
   Local    : addr = $pc : pc = $pc + 2
-           ! int($slot) > 255
-               : "a slot has to fit one byte, and {} does not" of $slot .
+           ! $slot.num > 255
+               : "a slot has to fit one byte, and {} does not" of $slot.num .
   SetLocal : addr = $pc : pc = $pc + 2
-           ! int($slot) > 255
-               : "a slot has to fit one byte, and {} does not" of $slot .
+           ! $slot.num > 255
+               : "a slot has to fit one byte, and {} does not" of $slot.num .
 
   (* Reading an enclosing frame is what the `CAPTURES` flag records, and the
    * flag is about **this chunk only**. `solas`'s own comment on it: *a nested
@@ -106,14 +115,14 @@
            : outs = [true]
            ! int($depth) > 255
                : "a depth has to fit one byte, and {} does not" of $depth
-           ! int($slot) > 255
-               : "a slot has to fit one byte, and {} does not" of $slot .
+           ! $slot.num > 255
+               : "a slot has to fit one byte, and {} does not" of $slot.num .
   SetOuter : addr = $pc : pc = $pc + 3
            : outs = [true]
            ! int($depth) > 255
                : "a depth has to fit one byte, and {} does not" of $depth
-           ! int($slot) > 255
-               : "a slot has to fit one byte, and {} does not" of $slot .
+           ! $slot.num > 255
+               : "a slot has to fit one byte, and {} does not" of $slot.num .
 
   Jump      : addr = $pc : pc = $pc + 3 .
   ExitFalse : addr = $pc : pc = $pc + 3 .
@@ -168,7 +177,6 @@
    * refused either way. *)
   Slots : n  = lookup([[0, size($slotnames)]], int($count), int($count))
         : sl = [$n]
-        : snames = $slotnames
         ! lookup([[0, size($slotnames)]], int($count), int($count)) < 1
             : "a frame has at least one slot, for the receiver"
         ! lookup([[0, size($slotnames)]], int($count), int($count)) > 255
@@ -194,7 +202,6 @@
   otherwise entry   = []
   otherwise lname   = []
   otherwise sl      = []
-  otherwise snames  = []
   otherwise haltend = []
   otherwise retend  = []
 
@@ -248,7 +255,6 @@
            : ownsize      = $pc
            : ownretend    = flatten($items.retend)
            : ownnslots    = lookup([[0, size($slotnames)]], int($slots), int($slots))
-           : ownsnames    = $slotnames
 
            : owncaptures  = size(flatten($items.outs)) > 0
 
@@ -313,7 +319,6 @@
           * in slot 0 whether or not anybody says so. Prepending the default
           * is what makes "the last one, or 1" an ordinary index. *)
        : ownnslots    = at([1, ...$declared], size($declared) + 1)
-       : ownsnames    = flatten($items.snames)
 
        ! size(flatten($items.sl)) > 1
            : "the script's frame is declared more than once"
@@ -345,16 +350,16 @@
   SetGlobal : code = "{}{}" of bytes(3, 1), bytes($nidx, 2) .
   (* The frame is declared, so a slot past it is knowable here rather than at
    * load. Slots count from zero, and slot 0 is the receiver. *)
-  Local     : code = "{}{}" of bytes(4, 1), bytes(int($slot), 1)
-            ! int($slot) > $nslots - 1
-                : "slot {} is past this frame, which has {}" of $slot, $nslots .
-  SetLocal  : code = "{}{}" of bytes(5, 1), bytes(int($slot), 1)
-            ! int($slot) > $nslots - 1
-                : "slot {} is past this frame, which has {}" of $slot, $nslots .
+  Local     : code = "{}{}" of bytes(4, 1), bytes($slot.num, 1)
+            ! $slot.num > $nslots - 1
+                : "slot {} is past this frame, which has {}" of $slot.num, $nslots .
+  SetLocal  : code = "{}{}" of bytes(5, 1), bytes($slot.num, 1)
+            ! $slot.num > $nslots - 1
+                : "slot {} is past this frame, which has {}" of $slot.num, $nslots .
   Outer     : code = "{}{}{}"
-                of bytes(6, 1), bytes(int($depth), 1), bytes(int($slot), 1) .
+                of bytes(6, 1), bytes(int($depth), 1), bytes($slot.num, 1) .
   SetOuter  : code = "{}{}{}"
-                of bytes(7, 1), bytes(int($depth), 1), bytes(int($slot), 1) .
+                of bytes(7, 1), bytes(int($depth), 1), bytes($slot.num, 1) .
 
   PushBlock : code = "{}{}" of bytes(8, 1), bytes(lookup($blocktab, $name, 0), 2)
             ! not defined($blocktab, $name)
@@ -469,5 +474,5 @@
            bytes(size(flatten($items.record)), 4), $methods
          ], "") .
 
-%driver sob   = selectors, layout, sob -> out .
-%driver check = selectors, layout, sob .
+%driver sob   = selectors, frames, slotrefs, layout, sob -> out .
+%driver check = selectors, frames, slotrefs, layout, sob .

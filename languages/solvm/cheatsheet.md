@@ -29,8 +29,8 @@ top:                            ; a label names the next instruction
         pop
         halt                    ; a script ends with halt
 
-.block name arity 1 slots 2     ; a nested chunk; occupies no space here
-        local   1
+.block name arity 1 slots self, n   ; a nested chunk; no space here
+        local   n               ; a named frame may be addressed by name
         return                  ; a block ends with return
 .end
 ```
@@ -73,6 +73,7 @@ instruction. `global` is the one lookup.
 | constant | `#42` `#-7` `3.5` `-1.25` `#true` `#false` `#nil` |
 | selector, global, string | a name, or a text literal: `add`, `"return"`, `"hi"` |
 | slot, depth, argc | `0`–`255`. Depth 0 is this frame, 1 is the frame it was written in |
+| slot, by name | where the addressed frame was declared as names, one of them: `local total`, `outer 1, n` |
 | label, block | a name |
 
 Text escapes: `\n` `\t` `\r` `\"`. A doubled backslash is refused.
@@ -96,7 +97,11 @@ cannot leave its chunk.
 
 A frame is written as a count or as its slots' names — `slots self, n` — and
 the names reach `solvm --trace`, which writes `value(n: #41)` rather than
-`value(#41)`. Names are for reading; `local` still takes a number.
+`value(#41)`.
+
+Named slots may also be **addressed** by name: `local n` is `local 1`,
+resolved here, same byte. `local` and `setlocl` look in this frame; `outer d`
+and `setoutr d` look `d` frames out.
 
 `slots` is the whole frame: at least `arity + 1`, at most 255. Nesting is at
 most 16 frames deep, and a `local` past the frame you declared is refused.
@@ -147,7 +152,9 @@ program can be compared line for line.
 **Checked:** an unknown label · a label defined twice · a jump in the wrong
 direction · a slot past the frame · a slot, depth or argc over 255 · an unknown
 block · two blocks of one name · a script not ending in `halt`, a block not in
-`return` · `slots < arity + 1` · nesting over 16 · a chunk over 65535 bytes.
+`return` · `slots < arity + 1` · nesting over 16 · a chunk over 65535 bytes ·
+a slot name the addressed frame has not got · two slots of one name · an
+`outer` depth past the outermost frame.
 
 **Not checked — the verifier's, at load:**
 

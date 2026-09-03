@@ -1,0 +1,7 @@
+; A chunk nested `n` deep has `n` frames outside it and no more, whenever it
+; runs -- so a depth past that is a mistake in the text, not a thing to find
+; out at run time. The script is nested none deep, so any `outer` at all is one.
+.slots 2
+        outer   1, 1
+        pop
+        halt

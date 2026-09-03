@@ -1,0 +1,6 @@
+; Both would resolve to the first, and nothing downstream could tell -- which
+; is why two labels of one name are refused too.
+.slots self, n, n
+        local   n
+        pop
+        halt

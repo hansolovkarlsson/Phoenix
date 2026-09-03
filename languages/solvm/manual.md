@@ -134,7 +134,9 @@ two entries, not one.
 
 ## 4. Frames and slots
 
-A frame is an array of slots, and every slot is reached by number.
+A frame is an array of slots, and every slot is reached by number — or by a
+name standing for one, which resolves to that number before any byte is
+written.
 
 > **Slot 0 is the receiver.** In a block it is `self`; in a script there is no
 > receiver, so slot 0 is unused — and still counted.
@@ -154,11 +156,39 @@ A frame may be written as its slots' names instead of a count:
 
 Three slots either way. The names go into the chunk, and **`solvm --trace`
 reads them to name a call's arguments** — `value(n: #41)` rather than
-`value(#41)`, which is what `solas` produces and what this matches. They are
-for reading only: an instruction still says `local 1`.
+`value(#41)`, which is what `solas` produces and what this matches.
 
 The table is positional, so the first name *is* slot 0 — the receiver, which
 SolVM never reads a name for. `self` is the convention.
+
+### And then addressing by them
+
+Once a frame has names, an instruction may use one in place of the number:
+
+```
+.block twice arity 1 slots self, n
+        local   n
+        local   n
+        send    add, 1
+        return
+.end
+```
+
+`local n` is `local 1`, because `n` is the second name and slots count from
+zero. **The name is resolved here, not in the machine**: the same one byte is
+written either way, and SolVM never sees the difference. The two spellings of
+one program are in `programs/adder.sasm` and `programs/adder-named.sasm`, and
+the suite assembles both and compares the bytes.
+
+Which frame a name is looked up in is the frame the instruction addresses —
+this one for `local` and `setlocl`, and `d` out for `outer d` and `setoutr d`.
+So the block above could say `outer 1, total` if the script declared
+`.slots self, total, i`.
+
+A name that the addressed frame has not declared is refused, and so is a name
+written against a frame declared as a count — which has no names to match. Two
+slots of one name are refused as well: both would resolve to the first, and
+nothing after that could tell.
 
 ### Three ways to reach a variable, and they are different instructions
 
@@ -172,8 +202,9 @@ A compiler for a language would have to *work out* which of the three a name
 needs; that is most of what `solveig-sob.phx` is. **In assembly you say which**,
 which is why an assembler is a much smaller description than a compiler.
 
-`outer 1, 1` is *the frame I was written in, slot 1*. Depth 0 is this frame, so
-`outer 0, s` is a roundabout `local s`.
+`outer 1, 1` is *the frame I was written in, slot 1* — or `outer 1, n`, if
+that frame named its slots. Depth 0 is this frame, so `outer 0, s` is a
+roundabout `local s`.
 
 ### Every assignment leaves its value
 
@@ -396,6 +427,11 @@ table.
 - `outer 1, 1` — slot 1 of the frame this block was written in;
 - `local 1` — its own argument.
 
+Written with the frames named — `slots self, n` outside and `slots self, m`
+inside — those last two are `outer 1, n` and `local m`, which is
+[`programs/adder-named.sasm`](../../languages/solvm/programs/adder-named.sasm)
+and assembles to the same bytes.
+
 `block adder` is what pushes it, and **it captures the running frame as the
 block's home** — which is what makes `self` and the enclosing locals still mean
 the right thing whenever the block is run.
@@ -533,6 +569,14 @@ Which usually means a `nil` in the arm that has nothing to say. Look at
 `local 4` in a frame of 2 is refused, and named — but the assembler can only
 check against the number you wrote, so `.slots` being too *large* costs a
 little stack and nothing tells you.
+
+### Name the frame, and a wrong slot stops being a silent one
+
+`local 1` is a valid instruction in every frame of two or more, so a slip
+between two locals assembles cleanly and goes wrong at run time. `local total`
+against `slots self, total, i` cannot: the name either is in the frame or is
+refused by name. It costs nothing — the same byte is written — and it is the
+one check the numeric spelling cannot give you.
 
 ### Write the selector an inlined jump stands for
 

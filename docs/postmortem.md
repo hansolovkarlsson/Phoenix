@@ -375,3 +375,43 @@ It is a small thing, but it is the same shape as the tutorials: the guess about
 what had rotted was wrong in both directions at once, and only reading the
 actual text settled it. **A page is not stale because the code around it moved;
 it is stale where a specific sentence stopped being true.**
+
+## 7. The one estimate the standup made
+
+Closing 2026-09-03 the standup put symbolic slot operands at the top of the
+outstanding list and predicted the size: *the frame already knows the names, so
+it is small.*
+
+**It held, and the reason is worth separating from the result.** It was not
+small because the change was shallow — every slot operand moved from a field to
+a child node, across two files and four instructions. It was small because
+three mechanisms were already there and each was there for a reason that had
+been written down:
+
+- `positions` answers `[value, index]` pairs zero-based, and § 5 of the roadmap
+  already recorded *kept that way because what it exists for is slot numbers* —
+  written before anything needed it to be.
+- `sel` had established the shape for an operand with two spellings: a node,
+  resolved in a pass, read as `$sel.word` by every instruction that takes one.
+  `SlotNum` / `SlotName` is that shape a second time, and it is why the two
+  backends changed by a token each.
+- The gather-up-then-hand-down pair was already written for labels, for the
+  same reason: a declaration below its use.
+
+The estimate was right because the parts had been named. That is a different
+claim from *the change was easy*, and it is the one worth carrying: **a
+mechanism that was given a reason when it went in can be reused without
+re-deciding anything.**
+
+### What the estimate did not include, and should have
+
+Two refusals and a diagnosis. A frame with two slots of one name had to be
+refused; `outer` reaching past the outermost frame had to be *checked* rather
+than merely reported badly, because the first message written for it — *no slot
+is called `x` here* — was true and was not the mistake.
+
+That last one is not a rounding error on an estimate. It found a gap that
+predates the feature: `outer 5, 1`, numeric, at the top level, had always
+assembled cleanly. **Writing a message forced the question the feature had not
+raised**, which is the third time this week a page or a message has found a
+defect the code did not.

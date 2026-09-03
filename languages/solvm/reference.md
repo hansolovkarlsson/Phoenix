@@ -70,6 +70,7 @@ convention, not a rule.
 | --- | --- |
 | a name | a letter or `_`, then letters, digits and `-`. `and-done` is one name |
 | an integer | `0`, `42` — a slot, a depth, an argument count, a slot count |
+| a slot | an integer, or — where the frame was declared as names — one of those names |
 | an integer constant | `#42`, `#-7` |
 | a float constant | `3.5`, `-1.25`. A digit, a point, and a digit — `.5` and `5.` are not floats |
 | a named constant | `#true`, `#false`, `#nil` |
@@ -83,8 +84,8 @@ unambiguous. A literal newline inside the quotes is allowed and means itself.
 ### Reserved words
 
 **Every mnemonic is a reserved word**, worked out from the grammar rather than
-declared. So are `arity` and `slots`. A label, a global, a block or a selector
-cannot be spelled as any of:
+declared. So are `arity` and `slots`. A label, a global, a block, a slot name
+or a selector cannot be spelled as any of:
 
 ```
 const    nil      global   setglob  local    setlocl  outer    setoutr
@@ -128,8 +129,17 @@ script has no receiver, so its slot 0 is unused but still counted — and named
 `self` by convention, since the table is positional and the first name *is*
 slot 0.
 
-**Names are for reading, not for addressing.** An instruction still says
-`local 1`; nothing resolves a name to a slot.
+**Names address as well as read.** Where a frame is declared as names, an
+instruction may write one instead of a number: `local total` is `local 1` if
+`total` is the frame's second name. The number is resolved at assembly time
+against the frame's own declaration, so the two spellings produce **identical
+bytes** — `languages/solvm/programs/adder.sasm` and `adder-named.sasm` are one
+program in the two spellings, and the suite checks they assemble the same.
+
+A name is resolved against the frame the instruction addresses, which is this
+one for `local` and `setlocl` and `D` frames out for `outer D` and `setoutr D`
+— so `outer 1, n` needs `n` in the *enclosing* frame's declaration. A frame
+declared as a count has no names, and a name written against one is refused.
 
 Comma-separated rather than juxtaposed, because a list that ended wherever a
 name stopped could not tell its last entry from the label on the line below.
@@ -209,10 +219,10 @@ the first and nothing downstream could have told.
 | --- | --- | --- | --- | --- | --- |
 | `global N` | 2 | u16 name index | 3 | → v | Push the named global. A lookup, not a send |
 | `setglob N` | 3 | u16 name index | 3 | v → v | Bind the name, **leaving the value** |
-| `local S` | 4 | u8 slot | 2 | → v | Push a frame slot. Slot 0 is `self` in a block, unused in a script; 1..arity are the arguments |
-| `setlocl S` | 5 | u8 slot | 2 | v → v | Store into a slot, leaving the value |
-| `outer D, S` | 6 | u8 depth, u8 slot | 3 | → v | Read a slot `D` frames out along the **lexical** chain |
-| `setoutr D, S` | 7 | u8 depth, u8 slot | 3 | v → v | Write one, leaving the value |
+| `local S` | 4 | u8 slot | 2 | → v | Push a frame slot. Slot 0 is `self` in a block, unused in a script; 1..arity are the arguments. `S` is a number or a name of this frame |
+| `setlocl S` | 5 | u8 slot | 2 | v → v | Store into a slot, leaving the value. `S` is a number or a name of this frame |
+| `outer D, S` | 6 | u8 depth, u8 slot | 3 | → v | Read a slot `D` frames out along the **lexical** chain. `S` is a number or a name of *that* frame |
+| `setoutr D, S` | 7 | u8 depth, u8 slot | 3 | v → v | Write one, leaving the value. `S` is a number or a name of *that* frame |
 | `setslot N` | 12 | u16 name index | 3 | o v → v | Pop a value and an object, bind the name on the object, leave the value |
 
 **All four assignments leave their value on the stack.** That is what makes
@@ -265,7 +275,7 @@ a mistake.
 | a **constant** | `#42`, `#-7`, `3.5`, `-1.25`, `#true`, `#false`, `#nil` |
 | a **selector** or a **global name** | a name, or a text literal: `add`, `"return"` |
 | the text a `string` builds | a text literal: `"hello, world"` |
-| a **slot** | an integer, 0 to 255 |
+| a **slot** | an integer, 0 to 255 — or a name the addressed frame declared |
 | a **depth** | an integer, 0 to 255. 0 is this frame, 1 is the frame it was written in |
 | an **argument count** | an integer, 0 to 255 |
 | a **label** | a name |
@@ -419,6 +429,10 @@ Each names a line and a column of assembly, with a caret.
 | `'x' is ahead of this, and a forward jump is` `jump` | on `loop` |
 | `no block called 'x' is defined in this chunk` | on `block` |
 | `a slot has to fit one byte, and n does not` | `local`, `setlocl`, `outer`, `setoutr` |
+| `no slot is called 'x' here -- the frame has ...` | a name against a frame that has not got it, or against one declared as a count. The tail names what the frame does have, or `nothing named` |
+| `two slots in the script's frame have the same name` | `.slots self, n, n` — both would resolve to the first |
+| `two slots in 'b' have the same name` | the same, in a block's header |
+| `depth n reaches past the outermost frame, and this chunk is nested m deep` | `outer`, `setoutr`. The lexical chain is as long as the nesting, so this is knowable here |
 | `a depth has to fit one byte, and n does not` | `outer`, `setoutr` |
 | `an argument count has to fit one byte, and n does not` | `send` |
 | `no constant is spelled 'x' -- they are #true, #false and #nil` | a fourth `#word` |
@@ -472,6 +486,7 @@ The verifier's other conditions are checked here, or hold by construction:
 | every operand indexes something that exists | by construction — indices come from the tables |
 | every jump lands on an instruction boundary | by construction — offsets come from labels |
 | every `local`/`setlocl` addresses a slot the frame has | checked, against the frame this chunk declared |
+| every slot written as a name is one the addressed frame declared | checked, and the name resolves to the number that name has |
 | the last instruction stops the machine | checked, and more strictly |
 | a method has at least `arity + 1` slots | checked |
 | nesting is at most 16 frames | checked |

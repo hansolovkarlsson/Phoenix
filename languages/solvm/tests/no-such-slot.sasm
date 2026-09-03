@@ -1,0 +1,6 @@
+; The frame is declared as its slots' names, and `total` is not one of them --
+; so the refusal can say what it does have.
+.slots self, n
+        local   total
+        pop
+        halt

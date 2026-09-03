@@ -96,6 +96,26 @@ refuse too-few-slots.sasm       "the receiver is slot 0"
 refuse two-labels-one-name.sasm "two labels in the script have the same name"
 refuse slot-past-frame.sasm     "slot 4 is past this frame, which has 2"
 refuse frame-declared-twice.sasm "declared more than once"
+refuse no-such-slot.sasm        "no slot is called 'total' here -- the frame has self, n"
+refuse two-slots-one-name.sasm  "two slots in the script's frame have the same name"
+refuse depth-past-outermost.sasm "depth 1 reaches past the outermost frame"
+
+# ---- and a name means the slot a number would have meant ----------------
+#
+# `adder-named.sasm` is `adder.sasm` with its slot operands written as names.
+# They are one program in two spellings and have to assemble to identical
+# code. A chunk records the file it came from, so the two are put at one path
+# rather than compared where they live.
+
+cp $lang/programs/adder.sasm "$tmp/one.sasm"
+"$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-number.sob" 2>/dev/null
+cp $lang/programs/adder-named.sasm "$tmp/one.sasm"
+"$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-name.sob" 2>/dev/null
+if cmp -s "$tmp/by-number.sob" "$tmp/by-name.sob"; then
+    ok "adder assembles the same written with names as with numbers"
+else
+    no "adder assembles the same written with names as with numbers"
+fi
 
 # ---- 4. and agrees with solas, which is the oracle -----------------------
 

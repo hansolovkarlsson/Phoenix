@@ -128,8 +128,22 @@ It refuses a label that is not defined, a `jump` whose target is behind it
 (that is `loop`) and a `loop` whose target is ahead (that is `jump`), a slot,
 depth or argument count that will not fit its byte, a block named twice in one
 chunk, a `block` naming no definition, a script that does not end in `halt`, a
-block that does not end in `return`, and a chunk too long for a two-byte
-offset.
+block that does not end in `return`, a chunk too long for a two-byte offset,
+and an `outer` depth past the outermost frame — the lexical chain is as long
+as the nesting, so how far out a chunk can reach is knowable from the text.
+
+It also refuses a **slot named as something the frame has not got**. A frame
+may be declared as its slots' names — `slots self, n` — and where it is, an
+instruction may address one by name: `local n` rather than `local 1`, and
+`outer 1, n` for the frame one step out. The name is resolved against that
+frame's own declaration and the same byte is written, so the two spellings are
+one program: [`programs/adder.sasm`](programs/adder.sasm) and
+[`adder-named.sasm`](programs/adder-named.sasm) are exactly that, and the suite
+assembles both and compares the bytes.
+
+**This is the one check the numeric spelling cannot give.** `local 0` in a
+frame of two is a valid instruction that pushes the wrong thing; `local nn` is
+not an instruction at all, and the refusal names what the frame does have.
 
 **It cannot check the stack.** SolVM's verifier refuses a chunk where *two
 paths reach one instruction with different stack depths*, and that is a
@@ -140,8 +154,8 @@ the assembler. Nothing here pretends otherwise.
 ## Reserved words
 
 **Every mnemonic is a reserved word**, worked out from the grammar rather than
-declared — so a label cannot be called `loop`, and `arity` and `slots` are
-spoken for too. A *selector* that collides with one is written in quotes:
+declared — so a label cannot be called `loop`, a slot cannot be named `block`,
+and `arity` and `slots` are spoken for too. A *selector* that collides with one is written in quotes:
 `send "return", 0`.
 
 The three named constants are `#true`, `#false` and `#nil` for exactly this

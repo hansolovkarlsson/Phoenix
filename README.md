@@ -752,7 +752,7 @@ C11 and no dependencies. **The suite passes with nothing outside this
 repository** — 186 of the 189 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
-skipped when it is absent rather than failing. The assembler is in the 177:
+skipped when it is absent rather than failing. The assembler is in the 186:
 its programs are held against the bytes they assembled to last time, so it is
 tested without SolVM and held *against* SolVM when there is one.
 
@@ -1012,12 +1012,14 @@ writing it had heard of this project.**
 [`languages/solvm/`](languages/solvm/) is an assembler for Solveig's `.sob`
 bytecode: 21 mnemonics, labels, and blocks whose chunks nest. It is the
 tutorial's two-pass shape at full size — a threaded byte counter for the
-addresses, a gathered table for the labels — and the oracle is the same program
-written twice, in Solveig for `solas` and in assembly for this, compared
-*instruction by instruction* rather than only on what it prints:
+addresses, a gathered table for the labels, and the same shape again for slot
+names, so that `local n` can be written where `local 1` was meant — and the
+oracle is the same program written twice, in Solveig for `solas` and in
+assembly for this, compared *instruction by instruction* rather than only on
+what it prints:
 
 ```
-ok    25 checks: the bytes, the round trip, the refusals, and solas
+ok    58 checks: the bytes, the round trip, the refusals, solas, and the tutorial
 ```
 
 `count.sasm` is the loop and conditional whose disassembly is printed in

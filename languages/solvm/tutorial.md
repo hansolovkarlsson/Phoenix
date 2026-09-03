@@ -332,6 +332,60 @@ assembly** that each instruction came from, so a traceback points at what you
 wrote. And the chunk is called `twice` — `solas` names every block `block`, so
 naming them is something writing assembly buys you.
 
+### Name the frame, and say `local n`
+
+`local 1` twice tells you nothing about what slot 1 holds. Declare the frame as
+its slots' names instead of a count, and the instruction can say it. Change the
+block's header and its two `local`s:
+
+```
+.block twice arity 1 slots self, n
+        local   n
+        local   n
+        send    add, 1
+        return
+.end
+```
+
+```sh
+$ phx --raw "$asm" sum.sasm > sum.sob
+$ solvm sum.sob
+30
+```
+
+**The name is resolved here, not in the machine.** `self` is slot 0 and `n` is
+slot 1, because the list is positional and slots count from zero — so `local n`
+*is* `local 1`, one byte, and the disassembly does not change at all:
+
+```sh
+$ solvm --dump sum.sob | tail -6
+== twice ==
+0000   35 LOCAL       1
+0002   36 LOCAL       1
+0004   37 SEND        0 'add' (1 args)
+0008   38 RETURN
+30
+```
+
+Two things it buys. The first is the mistake it makes impossible: `local 0` in
+this frame is a perfectly valid instruction that pushes the receiver instead of
+the argument, and nothing would tell you — `local nn` is refused by name, and
+the refusal says what the frame does have.
+
+The second is that the names go into the chunk, where `solvm --trace` finds
+them:
+
+```sh
+$ solvm --trace sum.sob | tail -3
+  [sum.sasm:29] value(n: #15)
+  -> #30
+30
+```
+
+`value(n: #15)` rather than `value(#15)` — which is also what `solas` produces
+from the Solveig in the next step, and one of the things the two are compared
+on.
+
 ---
 
 ## 7. Check it against the compiler
@@ -394,6 +448,7 @@ is tested: `languages/solvm/oracle/` holds a `.sol` for every program in
 | a label, `loop`, `exitf` | forward and backward are different opcodes, and the assembler checks which you need |
 | `jumpf` | and the rule that both arms leave the same number of values |
 | `.block` / `block` / `return` | a nested chunk, its method-table slot, and slot 0 being the receiver |
+| `slots self, n` and `local n` | naming a frame, and addressing it by name — the same byte, and a wrong slot becomes a refusal |
 | `solvm --dump` | the only disassembler — Phoenix can emit `.sob` and cannot read one |
 
 ## What is left

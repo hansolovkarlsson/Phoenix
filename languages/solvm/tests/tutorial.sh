@@ -204,6 +204,27 @@ X
 says "6  the block doubles it" "$("$solvm" sum.sob 2>&1)"
 says "6b the tail of the dump" "$("$solvm" --dump sum.sob 2>&1 | tail -6)"
 
+# ---- 6c. the same block, with its frame named ---------------------------
+#
+# Only the block changes, which is what the page says to change. It claims
+# three things: it still prints 30, the disassembly is unchanged because
+# `local n` *is* `local 1`, and `--trace` now names the argument.
+#
+# `sum.sob` is left holding this build on purpose, so step 7 compares the
+# **named** spelling against solas -- which is the claim that naming a slot
+# changes nothing that reaches the machine.
+
+sed -e 's/^\.block twice arity 1 slots 2$/.block twice arity 1 slots self, n/' \
+    -e 's/^        local   1$/        local   n/' sum.sasm > named.sasm
+mv named.sasm sum.sasm
+
+"$phx" --raw "$asm" sum.sasm > sum.sob
+says "6c named, and it still doubles it" "$("$solvm" sum.sob 2>&1)"
+says "6d the same dump, because it is the same byte" \
+     "$("$solvm" --dump sum.sob 2>&1 | tail -6)"
+says "6e and --trace names the argument" \
+     "$("$solvm" --trace sum.sob 2>&1 | tail -3)"
+
 # ---- 7. and it is what solas emits --------------------------------------
 cat > sum.sol <<'X'
 total := #0.

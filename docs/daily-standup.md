@@ -9,6 +9,10 @@ scoring is [postmortem.md](postmortem.md).*
 `main`, clean, pushed. **189 tests, 0 failing** — 186 of them need nothing
 outside the repository. Started the day at 176.
 
+*Since: 2026-09-04 added symbolic slot operands to the assembler. Still 189
+reports; the assembler's own count went 49 → 58, and
+[journal.md](journal.md) has the day.*
+
 The website is live at
 [hansolovkarlsson.github.io/Phoenix](https://hansolovkarlsson.github.io/Phoenix/)
 and rebuilds itself on every push that touches `docs/` or `www/`.
@@ -37,10 +41,12 @@ and rebuilds itself on every push that touches `docs/` or `www/`.
 Nothing is blocked, and nothing is half-finished. In the order I would pick
 them up:
 
-- [ ] **Symbolic slot operands** in the assembler — `local total` rather than
-      `local 1`. Deferred on purpose when slot names went in; the frame already
-      knows the names, so it is small. It changes the assembly language rather
-      than its metadata, which is why it was not folded in.
+- [x] **Symbolic slot operands** in the assembler — `local total` rather than
+      `local 1`. **Done 2026-09-04**; the estimate held, and
+      [postmortem.md](postmortem.md) § 7 says why that is a claim about the
+      mechanisms rather than about the change. It brought two refusals and a
+      static check on `outer` depth that the feature did not ask for. The
+      assembler's suite went 49 → 58 and the goldens did not move.
 - [ ] **Read `SOL_SOB_VERSION` rather than writing 14** into two descriptions.
       `PRODUCING.md` asks for it; the trade was made deliberately (it would
       couple a description to a path outside this repository) and the suite

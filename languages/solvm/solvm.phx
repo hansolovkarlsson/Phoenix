@@ -117,10 +117,10 @@ instruction =
   | "nil"                               -> Nil
   | "global"  n:sel                     -> Global(sel: $n)
   | "setglob" n:sel                     -> SetGlobal(sel: $n)
-  | "local"   s:integer                 -> Local(slot: $s)
-  | "setlocl" s:integer                 -> SetLocal(slot: $s)
-  | "outer"   d:integer "," s:integer   -> Outer(depth: $d, slot: $s)
-  | "setoutr" d:integer "," s:integer   -> SetOuter(depth: $d, slot: $s)
+  | "local"   s:slotref                 -> Local(slot: $s)
+  | "setlocl" s:slotref                 -> SetLocal(slot: $s)
+  | "outer"   d:integer "," s:slotref   -> Outer(depth: $d, slot: $s)
+  | "setoutr" d:integer "," s:slotref   -> SetOuter(depth: $d, slot: $s)
   | "block"   b:name                    -> PushBlock(name: $b)
   | "string"  t:sel                     -> Str(sel: $t)
   | "symbol"  n:sel                     -> Sym(sel: $n)
@@ -139,6 +139,19 @@ instruction =
  * character a name cannot hold -- a text literal. *)
 sel = n:name -> Bare(word: $n)
     | t:text -> Quoted(raw: $t) .
+
+(* A slot, as its number or -- when the frame it belongs to was declared as
+ * its slots' names -- as one of those names. Which frame that is depends on
+ * the instruction: `local` means this one and `outer d` means `d` out, so the
+ * operand cannot resolve itself and is handed the frame in the `slotrefs`
+ * pass below.
+ *
+ * A node rather than two spellings of one field, which is what `sel` above
+ * does for the same reason: the resolving happens once, in a clause, and
+ * every instruction that takes a slot reads `$slot.num` without knowing
+ * which spelling it was given. *)
+slotref = n:integer -> SlotNum(text: $n)
+        | n:name    -> SlotName(name: $n) .
 
 constant = intlit   -> IntConst(text: $1)
          | reallit  -> RealConst(text: $1)
@@ -174,6 +187,111 @@ constant = intlit   -> IntConst(text: $1)
   otherwise word = "" .
 
 (* ------------------------------------------------------------------ *)
+(* Which slot a name means.                                           *)
+(*                                                                     *)
+(* Two passes, and it is the same reason an assembler is two passes:    *)
+(* the script's frame is declared by a `.slots` that is a *sibling* of   *)
+(* the instructions using it, and very often below them. So the names    *)
+(* are gathered on the way up in one pass and handed back down in the     *)
+(* next -- exactly what `layout` and `sob` do for labels.                 *)
+(*                                                                        *)
+(* A block needs neither, since its frame is in its own header; it is the  *)
+(* script that cannot be done in one walk, and one mechanism is written    *)
+(* rather than two.                                                       *)
+(*                                                                        *)
+(* **This is here and not in the assembler** because a name that no slot   *)
+(* answers to is a mistake in the *program*, not in the bytes -- so        *)
+(* `--driver render` refuses it too, and `solvm.phx` stays the file that   *)
+(* holds every check of that kind.                                        *)
+
+%pass frames
+
+  (* Gathered up. A `.slots` is the only item that contributes, and it can
+   * only appear at the top: a block declares its frame in its header. *)
+  Slots     : snames = $slotnames .
+  otherwise snames = [] .
+
+  Unit     : ownsnames = flatten($items.snames)
+           ! size(positions(flatten($items.snames))) < size(flatten($items.snames))
+               : "two slots in the script's frame have the same name" .
+
+  BlockDef : ownsnames = $slotnames
+           ! size(positions($slotnames)) < size($slotnames)
+               : "two slots in '{}' have the same name" of $name .
+
+%pass slotrefs
+
+  (* Handed back down. One table for every frame on the way in, keyed by the
+   * frame's depth and the name -- a space cannot occur in either half, so the
+   * two cannot run together. Flat rather than a stack of tables, because
+   * `lookup` takes a table and a list of them would need a second mechanism
+   * to index.
+   *
+   * `positions` is what turns the names into slot numbers: it answers
+   * `[value, index]` pairs and its index is zero-based, which is how slots
+   * are counted. `fnames` is the same names again, joined, and exists only so
+   * that a refusal can say what the frame does have.
+   *
+   * The inner frame's entries go on the **front**, so `lookup` reaches the
+   * nearest one first. *)
+  Unit : down bdepth = 0
+       : down ftable = positions(each($ownsnames, "0 {}"))
+       : down fnames = [[0, lookup([[0, "nothing named"]], size($ownsnames),
+                                   join($ownsnames, ", "))]] .
+
+  (* Written before `bdepth` is advanced, so `$bdepth + 1` says this block's
+   * own depth once rather than reading a value that has just changed
+   * underneath it. Clauses run in the order they are written. *)
+  BlockDef : down ftable = [...positions(each($slotnames,
+                                              "{} {}" of ($bdepth + 1), "{}")),
+                            ...$ftable]
+           : down fnames = [[$bdepth + 1,
+                              lookup([[0, "nothing named"]], size($slotnames),
+                                     join($slotnames, ", "))], ...$fnames]
+           : down bdepth = $bdepth + 1 .
+
+  (* Which frame the operand below is to be read against. This is the whole
+   * reason the operand does not resolve itself. *)
+  Local    : down fdepth = $bdepth .
+  SetLocal : down fdepth = $bdepth .
+
+  (* The depth is checked here rather than left to the machine, because the
+   * lexical chain is a fact about the *text*: a chunk nested `n` deep has `n`
+   * frames outside it and no more, whenever it runs. Without this a name one
+   * step too far out would be reported as a name the frame has not got, which
+   * is true and is not the mistake. *)
+  Outer    : down fdepth = $bdepth - int($depth)
+           ! int($depth) > $bdepth
+               : "depth {} reaches past the outermost frame, and this chunk is nested {} deep"
+                   of $depth, $bdepth .
+  SetOuter : down fdepth = $bdepth - int($depth)
+           ! int($depth) > $bdepth
+               : "depth {} reaches past the outermost frame, and this chunk is nested {} deep"
+                   of $depth, $bdepth .
+
+  SlotNum  : num = int($text) .
+
+  (* Three things about the four lines below.
+   *
+   * The key is written out twice rather than named once, because a check runs
+   * before the attributes of the rule it guards -- so an attribute holding it
+   * could not be read here.
+   *
+   * `$fdepth >= 0` leaves a depth past the outermost frame to the check
+   * above. Below zero there is no frame to hold a slot of any name, and
+   * saying *this frame has not got it* would be true and would not be the
+   * mistake.
+   *
+   * So what is left for `lookup`'s default to cover is the frame that was
+   * declared as a count: it has no names, and "nothing named" is what the
+   * refusal should say about it. *)
+  SlotName : num = lookup($ftable, ("{} {}" of $fdepth, $name), 0)
+           ! $fdepth >= 0
+             and not defined($ftable, ("{} {}" of $fdepth, $name))
+               : "no slot is called '{}' here -- the frame has {}"
+                   of $name, lookup($fnames, $fdepth, "nothing named") .
+
+(* ------------------------------------------------------------------ *)
 (* Writing it back out.                                               *)
 (*                                                                     *)
 (* Not decoration: a program that parses, renders and parses to the     *)
@@ -188,6 +306,11 @@ constant = intlit   -> IntConst(text: $1)
   Bare       : out = $word .
   Quoted     : out = "{}" of $raw .
 
+  (* A slot goes back out as it came in: the node kept its spelling, so a
+   * program written with names renders with names. *)
+  SlotNum    : out = $text .
+  SlotName   : out = $name .
+
   IntConst   : out = $text .
   RealConst  : out = $text .
   NamedConst : out = $text .
@@ -196,10 +319,10 @@ constant = intlit   -> IntConst(text: $1)
   Nil        : out = "    nil" .
   Global     : out = "    global  {}" of $sel.out .
   SetGlobal  : out = "    setglob {}" of $sel.out .
-  Local      : out = "    local   {}" of $slot .
-  SetLocal   : out = "    setlocl {}" of $slot .
-  Outer      : out = "    outer   {}, {}" of $depth, $slot .
-  SetOuter   : out = "    setoutr {}, {}" of $depth, $slot .
+  Local      : out = "    local   {}" of $slot.out .
+  SetLocal   : out = "    setlocl {}" of $slot.out .
+  Outer      : out = "    outer   {}, {}" of $depth, $slot.out .
+  SetOuter   : out = "    setoutr {}, {}" of $depth, $slot.out .
   PushBlock  : out = "    block   {}" of $name .
   Str        : out = "    string  {}" of $sel.out .
   Sym        : out = "    symbol  {}" of $sel.out .
@@ -228,4 +351,4 @@ constant = intlit   -> IntConst(text: $1)
 
   Unit       : out = join($items.out, "\n") .
 
-%driver render = selectors, render -> out .
+%driver render = selectors, frames, slotrefs, render -> out .

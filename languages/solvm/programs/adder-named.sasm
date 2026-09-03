@@ -1,0 +1,34 @@
+; `adder.sasm`, with every slot written as its name rather than its number.
+;
+; The two are the same program and have to assemble to the same code -- which
+; is what `tests/run.sh` checks, by putting both at one path and comparing the
+; bytes. A chunk records the file it came from, so that is the only way to
+; compare two files honestly.
+;
+; This is the whole of what a name buys. `outer 1, 1` says nothing about what
+; slot 1 holds; `outer 1, n` says it, and the frame it is counted against is
+; already declared two lines up. Nothing reaches the bytes differently: the
+; name is resolved against the frame's own declaration and one byte is
+; written, exactly as before.
+.slots self
+
+        block   outer-block
+        const   #2
+        send    value, 1
+        send    display, 0
+        pop
+        halt
+
+.block outer-block arity 1 slots self, n
+        block   inner-block
+        const   #40
+        send    value, 1
+        return
+
+    .block inner-block arity 1 slots self, m
+        outer   1, n
+        local   m
+        send    add, 1
+        return
+    .end
+.end
