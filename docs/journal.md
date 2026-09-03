@@ -2874,3 +2874,132 @@ widest thing the tests compare.**
 for what does not. The three things named as unfinished are `getline`'s two
 piped forms in awk, scope graphs, and compiling the tables to code — and the
 page says why none of them is urgent.
+
+---
+
+## 2026-09-03 — documentation, and what running it found
+
+The tool was finished enough that the day's work was mostly about the pages
+around it. Five documents for Phoenix — a manual, a reference, a cheatsheet and
+two tutorials — then a website that builds them, then the same four documents
+for a new language, then a week's worth of finding out that a page nobody runs
+is a page that is wrong.
+
+### The website, assembled rather than committed
+
+`www/` holds a front page and a stylesheet; `.github/workflows/pages.yml` runs
+`www/assemble.sh` on every push that touches `docs/` or `www/`. Nothing is
+committed built, so the site cannot fall behind the documentation and there is
+no generated HTML in the history.
+
+The one thing that had to be worked around: **Jekyll's Liquid ate `{{`**, which
+is how this notation writes a literal brace, so six of fourteen documents
+refused to build. `assemble.sh` wraps each body in `{% raw %}`. Front matter is
+added there too, rather than committed, because `docs/*.md` are read on GitHub
+as often as on the site and YAML renders there as a stray table.
+
+### An assembler for SolVM
+
+`languages/solvm/` — 21 mnemonics, labels, nested blocks. It is the thing this
+tool is most obviously for: every hard part of `solveig-sob.phx` is absent,
+because in assembly the programmer says which slot and which frame. What is
+left is the part that is not, and it is the two-pass shape `%driver` exists for.
+
+Two mechanisms, because there are two questions. A side-table index is assigned
+where a name is first seen — a fold over the walk, so a thread. A label is used
+before it is defined, so it cannot be one, and is gathered instead. Both nest,
+because a block is its own chunk, and `down` on a *threaded* attribute finally
+has its second customer.
+
+`count.sasm` is the loop-and-conditional listing printed in SolVM's own
+`docs/BYTECODE.md`, typed back in by hand, and it assembles to that listing
+exactly — every offset, every opcode, every side-table index.
+
+### The oracle found the one thing reading did not
+
+The CAPTURES flag was derived over nested chunks as well as this one, on the
+reasoning that a frame read from below has to survive too. `solas` does not,
+and says why in a comment above `touches_home`: *a nested chunk is not
+consulted; its depths are counted from its own frame.* Both spellings run the
+same program and print the same answer. **Only comparing the instruction
+streams found it.**
+
+### And then: run the documentation
+
+Three tutorials were made executable this week, and the first two had been
+"verified" by their author while writing them. That verification is worth
+nothing, and it is worth understanding why: an author checks the commands
+against files that already exist, in a directory that already has state.
+Neither is what a reader has.
+
+The solvm tutorial had four defects. Three were a `solvm` run on bytecode
+nothing had reassembled after the source changed — the reader sees an answer
+that has nothing to do with the file in front of them. The fourth was the
+closing comparison, the step the whole page builds to, diffing a program with a
+block against one without.
+
+`docs/tutorial-assembler.md` had two: a command using a driver the page never
+told the reader to write, and a line number captured from a file that already
+had a later pass appended. `docs/tutorial-picture.md` had one, and it was a
+caret line two spaces short.
+
+All three now run in the suite, and each asserts that what came back **appears
+verbatim in the page**. Confirmed to bite by drifting a field name in one and a
+line number in another.
+
+### Two roadmap entries left with verdicts
+
+**1.6** — `|` as an expression operator, for awk's `cmd | getline`. Where the
+rung goes is not guessable from the ladder around it, so it was settled against
+`/usr/bin/awk`: looser than concatenation, tighter than a relation, a left
+fold, no newline after it. Two of those four are things a description could be
+*consistently* wrong about, which is why the round trip could not have settled
+them. The entry predicted `printargs` would need telling where to stop; it
+needed nothing, because awk keeps `|` as the redirect inside a print and says
+so loudly.
+
+**2.3** — scope graphs. The entry had scepticism and no evidence, so Turbo
+Pascal's units were described to get some: `languages/units/`. Every rule
+settled against `fpc -Mtp` first, including one a reading of the others gets
+wrong. Resolution stayed a list, and a cycle between two implementations costs
+nothing — because visibility does not compose, resolving a `uses` is one lookup
+in a table the first pass built, not a walk. **There is no traversal for a
+cycle to be a cycle in.**
+
+So the entry's leading criterion, *modules that import each other*, is not
+sufficient. What would bite is a language where visibility *composes*, and the
+entry leaves saying so.
+
+### A gap in the checker, found by using a feature
+
+Adding a `slotnames` field called `names` to a node whose clauses save and
+restore the interned `names` **thread** broke the assembler silently: a field is
+read before an attribute, so the save read the field, the thread never passed
+through, and the chunk came out with a name count of zero and the names still
+in it. Three bytes wrong, no diagnostic.
+
+A synthesised attribute of a field's name had always been warned about. A
+threaded one had not, and it is the sharper case: the synthesised one is merely
+invisible from outside, while the threaded one takes a value out of the fold and
+puts a different one back. It is an error now. An inherited one is a warning.
+And settling the third case turned up a documentation bug — `docs/manual.md`
+stated the resolution order backwards, claiming a field is read before a
+binding.
+
+### What the day's last hour said about all of it
+
+`docs/reference.md` § 11 was held by nothing: eighteen of the library's
+twenty-two functions had no executable check. 66 claims later, **all 66 held.**
+
+That is the useful result. Three tutorials and one reference section were made
+executable this week; the tutorials had eight defects between them and the
+reference had none. The difference is what the two kinds of page are *about*.
+A tutorial's claims are about a sequence of commands in a directory, and go
+stale when anything around them moves. A reference's claims are about the tool,
+and the tool has tests.
+
+**Run the documentation whose claims are not already held by something else.**
+That is sharper than "run your documentation", and it is what this week
+actually taught.
+
+176 tests at the start of the day, 189 at the end.

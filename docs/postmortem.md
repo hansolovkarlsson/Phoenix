@@ -277,3 +277,84 @@ written by people who had never heard of this.
 The ratio is the claim, and it is now measurable on somebody else's code: **800
 lines of awk in the corpus, 1,650 lines of description that compiles it, and
 the description works on awk nobody has written yet.**
+
+---
+
+## 6. What the documentation week scored
+
+Four kinds of page were made executable in one week — three tutorials and one
+reference section — and the results split cleanly enough to be a rule.
+
+### The prediction that failed: that reading a page verifies it
+
+Every tutorial here was checked by its author while it was being written. That
+turned out to be worth nothing, and the reason is not carelessness:
+
+> An author runs the commands against files that already exist, in a directory
+> that already has state. **Neither is what a reader has.**
+
+Eight defects across three tutorials, and the shape of them is the tell. Three
+were a command run on an artefact nothing had rebuilt after the source changed
+— which does not fail, it silently answers about the previous build. One was
+the closing comparison of a page, the step the whole tutorial builds to,
+comparing two things that were no longer the same program. One was a command
+naming a driver the page never told the reader to write. One was a line number
+captured from a file that had a later section appended. One was a caret line
+two spaces short.
+
+Not one would have been found by reading. All were found in a single pass by
+running.
+
+### The prediction that held: that a reference is different
+
+`docs/reference.md` § 11 had eighteen of the library's twenty-two functions
+unchecked. 66 claims were written from it, in the order the page makes them.
+**All 66 held.**
+
+That is the more useful half of the week, because it says *which* pages need
+this:
+
+> A tutorial's claims are about a sequence of commands in a directory, and go
+> stale when anything around them moves. A reference's claims are about the
+> tool, and the tool has tests.
+
+So the rule is not *run your documentation*. It is **run the documentation
+whose claims are not already held by something else** — and a tutorial is
+always in that category, because its subject is a session rather than a
+program.
+
+### What the checker did not catch, and now does
+
+A field with a **threaded** attribute's name was silent. A field is read before
+an attribute, so the clause meant to update the thread read the field instead:
+the thread never passed through that node, and every node after it carried on
+from a value that never went through. The chunk it produced was three bytes
+wrong with no diagnostic, and it took a byte-level diff against a golden to
+find.
+
+The synthesised case had been warned about since the check was written. The
+threaded case is the sharper one — the synthesised attribute is merely
+invisible from outside, while the threaded one takes a value out of the fold
+and puts a different one back — and it is an error now rather than a warning,
+because there is no reading of it that is correct.
+
+Settling the remaining case of that family turned up a documentation bug of
+exactly the kind § 6 is about: `docs/manual.md` stated the name-resolution
+order backwards. A binding wins over a field; the page said the reverse.
+
+### And two entries left the roadmap with evidence rather than opinion
+
+**2.3** had been open on scepticism for three languages. Describing Turbo
+Pascal's units settled it against: resolution stayed an association list, and a
+cycle between two implementations costs nothing because visibility does not
+compose — *there is no traversal for a cycle to be a cycle in*. The entry's
+leading criterion turned out not to be sufficient, which is a better result
+than closing it would have been, because it names what to look for instead.
+
+**1.6** was the last unfinished work in any language described here. Its
+prediction was half wrong in the useful direction: `printargs` needed no
+telling where to stop, because awk itself keeps `|` as the redirect inside a
+print.
+
+Section 2 of the roadmap is now empty and section 1 holds one entry, which is a
+measurement rather than work.
