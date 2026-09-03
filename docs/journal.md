@@ -643,7 +643,7 @@ declaration is a reference to another node**, and an attribute computed in one
 walk cannot reach sideways. So names are not checked in there either.
 
 That second one is worth more than the checking it costs: it is the first
-concrete argument for [reference attributes](ROADMAP.md#21-reference-attributes--from-jastadd),
+concrete argument for [reference attributes](COMPLETED.md#21-reference-attributes--from-jastadd),
 which until now was a thing the literature offered rather than a thing this
 project needed. The rule has been *do not build it speculatively*, and it is no
 longer speculative.
@@ -662,7 +662,7 @@ named.
 
 The two places the Pascal checker said nothing — `with origin do ... x ...` and
 `function Area;` repeating a `forward` heading — were filed as needing
-[reference attributes](ROADMAP.md#21-reference-attributes--from-jastadd), a
+[reference attributes](COMPLETED.md#21-reference-attributes--from-jastadd), a
 JastAdd feature that would have brought demand-driven evaluation back with it
 and undone a decision stage 2 made deliberately.
 

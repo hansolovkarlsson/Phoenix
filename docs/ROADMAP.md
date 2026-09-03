@@ -185,7 +185,7 @@ The `.sob` backend added three, and each says what was missing:
 | `positions(list)` | the table saying where each thing is. A slot *is* a position in the frame's list of names, and `at` wants an index rather than making one |
 
 The line table added **one more, and one extension**, and both say the same
-thing about the notation — see [1.3](#13-a-way-for-a-description-to-share-a-computation):
+thing about the notation — see [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation):
 
 | | |
 | --- | --- |
@@ -194,7 +194,7 @@ thing about the notation — see [1.3](#13-a-way-for-a-description-to-share-a-co
 
 **Both are cases `otherwise` would have covered**, and that is the entry worth
 reading beside this one. They were added while the question looked like *"a map
-over a list"*; it was [1.3](#13-a-way-for-a-description-to-share-a-computation)'s,
+over a list"*; it was [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)'s,
 *"an attribute every node has"*, and a list of nodes then has a column of them
 for free. The rule this section states was met by both and they are still here,
 so the rule is not enough on its own: **a library entry answers one case, and
@@ -234,8 +234,8 @@ as nothing, every part is emitted the same way whether it is there or not, and
 the question disappears rather than being answered.
 
 That is the third time the answer to "the notation cannot say this" has been
-"say something else earlier" — see [1.3](#13-a-way-for-a-description-to-share-a-computation)
-and [2.4](#24-inlining-a-block--from-solas). It is not proof that an `if` is
+"say something else earlier" — see [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)
+and [2.4](COMPLETED.md#24-inlining-a-block--from-solas). It is not proof that an `if` is
 never wanted. It is one more case where wanting one was a sign that a tree had
 the wrong shape.
 
