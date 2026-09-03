@@ -153,6 +153,41 @@ transcription survived.
 `awk-c.phx` went from 1,187 lines to 510, and `make test` compiles the runtime
 on its own.
 
+### 1.6 `|` as an expression operator, for `getline`
+
+`cmd | getline` and `cmd | getline var` — the last two of awk's six forms, and
+the only piece of unfinished work in any language described here.
+
+*The entry called it small and awkward rather than deep, and said `printargs`
+would have to be told where to stop if `|` became an operator.* Both right, and
+the second turned out to need nothing: awk itself keeps `|` as the redirect
+inside a print, and `print "echo hi" | getline x` pipes the string to whatever
+command `getline x` answers. So the print ladder simply does not get the rung —
+which is the split it already had, for the relation `print a > b` takes away.
+
+**Where the rung goes is the part a reading of the ladder gets wrong**, and it
+was settled against `/usr/bin/awk` rather than reasoned out:
+
+| | |
+| --- | --- |
+| `"ec" "ho hi" \| getline x` runs `echo hi` | looser than concatenation |
+| `"echo hi" \| getline x > 5` answers 0 | tighter than a relation |
+| `cmd \| getline x \| getline y` pipes twice | a left fold |
+| `"cmd" \|` then a newline is a syntax error | no `nl` after it |
+
+Only the two bare forms may follow the pipe, which is `simple_get` in POSIX's
+own grammar: the command is already where the input comes from, so `< file`
+cannot follow.
+
+Eleven lines of grammar and two `show` clauses. What holds it is
+`tests/conformance/getline-pipe.awk`, run under `/usr/bin/awk` before and after
+this description renders it — because the round trip alone proves only that the
+description agrees with itself, and two of those four facts are ones it could
+have been consistently wrong about.
+
+Still not **compiled**: `awk-c.phx` refuses every form of `getline` by name,
+and the piped one now among them.
+
 ### 2.2 Strategies — from Stratego
 
 `%rewrite name strategy`, with Stratego's words unchanged.

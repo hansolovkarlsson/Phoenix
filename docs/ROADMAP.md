@@ -10,16 +10,16 @@ what it got wrong first; [postmortem.md](postmortem.md) scores the predictions.
 
 Three languages are described and compiled: Pascal against `fpc`, Solveig
 against `solas`, awk against `/usr/bin/awk`. What remains on this page is one
-measurement that keeps coming out the same way, one small awkward grammar
-question, and one borrowed idea nothing has asked for.
+measurement that keeps coming out the same way and one borrowed idea nothing
+has asked for. **There is no unfinished work in any language described here.**
 
 ---
 
 ## 1. The stages that remain
 
-Six entries have left this section; [COMPLETED.md](COMPLETED.md) has them, with
-what each predicted against what it cost. Three of the six predicted wrong,
-which is the more useful half.
+Seven entries have left this section; [COMPLETED.md](COMPLETED.md) has them,
+with what each predicted against what it cost. Three of the seven predicted
+wrong, which is the more useful half.
 
 | | |
 | --- | --- |
@@ -28,6 +28,7 @@ which is the more useful half.
 | [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation) | `otherwise` — what a node answers when its rule does not |
 | [1.4](COMPLETED.md#14-where-a-node-ends) | a position is a **span** |
 | [1.5](COMPLETED.md#15-a-runtime-that-is-not-a-literal) | `%embed` — a file's bytes under a name |
+| [1.6](COMPLETED.md#16--as-an-expression-operator-for-getline) | `\|` as an expression operator — awk's `cmd \| getline` |
 
 ### 1.2 Compiling the tables to code
 
@@ -59,26 +60,6 @@ definition down first, and code generated against them can be checked against
 the interpreter that produced them. Doing it the other way round is how two
 implementations appear.
 
-### 1.6 `|` as an expression operator, for `getline`
-
-**The only piece of unfinished work in a language described here**, and it is
-small and awkward rather than deep.
-
-`languages/awk/awk.phx` describes four of `getline`'s six forms. The two it
-does not are `cmd | getline` and `cmd | getline var`, which need `|` to be an
-operator in an expression — and `|` is otherwise only a print redirect, so a
-`printargs` that stopped at one would have to be told where.
-
-It is described rather than skipped for a reason worth keeping: **not
-describing a construct is not the same as refusing it.** Before there was a
-rule mentioning the word, `getline line` read as *two variables concatenated* —
-ordinary awk, read as something else, quietly. Mentioning it is what makes it
-reserved. The two piped forms do not parse, which is loud, and
-`tests/divergent/getline-pipe.awk` says so.
-
-Nothing in the corpus uses `getline` at all, which is why this has waited.
-
----
 
 ## 2. Borrowed, and worth borrowing
 

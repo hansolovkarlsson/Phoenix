@@ -118,7 +118,8 @@
    * second reader, and the two forms this grammar does not describe need `|`
    * to be an expression operator. Neither is here, and both are refused rather
    * than guessed at. *)
-  Getline ! true : "getline is not compiled" .
+  Getline     ! true : "getline is not compiled" .
+  GetlinePipe ! true : "getline is not compiled" .
 
   (* Where output goes. A name stays open until `close` or the end, because
    * `print > "f"` twice appends to what it opened the first time. *)

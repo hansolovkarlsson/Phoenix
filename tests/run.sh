@@ -1226,8 +1226,8 @@ t="$root/languages/awk/tests/not-yet"
 # which is a silent mis-parse of ordinary awk.
 refuses "getline, which is read and not compiled" "getline is not compiled" \
         --driver c "$c" "$t/getline.awk"
-refuses "and the two forms of it that need | to be an operator" "and found" \
-        "$a" "$d/getline-pipe.awk"
+refuses "and the piped form, which needed a rung of its own to read" \
+        "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"

@@ -220,9 +220,31 @@ matching = comparison { o:matchop r:comparison
 matchop = "~" | "!~" .
 
 (* Not associative: `a < b < c` is two comparisons in C and nonsense here. *)
-comparison = a:concat o:relop b:concat -> Compare(op: $o, left: $a, right: $b)
-           | concat .
+comparison = a:piped o:relop b:piped -> Compare(op: $o, left: $a, right: $b)
+           | piped .
 relop = "<=" | "!=" | "==" | ">=" | "<" | ">" .
+
+(* **`cmd | getline` -- the one rung that makes `|` an operator**, and the
+ * reason the two piped forms of `getline` went undescribed until now.
+ *
+ * Where it sits was settled against `/usr/bin/awk` rather than reasoned out,
+ * because the answer is not guessable from the other rungs:
+ *
+ *   `"ec" "ho hi" | getline x`   runs `echo hi`, so it is looser than concat
+ *   `"echo hi" | getline x > 5`  answers 0, so it is tighter than a relation
+ *   `cmd | getline x | getline y` pipes twice, so it is a left fold
+ *   `"cmd" |` then a newline      is a syntax error, so no `nl` after it
+ *
+ * Only the two bare forms may follow the pipe -- `< file` cannot, because the
+ * command is already where the input comes from. That is `simple_get` in
+ * POSIX's own grammar, and it is why this is not simply `getline` again.
+ *
+ * **The print-argument ladder deliberately does not get this rung.** There `|`
+ * is the redirect, and awk agrees: `print "echo hi" | getline x` pipes the
+ * string to the command `getline x` answers, which is what `awk` does with it.
+ * A print argument that wants this writes the parentheses. *)
+piped = concat { "|" "getline" l:lvalue -> GetlinePipe(command: $$, into: $l)
+               | "|" "getline"          -> GetlinePipe(command: $$, into: nil) } .
 
 (* **Concatenation has no operator**, which is awk's most distinctive syntax
  * and the reason its grammar is not LL(1). Here it is a repetition of the rung
@@ -256,9 +278,8 @@ postfix = l:lvalue "++" -> PostIncr(target: $l)
  * concatenated* -- a silent mis-parse of ordinary awk.
  *
  * Four of its six forms are here, which is the two that read from a file or
- * from the input. `cmd | getline` is the other two, and `|` is not an
- * expression operator here, so those do not parse -- loudly, which is the
- * point. Mentioning the word at all is what makes it reserved. *)
+ * from the input; the other two are the pipe, and they are the `piped` rung
+ * above. Mentioning the word at all is what makes it reserved. *)
 primary = "getline" l:lvalue "<" e:concat -> Getline(into: $l, from: $e)
         | "getline" "<" e:concat          -> Getline(into: nil, from: $e)
         | "getline" l:lvalue              -> Getline(into: $l, from: nil)
@@ -394,6 +415,9 @@ arglist = e:expr { "," nl f:expr -> $f } -> [$e, ...$2]
   Getline(into: nil) : show = "getline < {}" of $from.show .
   Getline(from: nil) : show = "getline {}" of $into.show .
   Getline            : show = "getline {} < {}" of $into.show, $from.show .
+
+  GetlinePipe(into: nil) : show = "{} | getline" of $command.show .
+  GetlinePipe : show = "{} | getline {}" of $command.show, $into.show .
 
   Field   : show = "${}" of $index.show .
   Group   : show = "({})" of join($items.show, ", ") .

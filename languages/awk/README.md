@@ -176,16 +176,25 @@ appended file or a pipe with `close`, **range patterns**, and the input awk
 takes: the files named on the command line, `FILENAME`, `FNR`, and
 `name=value` operands including `-v`.
 
-**What is left is `getline`**, and it is the only thing here whose *grammar* is
-the problem rather than its runtime. Four of its six forms are described;
-`cmd | getline` is the other two and needs `|` to be an expression operator,
-which it is not. Both are in [`tests/not-yet/`](tests/not-yet/) and
-[`tests/divergent/`](tests/divergent/), and both are refused with a position.
+**What is left is `getline`, and only its runtime.** All six forms are
+described now: four read from a file or from the input, and the two piped ones
+took a rung of the expression ladder, since `cmd | getline` needs `|` to be an
+operator. Where that rung goes was settled against `/usr/bin/awk` rather than
+reasoned out — it is looser than concatenation and tighter than a relation, and
+neither is guessable from the rungs around it.
+
+The print-argument ladder deliberately does not get it. There `|` is the
+redirect, and awk agrees: `print "echo hi" | getline x` pipes the string to
+whatever command `getline x` answers. That is the same split the ladder already
+had for `print a > b`.
 
 **It is described even though nothing compiles it**, and that is the
 interesting part: `getline` is not a keyword unless some rule says so, and
 without one `getline line` reads as *two variables concatenated* — a silent
-mis-parse of ordinary awk. Mentioning the word is what makes it reserved.
+mis-parse of ordinary awk. Mentioning the word is what makes it reserved. Both
+forms sit in [`tests/not-yet/`](tests/not-yet/) and are refused by name;
+[`tests/conformance/getline-pipe.awk`](tests/conformance/) is the piped one run
+under `/usr/bin/awk` before and after this description renders it.
 
 ### Two things the backend taught the front end
 
@@ -233,5 +242,5 @@ need a hash table or a regular expression engine. `languages/solveig/` was built
 that a backend for a language whose parse is wrong is a backend written twice.
 
 **`getline`**, which is refused rather than mis-read: it is the one construct
-in awk whose grammar depends on where it appears, and it appears nowhere in the
-corpus.
+in awk whose grammar depends on where it appears — read in full now, compiled
+in none of its forms, and appearing nowhere in the corpus.

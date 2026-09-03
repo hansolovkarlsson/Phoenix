@@ -988,8 +988,8 @@ that e2fsprogs, ncurses and vim ship, run under `/usr/bin/awk` before and after
 this description rewrites them:
 
 ```
-ok    28 awk programs parse, render, and parse to the same tree, 0 do not
-ok    7 awk programs and 6 other people wrote do the same thing rendered, 0 do not
+ok    30 awk programs parse, render, and parse to the same tree, 0 do not
+ok    8 awk programs and 6 other people wrote do the same thing rendered, 0 do not
 ok    13 awk programs and 6 other people wrote compile to C that prints what awk prints
 ```
 
