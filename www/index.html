@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix — a compiler generator</title>
+<meta name="description" content="Write a language's grammar in EBNF and describe what each construct means; Phoenix writes the compiler. C11, no dependencies.">
+<meta property="og:title" content="Phoenix — a compiler generator">
+<meta property="og:description" content="Write a language's grammar in EBNF and describe what each construct means; Phoenix writes the compiler.">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="assets/phoenix.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23b0431c'/></svg>">
+</head>
+<body>
+
+<header class="bar">
+ <div class="wide">
+  <a class="mark" href="./">Phoenix</a>
+  <nav>
+    <a href="tutorial-picture.html">Tutorial</a>
+    <a href="manual.html">Manual</a>
+    <a href="reference.html">Reference</a>
+    <a href="cheatsheet.html">Cheatsheet</a>
+    <a href="https://github.com/hansolovkarlsson/Phoenix">GitHub</a>
+  </nav>
+ </div>
+</header>
+
+<!-- ================= hero ================= -->
+
+<section class="hero">
+  <div class="wide">
+    <h1>Phoenix</h1>
+    <p class="tag">A compiler generator. You write a language's grammar in EBNF
+      and describe what each construct means; <b>Phoenix writes the
+      compiler.</b></p>
+
+    <figure class="pipeline">
+      <svg viewBox="0 0 900 200" role="img" aria-label="pascal.phx becomes pascal.c, which cc builds into cpas; cpas turns myprogram.pas into myprogram.c, which cc builds into a program.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">
+
+          <!-- row one: a description becomes a compiler -->
+          <rect x="8"   y="20" width="140" height="42" rx="7" fill="var(--surface)" stroke="var(--rule)"/>
+          <text x="78"  y="46" fill="var(--ink)" text-anchor="middle">pascal.phx</text>
+
+          <line x1="152" y1="41" x2="212" y2="41" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)"/>
+          <text x="182" y="28" fill="var(--accent)" text-anchor="middle" font-size="12">phx</text>
+
+          <rect x="218" y="20" width="130" height="42" rx="7" fill="var(--surface)" stroke="var(--rule)"/>
+          <text x="283" y="46" fill="var(--ink)" text-anchor="middle">pascal.c</text>
+
+          <line x1="352" y1="41" x2="412" y2="41" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)"/>
+          <text x="382" y="28" fill="var(--accent)" text-anchor="middle" font-size="12">cc</text>
+
+          <rect x="418" y="20" width="104" height="42" rx="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.4"/>
+          <text x="470" y="46" fill="var(--accent)" text-anchor="middle" font-weight="600">cpas</text>
+
+          <!-- the compiler comes down and does its work -->
+          <line x1="470" y1="66" x2="470" y2="140" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 4"/>
+          <circle cx="470" cy="141" r="3.6" fill="var(--accent)"/>
+
+          <!-- row two: a program goes through it -->
+          <rect x="8"   y="120" width="176" height="42" rx="7" fill="var(--surface)" stroke="var(--rule)"/>
+          <text x="96"  y="146" fill="var(--ink)" text-anchor="middle">myprogram.pas</text>
+
+          <line x1="188" y1="141" x2="466" y2="141" stroke="var(--muted)" stroke-width="1.4"/>
+          <line x1="474" y1="141" x2="556" y2="141" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)"/>
+
+          <rect x="562" y="120" width="164" height="42" rx="7" fill="var(--surface)" stroke="var(--rule)"/>
+          <text x="644" y="146" fill="var(--ink)" text-anchor="middle">myprogram.c</text>
+
+          <line x1="730" y1="141" x2="778" y2="141" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)"/>
+          <text x="754" y="128" fill="var(--accent)" text-anchor="middle" font-size="12">cc</text>
+
+          <rect x="784" y="120" width="108" height="42" rx="7" fill="var(--surface)" stroke="var(--rule)"/>
+          <text x="838" y="146" fill="var(--ink)" text-anchor="middle">a program</text>
+        </g>
+      </svg>
+      <figcaption>C11, no dependencies. Nothing in that chain but <code>cc</code>.</figcaption>
+    </figure>
+
+    <div class="cta">
+      <a class="btn primary" href="tutorial-picture.html">Start the tutorial</a>
+      <a class="btn ghost" href="manual.html">Read the manual</a>
+      <a class="btn ghost" href="https://github.com/hansolovkarlsson/Phoenix">Source</a>
+    </div>
+  </div>
+</section>
+
+<!-- ================= the claim ================= -->
+
+<section class="sunk">
+  <div class="wide"><div class="prose">
+    <p class="eyebrow">Why not lex and yacc</p>
+    <h2>They solve the front of the problem and leave you at the syntax tree.</h2>
+    <p>After the parser you still hand-write forward-declaration collection,
+      type checking, optimisation and code generation — four large modules that
+      are mostly traversal boilerplate and a little content, written again for
+      every language.</p>
+    <blockquote>
+      <p>Phoenix's claim is that <b>a compiler is a grammar plus a sequence of
+      tree walks</b>, and that both halves can be written down instead of
+      programmed.</p>
+    </blockquote>
+    <p class="note">The name belongs to Brooker and Morris, whose Compiler
+      Compiler ran at Manchester around 1960 and meant something larger than a
+      parser: their system had a notation for what constructs <em>meant</em>.
+      <em>Yet Another Compiler-Compiler</em> borrowed the name and delivered a
+      fraction of it.</p>
+  </div></div>
+</section>
+
+<!-- ================= 1. the tree ================= -->
+
+<section>
+  <div class="wide">
+    <p class="eyebrow">One — the tree</p>
+    <h2>Say what a production <em>builds</em>, not just what it matches.</h2>
+    <p class="lede"><code>-&gt;</code> after an alternative names the node it
+      means. Everything else — the brackets, the semicolons, the chain of rules
+      that each pass one thing along — is never built in the first place.</p>
+
+    <div class="panes two">
+      <div class="pane">
+        <div class="label">calc.phx</div>
+<pre><code><span class="d">program</span>   = { statement } <span class="k">-&gt;</span> <span class="t">Program</span>(body: <span class="r">$1</span>) .
+
+<span class="d">statement</span> = <span class="s">"print"</span> e:expression <span class="s">";"</span>
+              <span class="k">-&gt;</span> <span class="t">Print</span>(value: <span class="r">$e</span>)
+          | <span class="s">"let"</span> n:name <span class="s">":="</span> e:expression <span class="s">";"</span>
+              <span class="k">-&gt;</span> <span class="t">Let</span>(name: <span class="r">$n</span>, value: <span class="r">$e</span>) .
+
+<span class="c">(* $$ is what has been built so far, which
+   makes this a left fold -- and is why
+   associativity is said once. *)</span>
+<span class="d">expression</span> = term { ( <span class="s">"+"</span> | <span class="s">"-"</span> ) term
+    <span class="k">-&gt;</span> <span class="t">Binary</span>(op: <span class="r">$1</span>, left: <span class="r">$$</span>, right: <span class="r">$2</span>) } .</code></pre>
+      </div>
+      <div class="pane">
+        <div class="label">$ phx --tree calc.phx sum.calc</div>
+<pre><code><span class="t">Program</span>
+`- body: [3]
+   |- <span class="t">Let</span>
+   |  |- name: <span class="s">"width"</span>
+   |  `- value: <span class="t">Binary</span>
+   |     |- op: <span class="s">"+"</span>
+   |     |- left: <span class="t">Number</span>
+   |     |  `- text: <span class="s">"3"</span>
+   |     `- right: <span class="t">Number</span>
+   |        `- text: <span class="s">"4"</span>
+   |- <span class="t">Let</span>
+   |  |- name: <span class="s">"height"</span>
+   |  `- value: <span class="t">Binary</span>
+   |     |- op: <span class="s">"*"</span>
+   |     |- left: <span class="t">Variable</span>
+   |     |  `- name: <span class="s">"width"</span>
+   |     `- right: <span class="t">Number</span>
+   |        `- text: <span class="s">"2"</span>
+   `- <span class="t">Print</span>
+      `- value: <span class="t">Binary</span> <span class="c">...</span></code></pre>
+      </div>
+    </div>
+
+    <p class="note"><b>Interior nodes are never built.</b> One rule, no
+      exceptions: a body that produced one value answers that value, and a body
+      that produced any other number answers a node named after the rule. The
+      useless nodes every hand-written tree-builder exists to strip are not
+      stripped — they never exist.</p>
+  </div>
+</section>
+
+<!-- ================= 2. the passes ================= -->
+
+<section class="sunk">
+  <div class="wide">
+    <p class="eyebrow">Two — the walks</p>
+    <h2>A pass is a clause per node type, and no traversal.</h2>
+    <p class="lede">There is no visitor class and no recursion to write.
+      <code>$left.out</code> reads a child's attribute; over a list it means
+      <em>that of each</em>, which is why there is no map either.</p>
+
+    <div class="panes two">
+      <div class="pane">
+        <div class="label">calc-c.phx — the whole backend</div>
+<pre><code><span class="k">%pass</span> emit-c
+
+  <span class="t">Number</span>   : out = <span class="s">"{}"</span> <span class="k">of</span> <span class="r">$text</span> .
+  <span class="t">Variable</span> : out = <span class="s">"{}"</span> <span class="k">of</span> <span class="r">$name</span> .
+  <span class="t">Binary</span>   : out = <span class="s">"({} {} {})"</span>
+               <span class="k">of</span> <span class="r">$left</span>.out, <span class="r">$op</span>, <span class="r">$right</span>.out .
+
+  <span class="t">Let</span>    : out = <span class="s">"{}long {} = {};"</span>
+             <span class="k">of</span> <span class="r">$indent</span>, <span class="r">$name</span>, <span class="r">$value</span>.out .
+  <span class="t">Print</span>  : out = <span class="s">"{}printf(\"%ld\\n\", (long)({}));"</span>
+             <span class="k">of</span> <span class="r">$indent</span>, <span class="r">$value</span>.out .
+
+  <span class="c">(* indentation flows downward: an inherited
+     attribute is the one thing a synthesised
+     or a threaded one cannot say *)</span>
+  <span class="t">Block</span>  : <span class="k">down</span> indent = <span class="s">"{}    "</span> <span class="k">of</span> <span class="r">$indent</span>
+         : out = join(<span class="r">$body</span>.out, <span class="s">"\n"</span>) .
+
+<span class="k">%driver</span> c = show, typecheck, emit-c <span class="k">-&gt;</span> out .</code></pre>
+      </div>
+      <div class="pane">
+        <div class="label">$ phx calc-c.phx sum.calc</div>
+<pre><code>#include &lt;stdio.h&gt;
+
+int main(void)
+{
+    long width = (3 + 4);
+    long height = (width * 2);
+    printf(<span class="s">"%ld\n"</span>, (long)(((width * height) - 1)));
+    return 0;
+}</code></pre>
+        <div class="label" style="margin-top:1.2rem">and the diagnostics come free</div>
+<pre><code>$ phx --driver check calc-c.phx bad.calc
+bad.calc:3:3: <span class="k">error:</span> print wants an int,
+              and (n &lt; 2) is bool
+    print n &lt; 2;
+    ^</code></pre>
+      </div>
+    </div>
+
+    <p class="note"><b>A driver is a claim about order, and it is checked.</b>
+      That message reads <code>$value.show</code>, which a different pass
+      computed. If a driver forgets to run it, Phoenix names the driver and the
+      pass that would have supplied it — when the description is read, not when
+      somebody's program hits it.</p>
+  </div>
+</section>
+
+<!-- ================= 3. writing it out ================= -->
+
+<section>
+  <div class="wide">
+    <p class="eyebrow">Three — the compiler</p>
+    <h2>One C file. No flags, no headers, no library.</h2>
+
+    <div class="panes two">
+      <div class="pane">
+        <div class="label">terminal</div>
+<pre><code>$ phx calc-c.phx -o calcc.c
+$ cc calcc.c -o calcc
+$ ./calcc sum.calc
+#include &lt;stdio.h&gt;
+
+int main(void)
+{
+    long width = (3 + 4);
+    long height = (width * 2);
+    printf(<span class="s">"%ld\n"</span>, (long)(((width * height) - 1)));
+    return 0;
+}</code></pre>
+      </div>
+      <div class="pane">
+        <div class="label">why it is data and not code</div>
+        <p>A generator can <b>emit code</b> — a recursive-descent function per
+          rule, a switch per pass — which is faster and is what most of the yacc
+          family does. Or it can <b>emit the description as data</b> and ship
+          the machine that already runs it.</p>
+        <p>Phoenix emits data, because the alternative is a second
+          implementation of everything: a second matcher with the same
+          ordered-choice rules, a second evaluator with the same floored
+          division. <b>Two implementations of one notation have to agree.</b></p>
+        <p>A generated compiler runs <em>the same</em> scanner, matcher and
+          evaluator that <code>phx</code> runs, over a grammar frozen into
+          static tables. There is nothing for the two to disagree about,
+          because there is only one of them.</p>
+      </div>
+    </div>
+
+    <blockquote>
+      <p>The conformance rule: the same <code>.phx</code>, interpreted and
+      through every backend, produces identical output — and that is a test on
+      every build.</p>
+    </blockquote>
+  </div>
+</section>
+
+<!-- ================= what is different ================= -->
+
+<section class="sunk">
+  <div class="wide">
+    <p class="eyebrow">What you get that a parser generator does not</p>
+    <h2>Six things, and each exists because getting it wrong is silent.</h2>
+
+    <div class="grid">
+      <div class="card">
+        <span class="num">01</span>
+        <h3>The target belongs to the description</h3>
+        <p>An emit pass builds a string and nothing anywhere cares what is in
+          it. C, SVG, another language — or bytes: Solveig's <code>.sob</code>
+          bytecode is emitted by a description, not by Phoenix.</p>
+      </div>
+      <div class="card">
+        <span class="num">02</span>
+        <h3>Factor drift is caught, not shipped</h3>
+        <p><code>$3</code> going stale after somebody inserts a factor before it
+          is yacc's most famous silent failure — the grammar still builds and
+          the tree is quietly wrong. Both <code>$n</code> and named factors are
+          checked when the description is read.</p>
+      </div>
+      <div class="card">
+        <span class="num">03</span>
+        <h3>Pass order is a declaration</h3>
+        <p>A <code>%driver</code> names the walks and their sequence, and
+          Phoenix refuses one whose passes read attributes nothing before them
+          defines — naming the pass that would have supplied it.</p>
+      </div>
+      <div class="card">
+        <span class="num">04</span>
+        <h3>The arithmetic is specified, executably</h3>
+        <p>Integers that trap rather than wrap, floored division, no implicit
+          conversion, structural equality. Every claim on that page is a check
+          the test suite runs, through <code>phx</code> and through a compiler
+          <code>phx</code> wrote.</p>
+      </div>
+      <div class="card">
+        <span class="num">05</span>
+        <h3>Diagnostics point at the program</h3>
+        <p>A line, a column and a caret in the file somebody wrote — not in the
+          description, and not at the place a PEG happened to give up. When a
+          match fails at the top, the position reported is the one it got
+          <em>furthest</em>.</p>
+      </div>
+      <div class="card">
+        <span class="num">06</span>
+        <h3>It describes itself</h3>
+        <p>The <code>.phx</code> notation is written in <code>.phx</code>, and
+          it parses itself along with every other description in the
+          repository. Wirth's own argument for the notation, carried out rather
+          than asserted.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= evidence ================= -->
+
+<section>
+  <div class="wide">
+    <p class="eyebrow">Evidence</p>
+    <h2>Three languages, and the third was not written for this.</h2>
+    <p class="lede">Pascal came with Wirth's grammar and Solveig with its own
+      BNF, both vendored and read unmodified. There is no awk grammar on this
+      machine, so awk is the POSIX definition transcribed — and what checks it
+      is not a grammar at all.</p>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="big">35</span>
+        <span class="cap">Pascal programs compiled to C that prints exactly what
+          <code>fpc -Miso</code>'s does. The first eight found six bugs at
+          once.</span>
+      </div>
+      <div class="stat">
+        <span class="big">75</span>
+        <span class="cap">Solveig programs whose compiled bytecode prints what
+          <code>solas</code>'s does — byte for byte, tracebacks included.</span>
+      </div>
+      <div class="stat">
+        <span class="big">13</span>
+        <span class="cap">awk programs other people wrote, compiled to C that
+          prints what <code>/usr/bin/awk</code> prints.</span>
+      </div>
+    </div>
+
+    <h3>Why an oracle and not a round trip</h3>
+    <p><code>et_c.awk</code> is 269 lines of awk that e2fsprogs uses to generate
+      C error tables. Compiled by a Phoenix description it becomes 1,149 lines
+      of C and prints the same 56 lines that <code>/usr/bin/awk</code> does.
+      <b>Nobody involved in writing it had heard of this project.</b></p>
+    <p>That matters because the cheaper test lies. Three tests agreed with each
+      other for months while a miscounted spread built a wrong tree, wrote it
+      back out wrongly <em>in the same way</em>, and re-parsed to an identical
+      tree. Running the program saw it at once.</p>
+
+    <p class="note">176 checks on every build, 174 of which need nothing outside
+      the repository.</p>
+  </div>
+</section>
+
+<!-- ================= get started ================= -->
+
+<section class="sunk">
+  <div class="wide">
+    <p class="eyebrow">Get started</p>
+    <h2>Build it, then write a language.</h2>
+
+    <div class="panes two">
+      <div class="pane">
+        <div class="label">build</div>
+<pre><code>$ git clone https://github.com/hansolovkarlsson/Phoenix
+$ cd Phoenix
+$ make
+$ make test
+176 passed, 0 failed</code></pre>
+        <div class="label" style="margin-top:1.2rem">try it</div>
+<pre><code>$ bin/phx languages/calc/calc-c.phx \
+      languages/calc/programs/sum.calc</code></pre>
+      </div>
+      <div class="pane">
+        <div class="label">then</div>
+        <p><a href="tutorial-picture.html"><b>A picture language</b></a> takes
+          you from an empty file to a language, a compiler to SVG, and a
+          standalone C compiler — in about half an hour. Every command and every
+          piece of output in it was run.</p>
+        <p><a href="tutorial-assembler.html"><b>Two passes, and a forward
+          reference</b></a> is the mechanism the first one did not need: a
+          threaded attribute, an inherited one, and why a symbol table is two
+          walks and not one.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= docs ================= -->
+
+<section>
+  <div class="wide">
+    <p class="eyebrow">Documentation</p>
+    <h2>Everything, in the shape you want it in.</h2>
+
+    <ul class="docs-list">
+      <li><a href="tutorial-picture.html">Tutorial: a picture language</a>
+        <span>From nothing to a compiler, in seven steps.</span></li>
+      <li><a href="tutorial-assembler.html">Tutorial: two passes</a>
+        <span>Threads, inherited attributes, and a forward reference.</span></li>
+      <li><a href="manual.html">Manual</a>
+        <span>The notation in the order it is learned, ending with the idioms and the pitfalls.</span></li>
+      <li><a href="reference.html">Reference</a>
+        <span>Every directive, clause form, operator and library function.</span></li>
+      <li><a href="cheatsheet.html">Cheatsheet</a>
+        <span>One page.</span></li>
+      <li><a href="semantics.html">Semantics</a>
+        <span>What the meta-language's own arithmetic means — and every claim is a test.</span></li>
+      <li><a href="COMPLETED.html">What is built</a>
+        <span>Each piece, and what it cost against what it was predicted to cost.</span></li>
+      <li><a href="ROADMAP.html">What is not built</a>
+        <span>And why — including the entries settled <em>against</em> building.</span></li>
+      <li><a href="performance.html">Performance</a>
+        <span>Measured, three languages.</span></li>
+      <li><a href="lineage.html">Lineage</a>
+        <span>Whose ideas these are: TREE-META, JastAdd, Silver, Eli, Stratego.</span></li>
+      <li><a href="postmortem.html">Postmortem</a>
+        <span>What was believed, and what the evidence later said.</span></li>
+      <li><a href="journal.html">Journal</a>
+        <span>The day-by-day, including every wrong turn.</span></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wide">
+    <p><b>Phoenix</b> — a compiler generator, in C11, with no dependencies.
+      <a href="https://github.com/hansolovkarlsson/Phoenix">Source on GitHub</a>.</p>
+    <p><em>Phoenix</em> is the bird that is rebuilt from what is left of the one
+      before it, which is what a compiler generator does to a language
+      description and, separately, what this repository is.</p>
+  </div>
+</footer>
+
+</body>
+</html>

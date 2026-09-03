@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }} — Phoenix</title>
+<meta name="description" content="{{ page.blurb | default: 'Documentation for Phoenix, a compiler generator.' }}">
+<link rel="stylesheet" href="assets/phoenix.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23b0431c'/></svg>">
+</head>
+<body>
+
+<header class="bar">
+ <div class="wide">
+  <a class="mark" href="./">Phoenix</a>
+  <nav>
+    <a href="tutorial-picture.html">Tutorial</a>
+    <a href="manual.html">Manual</a>
+    <a href="reference.html">Reference</a>
+    <a href="cheatsheet.html">Cheatsheet</a>
+    <a href="https://github.com/hansolovkarlsson/Phoenix">GitHub</a>
+  </nav>
+ </div>
+</header>
+
+<article class="doc">
+  <div class="wrap">
+    <p class="crumbs"><a href="./">Phoenix</a> &nbsp;/&nbsp; {{ page.title }}</p>
+    {{ content }}
+    <div class="docnav">
+      <a href="./">← Back to the front page</a>
+      <a href="https://github.com/hansolovkarlsson/Phoenix/blob/main/docs/{{ page.source }}">Edit on GitHub</a>
+    </div>
+  </div>
+</article>
+
+<footer>
+  <div class="wrap">
+    <p><b>Phoenix</b> — a compiler generator, in C11, with no dependencies.
+      <a href="https://github.com/hansolovkarlsson/Phoenix">Source on GitHub</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

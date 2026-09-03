@@ -8,3 +8,7 @@ scratch/
 
 # Where the oracle scripts run programs and put what they produce.
 build/
+
+# the website, assembled by www/assemble.sh
+_site_src/
+_site/
