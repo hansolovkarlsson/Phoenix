@@ -972,6 +972,7 @@ including the one that was settled *against* building it.
 | [cheatsheet.md](docs/cheatsheet.md) | one page |
 | [tutorial-picture.md](docs/tutorial-picture.md) | a language and a compiler, from nothing, in half an hour |
 | [tutorial-assembler.md](docs/tutorial-assembler.md) | two passes, a thread, and a forward reference |
+| [CHANGELOG.md](docs/CHANGELOG.md) | what shipped, and when — the one page that says *when* |
 | [COMPLETED.md](docs/COMPLETED.md) | what exists, and what each piece cost against what it was predicted to cost |
 | [ROADMAP.md](docs/ROADMAP.md) | what does not, and why |
 | [journal.md](docs/journal.md) | the day-by-day, including every wrong turn |
