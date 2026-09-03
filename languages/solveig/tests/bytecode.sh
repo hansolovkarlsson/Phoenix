@@ -60,8 +60,26 @@ run() {
     ( cd "$sandbox" && perl -e 'alarm 30; exec @ARGV' "$sol/bin/solvm" "$1" 2>&1 </dev/null )
 }
 
+# And what it printed under `--trace`, which is where the **slot names** show:
+# a call is written `value(e: #1)` rather than `value(#1)` when the chunk
+# remembers what the parameter was called. Nothing else compares those, and a
+# wrong slot-name table changes no instruction -- so the byte-for-byte
+# comparison above cannot see one at all.
+#
+# The `[file:line]` prefix comes off because `--trace` writes the path it was
+# given, and the two compilers are given different ones. Everything after it is
+# compared as it stands.
+trace() {
+    sandbox="$out/run/$2"
+    mkdir -p "$sandbox"
+    ( cd "$sandbox" \
+      && LC_ALL=C perl -e 'alarm 30; exec @ARGV' "$sol/bin/solvm" --trace "$1" 2>&1 </dev/null ) \
+    | LC_ALL=C sed -E 's/\[[^]]*\] //'
+}
+
 
 same=0; differ=0; unsteady=0
+tsame=0; tdiffer=0; tunsteady=0
 for f in "$sol"/examples/*.sol "$sol"/programs/*.sol "$sol"/lib/*.sol "$here"/conformance/*.sol; do
     [ -f "$f" ] || continue
     "$sol/bin/solas" "$f" -o "$tmp/oracle.sob" >/dev/null 2>&1 || continue
@@ -72,6 +90,22 @@ for f in "$sol"/examples/*.sol "$sol"/programs/*.sol "$sol"/lib/*.sol "$here"/co
     if ! "$phx" --raw --driver sob "$desc" -I "$sol/lib" "$f" > "$tmp/mine.sob" 2>"$tmp/err"; then
         differ=$((differ+1)); echo "  refused: $f"
         sed 's/^/      /' "$tmp/err" | head -2; continue
+    fi
+
+    # The traces, held to the same rule as the output below: they differ, or
+    # the program does not repeat itself. An object's address is printed as it
+    # is and no two runs agree about one, which is what puts a third of the
+    # corpus in the unsteady column here and almost none of it there.
+    twant=$(trace "$tmp/oracle.sob" "$name.trace-oracle")
+    tmine=$(trace "$tmp/mine.sob" "$name.trace-mine")
+    if [ "$twant" = "$tmine" ]; then
+        tsame=$((tsame+1))
+    elif [ "$twant" != "$(trace "$tmp/oracle.sob" "$name.trace-again")" ]; then
+        tunsteady=$((tunsteady+1))
+    else
+        tdiffer=$((tdiffer+1)); echo "  traces differ: $f"
+        printf '%s\n' "$twant" > "$tmp/tw"; printf '%s\n' "$tmine" > "$tmp/tm"
+        diff "$tmp/tw" "$tmp/tm" | head -6 | sed 's/^/      /'
     fi
 
     mine=$(run "$tmp/mine.sob" "$name.mine")
@@ -101,4 +135,6 @@ rm -rf "$tmp"
 
 printf '%d programs print exactly what solas compiled prints, %d do not' "$same" "$differ"
 printf ' (%d do not repeat themselves)\n' "$unsteady"
-[ "$differ" -eq 0 ]
+printf '  and %d trace identically, argument names included, %d do not' "$tsame" "$tdiffer"
+printf ' (%d do not repeat themselves)\n' "$tunsteady"
+[ "$differ" -eq 0 ] && [ "$tdiffer" -eq 0 ]

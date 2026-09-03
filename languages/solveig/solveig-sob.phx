@@ -151,6 +151,15 @@
    * declare is the **largest** any point in it reached, not the last. *)
   thread nslots   = 1 .
 
+  (* The frame's slots **in slot order**, which is what the chunk's slot-name
+   * table is. Not the same thing as `slotnames`: that one is inherited and
+   * says what is in scope *here*, so a group's temporaries leave it again at
+   * the group's end. This is the union along the walk -- every slot the frame
+   * ever has -- so it is threaded, exactly as `nslots` is and for the same
+   * reason. `solvm --trace` reads slots 1..arity out of it to name a call's
+   * arguments. *)
+  thread frameslots = [""] .
+
   (* The files a chunk's code came from, and the same table encoded. A chunk
    * holds code from more than one file whenever an `@include` put some there,
    * and a line number naming a file nobody said is worse than no line at all.
@@ -618,6 +627,7 @@
         : down heldms    = $methods
         : down heldnm    = $nmethods
         : down heldsl    = $nslots
+        : down heldfs    = $frameslots
         : down heldre    = $reaches
         : down heldfl    = $files
         : down heldft    = $filetext
@@ -628,6 +638,7 @@
         : down methods   = ""
         : down nmethods  = 0
         : down nslots    = 1 + size($params) + size($temps)
+        : down frameslots = ["self", ...$params, ...$temps]
         : down reaches   = false
         : down files     = []
         : down filetext  = ""
@@ -685,7 +696,9 @@
                          bytes(quotient(size($lineruns), 8), 4), $lineruns,
                          bytes(size($files), 4), $filetext,
                          bytes(quotient(size($fileruns), 8), 4), $fileruns,
-                         bytes(0, 2),
+                         bytes(size($frameslots), 2),
+                         join(each(bytes(sizes($frameslots), 2),
+                                   $frameslots, "{}{}")),
                          bytes($nmethods, 4), $methods], "")
 
           (* name, arity, slots, flags, body. The flag is `IS_BLOCK`; the
@@ -704,6 +717,7 @@
         : methods  = "{}{}" of $heldms, $record
         : nmethods = $heldnm + 1
         : nslots   = $heldsl
+        : frameslots = $heldfs
         : reaches  = $heldre
 
           (* The enclosing table back, **and this block's own file interned
@@ -737,7 +751,12 @@
         : runs   = slice($rawruns, 1, size($rawruns) - 8)
           (* The frame needs room for the deepest group in it, not the last. *)
         : nslots = lookup([[true, $nslots]], $nslots > size($slotnames),
-                          size($slotnames)) .
+                          size($slotnames))
+          (* And the names for those slots, kept the same way: the deepest
+           * group's, not the last one's. *)
+        : frameslots = lookup([[true, $frameslots]],
+                              size($frameslots) > size($slotnames),
+                              $slotnames) .
 
   (* ---- the file ----
    *
@@ -745,6 +764,7 @@
    * and the script ends with a `HALT`.
    *)
   Program : down slotnames = [""]
+          : down frameslots = [""]
           : down outerslot  = []
           : down outerdepth = []
           : down bdepth     = 0
@@ -776,7 +796,8 @@
               bytes(quotient(size($lineruns), 8), 4), $lineruns,
               bytes(size($files), 4), $filetext,
               bytes(quotient(size($fileruns), 8), 4), $fileruns,
-              bytes(0, 2),              (* slotnames *)
+              bytes(size($frameslots), 2),              (* slotnames *)
+              join(each(bytes(sizes($frameslots), 2), $frameslots, "{}{}")),
               bytes($nmethods, 4), $methods
             ], "") .
 

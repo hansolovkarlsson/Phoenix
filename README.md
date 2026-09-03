@@ -707,6 +707,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | `$n` past the last factor | and `$label` naming no factor — yacc's silent drift, made loud |
 | one node type, two shapes | a pass keyed on it would have to handle both |
 | an attribute with a field's name | a field is read before an attribute, so nothing outside the pass could see it |
+| a threaded attribute with a field's name | the clause updating the thread reads the field, so the thread quietly skips that node. The sharper half of the line above, and an error rather than a warning |
 | an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
 | a check reading the attributes it guards | a check runs first, by design |
 | `%include` naming a node nothing builds | or a field that node has not got — the mechanism would then do nothing, quietly, and every include would reach a pass as a node it has no clause for |
@@ -742,12 +743,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 182 checks, covering 35 Pascal programs against fpc
+make test       # 184 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 180 of the 182 need only what is vendored here, and the two
+repository** — 181 of the 184 need only what is vendored here, and the two
 that drive `solas` and `solvm` over a checkout of
 [Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
 skipped when it is absent rather than failing. The assembler is in the 177:

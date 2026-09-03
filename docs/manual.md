@@ -327,10 +327,15 @@ Block  : down indent = "{}    " of $indent
 
 ### Reading
 
-`$name` is a field of the node, or a binding from the pattern, or an attribute
-handed down, or the current value of a thread — resolved in that order, so **a
-field is read before an attribute of the same name**. `$child.attr` reads a
-child's attribute.
+`$name` is resolved in this order, and the order is worth knowing because two
+of the steps can hide a third:
+
+> `$pos` · a binding from the pattern · a field of this node · an attribute —
+> inherited, threaded or synthesised · an embedded file
+
+So **a binding wins over a field** (which is what lets a pattern rename one),
+and **a field wins over an attribute**. `$child.attr` reads a child's
+attribute, and that goes through the same order on the child.
 
 `.` over a **list** means *that of each*, which is why there is no map in this
 notation and no traversal to write:

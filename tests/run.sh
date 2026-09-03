@@ -83,6 +83,8 @@ warns   "an attribute with a field's name" "is already a field of" \
         "$root/tests/grammars/attribute-shadows-field.phx"
 refuses "a field of a threaded attribute's name" "does not pass through here" \
         "$root/tests/grammars/thread-shadowed.phx"
+warns   "a field of an inherited attribute's name" "cannot read" \
+        "$root/tests/grammars/down-shadowed.phx"
 refuses "an inherited clause reading its own rule's work" \
         "an inherited clause runs on the way in" \
         "$root/tests/grammars/down-reads-own.phx"
@@ -1102,7 +1104,11 @@ if [ -x "$sol/bin/solas" ]; then
         printf '%s\n' "$conf" | grep -A6 FAIL | sed 's/^/        /' | head -12
     fi
     if bc=$("$root/languages/solveig/tests/bytecode.sh" 2>&1); then
-        report pass "$(printf '%s' "$bc" | tail -1)"
+        printf '%s\n' "$bc" | grep -E '^[0-9]+ programs|^  and [0-9]+ trace' \
+            | while IFS= read -r line; do
+                  printf '  ok    %s\n' "$(printf '%s' "$line" | sed 's/^  and /and /')"
+              done
+        pass=$((pass + 2))
     else
         report fail "the .sob backend agrees with solas"
         printf '%s\n' "$bc" | sed 's/^/        /' | head -14

@@ -497,9 +497,16 @@ Assign : type = "void"
 | `$pos` | this node's position |
 | `f(x).attr` | an attribute of whatever an expression answered |
 
-**A field is read before an attribute of the same name**, which is why an
-attribute shadowed by a field is a warning: nothing outside the pass could see
-it.
+These resolve in a fixed order — `$pos`, then a binding, then a field, then an
+attribute of any kind, then an embedded file. **A binding wins over a field**,
+which is what lets a pattern rename one; **a field wins over an attribute**,
+which is why an attribute shadowed by a field is reported:
+
+| the shadowed attribute is | |
+| --- | --- |
+| **synthesised** | a **warning** — it is computed, but nothing outside the pass can see it |
+| **inherited** (`down`) | a **warning** — what it hands down still reaches a descendant with no such field, but this node cannot read what it wrote |
+| **threaded** | an **error** — the clause updating the thread reads the field instead, so the thread does not pass through this node at all and every node after it carries on from a value that never went through here |
 
 `$pos` resolves **before** bindings, fields and attributes, so that it means the
 same thing everywhere.
@@ -962,6 +969,8 @@ correct file reported as broken, at a place that is not the mistake.
 | --- | --- |
 | a clause nothing can reach | a general pattern above a specific one takes every case the specific one was for |
 | an attribute with a field's name | a field is read before an attribute, so nothing outside the pass could see it *(warning)* |
+| an **inherited** attribute with a field's name | it hands a value down that the node itself cannot read *(warning)* |
+| a **threaded** attribute with a field's name | the update reads the field, so the thread does not pass through that node — and nothing about the answer looks wrong |
 | an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
 | a check reading the attributes it guards | a check runs first, by design |
 | two `otherwise` clauses for one attribute | two answers to what a node answers when it has none of its own |

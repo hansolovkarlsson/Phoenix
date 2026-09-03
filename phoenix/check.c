@@ -584,6 +584,19 @@ static void check_clause_order(Check *c)
                     c->ok = false;
                 }
 
+                /* 1b. An **inherited** attribute of a field's name is the
+                 * milder version again: what it hands down still reaches a
+                 * descendant that has no field of that name, but on this node
+                 * `$name` is the field, so the value written here is not the
+                 * one read here. A warning rather than an error, because
+                 * handing it down may be the whole point. */
+                if (def->kind == C_DOWN && type_has_field(type, def->attr))
+                    diag_warn(&g->src, def->pos,
+                              "'%s' is already a field of '%s', and a field is "
+                              "read before an attribute -- so this clause hands "
+                              "a value down that '%s' itself cannot read",
+                              def->attr, type, type);
+
                 if (def->kind != C_SYNTH) continue;
 
                 /* 1. An attribute with a field's name is invisible from

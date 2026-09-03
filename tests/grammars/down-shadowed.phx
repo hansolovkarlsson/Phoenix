@@ -1,0 +1,23 @@
+(* A field of an inherited attribute's name.
+ *
+ * Milder than the threaded case: what this hands down still reaches a
+ * descendant with no field of that name. But on *this* node `$tag` is the
+ * field, so the value written here is not the value read here -- which is
+ * worth a warning and not an error, because handing it down may be the point.
+ *)
+%fragment letter .
+letter = "a" .. "z" .
+word   = letter { letter } .
+space  = " " { " " } .
+%skip space .
+
+%syntax .
+%start line .
+line = { w:word -> W(tag: $w) } -> L(items: $1) .
+
+%pass p
+  W : down tag = "inherited"
+    : seen = $tag .
+  L : out = "{}\n" of join($items.seen, ",") .
+
+%driver d = p -> out .
