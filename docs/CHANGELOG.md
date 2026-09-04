@@ -18,7 +18,8 @@ entry below that changes it says so.
 
 ## 2026-09-03 — an assembler, and documentation for a stranger
 
-**A fourth language: [`languages/solvm/`](../languages/solvm/).** An assembly
+**A fourth description, and a *target* rather than a language:
+[`languages/solvm/`](../languages/solvm/).** An assembly
 language for SolVM and an assembler that emits `.sob` bytecode — 21 mnemonics,
 labels, and blocks whose chunks nest. Phoenix can emit `.sob` and cannot read
 it: a length-prefixed format needs the match to depend on a count it has just
@@ -57,6 +58,13 @@ assembler, three tutorials, and a website at
 assembled from `docs/` on every push rather than committed. The tutorials are
 executable: `make test` runs each one and holds the page to what actually
 happens. Doing that the first time found eight defects in them.
+
+**This page, and two corrections it caused.** Written from the `stage-*` tags,
+it found [COMPLETED.md](COMPLETED.md)'s stage table disagreeing with them at
+rows 4 to 6 — and then found that the [README](../README.md#where-it-is) holds
+a *second* stage table which is the original plan rather than the delivery.
+Both now say which they are. This page was itself wrong within the hour, and
+that correction is recorded in [journal.md](journal.md) rather than hidden.
 
 **Tests:** 176 → 189, of which 186 need nothing outside the repository.
 

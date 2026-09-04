@@ -11,7 +11,7 @@ entries dated today, and they are the record. This page is only the way in.
 
 ## Where the tree is
 
-`main`, clean, **pushed** — `28f0045`. **189 tests, 0 failing**; 186 of them
+`main`, clean, **pushed** — `ccd8cb1`. **189 tests, 0 failing**; 186 of them
 need nothing outside the repository. Started the day at 176.
 
 The website is live at
@@ -37,6 +37,11 @@ workflow's green tick.
 | `b98d255` | the second closeout, and a day I had mis-dated |
 | `1db93b8` | **`outer 0` is not a roundabout `local`**, and the manual said it was |
 | `28f0045` | the slot bound moved to the language, and a cousin found unreachable |
+| `6e2cd0d` | the third closeout: the verifier audit, and the day's scoring |
+| `f28203c` | the `day-closeout` skill removed; the closeout said in a line |
+| `4509fc1` | **[CHANGELOG.md](CHANGELOG.md)** — the one page that says *when* |
+| `00a963f` | `COMPLETED.md`'s stage table corrected, and the plan told from the delivery |
+| `ccd8cb1` | the changelog corrected an hour after publishing it |
 
 ## What is outstanding
 
@@ -67,6 +72,18 @@ the day to [journal.md](journal.md), the scoring to
 [postmortem.md](postmortem.md), and [COMPLETED.md](COMPLETED.md) and
 [ROADMAP.md](ROADMAP.md) kept current as the work lands.
 
+## A document was added, and two were corrected
+
+[CHANGELOG.md](CHANGELOG.md) is new and is linked from the README and the site.
+Four records existed and none said **when**; this is that one, keyed to the
+`stage-*` tags.
+
+Writing it corrected two others. `COMPLETED.md`'s stage table had `-o` at 4 and
+Pascal at 5 where the tags and the journal have them the other way round — and
+the README turned out to hold a *second* stage table, which is the original
+plan rather than the delivery. Neither was wrong about its own subject; neither
+said what its subject was. Both do now.
+
 ## The one thing worth carrying forward
 
 The morning's lesson was *run the documentation whose claims are not already
@@ -83,5 +100,11 @@ sixteen nested blocks got generated instead. That one held.
 
 > **A bound is a claim. Generate the program that sits on it.**
 
-Three defects today; two came from reading a bound instead of running one, and
-the third from writing a count from memory when `grep -c` was right there.
+Five defects today. Two came from reading a bound instead of running one, one
+from writing a count from memory when `grep -c` was right there, and two from a
+page published in the afternoon that was wrong within the hour — caught by
+running `git log -S` for every feature it dates rather than re-reading it.
+
+`postmortem.md` § 9 scores the pattern, including where it fails: **asking
+*anything open?* audits what has settled, and cannot audit what was written
+since the asking.** The newest page is the likeliest to be wrong.

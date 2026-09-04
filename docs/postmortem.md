@@ -471,3 +471,51 @@ whose claims are not already held by something else*, § 6. Today extended it to
 bounds, which are documentation of a sort:
 
 > **A bound is a claim. Generate the program that sits on it.**
+
+## 9. "Anything open?", asked four times
+
+The question was asked four times on 2026-09-03 and found something every
+time: a partial-write bug, a missing role, a false claim about `outer 0`, and
+two errors in a page published an hour earlier. That is no longer luck, and it
+is worth saying what makes it work and where it fails.
+
+### It works because it changes the method, not the effort
+
+The first three askings were answered by *checking* rather than *recalling*:
+counting definitions against reads, walking `verify_chunk` rule by rule,
+generating a program that sits on the nesting bound, running `git log -S` for
+every feature a page dates. None of that is more careful reading. Re-reading is
+what let each defect through in the first place.
+
+> **A second reading of a page you wrote finds what you already believe. A
+> command that disagrees with it finds what is true.**
+
+### Where the answer aged badly, and why that is not a contradiction
+
+The third asking was recorded here as *this time nothing was* open, and it was
+true when written. Within the hour a changelog was published with two errors in
+it. Nothing was retracted: **"nothing is open" is only ever a claim about the
+work that exists when it is said**, and the answer had been correct about a
+repository that did not yet contain that page.
+
+The useful form of the rule is therefore narrower than it looked:
+
+> Asking *anything open?* audits what has settled. It cannot audit what was
+> written since the asking — and the most likely thing to be wrong is the
+> newest thing.
+
+### One hedge, scored
+
+Finding `COMPLETED.md`'s stage table wrong, the decision was to flag it rather
+than fix it, on the reasoning that it might be describing the **plan** rather
+than the delivery — its lead says *Seven were planned*.
+
+**The hedge was reasonable and it was wrong.** There *was* a plan table, and it
+was in the README, where nothing had looked. `COMPLETED.md`'s was the delivery
+and simply incorrect. What settled it was not more thought about the wording;
+it was `git ls-tree stage-3`, which shows `examples/calc-c.phx` already present
+and therefore shows the plan's stage 4 arriving inside stage 3.
+
+The generalisation is the one this section is about, arriving from the other
+direction: **the hedge was an attempt to resolve a factual question by reading
+more carefully.** It was a factual question. It took one command.

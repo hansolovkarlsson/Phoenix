@@ -2,7 +2,8 @@
 
 *What is built, and what each piece cost against what it was predicted to cost.
 [ROADMAP.md](ROADMAP.md) is what is **not** built; this is the other half, and
-the two are meant to be read together.*
+the two are meant to be read together. [CHANGELOG.md](CHANGELOG.md) is the
+third question those two do not answer: **when**.*
 
 An entry leaves the roadmap and arrives here when it is settled — which
 includes being settled **against** building it, because a mechanism refused on

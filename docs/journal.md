@@ -3248,3 +3248,97 @@ ancestor count of 16, whose children are 17 deep and already refused.
 > one.** Generating the program at the boundary costs a minute and settles it.
 
 189 tests, `main` clean at `28f0045`.
+
+## 2026-09-03 — a changelog, and the two tables that were about different things
+
+The fourth stretch of a day that had already been closed out three times.
+
+### The skill, twice rewritten and then removed
+
+`day-closeout` had been left unrun since the day it was noticed that it would
+damage this repository. Asked to fix it, the diagnosis went past the three
+known collisions:
+
+- Its captures ended at `(?:\.|$)`, so **any identifier with a dot was
+  truncated** — `serialize.c` to `serialize`, `ROADMAP 1.2` to `ROADMAP 1`.
+- `commit\s+([0-9a-f]{7,40})` **missed "Committed abc1234"**, the most natural
+  phrasing, because `\s+` wanted whitespace and found `t`.
+- A filter `if "day" not in item` **dropped every sentence containing
+  "today"**, in an end-of-day tool.
+- On seven lines describing a real day it extracted **zero** completed items
+  and **zero** code references.
+
+Two rewrites followed. The first replaced scraping with structured input and
+added a provenance marker; it still owned filenames, so `roadmap.md` still
+opened `ROADMAP.md`, and its guards ran per file — a refusal on the third
+document left the first two written. The second discovered the documents
+instead of naming them, which found `ROADMAP.md` and `COMPLETED.md` correctly,
+and planned every change before applying any.
+
+**Then it was removed anyway, and the reason is the one thing worth keeping.**
+The plumbing was never the problem. A script can guarantee it writes the right
+file, atomically, reversibly — and it still cannot know whether the summary it
+was handed is the whole day. Asked three times whether it would *for sure*
+document everything, the answer was no three times, for the same reason each
+time. A tool that cannot fail loudly at the thing you actually want is worse
+than no tool, because it reports success.
+
+> **Automating the placement of a judgement does not automate the judgement.**
+
+### The gap it did surface
+
+Running its discovery against this repository listed five roles and found four.
+There was no changelog — and looking for one is what showed the hole. Four
+records existed and none answered *when*: `COMPLETED.md` is the standing
+inventory, `ROADMAP.md` its complement, `journal.md` this narrative,
+`postmortem.md` the scoring. Somebody arriving from the website could learn
+what exists and why, and not when it arrived or what would break if they had
+written a description last week.
+
+[CHANGELOG.md](CHANGELOG.md) is that page, organised by the thing this project
+actually versions by — the `stage-0` … `stage-7` tags — and ending with a
+compatibility section that names what a description would have to change.
+
+### Two tables, about two different things, and neither said which
+
+Writing it from the tags found `COMPLETED.md`'s stage table disagreeing: `-o`
+at 4 and Pascal at 5, where the tags have Pascal at 4 and `-o` at 5. The
+journal settled it — there is **no stage 4 entry at all**, and the stage 5
+entry is `-o`. `%import` was credited to 6; the commit adding it is inside 3.
+
+Fixing that turned up why it had drifted. **The README has a stage table too,
+and it is a different kind of table**: the original plan, ticked off, where
+`COMPLETED.md`'s is the delivery keyed to the tags. They agree everywhere but
+stage 4 — the plan put an emit pass writing C there, and it arrived early,
+`examples/calc-c.phx` being present already at tag `stage-3`, so the `stage-4`
+tag went onto the Pascal work instead.
+
+> **Neither table was wrong about its own subject. Neither said what its
+> subject was**, which is what let one of them drift for two days with a second
+> table sitting in the README contradicting it.
+
+Both say now, and the delivery table names the tags, so the claim is checkable
+in one command.
+
+### The page was wrong an hour after it was published
+
+Asked again whether anything was open, the answer was to run `git log -S` for
+each feature the changelog dates rather than re-read it. `otherwise` was listed
+as one of six notation entries added on the 2nd. It was not added that day —
+`067fff8 Stage 2: passes`, on the 1st.
+
+What happened on the 2nd was better than what the page claimed. ROADMAP 1.3,
+the entry that had carried a warning for three stages, **closed with no new
+notation**: the mechanism was already built and `languages/pascal/pascal.phx`
+was already using it twenty-one times with a comment saying why.
+
+Five entries, then, not six — and the correction is worth more than the count,
+because *an entry that closes because the answer was already written* is a
+different and stronger result than one that closes because something was built.
+
+Also softened: `$pos` becoming a span is listed as a breaking change, and it
+and `$pos` itself landed the same day hours apart, so only a description
+written between two commits is affected. Saying "breaking" without that is
+louder than the truth.
+
+189 tests throughout. `main` at `ccd8cb1`.

@@ -6,7 +6,9 @@ here names **why** rather than when.*
 **This page is what is *not* built.** [COMPLETED.md](COMPLETED.md) is the other
 half — the tool, the languages, the notation, and every entry that has left
 here with a verdict. [journal.md](journal.md) records what each stage cost and
-what it got wrong first; [postmortem.md](postmortem.md) scores the predictions.
+what it got wrong first; [postmortem.md](postmortem.md) scores the predictions;
+[CHANGELOG.md](CHANGELOG.md) answers the *when* this page deliberately does
+not.
 
 Three languages are described and compiled: Pascal against `fpc`, Solveig
 against `solas`, awk against `/usr/bin/awk`. What remains on this page is **one
