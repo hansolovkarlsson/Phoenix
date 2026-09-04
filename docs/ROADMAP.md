@@ -40,23 +40,38 @@ of there being **one** implementation of the notation rather than two — see
 [the README](../README.md#writing-a-compiler-out) for why that trade was made
 deliberately.
 
-**Measured three times now, and the case is weaker each time.**
-[performance.md](performance.md) has the numbers. The matcher is linear in
-every shape tried — Pascal's four, and awk's two — and 20,000 lines of Pascal
-reach running C in 238 ms.
+**Measured four times now, and the case is weaker each time.**
+[performance.md](performance.md) has the numbers, and every one of them is
+reproducible from `bench/`. The matcher is linear in **nine shapes across three
+grammars** — Pascal's four, awk's two, the assembler's three — and 20,000 lines
+of Pascal reach running C in 189 ms.
 
-**awk is the interesting third measurement**, because it is the grammar that
-ought to have broken this: fourteen rungs of expression ladder, concatenation
-with no operator, and a `print` whose arguments need six of those rungs
-duplicated. It costs **370 to 2,600 match-steps per token** where Pascal costs
-24 — and it is still flat, at 369 per token from 705 tokens to 11,205. A
-hundred times the constant and the same curve.
+**The fourth measurement added the control that was missing.**
+`languages/solvm/` has no expression grammar at all: an instruction is a
+mnemonic and its operands, and the first token settles which rule matches. It
+is what this matcher costs when a grammar asks nothing of it — and the answer is
+**11 to 25 match-steps per token**, which is not meaningfully cheaper than
+Pascal's 12 to 31.
+
+So the three grammars span **240×** in constant and do not differ at all in
+curve:
+
+| | steps per token |
+| --- | --- |
+| SolVM assembly — no ladder | 11 – 25 |
+| Pascal — a shallow ladder | 12 – 31 |
+| awk — fourteen rungs and juxtaposition | 221 – 2,638 |
+
+**The constant tracks how deep ordered choice must go before it commits. The
+curve tracks nothing.** That is a stronger statement than three measurements
+could make, because the assembler is the case where generating code would help
+least and it is the case that was missing.
 
 And the constant does not matter: the largest program in the awk corpus is 269
 lines and reaches running C in **50 ms**. Memoisation would cut it and cost a
 table per position; generating code would cut it further and cost a second
 implementation of the notation. The hardest grammar tried has not asked for
-either.
+either, and now neither has the easiest.
 
 If it is ever done, the order is what makes it safe: the tables pin the
 definition down first, and code generated against them can be checked against
