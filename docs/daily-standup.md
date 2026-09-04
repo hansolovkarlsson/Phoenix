@@ -4,14 +4,15 @@
 overwritten each time; the durable record is [journal.md](journal.md) and the
 scoring is [postmortem.md](postmortem.md).*
 
-**This day was closed out three times.** The first was `3025bec` and the work
+**This day was closed out four times.** The first was `3025bec` and the work
 kept going after each. That is not a problem to fix — it is what the file being
 overwritten is for — but it means [journal.md](journal.md) carries three
-entries dated today, and they are the record. This page is only the way in.
+entries dated today, the last of them with four sections added after it was
+written. They are the record; this page is only the way in.
 
 ## Where the tree is
 
-`main`, clean, **pushed** — `ccd8cb1`. **189 tests, 0 failing**; 186 of them
+`main`, clean, **pushed** — `bcc1b8b`. **189 tests, 0 failing**; 186 of them
 need nothing outside the repository. Started the day at 176.
 
 The website is live at
@@ -42,6 +43,10 @@ workflow's green tick.
 | `4509fc1` | **[CHANGELOG.md](CHANGELOG.md)** — the one page that says *when* |
 | `00a963f` | `COMPLETED.md`'s stage table corrected, and the plan told from the delivery |
 | `ccd8cb1` | the changelog corrected an hour after publishing it |
+| `2174e2a` | the four records brought up to it and cross-linked |
+| `1825566` | **ROADMAP 1.2 measured a fourth time**, and the benchmark harness fixed |
+| `0811387` | that measurement filed into the records |
+| `bcc1b8b` | **ROADMAP 1.2 closed, settled against** — the roadmap is empty |
 
 ## What is outstanding
 
