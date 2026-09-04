@@ -3426,3 +3426,62 @@ rather than once per entry.
 
 Three entries are settled against now — 1.2, 2.1, 2.3 — and the README had said
 *the one*.
+
+## 2026-09-04 — the standup, moved out of the records it was never part of
+
+`docs/daily-standup.md` was a working note filed among the records. It was
+written at the end of each day to be read at the start of the next, which is a
+different job from the five documents around it: they are written for a
+stranger a year from now, and it was written for one person tomorrow morning.
+It moved to `scratch/`, which is gitignored, and left version control.
+
+**The evidence that it was never a record was that nothing linked to it.** The
+five documents in `docs/` are defined as much by their cross-references as by
+their contents — [ROADMAP.md](ROADMAP.md) and [COMPLETED.md](COMPLETED.md) are
+two halves of one ledger and say so in every entry, [postmortem.md](postmortem.md)
+scores what the other two predicted, and [CHANGELOG.md](CHANGELOG.md) answers
+the *when* the rest decline to. A grep for the standup's path across the whole
+repository before the move returned nothing outside the file itself. Three
+documents mention *the standup* as an actor — what it estimated, what it
+recommended against — and not one of them had ever needed to link to it. A
+document that nothing points at, in a set whose discipline is pointing at each
+other, was already outside the set; the move only wrote that down.
+
+### What the move cost, and the wrong way to pay it back
+
+It cost the handoff. The file the next session reads first is now a file in a
+directory that session is told not to open, and one that a fresh clone does not
+have at all. The first instinct was a stub in `docs/` — a small tracked file
+whose whole content is the scratch path — and that instinct was wrong for a
+reason worth keeping.
+
+**A stub would have been a sixth document in a set of five.** The property that
+makes those five work is that each answers a question no other one answers, and
+the italic note at the top of each is that claim in writing. The stub's question
+would have been *where is the other file*, which is not a question about this
+project. It would have earned a heading, a cross-link from the others, and a
+line in whatever counts them, all to say something that is not about compiling
+anything.
+
+What was written instead is [`CLAUDE.md`](../CLAUDE.md) at the root, which is
+already the file whose job is orientation and which no record cross-links by
+design. It names the standup's path as the thing to read first and then does the
+part a stub could not: it says plainly that the path is **absent on a fresh
+clone and on any day that was not closed out**, and gives `git log` and the five
+documents as the way in for that case. A pointer that admits it often points at
+nothing is honest in a way a stub in `docs/` would have had to pretend not to be.
+
+> A document that has to explain where another document is has the wrong
+> question. Move the pointer to the file whose question is already *where do I
+> start*.
+
+### What the audit found, which was nothing
+
+The day's second half was an audit, and the useful result is that it changed
+nothing. Sections 1 and 2 of the roadmap are still empty, `make test` is still
+189 passing and 0 failing — the same count before the writing and after — and a
+sweep for `TODO`, `FIXME` and `TBD` across every tracked file returns empty.
+Nothing was owed to [ROADMAP.md](ROADMAP.md), so nothing was added to it; the
+temptation to record *push the branch* on a page whose header says it lists what
+is **not built** is the same category error as the stub, one document doing
+another's job.
