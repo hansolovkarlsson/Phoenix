@@ -962,8 +962,9 @@ to be.
 
 [docs/ROADMAP.md](docs/ROADMAP.md) says what is **not** built and why;
 [docs/COMPLETED.md](docs/COMPLETED.md) is the other half — the tool, the
-languages, the notation, and every roadmap entry that has left with a verdict,
-including the one that was settled *against* building it.
+languages, the notation, and every roadmap entry that has left with a verdict —
+**including the three settled *against* building**, which is the half of a
+roadmap that usually goes unwritten. Nothing on that page is open.
 
 | | |
 | --- | --- |

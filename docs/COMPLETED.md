@@ -220,6 +220,92 @@ What the entry did not anticipate is that it needed **list patterns**: a value
 can be a list and a pattern could not be one, so the shape every optimisation
 over a message send asks about was not sayable.
 
+### 2.4 Inlining a block — from `solas`
+
+Seven rewrite rules and a clause each. `solas` compiles the block of an
+`ifTrue:`, a `whileTrue:` and the rest into the enclosing chunk, behind a jump;
+so does `languages/solveig/solveig-sob.phx`.
+
+*The entry worried about "a jump over code in the middle of the chunk being
+built".* A clause has no slot to patch and needs none: the code being jumped
+over is a value the clause is holding, so an offset is a `size` rather than a
+fixup.
+
+Fixed the format's nesting limit, the call depth, and every extra frame in a
+traceback.
+
+---
+
+## Settled, and not built
+
+Three entries, and each was refused on evidence a language produced
+rather than on taste.
+
+### 1.2 Compiling the tables to code
+
+**Settled against, after four measurements, and the fourth is the one that
+settled it.** A generated compiler interprets a PEG rather than being one,
+which is the price of there being **one** implementation of the notation rather
+than two — see [the README](../README.md#writing-a-compiler-out) for why that
+trade was made deliberately.
+
+The first three measurements said the same thing and could not say why: the
+matcher is linear in every shape tried. All three grammars were expression
+languages, so *flat in all of them* had no control.
+
+**The fourth added one.** `languages/solvm/` has no expression grammar at all —
+an instruction is a mnemonic and its operands, and the first token settles which
+rule matches. It is what this matcher costs when a grammar asks nothing of it:
+
+| | steps per token |
+| --- | --- |
+| SolVM assembly — no ladder | 11 – 25 |
+| Pascal — a shallow ladder | 12 – 31 |
+| awk — fourteen rungs and juxtaposition | 221 – 2,638 |
+
+**240× in constant, and no difference at all in curve**, over nine shapes.
+Two of the nine get cheaper per token as they grow.
+
+> The constant tracks how deep ordered choice must go before it commits. The
+> curve tracks nothing.
+
+That is what closes it. Generating code buys a constant factor on a matcher
+whose constant is already within 2× of a grammar that asks nothing — and costs
+a second implementation of ordered choice, of floored division, of pattern
+matching. *Two implementations of one notation* is the thing this project has
+refused everywhere else, and there is now a measurement saying what refusing it
+costs: nothing that has been asked for.
+
+**If it is ever reopened, the order is what makes it safe.** The tables pin the
+definition down first, and code generated against them can be checked against
+the interpreter that produced them. Doing it the other way round is how two
+implementations appear.
+
+*Measuring it a fourth time also found a defect in the measuring* —
+`bench/run.sh` could not report a failed run, and two numbers in
+[performance.md](performance.md) had been parsed out of an error message. See
+the last row of *Defects found* below.
+
+### 2.1 Reference attributes — from JastAdd
+
+**Tested against the language it was waiting for, and lost.**
+
+The entry had been narrowed to one case: *a reference that points forward, to a
+node the walk has not reached*. Its condition was a language that needs one.
+awk is that language — a function may be called above where it is defined, and
+awk resolves it by name over the whole program.
+
+Checking those calls is **two passes and twenty lines**: one collects the
+functions and leaves the table on the root, the other hands it back down. A
+leaving clause on the root runs after the whole subtree, so the forward
+reference is answered by the *shape of the walk* rather than by a mechanism.
+
+Two passes cost a second walk. Reference attributes cost demand-driven
+evaluation and the cycle detection that walking once avoids, and would have
+bought one walk instead of two. The case two passes cannot do is a dependency
+that does not **stratify**, and none of Pascal, Solveig or awk has one.
+
+
 ### 2.3 Scope graphs — from Statix
 
 **Settled against, and the way it was settled is the point.** The entry named
@@ -270,44 +356,6 @@ and the suite checks they are still the divergences they say they are.
 visibility *composes* — Rust's `pub use`, ML's `open` inside a signature, a
 class hierarchy several classes share. That is criterion two and three, and
 Pascal units are not it.
-
-### 2.4 Inlining a block — from `solas`
-
-Seven rewrite rules and a clause each. `solas` compiles the block of an
-`ifTrue:`, a `whileTrue:` and the rest into the enclosing chunk, behind a jump;
-so does `languages/solveig/solveig-sob.phx`.
-
-*The entry worried about "a jump over code in the middle of the chunk being
-built".* A clause has no slot to patch and needs none: the code being jumped
-over is a value the clause is holding, so an offset is a `size` rather than a
-fixup.
-
-Fixed the format's nesting limit, the call depth, and every extra frame in a
-traceback.
-
----
-
-## Settled, and not built
-
-### 2.1 Reference attributes — from JastAdd
-
-**Tested against the language it was waiting for, and lost.**
-
-The entry had been narrowed to one case: *a reference that points forward, to a
-node the walk has not reached*. Its condition was a language that needs one.
-awk is that language — a function may be called above where it is defined, and
-awk resolves it by name over the whole program.
-
-Checking those calls is **two passes and twenty lines**: one collects the
-functions and leaves the table on the root, the other hands it back down. A
-leaving clause on the root runs after the whole subtree, so the forward
-reference is answered by the *shape of the walk* rather than by a mechanism.
-
-Two passes cost a second walk. Reference attributes cost demand-driven
-evaluation and the cycle detection that walking once avoids, and would have
-bought one walk instead of two. The case two passes cannot do is a dependency
-that does not **stratify**, and none of Pascal, Solveig or awk has one.
-
 ---
 
 ## Defects found, and what found them

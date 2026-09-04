@@ -45,14 +45,16 @@ workflow's green tick.
 
 ## What is outstanding
 
-Two, and neither is in the assembler.
+One, and it is a deliberate hold.
 
 - [ ] **Read `SOL_SOB_VERSION` rather than writing 14** into two descriptions.
       `PRODUCING.md` asks for it; the trade was made deliberately (it would
       couple a description to a path outside this repository) and the suite
       checks the two agree. Worth revisiting only if the version moves.
-- [ ] **ROADMAP 1.2** — compiling the tables to code. The only entry left, and
-      it is a measurement that has come out the same way three times.
+- [x] **ROADMAP 1.2** — **closed 2026-09-03, settled against.** Measured a
+      fourth time; the assembler supplied the control three expression grammars
+      could not, and the entry closed on it. Sections 1 and 2 of the roadmap
+      are now both empty — nothing on that page is open.
 
 **The assembler owes nothing, and this is now a checkable claim rather than an
 impression.** `verify_chunk` in `solum/src/serialize.c` has eleven rules: four

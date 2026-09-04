@@ -11,18 +11,28 @@ what it got wrong first; [postmortem.md](postmortem.md) scores the predictions;
 not.
 
 Three languages are described and compiled: Pascal against `fpc`, Solveig
-against `solas`, awk against `/usr/bin/awk`. What remains on this page is **one
-measurement that keeps coming out the same way**, and nothing else. There is no
-unfinished work in any language described here, and nothing borrowed is left to
-borrow.
+against `solas`, awk against `/usr/bin/awk`, and a fourth description targets
+SolVM's bytecode.
+
+**Nothing on this page is open.** Sections 1 and 2 are empty — every stage and
+every borrowed idea has left with a verdict, three of them settled *against*
+building. What is left here is section 3, which is what this project has
+decided **not** to have and why; section 4, what a description is checked for;
+and section 5, the warts it knows about.
+
+That is the shape a roadmap is supposed to reach. It is not a claim that
+nothing else will ever be built — it is a claim that **nothing is currently
+owed**, and that the next entry should arrive the way every other one did: a
+real language needing something the notation could not say.
 
 ---
 
-## 1. The stages that remain
+## 1. The stages — all of them settled
 
-Seven entries have left this section; [COMPLETED.md](COMPLETED.md) has them,
-with what each predicted against what it cost. Three of the seven predicted
-wrong, which is the more useful half.
+**This section is empty, and that is its result.** All seven entries have left
+it; [COMPLETED.md](COMPLETED.md) has them, with what each predicted against
+what it cost. Three of the seven predicted wrong, which is the more useful
+half, and one left **settled against building it** after four measurements.
 
 | | |
 | --- | --- |
@@ -31,52 +41,8 @@ wrong, which is the more useful half.
 | [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation) | `otherwise` — what a node answers when its rule does not |
 | [1.4](COMPLETED.md#14-where-a-node-ends) | a position is a **span** |
 | [1.5](COMPLETED.md#15-a-runtime-that-is-not-a-literal) | `%embed` — a file's bytes under a name |
+| [1.2](COMPLETED.md#12-compiling-the-tables-to-code) | compiling the tables to code — settled **against**: measured four times, and the fourth found the control |
 | [1.6](COMPLETED.md#16--as-an-expression-operator-for-getline) | `\|` as an expression operator — awk's `cmd \| getline` |
-
-### 1.2 Compiling the tables to code
-
-A generated compiler interprets a PEG rather than being one, which is the price
-of there being **one** implementation of the notation rather than two — see
-[the README](../README.md#writing-a-compiler-out) for why that trade was made
-deliberately.
-
-**Measured four times now, and the case is weaker each time.**
-[performance.md](performance.md) has the numbers, and every one of them is
-reproducible from `bench/`. The matcher is linear in **nine shapes across three
-grammars** — Pascal's four, awk's two, the assembler's three — and 20,000 lines
-of Pascal reach running C in 189 ms.
-
-**The fourth measurement added the control that was missing.**
-`languages/solvm/` has no expression grammar at all: an instruction is a
-mnemonic and its operands, and the first token settles which rule matches. It
-is what this matcher costs when a grammar asks nothing of it — and the answer is
-**11 to 25 match-steps per token**, which is not meaningfully cheaper than
-Pascal's 12 to 31.
-
-So the three grammars span **240×** in constant and do not differ at all in
-curve:
-
-| | steps per token |
-| --- | --- |
-| SolVM assembly — no ladder | 11 – 25 |
-| Pascal — a shallow ladder | 12 – 31 |
-| awk — fourteen rungs and juxtaposition | 221 – 2,638 |
-
-**The constant tracks how deep ordered choice must go before it commits. The
-curve tracks nothing.** That is a stronger statement than three measurements
-could make, because the assembler is the case where generating code would help
-least and it is the case that was missing.
-
-And the constant does not matter: the largest program in the awk corpus is 269
-lines and reaches running C in **50 ms**. Memoisation would cut it and cost a
-table per position; generating code would cut it further and cost a second
-implementation of the notation. The hardest grammar tried has not asked for
-either, and now neither has the easiest.
-
-If it is ever done, the order is what makes it safe: the tables pin the
-definition down first, and code generated against them can be checked against
-the interpreter that produced them. Doing it the other way round is how two
-implementations appear.
 
 
 ## 2. Borrowed, and worth borrowing

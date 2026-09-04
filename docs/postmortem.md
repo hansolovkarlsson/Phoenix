@@ -560,3 +560,35 @@ arriving at from other directions:
 > **Re-running a check that has always passed is how you find out the check
 > stopped working.** A result that never changes is indistinguishable from a
 > measurement that stopped measuring — until you look at the instrument.
+
+## 11. What closing the last entry was worth
+
+The roadmap reached empty on 2026-09-03. Two things about that are worth
+recording, because *empty* is easy to mistake for *finished*.
+
+### The measurement did not decide it; the control did
+
+1.2 had been measured three times and left open all three, correctly: three
+flat curves are an observation, not an argument. Every grammar measured was an
+expression language, so *flat in all of them* had nothing to be flat **against**.
+
+The fourth measurement supplied that, and the entry closed the same week. The
+number did not change. **What changed was that a number finally had something
+to be compared to.**
+
+> Three measurements of the same kind are one measurement repeated. The fourth
+> was worth more than the first three because it was a different kind.
+
+### And emptiness is a claim about the present tense
+
+The page now says nothing is open. That is not a claim that nothing else will
+be built — it is a claim that **nothing is currently owed**, and the difference
+matters because every entry that ever arrived on that page arrived the same
+way: a real language needed something the notation could not say.
+
+The risk of an empty roadmap is that it stops being read, and then the next
+thing that ought to go on it goes into a commit message instead. The mitigation
+is the one this repository already uses everywhere: `phoenix/library.c` is a
+separate file so that every addition is visible as an addition, and § 3.4 says
+a growing library means *the notation was not expressive enough and nobody
+noticed*. An empty roadmap fails the same way, and the same tell catches it.

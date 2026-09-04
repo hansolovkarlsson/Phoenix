@@ -75,6 +75,15 @@ of it: **11–25 match-steps per token**, against Pascal's 12–31 and awk's
 nine shapes. [performance.md](performance.md) has every number and the command
 that reproduces it.
 
+**[ROADMAP 1.2 is closed](COMPLETED.md#12-compiling-the-tables-to-code),
+settled against building.** The fourth measurement is what settled it: three
+flat curves with no control could not say *why* they were flat, and the
+assembler supplied one. Generating code buys a constant factor on a matcher
+already within 2× of a grammar that asks nothing, and costs a second
+implementation of ordered choice, floored division and pattern matching.
+**The roadmap now has no open entries at all** — sections 1 and 2 are empty,
+and what remains is what the project has decided not to have.
+
 **Fixed in the benchmark:** `bench/run.sh` did not check whether `phx` had
 succeeded, so a failed run was parsed out of the error message and printed as a
 measurement — two numbers on that page came from it. It checks now.

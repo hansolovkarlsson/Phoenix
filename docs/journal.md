@@ -3386,3 +3386,43 @@ Reproducible numbers show that drift. Unreproducible ones hide it.
 
 Timings re-taken while there: 20,000 lines of Pascal reach C in 189 ms, not the
 238 the page claimed.
+
+### 1.2 closed, and the roadmap emptied
+
+The fourth measurement did not change the number and did change the decision,
+which is the distinction the entry had been missing.
+
+Three flat curves could not say *why* they were flat, because all three
+grammars were expression languages. The assembler is the control: no expression
+grammar at all, and **11–25 match-steps per token against Pascal's 12–31**. So
+the constant tracks how deep ordered choice must go before it commits, the
+curve tracks nothing, and generating code buys a constant factor on a matcher
+already within 2× of the grammar that asks least.
+
+Against that it costs a second implementation of ordered choice, of floored
+division, of pattern matching. **Two implementations of one notation** is what
+this project has refused everywhere else, and there is now a measurement saying
+what refusing it costs: nothing anybody has asked for.
+
+Closed **against**, with the reopening order preserved — tables first, code
+checked against the interpreter that produced them.
+
+### The section that emptied, and one entry that was in the wrong half
+
+Sections 1 and 2 of the roadmap are now both empty. Nothing on that page is
+open; what is left is what the project has decided *not* to have, what a
+description is checked for, and the warts it knows about.
+
+Filing 1.2 under *Settled, and not built* turned up **2.3 sitting in the wrong
+half**. Its own first line reads *Settled against, and the way it was settled is
+the point* — and it was filed under *Settled, and built*, where it had been
+since the day it closed. The audit that caught it compared each entry's verdict
+sentence against its section, which is a thing worth doing once per section
+rather than once per entry.
+
+> **A document with two halves will eventually have something in the wrong
+> one**, and the check is cheap: read what each entry says it is, not where it
+> sits.
+
+Three entries are settled against now — 1.2, 2.1, 2.3 — and the README had said
+*the one*.
