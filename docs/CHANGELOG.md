@@ -66,6 +66,21 @@ a *second* stage table which is the original plan rather than the delivery.
 Both now say which they are. This page was itself wrong within the hour, and
 that correction is recorded in [journal.md](journal.md) rather than hidden.
 
+**Measured, a fourth time.** [ROADMAP 1.2](ROADMAP.md#12-compiling-the-tables-to-code)
+— whether the tables should be compiled to code — came out the same way again,
+now with the control it had been missing. The assembler's grammar has no
+expression ladder, so it is what the matcher costs when a grammar asks nothing
+of it: **11–25 match-steps per token**, against Pascal's 12–31 and awk's
+221–2,638. Three grammars, 240× apart in constant and identical in curve, over
+nine shapes. [performance.md](performance.md) has every number and the command
+that reproduces it.
+
+**Fixed in the benchmark:** `bench/run.sh` did not check whether `phx` had
+succeeded, so a failed run was parsed out of the error message and printed as a
+measurement — two numbers on that page came from it. It checks now.
+`bench/generate-awk.awk` and `bench/generate-solvm.awk` are new; before them
+nothing in the repository could reproduce the awk figures at all.
+
 **Tests:** 176 → 189, of which 186 need nothing outside the repository.
 
 ## 2026-09-02 — awk, and five notation entries

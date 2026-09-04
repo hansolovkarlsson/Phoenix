@@ -3342,3 +3342,47 @@ written between two commits is affected. Saying "breaking" without that is
 louder than the truth.
 
 189 tests throughout. `main` at `ccd8cb1`.
+
+### The fourth measurement, and the harness that could not fail
+
+ROADMAP 1.2 has come out the same way four times. What changed this time is
+what was measured: `languages/solvm/` is the **control** the first three
+lacked. It has no expression grammar at all — an instruction is a mnemonic and
+its operands, and the first token settles which rule matches — so it is what
+this matcher costs when a grammar asks nothing of it.
+
+**11 to 25 match-steps per token**, against Pascal's 12 to 31 and awk's 221 to
+2,638. Three grammars, **240× apart in constant and identical in curve**, over
+nine shapes. Two of the nine get cheaper per token as they grow.
+
+> **The constant tracks how deep ordered choice must go before it commits. The
+> curve tracks nothing.**
+
+That is a stronger case than three measurements could make, because the
+assembler is precisely where generating code would help least, and it is within
+a factor of two of Pascal.
+
+### The defect was in the instrument
+
+`bench/run.sh` never checked whether `phx` had succeeded. On error `--stats`
+prints nothing and the diagnosis arrives on the same stream, so
+`awk '{print $9}'` picked a word out of the error text and the row looked like
+a measurement.
+
+**Two numbers in `performance.md` came from that** — `nest` and `blocks` at
+n=1600, for shapes that cannot complete. A nested parenthesis costs **11 levels
+of grammar recursion**, so the 10,000-level limit binds at about nine hundred
+parentheses; the page had never distinguished a level from a paren, and reading
+it could not have caught that.
+
+> **A measurement harness that cannot report failure will report something
+> else.** The numbers it invented were plausible, which is why they survived
+> three readings of the page they were on.
+
+And the awk figures had no generator anywhere in the repository — nothing could
+reproduce them. `bench/generate-awk.awk` is that now, and its constant differs
+from the old claim because the grammar gained a rung today, `|` for `getline`.
+Reproducible numbers show that drift. Unreproducible ones hide it.
+
+Timings re-taken while there: 20,000 lines of Pascal reach C in 189 ms, not the
+238 the page claimed.

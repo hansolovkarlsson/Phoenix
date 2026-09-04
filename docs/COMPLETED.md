@@ -324,10 +324,15 @@ outside it. None was found by reading the code.
 | `getline line` read as two variables concatenated | `getline` was not described, so it was not a keyword. Ordinary awk, read as something else, quietly |
 | `substr("abc", 0, 2)` | was `"a"`; one-true-awk says `"ab"`. POSIX can be read either way and an oracle cannot |
 | `for (;;)` would not parse | the rule for "newlines or semicolons between two things" was eating a `for` header's own semicolons |
+| **the benchmark could not report a failure** | `bench/run.sh` never checked `phx`'s exit status, and `--stats` writes to the same stream as a diagnosis — so a failed run was parsed out of the error text and printed as a measurement. Two numbers in [performance.md](performance.md) came from it. Found by re-running a measurement that had been called settled |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.
 [journal.md](journal.md) records that three times, in two languages.
+
+The last row is the same rule about the *instrument* rather than the subject: a
+harness that cannot report failure reports something else, and a number nobody
+can reproduce is where that hides.
 
 ## The specification, made to run
 

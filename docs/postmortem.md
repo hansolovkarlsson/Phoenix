@@ -519,3 +519,44 @@ and therefore shows the plan's stage 4 arriving inside stage 3.
 The generalisation is the one this section is about, arriving from the other
 direction: **the hedge was an attempt to resolve a factual question by reading
 more carefully.** It was a factual question. It took one command.
+
+## 10. The measurement that was predicted to change nothing
+
+ROADMAP 1.2 was described three times as *a measurement that has come out the
+same way*, and the standup twice recommended against a fourth on those grounds.
+**The prediction about the result was right and the recommendation was wrong**,
+which is a distinction worth keeping.
+
+### Right about the number
+
+The curve was flat again, in three new shapes, exactly as predicted. Nothing
+about compiling the tables to code became more attractive.
+
+### Wrong about the value
+
+Two things came out of it that a fourth flat line does not describe.
+
+**The measurement gained a control.** The three previous grammars were a
+shallow ladder, a deep one, and a deeper one; all three are expression
+languages. `languages/solvm/` has no expression grammar at all, and measuring
+it turned *the curve is flat in every grammar tried* into something with a
+shape: the constant tracks ordered-choice depth, the curve tracks nothing, and
+the case where generating code would help least costs within 2× of the case
+where it would help most. That is an argument. Three flat lines were an
+observation.
+
+**And the instrument was broken.** `bench/run.sh` could not report a failed
+run, so two published numbers had been parsed out of an error message. That
+defect was two days old, sat in a file whose entire purpose is to produce
+trustworthy numbers, and would not have been found by any amount of reading —
+only by running it on an input that fails.
+
+### What the recommendation should have been
+
+*Do not expect a different answer* was correct. *Therefore do not measure* did
+not follow, and the reason it did not is the same one this document keeps
+arriving at from other directions:
+
+> **Re-running a check that has always passed is how you find out the check
+> stopped working.** A result that never changes is indistinguishable from a
+> measurement that stopped measuring — until you look at the instrument.
