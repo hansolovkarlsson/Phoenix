@@ -3972,4 +3972,116 @@ tried again and caught — `root claimed 1:11..1:13, folded said 15@1:1..1:1`.
 > The discipline is not *write better literals*. It is that an expectation
 > should be produced by something other than the code under test — the other
 > backend, the other run, or arithmetic a reader can do.
+### The first sentence, which was true of yacc as well
 
+The page opened with *you write a language's grammar in EBNF and describe what
+each construct means*. That is true, and it is also true of the front half of
+yacc — the thing that separates this tool from yacc was sixty lines further
+down, in the section arguing about the name. It leads now: **a compiler is a
+grammar plus a sequence of tree walks, and both halves can be written down
+instead of programmed**, then what a `.phx` file therefore holds and what comes
+out of it.
+
+Four copies carry it — this page's README, `CLAUDE.md`, the landing page and
+the repository's own description on GitHub — and only the last had a limit
+worth recording. A description there caps at 350 characters and the sentence is
+357, so *standalone* came out of that copy and stayed in the others.
+
+The meta tags took a **shorter form rather than the same one truncated**. A
+search result is cut near 160 characters and a link preview near 200; the full
+two sentences would have been severed mid-clause in front of exactly the
+readers who have not arrived yet. 179 characters, same claim.
+
+The hero was the one worth looking at twice. Pasted in full it became eight
+lines of large type above the pipeline diagram, because `.hero .tag` is capped
+at 46 characters wide — and the page's own three sections already say the
+detail at more length than a lede should. It stops at *instead of programmed*.
+
+### The name, asked properly and kept
+
+The section arguing that *compiler-compiler* is the older and better word had
+never said who else holds the shorter one. Asked directly, the answer is that
+**the word is taken everywhere except here**: Elixir's framework owns the
+search term, Arize's owns the AI-observability one, Apache Phoenix is SQL over
+HBase, and none of the three is a compiler generator. Searching GitHub for one
+that is turns up coursework.
+
+The namesake in the same field is dead. **Microsoft Phoenix** was a compiler and
+program-analysis framework out of Microsoft Research whose last SDK was the
+June 2008 CTP; what outlived it was some of the static analysis in Visual
+Studio 2010, and its Wikipedia article was deleted.
+
+Then the question the other way round: what would a rename buy. **Every
+myth-adjacent alternative collides nearer than the incumbents do.** Pyre is
+Meta's Python type checker and Cinder is Instagram's CPython fork — both in
+this field. **Bennu**, the Egyptian bird the Greek phoenix descends from and so
+the clever version of the move, is already a JavaScript parser combinator
+library and a game programming language. That is trading a distant collision
+for a near one.
+
+*Brooker* was the only candidate that survived the check — nothing above two
+stars holds it, and it means precisely what the name section argues, since the
+Compiler Compiler at Manchester had a notation for meaning and not only for
+syntax. It loses anyway: a surname says nothing to a reader who does not know
+the history, which is most readers, and it yields no better binary than `phx`.
+
+> The word is contested everywhere except in the field that could confuse it
+> for something else.
+
+What is actually contested is not *Phoenix* but **`phx`**, which is how Elixir
+spells its mix tasks. Homebrew has neither name, which is where it would
+matter; npm, crates.io and PyPI each have a dead `phx`.
+
+Three paragraphs of this are in the README now, under the section that was
+already arguing about the word — including the precedent, which is the same
+word: Mozilla shipped a browser called Phoenix in September 2002, renamed it
+Firebird in April 2003 when Phoenix Technologies objected, and renamed it
+Firefox in February 2004 when the Firebird database project objected in turn.
+No star counts and no formula counts went in with it. A number that moves on
+its own does not belong in a record nothing re-runs.
+
+### The closeout said the tree was clean, and it was not
+
+The day was closed out once already, and the standup's table said *clean,
+nothing uncommitted* at `eb4e650`. Two records were sitting modified:
+`COMPLETED.md`'s defect row and `postmortem.md` § 14 — **the very entries the
+same standup listed as the day's durable half**. They had been written and not
+committed, and the status table was filled in from what the closeout had done
+rather than from what `git status` said.
+
+That is the day's own carry-forward wearing different clothes. An expectation
+produced by the thing it describes is worth nothing, and it does not stop being
+worth nothing when the thing doing the describing is a closeout rather than a
+test. They are committed now, as `0d27886`.
+
+### What the next language would have to fail at
+
+More descriptions do not add mechanisms; they produce the evidence that earns
+one. The roadmap already says so in both open entries — *one is a workaround;
+two is a mechanism* for [1.7](ROADMAP.md#17-a-repetition-that-counts), and a
+customer *a person would notice* for
+[2.5](ROADMAP.md#25-circular-attributes--from-jastadd). So the question is not
+which language would be pleasant to write but which one would fail at
+something.
+
+Three candidates were considered and two rejected. **BASIC teaches nothing**:
+its one distinctive shape is unstructured control flow, which `pascal.phx`
+already parses and `pascal-c.phx` already emits as C `goto`, and there is no
+canonical dialect to be right against — no arbiter, no row in the table.
+**Lua would most likely produce a negative result at full price**: dynamic
+values, hash tables and coercion are what awk already demanded, and its one new
+thing, closures, is a set synthesised up the scope tree, which is what `%pass`
+does. **Java is the right idea at the wrong size** — inherited-member lookup is
+where reference attributes pay, and it is the only thing here that would
+seriously retest 2.1's verdict, but the subset would be arbitrary and the
+runtime enormous.
+
+What survived is two shapes. An **assembler for an ISA with span-dependent
+instructions**, which is 2.5's cheapest possible customer and is written up in
+that entry. And **lex and yacc as described languages**, where a subset
+construction and a FIRST/FOLLOW closure are fixpoints by definition, `flex` and
+`bison` are the arbiters, and the tool whose name this one argues about becomes
+a description in it. The second has a question in front of it: a yacc file
+embeds arbitrary C in braces, so reading one means scanning nested braces,
+strings and comments, and whether the lexical half can express that is an
+experiment rather than a guess.

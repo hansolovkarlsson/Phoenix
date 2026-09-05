@@ -139,6 +139,22 @@ definitions, constant propagation — and no description here has one, because
 none of them optimises. That is the thing to watch for rather than a bigger
 `units/`.
 
+*And a cheaper customer than a dataflow analysis may exist.* An assembler for
+an ISA with **span-dependent instructions** — Z80's `JR e` at two bytes against
+`JP nn` at three — has to iterate: choosing the short form shrinks the code,
+every label after it moves, and a branch that was out of range comes into it.
+That is a fixpoint over a table, getting it wrong is a silently bad offset
+rather than a diagnostic nobody asked for, and
+[`languages/solvm/`](../languages/solvm/) has already paid for everything an
+assembler costs here *except* that. `z80asm` assembles the same source for a
+byte-for-byte oracle, in the class of `fpc` and `solas` — present, or the test
+skips. Nothing is started; this names the candidate.
+
+It does nothing for [1.7](#17-a-repetition-that-counts), and that is worth
+writing down so it is not looked for twice: a Z80 instruction's length comes
+from its **opcode**, not from a count read out of the stream. The second
+length-prefixed format 1.7 wants is still unfound.
+
 
 ## 3. What is deliberately not here
 
