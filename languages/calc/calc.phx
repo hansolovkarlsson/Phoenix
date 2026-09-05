@@ -191,6 +191,18 @@ primary = integer -> Number(text: $1)
    * This is docs/semantics.md's headline in miniature: Phoenix's
    * arithmetic is not the target's, and a pass that models a target
    * writes the model out. *)
+  (* **This check is the interpreter's, and only the interpreter's.** It reads
+   * `$right.val`, so it can only fire where the value is known at walk time --
+   * and that is a property of `eval`, not of calc. A *compiled* calc program
+   * divides by zero at run time and the two backends answer differently:
+   * `awk` is fatal and says so, and C is undefined behaviour, which on the
+   * machine this was written on quietly produced 0.
+   *
+   * Nothing here is wrong. It is a thing calc has never said, the way it had
+   * never said what `/` means until `quotient` was written down -- and the
+   * cost is that a divide-by-zero program is outside the conformance rule
+   * rather than covered by it. Saying it would mean a check the *backends*
+   * emit, which is a language decision this calculator has not needed to make. *)
   Binary(op: "/") : val = quotient($left.val, $right.val)
                   ! $right.val = 0 : "division by zero" .
 

@@ -1,0 +1,18 @@
+# `<>` and `or`, which nothing else written in calc uses -- so the clauses
+# spelling them (`!=` and `||` in C, the same two in awk) had nothing holding
+# them, in either backend.
+#
+# Every iteration takes a different route through both: `n <> 1` is true then
+# false then true, and `a = b` is false throughout, so `or` answers true, false
+# and true in turn.
+let a := 3;
+let b := 4;
+let n := 0;
+while n <> 3 do
+  if n <> 1 or a = b then
+    print n;
+  else
+    print 0 - n;
+  end
+  n := n + 1;
+end

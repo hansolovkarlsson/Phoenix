@@ -752,20 +752,27 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 195 checks, covering 35 Pascal programs against fpc
-                #   and 76 Solveig programs against solas, byte for byte
+make test       # 196 checks, covering 35 Pascal programs against fpc
+                #   and every Solveig program in a checkout, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 191 of the 195 need only what is vendored here, and it is worth
+repository** — 192 of the 196 need only what is vendored here, and it is worth
 being exact about the other four, because they surface as **two** skipped lines
 rather than four. One drives `fpc`. Three drive `solas` and `solvm` over a
 checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are
 guarded together, so a machine without it prints one line for all three. Each
 reports itself skipped rather than failing, and a run with neither tool present
-is 191 passed and 0 failed. The assembler is in the 191: its programs are held
+is 192 passed and 0 failed. The assembler is in the 192: its programs are held
 against the bytes they assembled to last time, so it is tested without SolVM
 and held *against* SolVM when there is one.
+
+*The Solveig figures above are deliberately not numbers.* What that leg counts
+is `.sol` files in **another repository**, which changes without asking this
+one — two runs an hour apart here reported 76 and then 77. A count Phoenix
+cannot control is a count this page would be wrong about on somebody else's
+commit, so it says *every program in the checkout* and lets the suite print the
+number it found.
 
 ```sh
 SOLVEIG=/path/to/Solveig make test    # the other three, and the assembler against solas

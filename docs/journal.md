@@ -3598,3 +3598,100 @@ has been checkable rather than asserted: a diff between `calc-c.phx` and
 `calc-awk.phx` is a list of the ways awk is not C, and contains nothing else,
 because there is nothing else in either file to differ about.
 
+### The sweep afterwards, and nine numbers that had gone quietly wrong
+
+A status sweep the same afternoon held every checkable claim in the records
+against the tree. **Nine numbers disagreed**, and the shape of the
+disagreement is the part worth keeping: not one of them was ever wrong when it
+was written.
+
+`solveig` 1,108, `awk` 968 and `50 node types`, `solvm` 820 — all four entered
+[COMPLETED.md](COMPLETED.md) on 2026-09-02 and 2026-09-03, and all four
+descriptions changed *after*. `ee5c993`, the commit that made `|` an expression
+operator, is almost certainly what turned awk's fiftieth node type into its
+fifty-first. Nobody was careless; the numbers were true, and then the thing
+they counted moved.
+
+> A record's prose is written to be read again. Its numbers are written once
+> and then quietly describe a repository that has gone on without them.
+
+Two of the nine were **two hours old**. `480 lines` for calc went into the
+ledger this morning and a comment block in `calc-awk.phx` grew by two lines
+afterwards; `189 checks` in the README was corrected in the CHANGELOG and not
+in the README. Same failure at a hundredth of the timescale, which is the
+useful part: it is not a discipline problem that better care would fix, it is
+that nothing *runs* these numbers. [semantics.md](semantics.md) has a whole
+entry about that — a specification nothing runs is a document about a program —
+and the counts in the ledger are in exactly the position `semantics.md` was in
+before `tests/grammars/semantics.phx`.
+
+The README's was the one that mattered, being the page a stranger reads first,
+and it was the wrong *shape* rather than merely stale: *"186 of the 189, and
+the two that drive `solas` and `solvm`"* counted skipped lines in one clause
+and tests in the other. Measured rather than reasoned about, with the tools
+removed: 195 passed with them, 191 without, four external tests reported
+through two skipped lines. The claim the paragraph exists to make survived —
+the suite does pass with nothing outside this repository.
+
+### And the check that could not fail, found in the thing built to prevent it
+
+The sweep also read [`tests/run.sh`](../tests/run.sh) and found that
+`backends_agree`, written this morning, **checked neither program's exit
+status** — and captured stderr for awk while not capturing it for C. Two
+programs that both die print the same nothing, and the comparison would have
+called that agreement. [COMPLETED.md](COMPLETED.md#defects-found-and-what-found-them)
+already carries a row for this exact mistake reaching `bench/run.sh`, so it is
+the second time, in the same repository, in a harness written to be trusted.
+
+Probing the fix turned up something better than the fix. A calc program
+dividing by zero:
+
+| | |
+| --- | --- |
+| `awk` | fatal, exit 2, *"division by zero"* |
+| C | **exit 0, prints `0`** — undefined behaviour, and on this machine the quiet kind |
+
+**calc has never said what dividing by zero means.** Its `eval` clause refuses
+it, but that clause reads `$right.val` and so is the interpreter's alone; a
+compiled program has whatever the target does, and the two targets disagree.
+That is the same hole `quotient` was written to close, one operator over: the
+description borrowed each host's answer because it had not given one. It is
+written down in [`calc.phx`](../languages/calc/calc.phx) beside the check that
+misled, and left unfixed, because emitting a guard is a language decision this
+calculator has not needed to make.
+
+The pleasing part is the order. **The divergence was found on the same day as
+the machinery that finds divergences, by using it.** Two backends existed for
+six hours and had already caught something the interpreter could not see.
+
+### Two claims reframed rather than picked
+
+Two of the sweep's findings had no right answer and a better question.
+`~12,900 lines of C11` counts `runtime.h`, 4,217 generated lines that are the
+runtime re-emitted as a string literal — so the runtime is in the number twice.
+Choosing 8,698 or 12,915 would have made one of two true readings disappear;
+the ledger states both and says what separates them. Likewise
+`languages/units/` was absent from a table of six languages in a tree with
+seven directories, which reads as an oversight and is a decision — so the table
+says so now, in a line, rather than leaving a reader to count.
+
+> When a number has two honest readings, the fix is not to pick one. It is that
+> the page never said which it meant.
+
+### And one number that cannot be kept right, so it stopped being a number
+
+The recount put `76 Solveig programs against solas` back in the README having
+checked it. Two runs an hour later reported **77**, and then 76 again. Nothing
+in this repository changed between them.
+
+That leg counts `.sol` files in **another repository**, maintained by somebody
+else on their own schedule. The number was never Phoenix's to know, and a page
+that quotes it is a page that goes wrong on a commit made somewhere else — the
+same dependency, one level up, that got `pascal.bnf`'s fixtures vendored into
+this tree on 2026-09-01. [COMPLETED.md](COMPLETED.md) had already found the
+right form and used it — *every `.sol` file in that repository* — so the README
+now says that too, and lets the suite print whatever it counted.
+
+> A number in a document is a promise to keep it right. Do not make that
+> promise about a repository you do not control.
+

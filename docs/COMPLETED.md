@@ -13,7 +13,13 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, ~12,900 lines including the header.
+C11, no dependencies, **8,698 lines** hand-written.
+
+The figure usually quoted is ~12,900, and both are right about different
+things: `phoenix/` also holds `runtime.h`, 4,217 generated lines which are the
+seven runtime files re-emitted as a C string literal so that a compiler `phx`
+writes is one file. Counting it measures what is in the directory; not counting
+it measures what anybody wrote. The runtime is in both numbers, once or twice.
 
 ```
 phoenix/
@@ -33,8 +39,15 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`solveig/`](../languages/solveig/) | 1,129 lines, 15 node types | a front end and a `.sob` bytecode backend. **Every `.sol` file in that repository** prints what `solas`'s bytecode prints — byte for byte, tracebacks included, nothing normalised |
 | [`awk/`](../languages/awk/) | 993 lines + a 682-line C runtime, 51 node types | POSIX awk: grammar, a call check, and a compiler to C. 6 programs that e2fsprogs, ncurses and vim ship compile and print what `/usr/bin/awk` prints |
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
-| [`calc/`](../languages/calc/) | 482 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
+| [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
 | [`phx/`](../languages/phx/) | 256 lines | the notation described in itself. It parses itself and every other description here |
+
+**Seven directories, six rows.** [`languages/units/`](../languages/units/) —
+229 lines, 11 node types, and two checks in the suite — is deliberately not
+here. It was written to answer a question rather than to be compiled: *do
+Pascal units need a scope graph?* The answer is under
+[2.3](#23-scope-graphs--from-statix), which is where it is described, and this
+table is what the tool is *for* rather than everything it has read.
 
 ## The notation
 

@@ -612,8 +612,14 @@ fi
 if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/fizz.calc" \
         > "$tmp/fizz.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp/fizz" "$tmp/fizz.c" 2>/dev/null; then
-    got=$("$tmp/fizz" | tr '\n' ' ')
-    if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 " ]; then
+    if ! got=$("$tmp/fizz" 2>&1); then
+        report fail "a loop and a branch, compiled and run" \
+                    "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
+        got=
+    fi
+    got=$(printf '%s' "$got" | tr '\n' ' ')
+    # No trailing space: `$(...)` strips the final newline before `tr` sees it.
+    if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300" ]; then
         report pass "a loop and a branch, compiled and run"
     else
         report fail "a loop and a branch, compiled and run" "got: $got"
@@ -629,7 +635,11 @@ refuses "a loop refuses to be interpreted" "cannot be interpreted" \
 if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
         > "$tmp/out.c" 2>/dev/null \
    && cc -o "$tmp/out" "$tmp/out.c" 2>/dev/null; then
-    got=$("$tmp/out")
+    if ! got=$("$tmp/out" 2>&1); then
+        report fail "through the C backend, same answer" \
+                    "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
+        got=
+    fi
     if [ "$got" = "$want" ]; then
         report pass "through the C backend, same answer"
     else
@@ -702,8 +712,20 @@ backends_agree() {
         report fail "$_what" "the C backend did not compile cleanly"
         return
     fi
-    _a=$(awk -f "$tmp/two.awk" 2>&1 | tr '\n' ' ')
-    _c=$("$tmp/two" | tr '\n' ' ')
+    # Both statuses are checked, and both streams captured, because neither
+    # half of that is optional: a program that dies prints nothing, and two
+    # programs that both die print the same nothing. COMPLETED.md already has
+    # a row for the version of this mistake that reached bench/run.sh.
+    if ! _a=$(awk -f "$tmp/two.awk" 2>&1); then
+        report fail "$_what" "awk exited nonzero: $(printf '%s' "$_a" | tr '\n' ' ')"
+        return
+    fi
+    if ! _c=$("$tmp/two" 2>&1); then
+        report fail "$_what" "the compiled C exited nonzero: $(printf '%s' "$_c" | tr '\n' ' ')"
+        return
+    fi
+    _a=$(printf '%s' "$_a" | tr '\n' ' ')
+    _c=$(printf '%s' "$_c" | tr '\n' ' ')
     if [ "$_a" = "$_c" ]; then
         report pass "$_what"
     else
@@ -717,6 +739,11 @@ backends_agree "a loop whose body is one statement, likewise" \
                "$root/languages/calc/tests/one-statement-block.calc"
 backends_agree "and the operators the module brought" \
                "$root/languages/calc/programs/logic.calc"
+# `<>` and `or` are spelled by clauses of their own in both backends -- `!=`
+# and `||` -- and no other calc program in the tree reaches either. They had
+# nothing holding them until this one.
+backends_agree "and the two spellings nothing else exercised" \
+               "$root/languages/calc/tests/or-and-noteq.calc"
 
 # The Solveig backend is parked. Its example is still read, so the notation
 # cannot drift out from under it -- but nothing runs `solas`, and the round
@@ -780,8 +807,13 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
     # The generated program is a compiler, so what it writes has to compile.
     if "$tmp0/calcc" "$root/languages/calc/programs/fizz.calc" > "$tmp0/fizz.c" 2>/dev/null \
        && cc -Wall -Werror -o "$tmp0/fizz" "$tmp0/fizz.c" 2>/dev/null; then
-        got=$("$tmp0/fizz" | tr '\n' ' ')
-        if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 " ]; then
+        if ! got=$("$tmp0/fizz" 2>&1); then
+            report fail "and what it writes runs" \
+                        "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
+            got=
+        fi
+        got=$(printf '%s' "$got" | tr '\n' ' ')
+        if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300" ]; then
             report pass "and what it writes runs"
         else
             report fail "and what it writes runs" "got: $got"
