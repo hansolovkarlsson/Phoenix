@@ -374,7 +374,8 @@ Pascal units are not it.
 ## Defects found, and what found them
 
 Every one of these was found by a test comparing Phoenix against something
-outside it. None was found by reading the code.
+outside it. None was found by reading the code — though the last row widens
+what *outside it* has meant, and the entry after the table says how.
 
 | | |
 | --- | --- |
@@ -386,14 +387,37 @@ outside it. None was found by reading the code.
 | `substr("abc", 0, 2)` | was `"a"`; one-true-awk says `"ab"`. POSIX can be read either way and an oracle cannot |
 | `for (;;)` would not parse | the rule for "newlines or semicolons between two things" was eating a `for` header's own semicolons |
 | **the benchmark could not report a failure** | `bench/run.sh` never checked `phx`'s exit status, and `--stats` writes to the same stream as a diagnosis — so a failed run was parsed out of the error text and printed as a measurement. Two numbers in [performance.md](performance.md) came from it. Found by re-running a measurement that had been called settled |
+| **a syntax error named a token that was legal** | `parse_run` reported a leftover-input failure at the first token left over while keeping the *expected* list recorded wherever the match had really got stuck. `print a +;` blamed the `print`. A start rule that is a repetition never fails outright, so **every** syntax error in every language here took that path. Found by [reference.md](reference.md) disagreeing with the program |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.
 [journal.md](journal.md) records that three times, in two languages.
 
-The last row is the same rule about the *instrument* rather than the subject: a
-harness that cannot report failure reports something else, and a number nobody
-can reproduce is where that hides.
+The row before last is the same rule about the *instrument* rather than the
+subject: a harness that cannot report failure reports something else, and a
+number nobody can reproduce is where that hides.
+
+**And the last row is a fourth kind of finder, which is why the claim above it
+is hedged.** Nothing outside this project was consulted and no test failed. The
+thing Phoenix was compared against was **its own reference manual**, which said
+the position reported is the one the match got furthest — and a two-line
+experiment said otherwise. The code was then read to find out which was right,
+but reading is not what found it.
+
+That only works on a document precise enough to be contradicted.
+[reference.md](reference.md) earns its place here by saying something a
+five-minute test can disagree with, which is the same property
+[semantics.md](semantics.md) has and the reason that page became a suite.
+
+> A specification nothing runs is a document about a program. A specification
+> precise enough to be *wrong* is a test nobody has written yet.
+
+**A test was holding the defect in place**, and that is worth its own line
+because it looked like the opposite. `languages/awk/tests/divergent/spaced-regex.awk`
+asserted the message contained `and found "BEGIN"` — a file's first token
+blamed for a fault 34 columns into line 13 — from a directory named for genuine
+divergences, next to two of them. An expectation pasted from a run records the
+behaviour; only one written from the intent records the intent.
 
 ## The specification, made to run
 

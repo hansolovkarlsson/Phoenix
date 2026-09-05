@@ -732,3 +732,58 @@ does not catch a limit that shows up as a **workaround outside the tool**:
 1.7's symptom was reaching for `solvm --dump`, another project's binary, and no
 file in this repository grew by a line when that happened.
 
+---
+
+## 14. The counts check, scored the same day it was built
+
+[COMPLETED.md](COMPLETED.md#the-arithmetic-made-to-run-too) makes a claim about
+`tests/counts.sh` in the section that introduces it: **it would have caught all
+nine.** That was written on the morning of 2026-09-05 and had two pieces of
+evidence against it by the evening, one on each side.
+
+### Wrong, within the hour, and the reason generalises
+
+There was a **tenth** stale number, and the check did not have it.
+[lineage.md](lineage.md) opened with *5,300 lines of C11* — exact when written
+on 2026-09-01, and 63% understated four days later. The check covered
+`COMPLETED.md` and `postmortem.md` and not that file.
+
+Not an oversight of a known case: **the check was written from the list the
+sweep had produced.** Its inputs were the nine numbers already found, so its
+coverage was those nine numbers' homes. The question it should have been
+written from is *which records quote numbers*, which is a different question
+with a different answer.
+
+> A check written from the cases you found is a check against the cases you
+> found. Assemble it from the question instead — what kind of thing can be
+> wrong — or it inherits the blind spot of whatever found the first batch.
+
+*And a second reason it survived*, which is about numbers rather than about
+checks: 5,300 is close to what the **descriptions** now come to, 5,395. A stale
+number that looks wrong gets fixed on sight. One that looks like a *different
+true number* does not, and this one had been read past for four days.
+
+### Right, four hours later, in under a minute
+
+Fixing the syntax-error position added fourteen lines to `parse.c`. That made
+three records stale at once — `COMPLETED.md` twice, `lineage.md`, and
+`postmortem.md`, which the check still did not cover and does now — and
+`make test` refused the build **before the commit existed**.
+
+That is the claim holding in the form that matters. The nine had been wrong for
+days because nothing looked; this was wrong for the length of one edit, and the
+thing that noticed was not attention.
+
+### What the pair is actually worth
+
+The check did not make the class impossible, and it was written as though it
+had. What it did is **change how long a wrong number survives** — from days to
+the gap between two commands — for the records it covers, which is a smaller
+claim and a true one.
+
+The two failures also have opposite shapes and both are worth keeping:
+coverage decided by where the last bug was found, and a number wrong in a way
+that reads as plausible. Neither is fixed by care. The first is fixed by
+deriving the check's inputs from the question, and the second is not fixed at
+all — it is the reason the check has to exist.
+
