@@ -449,30 +449,38 @@ zero. The inconsistency is real and is kept on purpose: making it one-based
 would mean every use of it subtracting one, which is the off-by-one this
 notation is otherwise arranged to avoid.
 
-**One syntax error, and it is reported at the wrong column.** A pass collects
-its complaints and reports all of them — three undefined names give three
-`error:` lines — but a *parse* stops at the first failure and gives one. Worse
-than the count is the position:
+**One syntax error, and its two halves come from different places.** A pass
+collects its complaints and reports all of them — three undefined names give
+three `error:` lines — but a *parse* stops at the first failure and gives one.
+The count is the smaller half of the problem.
+
+`parse.c` tracks the position the match got **furthest**, which is the right
+heuristic and is what [reference.md](reference.md) describes. There are two
+failure paths and only one uses it. When the start rule matches and leaves
+input over, `parse_run` overwrites `furthest` with the first leftover token —
+deliberately, since that is *the first thing it could not use* — but does not
+clear the list of what was **wanted**, which was recorded somewhere else
+entirely. The message then pairs one position's token with another position's
+expectations:
 
 ```
 print a +;
+^ error: expected -, (, integer or name, and found "print"
 ```
 
-is reported at column 1, `expected -, (, integer or name, and found "print"`.
-The line is right and the column is the start of the statement, because ordered
-choice throws away *why* an alternative failed: what surfaces is the outer
-position that gave up rather than the inner one that got stuck.
+`print` is legal at that column, and the same file parses once the expression
+is finished. The expectations belong to the `;` eight columns along.
 
-This is a known PEG problem with a known ladder of answers, and
-[lineage.md](lineage.md) now names them. Ford's **farthest-failure** heuristic
-— report the rightmost position the parse ever reached — costs nothing and asks
-nothing of a grammar, and is the whole fix for the column. Reporting *more than
-one* error is a larger thing: it needs error recovery, which changes what a
-parse is.
+**A start rule that is a repetition can never fail outright** — `program = {
+statement }` matches zero statements and succeeds — so in every language
+described here, *every* syntax error takes this path. The line is right, which
+is why it reads as merely unhelpful rather than as wrong.
 
-It is a wart rather than an entry because no description is blocked by it. It
-is the weakest surface the tool has, though, for a project whose argument is
-that a fault found while reading is found before anybody else sees it.
+It is a wart rather than an entry because no description is blocked by it, and
+the fix is small enough to be suspicious of: reporting at `furthest` instead
+would name the `;`, and would change what a leftover-input error means.
+[lineage.md](lineage.md) has the literature — Ford's farthest failure is
+already here, and labelled failures are the next rung.
 
 **A description may guess where the tool will not.** `languages/awk/awk.phx`
 decides whether `/` opens a regexp by looking at the character after it,

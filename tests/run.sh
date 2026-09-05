@@ -380,6 +380,17 @@ prints "folded bottom-up"        "15"                  --driver folded  "$fold" 
 prints "and top-down, which is not the same" "((2 + 12) + 1)" \
        --driver partial "$fold" "$arith"
 
+# A node built by a rewrite takes the position of the node it replaced --
+# docs/reference.md says so, run.c copies the span into the builder on purpose,
+# and until now nothing ran it. The folded root must claim the span the
+# outermost Binary claimed, so a diagnostic from a later pass points at the
+# program rather than at the rule that rewrote it.
+prints "the spans a rewrite starts from" \
+       "((2@1:1..1:1 + (3@1:5..1:5 * 4@1:9..1:9)@1:7..1:9)@1:3..1:9 + 1@1:13..1:13)@1:11..1:13" \
+       --driver spans "$fold" "$arith"
+prints "and a rewritten node keeps the one it replaced" "15@1:11..1:13" \
+       --driver folded-spans "$fold" "$arith"
+
 refuses "an innermost rewrite that never settles" "and is still going" \
         "$root/tests/grammars/rewrite-runaway.phx" "$root/tests/sources/one.txt"
 refuses "a rewrite reading an attribute" "rather than what a pass worked out" \

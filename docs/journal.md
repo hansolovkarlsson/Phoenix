@@ -3813,3 +3813,65 @@ looks like a different true number does not.
 > found. The question it should have been written from is *what kind of thing
 > can be wrong*.
 
+### `$pos` does survive a rewrite, and the check for it found something else
+
+The standup's one untested item, answered: **it survives.** A `%rewrite` that
+folds `2 * 3` to `6` gives a node claiming `1:3..1:5`, which is exactly the span
+the `Binary` it replaced had. `run.c` copies `v->pos` and `v->endpos` into the
+builder on purpose, with a comment saying why, and the behaviour matches the
+comment at an inner node as well as at the root.
+
+**Two corrections to what the standup said.** It claimed *nothing in the records
+discusses it*. [reference.md](reference.md) has discussed it since `%rewrite`
+shipped — *a node built by a rewrite takes the position of the node it
+replaced, so a later diagnostic points at the program rather than at the rule.*
+The claim was there and nothing ran it, which is the position `semantics.md` was
+in before it became a test. It is two checks in
+[`tests/grammars/fold.phx`](../tests/grammars/fold.phx) now, and breaking the
+copy in `run.c` was tried, and caught.
+
+### And the syntax-error wart was diagnosed wrong this morning
+
+Written up a few hours earlier as *ordered choice throws away why an
+alternative failed, so the error surfaces at the outer position that gave up.*
+That is the textbook problem and it is **not** the one this tool has.
+
+`parse.c` already implements Ford's farthest-failure heuristic — `note_want`
+tracks the highest token index ever reached and the set of things wanted there.
+The reference documents it. It works. There are two failure paths and the
+second throws the answer away:
+
+```c
+if (got < t->n) {
+    /* The goal matched, and there is more file. */
+    p.furthest = got;
+    report_failure(&p);
+```
+
+`furthest` is overwritten with the first leftover token — deliberately, and
+defensibly, since that is the first thing the parse could not use — but
+`p->wanted` is **not cleared**, because clearing it is `note_want`'s job and
+`note_want` was bypassed. So the message pairs one position's token with
+another position's expectations:
+
+    print a +;
+    ^ error: expected -, (, integer or name, and found "print"
+
+`print` is legal at that column. The same file parses with the expression
+finished. The expectations belong to the `;`, eight columns along.
+
+**And a start rule that is a repetition can never fail outright.** `program = {
+statement }` matches zero statements and succeeds, so in every language
+described here *every* syntax error takes the second path. The wart is
+universal and was recorded as a guess.
+
+> The heuristic was not missing. A code path was discarding its answer, and the
+> literature was the wrong place to look for that.
+
+*What this says about the survey.* Reading about how other tools solve a
+problem told me what the problem is called and predisposed me to assume Phoenix
+had it in the textbook form. It did not. **Naming a limit from the outside is
+worth doing and is not evidence about the inside** — the fifteen minutes in
+`parse.c` were worth more than the afternoon of comparison, and would have been
+worth more still if they had come first.
+

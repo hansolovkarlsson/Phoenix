@@ -48,9 +48,12 @@ a second host.
 Nothing about the tool changed. This is a description, and the language a
 compiler emits was never Phoenix's business.
 
-**Tests:** 189 → 197. Eight new ones: six for the backend itself; one for `<>`
-and `or`, whose clauses no calc program had ever reached; and one holding the
-records' own counts against the tree. The backend's need `awk` to run what it
+**Tests:** 189 → 199. Ten new ones: six for the backend itself; one for `<>`
+and `or`, whose clauses no calc program had ever reached; one holding the
+records' own counts against the tree; and two for a claim `reference.md` had
+made since `%rewrite` shipped and nothing had run — **a node built by a rewrite
+keeps the position of the node it replaced**, so a diagnostic from a later pass
+points at the program rather than at the rule. The backend's need `awk` to run what it
 emits, in the same role `cc` already plays for the C backend; the Makefile
 requires both to build `phx` at all.
 

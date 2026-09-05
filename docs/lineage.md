@@ -80,18 +80,19 @@ tree walks and the boilerplate should be free*, it is that.
 
 Phoenix's matcher is a PEG, and PEGs have a known and well-studied weakness
 that this page had not named: **ordered choice throws away why an alternative
-failed**, so the error surfaces at the outer position that gave up rather than
-the inner one that got stuck. `print a +;` is reported at the `print`.
+failed**, so a failed parse has to guess where the real mistake was.
 
 | | |
 | --- | --- |
-| **Ford** (2002) | the **farthest-failure** heuristic — track the rightmost position the parse ever reached and report *that*. It needs nothing from the grammar writer, which is its whole appeal |
+| **Ford** (2002) | the **farthest-failure** heuristic — track the rightmost position the parse ever reached and report *that*. It needs nothing from the grammar writer, which is its whole appeal. **Phoenix already does this**, in `parse.c`, and discards it on one of its two failure paths — see [ROADMAP 5](ROADMAP.md#5-known-warts) |
 | **Maidl, Mascarenhas, Medeiros, Ierusalimschy** | **labeled failures**: a PEG names its kinds of failure and each ordered choice says which it catches, so a rule can commit and explain rather than backtrack silently |
 | **Medeiros and Fabio Mascarenhas** | error *recovery* in PEGs — recovery expressions that let a parse continue past a failure, which is what reporting more than one syntax error requires |
 
 The three are a ladder: the first is a heuristic and costs nothing, the second
-is a notation change, the third changes what a parse is. See
-[ROADMAP 5](ROADMAP.md#5-known-warts).
+is a notation change, the third changes what a parse is. Phoenix is on the
+first rung already, which is worth knowing before reaching for the second — the
+wart it has is not a missing heuristic but a path that throws the heuristic's
+answer away.
 
 ## Parser generators only — the yacc family
 

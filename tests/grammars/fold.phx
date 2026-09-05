@@ -37,3 +37,19 @@ factor     = number -> Number(text: $1) .
 %driver plain   = show -> out .
 %driver folded  = fold, show -> out .
 %driver partial = outside-in, show -> out .
+
+(* Does the built node keep the position of the one it replaced?
+ * `docs/reference.md` says it does -- *a node built by a rewrite takes the
+ * position of the node it replaced, so a later diagnostic points at the
+ * program rather than at the rule* -- and nothing checked it. `run.c` copies
+ * the span into the builder deliberately, so this is the claim made runnable
+ * rather than a suspicion. *)
+%pass where
+  Number : out = "{}@{}:{}..{}:{}"
+             of $text, $pos.line, $pos.column, $pos.endline, $pos.endcolumn .
+  Binary : out = "({} {} {})@{}:{}..{}:{}"
+             of $left.out, $op, $right.out,
+                $pos.line, $pos.column, $pos.endline, $pos.endcolumn .
+
+%driver spans        = where -> out .
+%driver folded-spans = fold, where -> out .
