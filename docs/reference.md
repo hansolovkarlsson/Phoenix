@@ -449,6 +449,25 @@ per statement is written the way every other list is:
 Program : lines = bytes($body.pos.line, 4) .
 ```
 
+**A node's span is the syntax that built it, which is not always everything
+underneath it.** An action on a whole alternative gets the whole alternative:
+`"print" e:expression ";"` gives a `Print` covering `print a;` from its `p` to
+its `;`. An action *inside* a repetition gets that turn of the repetition only,
+and for the left fold every binary operator is written with —
+
+```ebnf
+expression = term { "+" t:term -> Binary(op: "+", left: $$, right: $t) } .
+```
+
+— `$$` was built on an earlier turn, so the `Binary` spans `+ t` and starts at
+its **operator**. In `1 + 2` the `Binary` claims columns 3 to 5 while its left
+child is the `1` at column 1.
+
+That is usually what a diagnostic about an operator wants, and it is worth
+knowing before computing anything from it: **a parent's span does not
+necessarily enclose its children's**, so the extent of a subtree is not
+`$pos` of its root.
+
 A node built by a **rewrite** takes the position of the node it replaced, so a
 later diagnostic points at the program rather than at the rule.
 

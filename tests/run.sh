@@ -225,7 +225,12 @@ if printf '%s' "$tree" | grep -q "op: \"-\"" \
 else
     report fail "the fold associates to the left"
 fi
-refuses "a reserved word as a name" "expected"  "$root/languages/calc/calc-c.phx" "$root/languages/calc/tests/reserved.calc"
+# `"expected"` was the whole expectation here, which a missing semicolon
+# satisfies just as well -- it asserted that the file was refused and nothing
+# about *why*. What the test is for is that `print` cannot be a variable, so
+# the name and the position are what to insist on.
+refuses "a reserved word as a name" "1:5: error: expected name, and found \"print\"" \
+        "$root/languages/calc/calc-c.phx" "$root/languages/calc/tests/reserved.calc"
 refuses "a character no rule matches" "nothing here matches" \
         "$root/languages/calc/calc-c.phx" "$root/languages/calc/tests/bad-token.calc"
 
@@ -380,16 +385,33 @@ prints "folded bottom-up"        "15"                  --driver folded  "$fold" 
 prints "and top-down, which is not the same" "((2 + 12) + 1)" \
        --driver partial "$fold" "$arith"
 
+# **A node's span is the syntax that built it**, which is not the same as
+# everything underneath it. `2 * 3` is three tokens at columns 1, 3 and 5, and
+# the Binary claims 1:3..1:5 -- from its *operator*, not from its left operand
+# -- because the action that builds it runs inside a repetition and `$$` was
+# built on an earlier turn. Small enough to check by counting, which the
+# thirteen-column version of this was not.
+prints "a node's span is the syntax that built it" \
+       "(2@1:1..1:1 * 3@1:5..1:5)@1:3..1:5" \
+       --driver spans "$fold" "$root/tests/sources/one-op.txt"
+
 # A node built by a rewrite takes the position of the node it replaced --
 # docs/reference.md says so, run.c copies the span into the builder on purpose,
-# and until now nothing ran it. The folded root must claim the span the
-# outermost Binary claimed, so a diagnostic from a later pass points at the
-# program rather than at the rule that rewrote it.
-prints "the spans a rewrite starts from" \
-       "((2@1:1..1:1 + (3@1:5..1:5 * 4@1:9..1:9)@1:7..1:9)@1:3..1:9 + 1@1:13..1:13)@1:11..1:13" \
-       --driver spans "$fold" "$arith"
-prints "and a rewritten node keeps the one it replaced" "15@1:11..1:13" \
-       --driver folded-spans "$fold" "$arith"
+# and until now nothing ran it.
+#
+# The span is **derived rather than pasted**: whatever the root claims before
+# the fold is what the folded node has to claim after it. A literal here would
+# have been a snapshot of the rule above, and the two would have had to be kept
+# in step by hand.
+before=$("$phx" --driver spans "$fold" "$arith" 2>/dev/null)
+rootspan=${before##*@}
+after=$("$phx" --driver folded-spans "$fold" "$arith" 2>/dev/null)
+if [ -n "$rootspan" ] && [ "$after" = "15@$rootspan" ]; then
+    report pass "and a rewritten node keeps the one it replaced"
+else
+    report fail "and a rewritten node keeps the one it replaced" \
+                "root claimed '$rootspan', the folded node said '$after'"
+fi
 
 refuses "an innermost rewrite that never settles" "and is still going" \
         "$root/tests/grammars/rewrite-runaway.phx" "$root/tests/sources/one.txt"

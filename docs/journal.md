@@ -3912,3 +3912,64 @@ not yet cover and does now. The suite refused the build before the commit
 existed. That is the first time a number in this repository has been wrong for
 less than a minute.
 
+### The sweep the standup asked for, and it found its own author twice
+
+The carry-forward was *an expectation nothing derives* — a literal pasted from
+a run rather than worked out from the intent. Every `prints`, `refuses` and
+`warns` in the suite was read against that test. **Three hits out of
+seventy-three**, and the shape of the misses is the more useful half.
+
+**The fifty-three `refuses` are almost all right, and right in the same way.**
+They match a distinctive phrase from the diagnostic's *intent* — `left-recursive`,
+`a check runs before the attributes it guards`, `is a pass as well as a
+rewrite`. A phrase like that is a restatement of the rule being enforced, so it
+cannot be pasted from a run without saying what the run was for. That is a
+pattern worth naming, because it was arrived at fifty-three times without being
+written down anywhere.
+
+**One `refuses` was the opposite failure**, and it is the more dangerous kind:
+
+```sh
+refuses "a reserved word as a name" "expected"
+```
+
+`"expected"` is in every parse error this tool emits. The test asserted that
+`let print := 1;` was *refused* and nothing whatever about why — a missing
+semicolon in an unrelated file satisfies it, which was checked. It has the
+name and the position now, and the missing semicolon was checked again and no
+longer passes.
+
+> A test can fail to derive its expectation in two directions. A pasted literal
+> says too much about one run; a fragment this loose says nothing about any.
+
+**And the other two hits were three hours old and mine.** The checks written
+that afternoon for `$pos` surviving a rewrite pasted a thirteen-column span
+tree —
+
+    ((2@1:1..1:1 + (3@1:5..1:5 * 4@1:9..1:9)@1:7..1:9)@1:3..1:9 + 1@1:13..1:13)@1:11..1:13
+
+— which is exactly the thing the standup had complained about, written by the
+person who wrote the complaint, in the same session. It is unreadable, and
+worse, it silently encodes a rule nobody had written down.
+
+*That rule is the fourth finding.* **A node's span is the syntax that built it,
+not everything underneath it.** An action on a whole alternative gets the whole
+alternative — `Print` covers `print a;` — but an action inside a repetition
+gets that turn only, and every binary operator here is built by a left fold
+where `$$` came from an earlier turn. So `Binary` starts at its **operator**:
+in `1 + 2` it claims columns 3 to 5 while its left child is the `1` at column
+1. **A parent's span does not necessarily enclose its children's.**
+
+That is probably the right behaviour — it is what a diagnostic about an
+operator wants — and it was undocumented, which is why the pasted literal could
+not be checked by eye. `reference.md` says it now, and the test is `2 * 3`,
+three tokens at columns 1, 3 and 5, verifiable by counting.
+
+The rewrite check **derives** its span now: whatever the root claims before the
+fold is what the folded node must claim after. Breaking the copy in `run.c` was
+tried again and caught — `root claimed 1:11..1:13, folded said 15@1:1..1:1`.
+
+> The discipline is not *write better literals*. It is that an expectation
+> should be produced by something other than the code under test — the other
+> backend, the other run, or arithmetic a reader can do.
+
