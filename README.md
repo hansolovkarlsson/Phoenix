@@ -441,14 +441,22 @@ against *the target*:
 
 | | |
 | --- | --- |
-| `languages/calc/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about C |
+| `languages/calc/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about any target |
 | `languages/calc/calc-c.phx` | `%import "calc.phx"` and an emit pass |
-| `languages/calc/calc-solveig.phx` | `%import "calc.phx"` and a different emit pass |
+| `languages/calc/calc-awk.phx` | `%import "calc.phx"` and a different emit pass |
+| `languages/calc/calc-solveig.phx` | `%import "calc.phx"` and a third |
 
 Everything upstream of emitting is about the source language. Only emit is per
 target — which is why `calc-solveig.phx` went from ninety lines of duplicated
 grammar, quietly wrong the first time `calc.phx` changed, to an emit pass and a
 line naming the language.
+
+The C and awk passes are **24 clause lines each, 17 of them identical character
+for character**. The seven that differ are the ones awk forces: its special
+variables are ordinary assignable names, its `/` is floating division, it has
+no declarations, `print x > y` redirects to a file, and its unit of execution
+is a rule. A diff between the two files is a list of the ways awk is not C and
+contains nothing else, because there is nothing else in either file.
 
 ### `%include`: the same question, one level down
 
@@ -777,9 +785,16 @@ different clauses:
   Binary : out = "({} {} {})" of $left.out, $op, $right.out .
 ```
 
-`languages/calc/calc.phx` emits C. `languages/calc/calc-solveig.phx` is the same calculator
-emitting [Solveig](https://github.com/hansolovkarlsson/Solveig) instead, and the
-only difference between the two files is those clauses.
+`languages/calc/calc-c.phx` emits C and `languages/calc/calc-awk.phx` emits
+awk — the same calculator, the same `calc.phx` imported by both, and the only
+difference between the two files is those clauses.
+`languages/calc/calc-solveig.phx` is a third, emitting
+[Solveig](https://github.com/hansolovkarlsson/Solveig).
+
+The C and awk backends are the pair the suite runs, and it runs them **against
+each other**: `--run eval` cannot interpret a loop, so a program with control
+flow in it is checked by two independently written emit passes rather than
+against an expected string somebody typed.
 
 **And a target need not be text at all.**
 [`languages/solveig/solveig-sob.phx`](languages/solveig/solveig-sob.phx)

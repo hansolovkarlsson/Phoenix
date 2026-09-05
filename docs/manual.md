@@ -676,14 +676,22 @@ It is not grammar-versus-passes. It is **the language** against **the target**:
 
 | | |
 | --- | --- |
-| `languages/calc/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about C |
+| `languages/calc/calc.phx` | the grammar, the tree, `typecheck`, `eval` — none of which has an opinion about any target |
 | `languages/calc/calc-c.phx` | `%import "calc.phx"` and an emit pass |
-| `languages/calc/calc-solveig.phx` | `%import "calc.phx"` and a different emit pass |
+| `languages/calc/calc-awk.phx` | `%import "calc.phx"` and a different emit pass |
+| `languages/calc/calc-solveig.phx` | `%import "calc.phx"` and a third |
 
 Everything upstream of emitting is about the source language. Only emit is per
 target — which is why `calc-solveig.phx` went from ninety lines of duplicated
 grammar, quietly wrong the first time `calc.phx` changed, to an emit pass and a
 line naming the language.
+
+The C and awk passes are **24 clause lines each, 17 of them identical character
+for character**. The seven that differ are the ones awk forces: its special
+variables are ordinary assignable names, its `/` is floating division, it has
+no declarations, `print x > y` redirects to a file, and its unit of execution
+is a rule. A diff between the two files is a list of the ways awk is not C and
+contains nothing else, because there is nothing else in either file.
 
 ### Modules declare their holes
 

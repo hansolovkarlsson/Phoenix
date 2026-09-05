@@ -72,10 +72,21 @@ This is not a gap to fill. Interpreting is for checking a language while it is
 being designed; compiling is what Phoenix is for, and the clauses in
 [`languages/calc/calc.phx`](../languages/calc/calc.phx) say so where a program runs into it.
 
-*It does cost something.* The conformance rule — the same description,
-interpreted and compiled, giving the same answer — therefore covers
-straight-line programs only. A second emit backend is what would restore it,
-which since `%import` is about fifteen lines.
+*It cost something, and the cost has been paid.* The conformance rule is that
+one description, run two independent ways, gives one answer — and while one of
+the two ways was the interpreter, the rule covered straight-line programs only.
+Everything with a loop in it was checked by a single backend against a string
+somebody had typed into the suite.
+
+[`calc-awk.phx`](../languages/calc/calc-awk.phx) is the second emit pass, so a
+looping program now has **two implementations under it** and the interpreter is
+not needed as the referee. What the target had to be is the part worth keeping:
+a second backend sharing C's arithmetic would catch a mistake in its own
+clauses and not a host assumption leaking into the notation. awk's numbers are
+**doubles**, so its `/` is floating division where calc's truncates, and the
+backend writes the model out — [semantics.md](semantics.md)'s headline met a
+second time in a second host. It also needs nothing this repository does not
+already need, which is why it is awk and not the parked Solveig backend.
 
 ### 3.2 Actions as host-language fragments
 

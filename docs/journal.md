@@ -3485,3 +3485,116 @@ Nothing was owed to [ROADMAP.md](ROADMAP.md), so nothing was added to it; the
 temptation to record *push the branch* on a page whose header says it lists what
 is **not built** is the same category error as the stub, one document doing
 another's job.
+
+## 2026-09-05 — a second backend, and the string somebody had typed
+
+The roadmap said nothing was open, and that was true of sections 1 and 2. This
+day's work came out of **section 3**, which is the list of things deliberately
+not built — and the thing that changed there was not a decision but a *cost*.
+
+[§ 3.1](ROADMAP.md#31-an-interpreter-that-can-loop) refuses an interpreter that
+can loop, and the refusal still stands: an attribute is computed once per node
+in one walk, a loop needs its body evaluated a number of times that depends on
+the program, and neither is a thing a value computed once can say. What the
+entry also did was admit what the refusal costs — *"the conformance rule
+therefore covers straight-line programs only"* — and then name the fix and
+leave it unbuilt. That sentence had been sitting there since 2026-09-01.
+
+**An entry in section 3 has two halves and only one of them is a decision.**
+The decision was right and is unchanged. The cost was payable and had not been
+paid, and nothing about an empty section 1 said so.
+
+### What the hole actually was
+
+The conformance rule is that one description, run two independent ways, gives
+one answer. `sum.calc` has always had both legs: the suite takes what
+`--run eval` says and holds the compiled binary against it, so nobody ever
+typed 97 anywhere — two implementations agreed on it and the test records the
+agreement.
+
+`programs/fizz.calc` is the only calc program with a loop and a branch in it,
+and it had one leg. `--run eval` refuses it by design. So the test read:
+
+```sh
+if [ "$got" = "1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 " ]; then
+```
+
+That string is right. It is also **a person's answer, checked by that person**,
+sitting in a suite whose whole method everywhere else is to make two
+independent things agree. The gap was not that the expectation was wrong; it
+was that nothing could have said so.
+
+### Why awk, and why not the two easier answers
+
+`calc-solveig.phx` was already a second backend and could not be this one. It
+needs `solas` and `solvm`, which are not in this repository, so the suite can
+only run it behind `PHX_TEST_SOLVEIG=1` — a leg that is absent on most machines
+is not a leg. Its control-flow clauses are also missing on purpose, which is
+the same fact from the other end.
+
+A second **C** backend — the same tree emitted through `goto` and labels — was
+the cheap answer and is the one worth arguing against explicitly. It would have
+caught a mistake in its own clauses. It could not have caught a host assumption
+leaking into the notation, because both legs would still divide the way C
+divides, and *that* is what the two-backend discipline was for
+([2026-09-01](#2026-09-01--solveig-parked-and-c-is-the-target)).
+
+awk is wrong in a different direction, which is the whole qualification for the
+job. **Its numbers are doubles.** `/` is floating division where calc's
+truncates, so the backend has to write the model out as `int(a / b)` — the same
+sentence [semantics.md](semantics.md) was written to force, met a second time
+in a second host. And it costs no dependency at all: the Makefile builds
+`phoenix/runtime.h` by piping through `awk`, so a machine that cannot run these
+tests cannot build `phx` either.
+
+### The mutation that proves it, and it is the interesting one
+
+A test that has never failed is a claim about a test, so the backend was broken
+on purpose twice. Removing the `int()` from division — the one clause that
+models the host rather than spelling it — made awk print `300` fifteen times,
+because floating division makes `n / 3 * 3 = n` true for every `n` and the
+branch always takes the same arm.
+
+**That output is plausible.** It is fifteen lines of a number the program
+really does print, from a backend that is consistently wrong about the one
+thing this project has a whole document to pin down. No interpreter leg could
+ever have caught it, because the interpreter refuses that program. It is
+exactly the failure the conformance rule exists to catch, and until today
+calc's looping programs were outside the rule.
+
+> A test whose expectation was typed by the person who wrote the code being
+> tested is a spell-check, not a check. The suite knew that everywhere except
+> the three programs the interpreter could not reach.
+
+### What the estimate got wrong, which is in the postmortem
+
+*"About fifteen lines"* against twenty-nine actual. The miss is scored in
+[postmortem § 12](postmortem.md#12-about-fifteen-lines-and-what-a-second-backend-actually-cost)
+and is worth one line here because of *where* the missing half went: nine of
+the twenty-four clause lines answer for nodes calc's own grammar never
+writes — `Binary`, `Compare`, `Logical`, `Negate` and `Not` all arrive with
+`lib/expression.phx`. The other fifteen are calc's own, which is the estimate
+almost exactly.
+
+`calc.phx` has a comment directly above those clauses saying what importing a
+grammar module costs. The estimate was made anyway.
+
+> A cost written down in a comment is not a cost that has been counted.
+
+### What the two files now say to each other
+
+Both emit passes are twenty-four clause lines and **seventeen of them are
+identical character for character**. The seven that differ carry five
+differences, and each is the target forcing one: awk's special variables are
+ordinary assignable names, so a variable gets a `_` prefix, where C would have
+rejected `long printf = 3;` loudly and awk would have accepted `NF = 3` and
+gone quietly wrong; `/` is floating; there are no declarations, so `let` and
+`:=` are one shape; `print x > y` redirects to a file, so the argument list is
+parenthesised; and the unit of execution is a rule, so a program is a `BEGIN`
+block.
+
+That is what `%import` was argued for, and it is the first time the argument
+has been checkable rather than asserted: a diff between `calc-c.phx` and
+`calc-awk.phx` is a list of the ways awk is not C, and contains nothing else,
+because there is nothing else in either file to differ about.
+

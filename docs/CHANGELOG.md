@@ -16,6 +16,42 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-05 — a second calc backend, and a conformance rule that reaches a loop
+
+**calc compiles to awk: [`languages/calc/calc-awk.phx`](../languages/calc/calc-awk.phx).**
+
+    phx --run emit-awk languages/calc/calc-awk.phx prog.calc > prog.awk
+    awk -f prog.awk
+
+An `%import` line, an emit pass and three drivers — no grammar, no typechecker
+and no interpreter, because those are in `calc.phx` and have no opinion about
+any target. It is the same twenty-four clause lines as the C backend, and
+seventeen of them are identical to it character for character.
+
+**What it is for.** Phoenix's rule is that one description, run two independent
+ways, gives one answer. One of those ways was `--run eval`, which cannot
+interpret a branch or a loop — an attribute is computed once per node in one
+walk. So until now every calc program with control flow in it was checked by a
+single backend against an expected string somebody had typed into the suite.
+There are two backends under those programs now, and the suite compares their
+output with each other rather than with an expectation.
+
+**Why awk and not the parked Solveig backend.** awk needs nothing this
+repository does not already need — the Makefile itself builds
+`phoenix/runtime.h` by piping through `awk` — and, more to the point, **awk's
+numbers are doubles**. A second backend that shared C's arithmetic could only
+catch a mistake in its own clauses; this one had to write calc's truncating
+division out as `int(a / b)` in a host whose `/` is floating, which is the
+divergence [semantics.md](semantics.md) exists to prevent, met a second time in
+a second host.
+
+Nothing about the tool changed. This is a description, and the language a
+compiler emits was never Phoenix's business.
+
+**Tests:** 189 → 195. The six new ones need `awk` to run what the backend
+emits, in the same role `cc` already plays for the C backend; the Makefile
+requires both to build `phx` at all.
+
 ## 2026-09-03 — an assembler, and documentation for a stranger
 
 **A fourth description, and a *target* rather than a language:

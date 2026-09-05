@@ -10,10 +10,10 @@ this is what was **believed** about it.*
 chosen to suit the tool.*
 
 Phoenix is ~12,900 lines of C11 with no dependencies. The descriptions written
-against it come to ~4,100 lines: Pascal in 1,434 (56 node types, a checker and
+against it come to ~4,250 lines: Pascal in 1,434 (56 node types, a checker and
 two backends), Solveig in 1,108 (15 node types) with a bytecode backend, awk in
-968 with a 682-line C runtime it embeds, calc in 362, and Phoenix's own
-notation in 256.
+968 with a 682-line C runtime it embeds, calc in 480 across three backends,
+and Phoenix's own notation in 256.
 
 ---
 
@@ -592,3 +592,83 @@ is the one this repository already uses everywhere: `phoenix/library.c` is a
 separate file so that every addition is visible as an addition, and § 3.4 says
 a growing library means *the notation was not expressive enough and nobody
 noticed*. An empty roadmap fails the same way, and the same tell catches it.
+
+---
+
+## 12. "About fifteen lines", and what a second backend actually cost
+
+[ROADMAP.md § 3.1](ROADMAP.md#31-an-interpreter-that-can-loop) predicted the
+size of the thing that would restore the conformance rule over loops: *"A
+second emit backend is what would restore it, which since `%import` is about
+fifteen lines."* [`calc-awk.phx`](../languages/calc/calc-awk.phx) is that
+backend, so the estimate can be scored.
+
+### Wrong by half, and wrong for a reason already written down
+
+**Twenty-four clause lines, plus the `%pass` header, three `%driver` lines and
+one `%import` — twenty-nine against a predicted fifteen, so the estimate was
+out by about half.**
+
+Where the missing half went is the part worth recording, because the number it
+left out is exact. Nine of the twenty-four clause lines answer for nodes
+**calc's own grammar never writes**: `Binary`, `Compare`, `Logical`, `Negate`
+and `Not` all arrive with [`lib/expression.phx`](../lib/expression.phx), and
+several of them need more than one clause because their operators are spelled
+differently in every target anybody has. The other fifteen are calc's own.
+
+*Fifteen.* The estimate was very close to right about the language calc
+declares and left out the module it imports entirely.
+
+`calc.phx` states this cost in as many words — *"`expression.phx` builds these
+three, so calc has to answer for them even though it did not write the grammar
+that makes them. That is what importing a grammar module costs"* — a comment
+sitting directly above the clauses that were forgotten. **A cost written down
+in a comment is not a cost that has been counted.**
+
+### Right about the shape, which mattered more
+
+The half of the prediction that held is the half `%import` was argued for.
+`calc-awk.phx` contains an `%import` line, an emit pass and three drivers, and
+**nothing else** — no grammar, no typechecker, no interpreter, nothing that can
+drift from `calc.phx` because there is no copy of it.
+
+The C backend is **also twenty-four clause lines, and seventeen of them are
+identical to awk's character for character.** The seven that differ carry five
+differences, and every one is the target forcing a difference rather than a
+choice: awk's special variables are ordinary assignable names, so a variable
+gets a prefix; its `/` is floating division, so truncation is modelled; it has
+no declarations, so `let` and `:=` are one shape; `print x > y` redirects to a
+file, so the argument list is parenthesised; and its unit of execution is a
+rule, so a program is a `BEGIN` block. A diff between the two files is a list
+of the ways awk is not C, and nothing else.
+
+Fourteen lines of underestimate against a file that cannot go stale is the trade
+[1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation) and
+[2.4](COMPLETED.md#24-inlining-a-block--from-solas) both made, and it is worth
+recording that the *number* was the wrong thing to have predicted.
+
+### What it bought, which the estimate never mentioned
+
+The prediction was about size and the entry was about coverage, and the entry
+was the interesting half. Before this, `programs/fizz.calc` — the only calc
+program with a loop and a branch in it — was checked by one backend against
+`"1 2 300 4 5 300 7 8 300 10 11 300 13 14 300 "`, a string typed into
+`tests/run.sh` by hand. It was right. Nothing in the suite could have told
+anyone if it had not been.
+
+That expectation is gone. Both backends compile `fizz.calc`, both run, and the
+two outputs are compared with each other. To confirm the check can fail, the
+awk backend was mutated twice and the comparison caught both:
+
+| mutation | what awk then printed |
+| --- | --- |
+| `int({} / {})` → `({} / {})` — drop the truncation model | `300` fifteen times. Floating division makes `n / 3 * 3 = n` true for every `n`, so the branch always takes the same arm |
+| `while` → `if` — a loop that runs once | `1` |
+
+The first is the one worth the entry. It is a **plausible** output — fifteen
+lines of a number the program really does print — produced by a backend that
+is consistently wrong about the one thing
+[semantics.md](semantics.md) exists to pin down. No interpreter leg could ever
+have caught it, because the interpreter refuses that program. That is the
+failure the conformance rule was written against, and until today calc's
+looping programs were not covered by it.
