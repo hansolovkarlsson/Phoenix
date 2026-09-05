@@ -10,10 +10,10 @@ this is what was **believed** about it.*
 chosen to suit the tool.*
 
 Phoenix is ~12,900 lines of C11 with no dependencies. The descriptions written
-against it come to ~4,250 lines: Pascal in 1,434 (56 node types, a checker and
-two backends), Solveig in 1,108 (15 node types) with a bytecode backend, awk in
-968 with a 682-line C runtime it embeds, calc in 480 across three backends,
-and Phoenix's own notation in 256.
+against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and
+two backends), Solveig in 1,129 (15 node types) with a bytecode backend, awk in
+993 with a 682-line C runtime it embeds, calc in 482 across three backends, and
+Phoenix's own notation in 256.
 
 ---
 

@@ -752,20 +752,23 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 189 checks, covering 35 Pascal programs against fpc
+make test       # 195 checks, covering 35 Pascal programs against fpc
                 #   and 76 Solveig programs against solas, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 186 of the 189 need only what is vendored here, and the two
-that drive `solas` and `solvm` over a checkout of
-[Solveig](https://github.com/hansolovkarlsson/Solveig) report themselves
-skipped when it is absent rather than failing. The assembler is in the 186:
-its programs are held against the bytes they assembled to last time, so it is
-tested without SolVM and held *against* SolVM when there is one.
+repository** — 191 of the 195 need only what is vendored here, and it is worth
+being exact about the other four, because they surface as **two** skipped lines
+rather than four. One drives `fpc`. Three drive `solas` and `solvm` over a
+checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are
+guarded together, so a machine without it prints one line for all three. Each
+reports itself skipped rather than failing, and a run with neither tool present
+is 191 passed and 0 failed. The assembler is in the 191: its programs are held
+against the bytes they assembled to last time, so it is tested without SolVM
+and held *against* SolVM when there is one.
 
 ```sh
-SOLVEIG=/path/to/Solveig make test    # the other two, and the assembler against solas
+SOLVEIG=/path/to/Solveig make test    # the other three, and the assembler against solas
 PHX_TEST_SOLVEIG=1 make test          # also emit Solveig from calc.phx and compile it
 ```
 
