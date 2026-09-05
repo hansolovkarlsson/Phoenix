@@ -13,8 +13,11 @@ way in.
 
 ## What this is
 
-A compiler generator. You write a language's grammar in EBNF and describe what
-each construct means; Phoenix writes the compiler. C11, no dependencies, and
+A compiler generator. It rests on the claim that a compiler is *a grammar plus
+a sequence of tree walks*, and that both halves can be written down instead of
+programmed — so a `.phx` description carries the EBNF, the AST each production
+builds, and the typed passes that check and emit, and Phoenix either runs it or
+writes it out as a standalone one-file C compiler. C11, no dependencies, and
 nothing outside this repository is needed to build it or to run its tests.
 
 ## Commands

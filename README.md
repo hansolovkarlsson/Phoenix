@@ -1,7 +1,10 @@
 # Phoenix
 
-A compiler generator. You write a language's grammar in EBNF and describe what
-each construct means; Phoenix writes the compiler.
+A compiler generator. It rests on the claim that a compiler is *a grammar plus
+a sequence of tree walks*, and that both halves can be written down instead of
+programmed — so a `.phx` description carries the EBNF, the AST each production
+builds, and the typed passes that check and emit, and Phoenix either runs it or
+writes it out as a standalone one-file C compiler.
 
 ```
 pascal.phx  ──phx──▶  pascal.c  ──cc──▶  cpas
@@ -53,6 +56,31 @@ itself. Phoenix is not one -- `phx` is C, and the `.phx` notation is read by a
 hand-written parser. It could become one; see
 [self-hosting](docs/journal.md#2026-09-01--what-self-hosting-would-and-would-not-prove)
 for what that would and would not prove.
+
+**The word is taken everywhere except here.** Elixir's Phoenix is a web
+framework large enough to own the search term, Arize's is AI observability, and
+Apache Phoenix is SQL over HBase. None of them is a compiler generator, and
+searching GitHub for one that is turns up coursework. The closest namesake is
+dead: **Microsoft Phoenix** was a compiler and program-analysis framework out
+of Microsoft Research whose last SDK was the June 2008 CTP, and what outlived
+it was some of the static analysis in Visual Studio 2010. So the field is
+clear, and the cost of the name is discoverability rather than conflict.
+
+The cautionary tale is this exact word. Mozilla shipped its browser as
+*Phoenix* in September 2002, renamed it Firebird in April 2003 when Phoenix
+Technologies -- the BIOS company, which had a browser of its own -- objected,
+and renamed it Firefox in February 2004 when the Firebird database project
+objected in turn. Phoenix Technologies' marks are registered for firmware; this
+is a compiler generator on GitHub, which is another class in another market.
+
+What is contested is not the name but the two identifiers under it. **`phx` is
+already how Elixir's framework spells itself** -- `mix phx.new`, `phx-click` --
+so to anyone who has written Elixir the binary reads as that first; npm,
+crates.io and PyPI each have a `phx` too, none of them alive (npm's is a D3
+charting library last published in 2015). Homebrew has neither `phoenix` nor
+`phx`, which is where it would matter. And `.phx`, in the file-type databases,
+belongs to Brother's PE-Design embroidery software -- binary, magic bytes
+`#PHX0`.
 
 ## Why not lex and yacc
 

@@ -1,7 +1,7 @@
 # Jekyll builds the pages under docs/ into the site. The landing page is plain
 # HTML and is copied through untouched, which is why there is no theme here.
 title: Phoenix
-description: A compiler generator. You write a language's grammar in EBNF and describe what each construct means; Phoenix writes the compiler.
+description: A compiler generator. A compiler is a grammar plus a sequence of tree walks, and Phoenix writes both down: EBNF, the tree it builds, the passes that walk it. C11, no dependencies.
 markdown: kramdown
 kramdown:
   input: GFM

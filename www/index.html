@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Phoenix — a compiler generator</title>
-<meta name="description" content="Write a language's grammar in EBNF and describe what each construct means; Phoenix writes the compiler. C11, no dependencies.">
+<meta name="description" content="A compiler generator. A compiler is a grammar plus a sequence of tree walks, and Phoenix writes both down: EBNF, the tree it builds, the passes that walk it. C11, no dependencies.">
 <meta property="og:title" content="Phoenix — a compiler generator">
-<meta property="og:description" content="Write a language's grammar in EBNF and describe what each construct means; Phoenix writes the compiler.">
+<meta property="og:description" content="A compiler generator. A compiler is a grammar plus a sequence of tree walks, and Phoenix writes both down: EBNF, the tree it builds, the passes that walk it. C11, no dependencies.">
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="assets/phoenix.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='6' fill='%23b0431c'/></svg>">
@@ -31,9 +31,9 @@
 <section class="hero">
   <div class="wide">
     <h1>Phoenix</h1>
-    <p class="tag">A compiler generator. You write a language's grammar in EBNF
-      and describe what each construct means; <b>Phoenix writes the
-      compiler.</b></p>
+    <p class="tag">A compiler generator. It rests on the claim that
+      <b>a compiler is a grammar plus a sequence of tree walks</b>, and that
+      both halves can be written down instead of programmed.</p>
 
     <figure class="pipeline">
       <svg viewBox="0 0 900 200" role="img" aria-label="pascal.phx becomes pascal.c, which cc builds into cpas; cpas turns myprogram.pas into myprogram.c, which cc builds into a program.">
