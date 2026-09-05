@@ -48,6 +48,21 @@ a second host.
 Nothing about the tool changed. This is a description, and the language a
 compiler emits was never Phoenix's business.
 
+**Syntax errors point at the mistake.** A parse that matched its goal and left
+input over used to be reported at the first leftover token, with the *expected*
+list from wherever the match had really got stuck — two places in one message,
+and the token named was usually legal where it stood. Since a start rule that
+is a repetition never fails outright, that was every syntax error in every
+language described here.
+
+    print a +;
+    ^ expected -, (, integer or name, and found "print"     (before)
+             ^ expected -, (, integer or name, and found ";" (after)
+
+`parse.c` already tracked the furthest point the match reached; one path threw
+it away. The fallback is unchanged for a parse that never got past the
+leftover.
+
 **Tests:** 189 → 199. Ten new ones: six for the backend itself; one for `<>`
 and `or`, whose clauses no calc program had ever reached; one holding the
 records' own counts against the tree; and two for a claim `reference.md` had

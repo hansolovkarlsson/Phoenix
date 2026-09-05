@@ -449,38 +449,26 @@ zero. The inconsistency is real and is kept on purpose: making it one-based
 would mean every use of it subtracting one, which is the off-by-one this
 notation is otherwise arranged to avoid.
 
-**One syntax error, and its two halves come from different places.** A pass
-collects its complaints and reports all of them — three undefined names give
-three `error:` lines — but a *parse* stops at the first failure and gives one.
-The count is the smaller half of the problem.
+**A parse reports one syntax error, and only one.** A pass collects its
+complaints and reports all of them — three undefined names give three `error:`
+lines — but a parse stops at the first failure. Reporting more than one needs
+error recovery, which changes what a parse *is*; `lineage.md` has the
+literature, and nothing here is blocked by having one.
 
-`parse.c` tracks the position the match got **furthest**, which is the right
-heuristic and is what [reference.md](reference.md) describes. There are two
-failure paths and only one uses it. When the start rule matches and leaves
-input over, `parse_run` overwrites `furthest` with the first leftover token —
-deliberately, since that is *the first thing it could not use* — but does not
-clear the list of what was **wanted**, which was recorded somewhere else
-entirely. The message then pairs one position's token with another position's
-expectations:
+*Where that one error is reported was a second wart and is now fixed.* It is
+worth leaving the shape of it written down. `parse.c` tracks the position the
+match got **furthest**, which is the right heuristic; there were two failure
+paths and the second discarded it, overwriting `furthest` with the first
+leftover token while keeping the `wanted` list recorded elsewhere. Because a
+start rule that is a repetition can never fail outright — `program = {
+statement }` succeeds on zero statements — *every* syntax error in every
+language here took that path, and named a token that was usually legal where it
+stood.
 
-```
-print a +;
-^ error: expected -, (, integer or name, and found "print"
-```
-
-`print` is legal at that column, and the same file parses once the expression
-is finished. The expectations belong to the `;` eight columns along.
-
-**A start rule that is a repetition can never fail outright** — `program = {
-statement }` matches zero statements and succeeds — so in every language
-described here, *every* syntax error takes this path. The line is right, which
-is why it reads as merely unhelpful rather than as wrong.
-
-It is a wart rather than an entry because no description is blocked by it, and
-the fix is small enough to be suspicious of: reporting at `furthest` instead
-would name the `;`, and would change what a leftover-input error means.
-[lineage.md](lineage.md) has the literature — Ford's farthest failure is
-already here, and labelled failures are the next rung.
+**A test was pinning it.** `languages/awk/tests/divergent/spaced-regex.awk`
+asserted the message contained `and found "BEGIN"` — the parser blaming the
+first token of the file for a fault 34 columns into line 13. It now asserts the
+position, which is what the divergence is about.
 
 **A description may guess where the tool will not.** `languages/awk/awk.phx`
 decides whether `/` opens a regexp by looking at the character after it,

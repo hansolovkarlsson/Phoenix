@@ -84,15 +84,15 @@ failed**, so a failed parse has to guess where the real mistake was.
 
 | | |
 | --- | --- |
-| **Ford** (2002) | the **farthest-failure** heuristic — track the rightmost position the parse ever reached and report *that*. It needs nothing from the grammar writer, which is its whole appeal. **Phoenix already does this**, in `parse.c`, and discards it on one of its two failure paths — see [ROADMAP 5](ROADMAP.md#5-known-warts) |
+| **Ford** (2002) | the **farthest-failure** heuristic — track the rightmost position the parse ever reached and report *that*. It needs nothing from the grammar writer, which is its whole appeal. **This is what `parse.c` does**, on both of its failure paths since 2026-09-05 |
 | **Maidl, Mascarenhas, Medeiros, Ierusalimschy** | **labeled failures**: a PEG names its kinds of failure and each ordered choice says which it catches, so a rule can commit and explain rather than backtrack silently |
 | **Medeiros and Fabio Mascarenhas** | error *recovery* in PEGs — recovery expressions that let a parse continue past a failure, which is what reporting more than one syntax error requires |
 
 The three are a ladder: the first is a heuristic and costs nothing, the second
 is a notation change, the third changes what a parse is. Phoenix is on the
-first rung already, which is worth knowing before reaching for the second — the
-wart it has is not a missing heuristic but a path that throws the heuristic's
-answer away.
+first rung and the second is what it would take to say *more* than one error —
+worth knowing before reaching for either, since the first rung was already
+built and one code path was throwing its answer away.
 
 ## Parser generators only — the yacc family
 
@@ -120,7 +120,7 @@ transformation.
 **Not novel in its ideas.** Every mechanism above has a name and a literature.
 What is distinctive is the combination:
 
-- **8,698 lines of C11 against the C standard library and nothing else.** The
+- **8,712 lines of C11 against the C standard library and nothing else.** The
   point is not the language — Eli is a C-based system too — it is the footprint:
   Eli and Spoofax are *systems*, with toolchains and generators and editors.
   Phoenix is one binary and a `lib/` directory. That buys much less and costs

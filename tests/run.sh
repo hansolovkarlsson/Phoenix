@@ -1362,7 +1362,13 @@ prints "and f (1) as a call, where awk concatenates" \
        "BEGIN { x = f(1) }" "$root/languages/awk/awk.phx" "$d/spaced-call.awk"
 # The third witness, and the one found by writing a program rather than by
 # thinking about it: a regexp may not begin with a space either.
-refuses "a regexp beginning with a space" "and found \"BEGIN\"" \
+#
+# **This expectation used to be `and found "BEGIN"`**, which was the parser
+# blaming the first token of the file for a fault 34 columns into line 13. It
+# was not asserting the divergence; it was pinning a defect in `parse_run`,
+# which reported the first leftover token and the wants from somewhere else.
+# What the refusal is *about* is the position, so that is what is checked.
+refuses "a regexp beginning with a space" "spaced-regex.awk:13:34" \
         "$root/languages/awk/awk.phx" "$d/spaced-regex.awk"
 
 # **A call is resolved over the whole program**, so a function may be used

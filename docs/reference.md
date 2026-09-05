@@ -333,20 +333,11 @@ When a PEG fails at the top it has usually backtracked a long way from the real
 mistake, so the position reported is the one the match got **furthest**, not the
 one it stopped at.
 
-**That holds when the start rule fails outright, and not when it matches and
-leaves input over.** In the second case the position reported is the first
-token left over, and the *expected* list is still the one recorded at the
-furthest point — two different places in one message. It matters because a
-grammar whose start rule is a repetition can never fail outright: `program = {
-statement }` matches zero statements and succeeds, so **every** syntax error in
-such a language takes the second path. A bad statement is then reported at its
-own first token, with a list of what was wanted somewhere inside it:
-
-    print a +;
-    ^ expected -, (, integer or name, and found "print"
-
-`print` is legal there; it is what was wanted at the `;` that the message
-names. See [ROADMAP 5](ROADMAP.md#5-known-warts).
+**That holds on both failure paths.** A start rule that is a repetition never
+fails outright — `program = { statement }` matches zero statements and succeeds
+— so a syntax error in such a language surfaces as *the goal matched and there
+is more file*. The furthest point is still what is reported: the leftover
+token is the fallback, used only when nothing got further than it.
 
 ---
 

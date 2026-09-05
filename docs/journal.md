@@ -3875,3 +3875,40 @@ worth doing and is not evidence about the inside** — the fifteen minutes in
 `parse.c` were worth more than the afternoon of comparison, and would have been
 worth more still if they had come first.
 
+### And then it was fixed, which took four lines
+
+The wart above lasted an afternoon. `parse_run` keeps the furthest point unless
+nothing got past the leftover token, and clears `nwanted` in that fallback
+because moving the position invalidates what was wanted at the old one:
+
+```c
+if (p.furthest < got) {
+    p.furthest = got;
+    p.nwanted  = 0;
+}
+```
+
+Every case improved and none regressed. `let a := 1` with a missing semicolon
+was reported at **1:1** — the first character of the file — and is now reported
+at the `print` on line 2, which is where a person notices it too.
+
+**Two things the fix turned up that the diagnosis had not.**
+
+*A test was pinning the defect in place.*
+`languages/awk/tests/divergent/spaced-regex.awk` asserted the message contained
+`and found "BEGIN"`, which was the parser blaming the first token of a file for
+a fault 34 columns into line 13. It read like a test of the divergence and was
+a test of the bug. The new expectation is the **position**, which is what that
+divergence is actually about — and the caret now lands on the `/ +/` the
+description cannot read.
+
+> A test written from observed output records the behaviour, not the intent.
+> When the two differ, the test is what keeps them apart.
+
+*And `tests/counts.sh` caught its own author, four hours old.* Editing
+`parse.c` grew the tool by fourteen lines and three records went stale at once
+— `COMPLETED.md` twice, `lineage.md`, and `postmortem.md`, which the check did
+not yet cover and does now. The suite refused the build before the commit
+existed. That is the first time a number in this repository has been wrong for
+less than a minute.
+

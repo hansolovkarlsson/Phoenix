@@ -484,9 +484,23 @@ Value *parse_run(Arena *a, const Grammar *g, const Source *src, const Tokens *t)
     if (diag_failed()) return NULL;          /* an action went wrong */
 
     if (got < t->n) {
-        /* The goal matched, and there is more file. That is a syntax error at
-         * the first thing left over, not a success. */
-        p.furthest = got;
+        /* The goal matched, and there is more file. That is a syntax error
+         * rather than a success -- but *where* is not the first thing left
+         * over. A start rule that is a repetition ends quietly when its next
+         * item fails, so the leftover begins at the top of whatever could not
+         * be finished, while the real mistake is inside it. Reporting the
+         * leftover named a token that was usually legal where it stood, and
+         * paired it with the `wanted` list from the furthest point -- two
+         * places in one message.
+         *
+         * So the furthest point wins here as it does everywhere else, and the
+         * first leftover token is the fallback for a parse that never got past
+         * it: nothing failed on the way, so there is nothing recorded to say
+         * what was wanted, and `nwanted` has to go with the position. */
+        if (p.furthest < got) {
+            p.furthest = got;
+            p.nwanted  = 0;
+        }
         report_failure(&p);
         return NULL;
     }

@@ -110,10 +110,12 @@ fi
 # number does: it stayed plausible, being close to what the *descriptions* now
 # come to. This is the record the first version of this script did not check.
 
-case $(cat docs/lineage.md) in
-    *"$hand"*) ok "lineage.md has the tool at $hand lines" ;;
-    *)         no "lineage.md does not have the tool at $hand lines" ;;
-esac
+for rec in docs/lineage.md docs/postmortem.md; do
+    case $(cat "$rec") in
+        *"$hand"*) ok "$rec has the tool at $hand lines" ;;
+        *)         no "$rec does not have the tool at $hand lines" ;;
+    esac
+done
 
 # ---------------------------------------------------------------------------
 # postmortem.md quotes the same counts in its opening paragraph. Checked as a
