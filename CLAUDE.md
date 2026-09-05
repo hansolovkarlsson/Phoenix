@@ -27,10 +27,11 @@ Five documents in `docs/`, each answering a different question. Putting the
 same paragraph in two of them means at least one is wrong.
 
 - `journal.md` — why each decision was made, in the order it was made.
+  **Oldest first**: a new day is appended at the end, not prepended.
 - `postmortem.md` — predictions scored against what actually happened.
 - `COMPLETED.md` is what exists, `ROADMAP.md` is what does not. An item moves
   from one to the other when it is settled, **including settled against**.
 - `CHANGELOG.md` — *when* it shipped, for a reader not reading the source.
 
-Each of those opens with an italic note stating its own job. That note is the
+Each of those opens with a note stating its own job. That note is the
 specification for what belongs in it — follow it over any general instruction.
