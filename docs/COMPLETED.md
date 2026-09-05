@@ -405,3 +405,40 @@ compiler `phx` wrote — which has to complain in the same words.
 
 > A specification nothing runs is a document about a program, and it drifts
 > from it one sentence at a time.
+
+## The arithmetic, made to run too
+
+The section above is about prose. These documents also make claims that are
+**numbers** — how many lines a description is, how many node types it has, how
+big the tool is, how many checks the suite runs — and those rot differently.
+A sentence goes wrong when somebody writes it. A number goes wrong when
+somebody changes something *else*.
+
+A sweep on 2026-09-05 found **nine stale**. Four had drifted over three days as
+awk, `solvm` and Solveig each grew after their counts were filed;
+[`ee5c993`](CHANGELOG.md) — `|` as an expression operator — is what turned
+awk's fiftieth node type into its fifty-first. Two were **two hours old**,
+written that morning and false by lunchtime, by somebody who had just measured
+them. That last pair is the argument: care is what wrote them, so more care is
+not the fix.
+
+[`tests/counts.sh`](../tests/counts.sh) holds every count in
+[COMPLETED.md](COMPLETED.md) and [postmortem.md](postmortem.md) against `wc
+-l`, `--nodes` and the tree. It would have caught all nine.
+
+**And the one count it refuses.** A test that asserts how many tests there are
+changes the answer. The suite's own total is checked in
+[`tests/run.sh`](../tests/run.sh) *after* the summary line, where the number is
+final and nothing is still counting — so it can fail the run without being in
+it. It is judged only on a full run: a machine without `fpc` or Solveig is
+right to report a smaller number, and failing there would make the check a
+claim about the machine rather than about the records.
+
+That needed the suite to know what it had **not** run, which it did not. Skips
+are counted now, and a guard says how many checks are behind it rather than how
+many lines it prints — so an incomplete run says `193 passed, 0 failed, 4
+skipped` instead of quietly saying 193.
+
+> A number in a document is a promise to keep it right. The only promises worth
+> making are the ones something checks.
+

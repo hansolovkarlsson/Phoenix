@@ -8,6 +8,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 phx="$root/bin/phx"
 pass=0
 fail=0
+skipped=0
 
 report() {
     if [ "$1" = pass ]; then
@@ -18,6 +19,15 @@ report() {
         printf '  FAIL  %s\n' "$2"
         [ -n "${3:-}" ] && printf '        %s\n' "$3"
     fi
+}
+
+# skip <how many> <why> -- a guard that could not run its checks. The count is
+# how many *checks* are behind the guard rather than how many lines are
+# printed, because one guard can hold several: a machine without Solveig loses
+# three and is told so once.
+skip() {
+    skipped=$((skipped + $1))
+    printf '  --    %s\n' "$2"
 }
 
 # accepts <what> <args...>
@@ -529,6 +539,18 @@ if [ -z "$lmissing" ]; then
     report pass "and the refusals it names"
 else
     report fail "and the refusals it names" "missing:$lmissing"
+fi
+
+# The records' *arithmetic*, which nothing ran until a sweep found nine stale
+# counts on 2026-09-05 -- four drifted over three days, two of them two hours
+# old. The prose in these documents is executed a dozen ways above; the numbers
+# were executed by nobody. tests/counts.sh has the reasoning.
+if cnt=$("$root/tests/counts.sh" 2>&1); then
+    n=$(printf '%s' "$cnt" | grep -c '^  ok')
+    report pass "$n counts in the records match the tree"
+else
+    report fail "counts in the records match the tree"
+    printf '%s\n' "$cnt" | grep '^  FAIL' | sed 's/^/      /' | head -10
 fi
 
 # The conformance rule, applied to the page the rule is *about*: the same
@@ -1224,7 +1246,7 @@ if command -v fpc >/dev/null 2>&1; then
         printf '%s\n' "$oracle" | grep -A6 'FAIL' | sed 's/^/        /' | head -14
     fi
 else
-    printf '  --    the oracle needs fpc, which is not on this machine\n'
+    skip 1 "the oracle needs fpc, which is not on this machine"
 fi
 
 # Solveig's conformance suite: programs and the output each must produce, held
@@ -1260,7 +1282,7 @@ if [ -x "$sol/bin/solas" ]; then
         printf '%s\n' "$bc" | sed 's/^/        /' | head -14
     fi
 else
-    printf '  --    the conformance suite needs Solveig, which is not here\n'
+    skip 3 "the conformance suite needs Solveig, which is not here"
 fi
 
 # Pascal units, which is an experiment rather than a language anybody wants
@@ -1390,5 +1412,39 @@ refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 echo
-printf '%d passed, %d failed\n' "$pass" "$fail"
+if [ "$skipped" -eq 0 ]; then
+    printf '%d passed, %d failed\n' "$pass" "$fail"
+else
+    printf '%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
+fi
+
+# The count tests/counts.sh deliberately leaves alone, because a test that
+# asserts how many tests there are changes the answer. It is held here instead,
+# after the summary, where the number is final and nothing is still counting --
+# so this can fail the run without being in it.
+#
+# Only a **full** run can judge it. The records quote what the suite does when
+# everything it needs is present, and a machine without `fpc` or Solveig is
+# right to report a smaller number -- failing there would make the check a
+# claim about the machine rather than about the records.
+if [ "$skipped" -ne 0 ]; then
+    printf '  --    %d skipped, so the records'"'"' own count is not judged here\n' \
+           "$skipped"
+else
+    stale=""
+    readme=$(sed -n 's/^make test .*# \([0-9]*\) checks.*/\1/p' \
+                 "$root/README.md" | head -1)
+    [ "$readme" = "$pass" ] || stale="$stale README.md says $readme."
+
+    chg=$(grep -m1 '^\*\*Tests:\*\*' "$root/docs/CHANGELOG.md" \
+          | sed -n 's/.*→ \([0-9]*\).*/\1/p')
+    [ "$chg" = "$pass" ] || stale="$stale CHANGELOG.md's newest entry says $chg."
+
+    if [ -n "$stale" ]; then
+        printf '  FAIL  the records say how many checks there are, and it is not %d:%s\n' \
+               "$pass" "$stale"
+        fail=$((fail + 1))
+    fi
+fi
+
 [ "$fail" -eq 0 ]

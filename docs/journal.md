@@ -3695,3 +3695,42 @@ now says that too, and lets the suite print whatever it counted.
 > A number in a document is a promise to keep it right. Do not make that
 > promise about a repository you do not control.
 
+### And then the counts were made to run
+
+The obvious answer to nine stale numbers is to be more careful. It is the wrong
+answer, and the evidence was in the same sweep: **two of the nine were two
+hours old**, written by somebody who had just measured them, in the session
+that measured them. Care is what produced them. What was missing is what
+[semantics.md](semantics.md) was missing before
+`tests/grammars/semantics.phx` — something that *runs* the claim.
+
+[`tests/counts.sh`](../tests/counts.sh) holds every count in the records
+against `wc -l`, `--nodes` and the tree: eighteen checks, reported to the suite
+as one. Each of the five kinds was mutated to confirm it bites, including
+putting awk's stale `968` and `50` back and watching them fail.
+
+**The interesting part was the count it cannot check.** The suite's own total
+is the most visible number in the records and the one a test cannot assert,
+because asserting it changes it. Making that a test would have meant a
+fixpoint — *this check passes when the README says one more than the number of
+checks that are not this one* — which is a puzzle wearing a check's clothes.
+
+So it is not a test. It runs in `tests/run.sh` **after** the summary line,
+where `pass` is final and nothing is still counting, and it fails the run
+without being in it. The first time it ran it did exactly that, and `make` came
+back with `Error 1` over a stale number, which this repository had never done
+before.
+
+*That immediately found a second thing.* The check fails on a machine without
+`fpc` or Solveig, where the suite legitimately reports a smaller number — a
+check about the records would have become a check about the machine. The fix
+needed the suite to know what it had **not** run, and it did not: skips were
+printed and never counted. They are counted now, and a guard declares how many
+checks are behind it rather than how many lines it prints, so three Solveig
+checks behind one guard count as three. An incomplete run says `193 passed, 0
+failed, 4 skipped`, the summary the status sweep had wanted that morning and
+could not have.
+
+> A check that cannot say what it skipped is a check that reports a number it
+> has no right to.
+

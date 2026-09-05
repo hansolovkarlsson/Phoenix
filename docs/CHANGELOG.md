@@ -48,10 +48,11 @@ a second host.
 Nothing about the tool changed. This is a description, and the language a
 compiler emits was never Phoenix's business.
 
-**Tests:** 189 → 196. Seven new ones: six for the backend itself, and one for
-`<>` and `or`, whose clauses no calc program had ever reached. They need `awk`
-to run what the backend emits, in the same role `cc` already plays for the C
-backend; the Makefile requires both to build `phx` at all.
+**Tests:** 189 → 197. Eight new ones: six for the backend itself; one for `<>`
+and `or`, whose clauses no calc program had ever reached; and one holding the
+records' own counts against the tree. The backend's need `awk` to run what it
+emits, in the same role `cc` already plays for the C backend; the Makefile
+requires both to build `phx` at all.
 
 ## 2026-09-03 — an assembler, and documentation for a stranger
 
