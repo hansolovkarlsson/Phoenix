@@ -639,6 +639,85 @@ else
     report fail "through the C backend, same answer" "it did not compile"
 fi
 
+# ---------------------------------------------------------------------------
+# The third leg, and the one that reaches a loop.
+#
+# `--run eval` cannot interpret a branch or a loop -- an attribute is computed
+# once per node in one walk -- so up to here every calc program with control
+# flow in it was checked by *one* implementation, against a string somebody had
+# typed into this file. Two emit passes are two implementations, and they can
+# be held against each other where the interpreter cannot go.
+#
+# awk is the second backend rather than Solveig because it needs nothing that
+# is not needed already: the Makefile builds phoenix/runtime.h by piping
+# through `awk`, so `make` does not run without one, and `solas` is not in this
+# repository at all. And awk's numbers are doubles, so it is wrong in a
+# *different* direction from C -- which is the whole reason a pair is worth
+# more than either of them twice.
+
+accepts "the awk backend reads" "$root/languages/calc/calc-awk.phx"
+
+if "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
+        "$root/languages/calc/programs/sum.calc" > "$tmp/sum.awk" 2>/dev/null; then
+    got=$(awk -f "$tmp/sum.awk" 2>&1)
+    if [ "$got" = "$want" ]; then
+        report pass "through the awk backend, same answer"
+    else
+        report fail "through the awk backend, same answer" "got '$got', wanted '$want'"
+    fi
+else
+    report fail "through the awk backend, same answer" "it did not emit"
+fi
+
+# docs/semantics.md's headline, met a second time in a second host. C's `/`
+# truncates and happens to agree with calc; awk's is floating division and does
+# not, so this backend has to write the model out as `int(a / b)`. The same
+# program, the same -3.
+if "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
+        "$root/languages/calc/tests/negative-division.calc" > "$tmp/neg.awk" 2>/dev/null; then
+    got=$(awk -f "$tmp/neg.awk" 2>&1)
+    if [ "$got" = "-3" ]; then
+        report pass "and truncates in a host whose / does not"
+    else
+        report fail "and truncates in a host whose / does not" "got '$got', wanted -3"
+    fi
+else
+    report fail "and truncates in a host whose / does not" "it did not emit"
+fi
+
+# backends_agree <what> <program> -- one description, both emit passes, and the
+# two compiled programs run and compared with each other. No expected string:
+# the answer is what two implementations independently arrived at, which is the
+# conformance rule with the interpreter's leg replaced rather than dropped.
+backends_agree() {
+    _what=$1; _prog=$2
+    if ! "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" "$_prog" \
+            > "$tmp/two.awk" 2>/dev/null; then
+        report fail "$_what" "the awk backend did not emit"
+        return
+    fi
+    if ! "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$_prog" \
+            > "$tmp/two.c" 2>/dev/null \
+       || ! cc -Wall -Werror -o "$tmp/two" "$tmp/two.c" 2>/dev/null; then
+        report fail "$_what" "the C backend did not compile cleanly"
+        return
+    fi
+    _a=$(awk -f "$tmp/two.awk" 2>&1 | tr '\n' ' ')
+    _c=$("$tmp/two" | tr '\n' ' ')
+    if [ "$_a" = "$_c" ]; then
+        report pass "$_what"
+    else
+        report fail "$_what" "awk said '$_a', C said '$_c'"
+    fi
+}
+
+backends_agree "a loop and a branch, two backends, one answer" \
+               "$root/languages/calc/programs/fizz.calc"
+backends_agree "a loop whose body is one statement, likewise" \
+               "$root/languages/calc/tests/one-statement-block.calc"
+backends_agree "and the operators the module brought" \
+               "$root/languages/calc/programs/logic.calc"
+
 # The Solveig backend is parked. Its example is still read, so the notation
 # cannot drift out from under it -- but nothing runs `solas`, and the round
 # trip happens only when it is asked for by name:

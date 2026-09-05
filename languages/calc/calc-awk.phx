@@ -1,0 +1,120 @@
+(* calc-awk.phx -- the calculator, compiled to awk.
+ *
+ *     phx --run emit-awk languages/calc/calc-awk.phx prog.calc > prog.awk
+ *     awk -f prog.awk
+ *
+ * **This file is only the emit clauses**, the same as `calc-c.phx` is. The
+ * grammar, the actions, the typechecker and the interpreter are in `calc.phx`
+ * and are imported, because none of them has an opinion about awk.
+ *
+ * **Why a second backend that runs, rather than a third that is parked.**
+ * The conformance rule is that one description, run two independent ways,
+ * gives one answer. `--run eval` is one of those ways and it cannot interpret
+ * a branch or a loop -- an attribute is computed once per node in one walk --
+ * so a program with control flow in it had exactly one implementation under it
+ * and an expected string somebody had typed. Two emit passes are two
+ * implementations, and they can be compared with each other where the
+ * interpreter cannot go.
+ *
+ * `calc-solveig.phx` could not be that backend: it needs `solas` and `solvm`,
+ * which are not in this repository, so the suite can only run it when asked by
+ * name. awk needs nothing that is not already required -- the Makefile builds
+ * `phoenix/runtime.h` by piping through `awk`, so `make` does not run without
+ * one.
+ *
+ * **And awk is wrong in a different direction from C, which is the point.**
+ * A second backend sharing C's arithmetic would catch a mistake in these
+ * clauses and not a host assumption leaking into the notation. awk's numbers
+ * are doubles: `/` is floating division where calc's truncates, and saying so
+ * here is `docs/semantics.md`'s headline met a second time in a second host.
+ *)
+
+%import "calc.phx" .
+
+(* ------------------------------------------------------------------ *)
+(* Pass three, again: awk.                                             *)
+(*                                                                     *)
+(* Read this beside `calc-c.phx`. Both passes are 24 clause lines and    *)
+(* 17 of them are identical character for character; the other 7 carry   *)
+(* five differences, each marked below. Every one of them is the target  *)
+(* forcing a difference rather than a choice made here, which is what    *)
+(* makes a disagreement between the two backends mean something.         *)
+
+%pass emit-awk
+
+  Number   : out = "{}" of $text .
+
+  (* **The first difference: a name gets a prefix.** C would reject
+   * `long printf = 3;` loudly, so `calc-c.phx` can emit a name as it
+   * stands. awk would accept `NF = 3` and go quietly wrong -- its
+   * special variables are ordinary assignable names, and a calc program
+   * may legally call a variable `NF`. Nothing in awk begins with `_`. *)
+  Variable : out = "_{}" of $name .
+
+  (* **The second: division is modelled rather than spelled.** awk has one
+   * numeric type and it is a double, so `/` is floating division; calc's
+   * truncates, which is what `quotient` says in the interpreter and what
+   * C's `/` happens to do already. `int()` truncates toward zero, so it
+   * is the model -- exact for as long as the operands are integers a
+   * double holds exactly, which is the same bargain awk itself offers. *)
+  Binary(op: "/") : out = "int({} / {})" of $left.out, $right.out .
+  Binary          : out = "({} {} {})"   of $left.out, $op, $right.out .
+
+  Negate : out = "(-{})"  of $value.out .
+  Not    : out = "(!{})"  of $value.out .
+  Logical(op: "and") : out = "({} && {})" of $left.out, $right.out .
+  Logical(op: "or")  : out = "({} || {})" of $left.out, $right.out .
+
+  Compare(op: "=")  : out = "({} == {})" of $left.out, $right.out .
+  Compare(op: "<>") : out = "({} != {})" of $left.out, $right.out .
+  Compare           : out = "({} {} {})" of $left.out, $op, $right.out .
+
+  (* **The third: `let` and `:=` become the same statement.** awk has no
+   * declarations and a variable exists by being assigned, so the two
+   * clauses `calc-c.phx` needs -- `long x = ...` and `x = ...` -- are one
+   * shape here. The clauses stay separate because the *nodes* are, and a
+   * clause per node is what lets the next difference be visible. *)
+  Let    : out = "{}_{} = {};" of $indent, $name, $value.out .
+  Assign : out = "{}_{} = {};" of $indent, $name, $value.out .
+
+  (* **The fourth: `printf` is parenthesised.** `print x > y` redirects to
+   * a file in awk, and the parenthesised argument list is what says this
+   * `>` is a comparison. `%d` for the same reason C's clause casts to
+   * `long`: the value is a double here and an int there, and both
+   * backends have to write the same digits. *)
+  Print  : out = "{}printf(\"%d\\n\", {});" of $indent, $value.out .
+
+  (* Indentation flows downward, exactly as it does in C, and for the same
+   * reason: it is a thing a node hands to its children and to nothing
+   * else. Both of Block's clauses are in this one rule because clauses
+   * are tried in order and the first match wins. *)
+  Block  : down indent = "{}    " of $indent
+         : out = join($body.out, "\n") .
+
+  (* awk's control-flow syntax *is* C's, so these three clauses are their
+   * C counterparts character for character. That is worth noticing rather
+   * than hiding: where two targets agree, two backends agreeing is not
+   * duplication, it is the reason a disagreement elsewhere means
+   * something. *)
+  If     : out = "{}if ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent .
+  IfElse : out = "{}if ({}) {{\n{}\n{}}} else {{\n{}\n{}}}"
+             of $indent, $cond.out, $then.out, $indent, $else.out, $indent .
+  While  : out = "{}while ({}) {{\n{}\n{}}}"
+             of $indent, $cond.out, $body.out, $indent .
+
+  (* **The fifth: the program is a BEGIN block.** awk's unit of execution
+   * is a rule matched against input, and a calc program reads no input,
+   * so it is the rule that runs before any is read. *)
+  Program : down indent = "    "
+          : out = "BEGIN {{\n{}\n}}" of join($body.out, "\n") .
+
+(* ------------------------------------------------------------------ *)
+(* What to run, and in what order. The same three drivers `calc-c.phx`  *)
+(* declares, because the first two passes are the same two passes --    *)
+(* `show` before `typecheck` because typecheck's messages read          *)
+(* `$left.show`, and Phoenix refuses the driver if that order is wrong. *)
+
+%driver awk   = show, typecheck, emit-awk -> out .
+%driver run   = show, typecheck, eval     -> out .
+%driver check = show, typecheck .
