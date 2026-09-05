@@ -3734,3 +3734,82 @@ could not have.
 > A check that cannot say what it skipped is a check that reports a number it
 > has no right to.
 
+### The survey, and what a survey is actually for
+
+The question was *what do comparable tools have that we do not*, and the useful
+part of the answer was how little of it was new. [lineage.md](lineage.md)
+already named JastAdd, Silver, Eli, UUAG, LISA, Kiama, Spoofax, Stratego,
+Statix, Rascal, TXL, Nanopass, Coco/R, Cocktail and TREE-META. Of the features
+those tools have and this one does not, **most were already refused with
+evidence** — reference attributes lost to awk, scope graphs lost to Pascal
+units, host-language actions and conditionals are design decisions with
+reasoning attached.
+
+So the survey's yield was three families the page had missed and two entries
+that could be opened, and it is worth saying which came first: **the entries
+did.** `languages/solvm/` has emitted `.sob` and been unable to read it since
+the day it was written, and `languages/units/divergent/three-cycle.pas` has sat
+there refusing to be refused. Both were recorded as *costs*. What the survey
+supplied was not the problems but the **prior art** — Kaitai Struct's
+`repeat-expr` for the first, JastAdd's circular attributes for the second — and
+that is what moved them from a cost to somebody's solved problem.
+
+> A survey of other tools does not tell you what you are missing. It tells you
+> what the thing you already know you are missing is called.
+
+The three families added are Kaitai and DFDL for binary layouts, Langium for
+what a workbench looks like now, and the PEG error-reporting line — Ford's
+farthest failure, then labeled failures, then recovery — which is the
+literature for a limit this tool has and had never named.
+
+### Two findings that are not roadmap entries, and why
+
+**The parser reports one syntax error, at the wrong column.** Measured rather
+than suspected: three bad statements give one message, where three bad *names*
+give three. `print a +;` is reported at column 1 as *expected -, (, integer or
+name, and found "print"*, because ordered choice discards why an alternative
+failed and what surfaces is the outer position that gave up. That is a **wart**
+— [5](ROADMAP.md#5-known-warts) — because no description is blocked by it. It
+is also the weakest surface this tool has, for a project whose argument is that
+a fault found while reading is found before anybody else sees it.
+
+**The round trip rests on a hand-written renderer.** Three descriptions are
+checked by rendering the tree and parsing it again, and this repository states
+three separate times that a round trip can be green while the parse is
+consistently wrong, *because what is written back out is wrong in the same
+way*. Those renderers are 122 lines in awk, 51 in solvm, 46 in solveig, 16 in
+calc, and **nothing checks that a `show` pass agrees with the grammar it
+renders** — a person wrote both. SDF3 closes this by deriving the pretty-printer
+from the grammar. It went into
+[4](ROADMAP.md#4-what-a-description-is-checked-for), under *things no check can
+reach*, rather than onto the roadmap, because no description is blocked and
+that page's bar is a language that cannot say something.
+
+Those two placements are the part of this worth remembering. The roadmap's
+opening note says an entry names **why**, and its header says the next one
+should arrive from a real language needing something — so a gap found by
+*reading about other tools* does not qualify, however real it is. It goes where
+the project already keeps things it knows and has not fixed.
+
+### And a tenth stale number, in the record the check did not cover
+
+[lineage.md](lineage.md) opened its argument with *5,300 lines of C11 against
+the C standard library and nothing else*. The tool is 8,698 lines. Written on
+2026-09-01 it was exact — 5,333 against a claimed 5,300 — and four days later
+it understated by 63%.
+
+**It survived a sweep that was looking for exactly this**, the morning after
+`tests/counts.sh` was built to make the class impossible. Two reasons, and both
+are instructive. The check covered `COMPLETED.md` and `postmortem.md` because
+those are where the counts *were* — a check written from a list of known cases
+rather than from the question *which records quote numbers*. And 5,300 is
+close to what the **descriptions** now come to, 5,395, so the number reads as
+plausibly about something. A stale number that looks wrong gets fixed; one that
+looks like a different true number does not.
+
+`tests/counts.sh` covers lineage.md now, and the mutation was run.
+
+> A check written from the cases you found is a check against the cases you
+> found. The question it should have been written from is *what kind of thing
+> can be wrong*.
+

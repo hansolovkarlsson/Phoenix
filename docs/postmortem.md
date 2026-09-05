@@ -674,3 +674,61 @@ is consistently wrong about the one thing
 have caught it, because the interpreter refuses that program. That is the
 failure the conformance rule was written against, and until today calc's
 looping programs were not covered by it.
+
+---
+
+## 13. The empty roadmap, and the risk it named coming true
+
+[§ 11](#11-what-closing-the-last-entry-was-worth) was written on 2026-09-03,
+two days before this, and it named a risk:
+
+> The risk of an empty roadmap is that it stops being read, and then the next
+> thing that ought to go on it goes into a commit message instead.
+
+**That happened, and it took two days.** The roadmap is not empty any more:
+[1.7](ROADMAP.md#17-a-repetition-that-counts) and
+[2.5](ROADMAP.md#25-circular-attributes--from-jastadd) are open. Neither is new
+work discovered by having a good idea. Both are failures that were **already
+written down somewhere else**:
+
+| entry | where it had been living instead |
+| --- | --- |
+| 1.7 — a repetition that counts | [CHANGELOG.md](CHANGELOG.md) 2026-09-03, in the sentence announcing the assembler: *Phoenix can emit `.sob` and cannot read it* |
+| 2.5 — circular attributes | [`languages/units/divergent/three-cycle.pas`](../languages/units/divergent/three-cycle.pas), a test file, since the day units were described |
+
+Not a commit message, which is what § 11 guessed. A **changelog entry** and a
+**test fixture** — both durable, both version-controlled, both entirely
+invisible to anybody asking *what is left to do*. The prediction was right
+about the mechanism and wrong about the hiding place, and the hiding place is
+the more useful half: those are better places to lose something than a commit
+message, because they look like records.
+
+### What actually surfaced them, which was not diligence
+
+A survey of comparable tools. Not because it found problems — it found none
+this project did not have written down — but because it supplied the **names**:
+Kaitai Struct's `repeat-expr` for the first, JastAdd's circular attributes for
+the second.
+
+That is what moved them. Section 2's own header says each entry is *somebody
+else's solved problem*, and a cost with no prior art attached does not read as
+one. Both had failed the page's admission test for days on a technicality: they
+were things the notation could not say, and nobody had a word for what would
+fix them.
+
+> An open question with no name stays a complaint. Finding out what other
+> people call it is what makes it an entry.
+
+### And the mitigation § 11 offered did not fire
+
+§ 11 proposed a tell: a growing `library.c` means the notation was not
+expressive enough and nobody noticed, and an empty roadmap fails the same way,
+so *the same tell catches it*. It did not. `library.c` gained nothing in those
+two days, because neither of these wants a library function — one wants a
+grammar operator and the other an evaluation strategy.
+
+The tell was calibrated for the failure mode the project had already met. It
+does not catch a limit that shows up as a **workaround outside the tool**:
+1.7's symptom was reaching for `solvm --dump`, another project's binary, and no
+file in this repository grew by a line when that happened.
+

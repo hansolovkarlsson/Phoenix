@@ -14,25 +14,63 @@ Three languages are described and compiled: Pascal against `fpc`, Solveig
 against `solas`, awk against `/usr/bin/awk`, and a fourth description targets
 SolVM's bytecode.
 
-**Nothing on this page is open.** Sections 1 and 2 are empty — every stage and
-every borrowed idea has left with a verdict, three of them settled *against*
-building. What is left here is section 3, which is what this project has
-decided **not** to have and why; section 4, what a description is checked for;
-and section 5, the warts it knows about.
+**Two entries are open, and both arrived the way this page requires.** Section
+1 and section 2 stood empty from 2026-09-03, every stage and every borrowed
+idea having left with a verdict and three of them settled *against* building.
+What re-opened them was not a survey of what other tools have — that survey was
+done, and most of what it found is either already here or already refused. It
+was that **two descriptions in this repository have a failure written down**,
+in a `divergent/` directory and in a changelog, and each names a thing the
+notation cannot say:
 
-That is the shape a roadmap is supposed to reach. It is not a claim that
-nothing else will ever be built — it is a claim that **nothing is currently
-owed**, and that the next entry should arrive the way every other one did: a
-real language needing something the notation could not say.
+| | |
+| --- | --- |
+| [1.7](#17-a-repetition-that-counts) | `languages/solvm/` **emits `.sob` and cannot read it** |
+| [2.5](#25-circular-attributes--from-jastadd) | `languages/units/` cannot refuse `A -> B -> C -> A`, and cannot order initialisation |
+
+Neither is new. Both have been true for days and were recorded as costs rather
+than as work; what changed is [lineage.md](lineage.md) naming the prior art, so
+each is now *somebody's solved problem* rather than an open question.
+
+The rest of the page is section 3, what this project has decided **not** to
+have and why; section 4, what a description is checked for; and section 5, the
+warts it knows about.
 
 ---
 
-## 1. The stages — all of them settled
+## 1. The stages
 
-**This section is empty, and that is its result.** All seven entries have left
-it; [COMPLETED.md](COMPLETED.md) has them, with what each predicted against
-what it cost. Three of the seven predicted wrong, which is the more useful
-half, and one left **settled against building it** after four measurements.
+**Seven have left, and one is open.** [COMPLETED.md](COMPLETED.md) has the
+seven, with what each predicted against what it cost. Three of the seven
+predicted wrong, which is the more useful half, and one left **settled against
+building it** after four measurements.
+
+### 1.7 A repetition that counts
+
+`{ x }` matches `x` until it stops matching. That is the only repetition the
+notation has, and it is the wrong one for a **length-prefixed** format, where
+what follows a count is *that many* of something and the thing after them is
+not an `x` that failed — it is the next field.
+
+**This is written down as a limit already**, in the entry that shipped the
+assembler: Phoenix can emit `.sob` and cannot read it. The reading half is
+`solvm --dump`, which is another project's binary doing a job this notation
+cannot ask for — and that makes the oracle for the one backend emitting
+**bytes** depend on a tool outside this repository.
+
+*What it would take is not obvious, and that is the entry.* A count is a value
+a pass computes, and the grammar runs before any pass does. So either a
+repetition may read a **field of the node being built** — which makes the
+parser depend on the tree in a way nothing here does yet — or the notation
+grows a separate binary-reading half, which is a second mechanism and the thing
+[3.4](#34-a-library-that-grows-without-deciding) says to be afraid of.
+
+**Kaitai Struct has the vocabulary settled**: `repeat-expr` for a computed
+count and `repeat-until` for a predicate, over a field already read.
+[lineage.md](lineage.md) has the family. Borrow the words before inventing any.
+
+*The condition for building it* is a second format that wants it. One is a
+workaround; two is a mechanism. `.sob` is the one.
 
 | | |
 | --- | --- |
@@ -44,12 +82,15 @@ half, and one left **settled against building it** after four measurements.
 | [1.2](COMPLETED.md#12-compiling-the-tables-to-code) | compiling the tables to code — settled **against**: measured four times, and the fourth found the control |
 | [1.6](COMPLETED.md#16--as-an-expression-operator-for-getline) | `\|` as an expression operator — awk's `cmd \| getline` |
 
+**Open:** [1.7](#17-a-repetition-that-counts), a repetition whose count is a
+value the parse has just produced.
+
 
 ## 2. Borrowed, and worth borrowing
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
-whose. **All four are settled** — two built and two tested and refused. Nothing
-is left in this section.
+whose. **Four are settled** — two built and two tested and refused — and one is
+open.
 
 | | |
 | --- | --- |
@@ -57,6 +98,46 @@ is left in this section.
 | [2.2](COMPLETED.md#22-strategies--from-stratego) | strategies, from Stratego — `%rewrite` |
 | [2.3](COMPLETED.md#23-scope-graphs--from-statix) | scope graphs, from Statix — settled **against**: Pascal units were described to test it, and resolution stayed a list |
 | [2.4](COMPLETED.md#24-inlining-a-block--from-solas) | inlining a block, from `solas` |
+
+### 2.5 Circular attributes — from JastAdd
+
+An attribute here is computed **once per node in one walk**, which is what
+makes the walk cheap and what [3.1](#31-an-interpreter-that-can-loop) refuses a
+looping interpreter over. A **circular** attribute is defined by a fixpoint
+instead: it starts at a bottom value and is re-evaluated until it stops
+changing. Magnusson and Hedin added them to JastAdd for exactly the analyses
+one walk cannot do.
+
+**Two failures in this repository are the same missing thing.** Both are in
+[`languages/units/divergent/`](../languages/units/divergent/), written down
+rather than hidden, with the suite checking they are still the divergences they
+claim to be:
+
+| | |
+| --- | --- |
+| a circular `uses` three units deep | refusing `A -> B -> C -> A` is **reachability**, and this description manages two units only. [`three-cycle.pas`](../languages/units/divergent/three-cycle.pas) is the witness |
+| initialisation order | a **topological sort** over the same graph |
+
+[5](#5-known-warts) already names the general form — *there is no iteration
+over data.* `%rewrite innermost` reaches a fixpoint over the **shape of a
+tree**, rewriting until nothing matches; nothing does the same over a **table**.
+Every list operation in the library answers in one step. So the mechanism is
+half-present: the fixpoint is there, and it is over the wrong thing.
+
+*Why this is not [2.3](COMPLETED.md#23-scope-graphs--from-statix) again.* Scope graphs were
+refused because **resolution** did not need a graph — visibility does not
+compose, so a `uses` is one lookup in a table and there is no traversal for a
+cycle to be a cycle in. That finding stands and this entry does not disturb it.
+What is graph-shaped here is not resolution but the two things above, and the
+2.3 entry says so itself.
+
+*The condition for building it* is a language that needs a fixpoint for
+something a person would notice. Refusing a three-unit cycle is a diagnostic
+nobody has asked for, and `fpc` is the arbiter that already catches it. **A
+dataflow analysis would be the real customer** — liveness, reaching
+definitions, constant propagation — and no description here has one, because
+none of them optimises. That is the thing to watch for rather than a bigger
+`units/`.
 
 
 ## 3. What is deliberately not here
@@ -270,6 +351,30 @@ claim it makes is a check now, and every refusal it names is a clause, run
 through `phx` and through a compiler `phx` wrote — which has to complain in the
 same words. **A specification nothing runs is a document about a program.**
 
+**And a third, found by asking what the round trip rests on.** Three of these
+descriptions are checked by *rendering the tree back and parsing it again*, and
+the rule that makes it worth doing is stated in
+[COMPLETED.md](COMPLETED.md#defects-found-and-what-found-them) three times: a
+round trip can be **green while the parse is consistently wrong**, because what
+is written back out is wrong in the same way.
+
+The renderers are hand-written — 122 lines in `languages/awk/`, 51 in
+`solvm/`, 46 in `solveig/`, 16 in `calc/` — and a hand-written renderer is
+precisely a second chance to make the first mistake. Nothing checks that a
+`show` pass agrees with the grammar it is rendering; a person wrote both.
+
+*What closes it is known and is not on this page.* Spoofax's SDF3 derives the
+pretty-printer **from the grammar**, regenerated whenever the grammar changes,
+so there is no second artefact to disagree — the layout lives in the production
+that already says what the syntax is. It is not a roadmap entry because no
+description here is blocked by the absence, and this page's bar is a language
+that cannot say something. It is written here instead, under the heading for
+things a check cannot reach, because that is what it is.
+
+The three have one shape. **Everything the suite checks, it checks by
+comparing two things — and each of these is a place where only one thing
+exists.**
+
 ## 5. Known warts
 
 **`pos` is a reserved field name.** Every node has a position and `$pos` is
@@ -343,6 +448,31 @@ because what it exists for is **slot numbers**, and a frame's first slot is
 zero. The inconsistency is real and is kept on purpose: making it one-based
 would mean every use of it subtracting one, which is the off-by-one this
 notation is otherwise arranged to avoid.
+
+**One syntax error, and it is reported at the wrong column.** A pass collects
+its complaints and reports all of them — three undefined names give three
+`error:` lines — but a *parse* stops at the first failure and gives one. Worse
+than the count is the position:
+
+```
+print a +;
+```
+
+is reported at column 1, `expected -, (, integer or name, and found "print"`.
+The line is right and the column is the start of the statement, because ordered
+choice throws away *why* an alternative failed: what surfaces is the outer
+position that gave up rather than the inner one that got stuck.
+
+This is a known PEG problem with a known ladder of answers, and
+[lineage.md](lineage.md) now names them. Ford's **farthest-failure** heuristic
+— report the rightmost position the parse ever reached — costs nothing and asks
+nothing of a grammar, and is the whole fix for the column. Reporting *more than
+one* error is a larger thing: it needs error recovery, which changes what a
+parse is.
+
+It is a wart rather than an entry because no description is blocked by it. It
+is the weakest surface the tool has, though, for a project whose argument is
+that a fault found while reading is found before anybody else sees it.
 
 **A description may guess where the tool will not.** `languages/awk/awk.phx`
 decides whether `/` opens a regexp by looking at the character after it,

@@ -103,6 +103,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# lineage.md quotes the tool's size too, in the sentence that says what is
+# distinctive about it. That number was written on 2026-09-01 and was exactly
+# right -- 5,333 against a claimed 5,300 -- and by 2026-09-05 the tool was
+# 8,698 and the page still said 5,300. It went unnoticed for the reason a
+# number does: it stayed plausible, being close to what the *descriptions* now
+# come to. This is the record the first version of this script did not check.
+
+case $(cat docs/lineage.md) in
+    *"$hand"*) ok "lineage.md has the tool at $hand lines" ;;
+    *)         no "lineage.md does not have the tool at $hand lines" ;;
+esac
+
+# ---------------------------------------------------------------------------
 # postmortem.md quotes the same counts in its opening paragraph. Checked as a
 # set of numbers rather than as a sentence, so that rewording the prose does
 # not fail a check about arithmetic.
