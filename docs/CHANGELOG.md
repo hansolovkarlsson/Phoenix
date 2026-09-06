@@ -63,14 +63,35 @@ language described here.
 it away. The fallback is unchanged for a parse that never got past the
 leftover.
 
-**Tests:** 189 → 199. Ten new ones: six for the backend itself; one for `<>`
+**A Z80 subset, and an assembler for it:
+[`languages/z80/z80.phx`](../languages/z80/z80.phx).**
+
+    phx --driver code --raw languages/z80/z80.phx prog.z80 > prog.bin
+    z80asm -o want.bin prog.z80 && cmp want.bin prog.bin
+
+190 lines: immediate loads, `inc`, `dec`, the immediate arithmetic, the
+absolute jumps and calls, and labels. It is a **control**, not a language
+anybody asked for — every instruction in it has one encoding and one length,
+which is what makes two passes enough. `jr`, whose length depends on a distance
+that depends on lengths, is deliberately left out; adding it is what
+[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) is waiting for.
+
+**The oracle is byte for byte**, which none of the others are. `z80asm`
+assembles the same four programs and the two binaries are compared whole —
+where Pascal and Solveig agree about what a program *prints*, and a
+consistently wrong translation can survive that.
+
+**Tests:** 189 → 204. Fifteen new ones: six for the calc backend; one for `<>`
 and `or`, whose clauses no calc program had ever reached; one holding the
 records' own counts against the tree; and two for a claim `reference.md` had
 made since `%rewrite` shipped and nothing had run — **a node built by a rewrite
 keeps the position of the node it replaced**, so a diagnostic from a later pass
-points at the program rather than at the rule. The backend's need `awk` to run what it
-emits, in the same role `cc` already plays for the C backend; the Makefile
-requires both to build `phx` at all.
+points at the program rather than at the rule. And five for the Z80 subset:
+one that it reads, three refusals — an undefined label, one name at two
+addresses, an immediate that does not fit its byte — and the oracle. The calc
+backend's tests need `awk` to run what it emits, in the same role `cc` already
+plays for the C backend; the Makefile requires both to build `phx` at all. The
+Z80 oracle needs `z80asm`, and skips without it.
 
 ## 2026-09-03 — an assembler, and documentation for a stranger
 

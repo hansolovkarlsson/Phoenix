@@ -1,0 +1,190 @@
+(* z80.phx -- a Z80 subset, assembled to raw bytes.
+ *
+ *   phx --driver code --raw languages/z80/z80.phx prog.z80 > prog.bin
+ *   z80asm -o want.bin prog.z80 && cmp want.bin prog.bin
+ *
+ * ---------------------------------------------------------------------------
+ * What this is for
+ *
+ * [ROADMAP 2.5](../../docs/ROADMAP.md#25-circular-attributes--from-jastadd)
+ * has wanted a customer since it opened: an analysis that needs a **fixpoint
+ * over a table** rather than over the shape of a tree. A Z80 assembler is the
+ * cheapest one, because `jr e` is two bytes and reaches 127 in either
+ * direction while `jp nn` is three and reaches anywhere -- so choosing the
+ * short form shrinks the code, moves every label after it, and can bring a
+ * further branch into range. The sizes have to be iterated until they stop
+ * changing.
+ *
+ * **`jr` is deliberately absent from this file.** Every instruction here has
+ * one encoding and one length, which is what makes the two passes below
+ * enough -- the same two `languages/solvm/` uses, and for the same reason. Its
+ * comment says it best: a jump names a label, and a label is very often below
+ * the jump.
+ *
+ * This half is the control. If a subset with no choice of encoding does *not*
+ * agree with `z80asm` byte for byte, the fault is here and not in the notation
+ * -- and that has to be settled before `jr` is added and the notation is asked
+ * for something it may not have.
+ *
+ * ---------------------------------------------------------------------------
+ * The subset, and what is outside it
+ *
+ * Immediate loads into the eight-bit registers, the three immediate
+ * arithmetic instructions that take `a`, `inc`, `dec`, the absolute jumps and
+ * calls, and the three instructions that are one byte on their own. No index
+ * registers, no sixteen-bit arithmetic, no `ld` between two registers, and no
+ * relative jumps.
+ *
+ * Numbers are decimal. The assembly starts at address 0, which is `z80asm`'s
+ * default with no `org`, and there is no `org` here to disagree with it.
+ *
+ * **Every word-shaped literal in the syntactic half is reserved**, so `ld`,
+ * `jp`, `a`, `nz` and the rest are not available as label names. That is the
+ * bargain ROADMAP 5 already describes for `lib/expression.phx`, met here in a
+ * language whose mnemonics are ordinary words.
+ *)
+
+%fragment letter digit .
+
+letter  = "a" .. "z" | "A" .. "Z" | "_" .
+digit   = "0" .. "9" .
+
+word    = letter { letter | digit } .
+number  = digit { digit } .
+space   = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+comment = ";" { ! "\n" } .
+symbol  = ":" | "," .
+
+%skip space comment .
+
+%syntax .
+%start program .
+
+program = { item } -> Program(items: $1) .
+
+(* A label first, because `n:word ":"` fails on a mnemonic and falls through --
+ * which is what ordered choice asks for, and what `languages/solvm/` does with
+ * the same rule for the same reason. *)
+item = n:word ":" -> Label(name: $n)
+     | instruction .
+
+(* The conditional jump is above the unconditional one. `jp nz, loop` would
+ * otherwise take `nz` as the target and leave the comma over. *)
+instruction =
+    "ld"   r:reg "," v:number  -> LdImm(reg: $r, value: $v)
+  | "add"  "a" "," v:number    -> AddImm(value: $v)
+  | "sub"  v:number            -> SubImm(value: $v)
+  | "cp"   v:number            -> CpImm(value: $v)
+  | "inc"  r:reg               -> Inc(reg: $r)
+  | "dec"  r:reg               -> Dec(reg: $r)
+  | "jp"   c:cond "," t:word   -> JpCond(cond: $c, target: $t)
+  | "jp"   t:word              -> Jp(target: $t)
+  | "call" t:word              -> Call(target: $t)
+  | "ret"                      -> Ret
+  | "nop"                      -> Nop
+  | "halt"                     -> Halt .
+
+(* A register is its **encoding**, in the grammar, because that is the one
+ * place the seven of them are written down -- and three instructions below
+ * would otherwise each carry a copy of the same table. `ld r, n` is
+ * `0x06 + 8r`, `inc r` is `0x04 + 8r` and `dec r` is `0x05 + 8r`, so the
+ * number is all any of them needs. It is a string because that is what an
+ * action builds; `int` takes it back.
+ *
+ * This is `solveig.phx`'s `relation = "<=" -> "lessOrEqual"` in a language
+ * whose vocabulary happens to be numeric. *)
+reg = "b" -> "0" | "c" -> "1" | "d" -> "2" | "e" -> "3"
+    | "h" -> "4" | "l" -> "5" | "a" -> "7" .
+
+(* A condition is its whole opcode rather than a field of one, because the
+ * four conditional jumps are four unrelated bytes and not a base plus an
+ * index: 0xC2, 0xCA, 0xD2, 0xDA. *)
+cond = "nz" -> "194" | "z"  -> "202"
+     | "nc" -> "210" | "c"  -> "218" .
+
+(* ------------------------------------------------------------------ *)
+(* Pass one: where does everything sit?                               *)
+
+%pass layout
+
+  thread pc = 0
+
+  (* One byte. *)
+  Nop  : pc = $pc + 1 .
+  Halt : pc = $pc + 1 .
+  Ret  : pc = $pc + 1 .
+  Inc  : pc = $pc + 1 .
+  Dec  : pc = $pc + 1 .
+
+  (* An opcode and its immediate byte. The bound is here rather than in the
+   * pass that writes the bytes, because it is a fact about the program and
+   * not about the encoding: `ld a, 300` is a mistake in the assembly. *)
+  LdImm  : pc = $pc + 2
+         ! int($value) > 255
+             : "an immediate byte is at most 255, and this is {}" of $value .
+  AddImm : pc = $pc + 2
+         ! int($value) > 255
+             : "an immediate byte is at most 255, and this is {}" of $value .
+  SubImm : pc = $pc + 2
+         ! int($value) > 255
+             : "an immediate byte is at most 255, and this is {}" of $value .
+  CpImm  : pc = $pc + 2
+         ! int($value) > 255
+             : "an immediate byte is at most 255, and this is {}" of $value .
+
+  (* An opcode and a sixteen-bit address. *)
+  Jp     : pc = $pc + 3 .
+  JpCond : pc = $pc + 3 .
+  Call   : pc = $pc + 3 .
+
+  (* The one item that occupies no space and is the reason for two passes. *)
+  Label : entry = [[$name, $pc]] : lname = [$name] .
+
+  otherwise entry = []
+  otherwise lname = []
+
+  Program : labels = flatten($items.entry)
+          ! size($items) = 0 : "there is nothing here to assemble"
+          ! size(positions(flatten($items.lname))) < size(flatten($items.lname))
+              : "two labels have the same name"
+          ! $pc > 65536
+              : "the assembly is {} bytes, and an address is two" of $pc .
+
+(* ------------------------------------------------------------------ *)
+(* Pass two: the bytes.                                               *)
+
+%pass code
+
+  Program : down table = $labels
+          : out = join($items.out) .
+
+  Nop  : out = bytes(0, 1) .
+  Halt : out = bytes(118, 1) .
+  Ret  : out = bytes(201, 1) .
+
+  LdImm : out = join([bytes(6 + 8 * int($reg), 1), bytes(int($value), 1)]) .
+  Inc   : out = bytes(4 + 8 * int($reg), 1) .
+  Dec   : out = bytes(5 + 8 * int($reg), 1) .
+
+  AddImm : out = join([bytes(198, 1), bytes(int($value), 1)]) .
+  SubImm : out = join([bytes(214, 1), bytes(int($value), 1)]) .
+  CpImm  : out = join([bytes(254, 1), bytes(int($value), 1)]) .
+
+  (* An address is absolute and little-endian, which is what `bytes(n, 2)`
+   * writes. `lookup`'s default keeps an unresolved label out of the
+   * arithmetic; the check under it is the diagnosis. *)
+  Jp     : out = join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)])
+         ! not defined($table, $target)
+             : "no label called '{}'" of $target .
+  JpCond : out = join([bytes(int($cond), 1),
+                       bytes(lookup($table, $target, 0), 2)])
+         ! not defined($table, $target)
+             : "no label called '{}'" of $target .
+  Call   : out = join([bytes(205, 1), bytes(lookup($table, $target, 0), 2)])
+         ! not defined($table, $target)
+             : "no label called '{}'" of $target .
+
+  (* A label is where the bytes after it are, and none of its own. *)
+  otherwise out = ""
+
+%driver code = layout, code -> out .

@@ -148,7 +148,13 @@ rather than a diagnostic nobody asked for, and
 [`languages/solvm/`](../languages/solvm/) has already paid for everything an
 assembler costs here *except* that. `z80asm` assembles the same source for a
 byte-for-byte oracle, in the class of `fpc` and `solas` — present, or the test
-skips. Nothing is started; this names the candidate.
+skips. **The control half is built** — [`languages/z80/`](../languages/z80/),
+190 lines, four programs agreeing with `z80asm` byte for byte — and it needed
+nothing the notation does not have, which is what a control is for. What
+remains is `jr`, and it is the whole entry: the moment an instruction's length
+depends on a distance that depends on lengths, `layout`'s single walk cannot
+answer, and the failure goes into `languages/z80/divergent/` next to the two in
+`units/`.
 
 It does nothing for [1.7](#17-a-repetition-that-counts), and that is worth
 writing down so it is not looked for twice: a Z80 instruction's length comes

@@ -1,0 +1,6 @@
+; a jump to a label below it, which is the reason an assembler is two passes.
+        ld a, 10
+        cp 10
+        jp z, done
+        ld b, 1
+done:   halt

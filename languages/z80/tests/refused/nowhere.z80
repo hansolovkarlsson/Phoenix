@@ -1,0 +1,3 @@
+; a jump to a label nothing defines.
+        jp nowhere
+        halt

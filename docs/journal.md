@@ -4085,3 +4085,57 @@ a description in it. The second has a question in front of it: a yacc file
 embeds arbitrary C in braces, so reading one means scanning nested braces,
 strings and comments, and whether the lexical half can express that is an
 experiment rather than a guess.
+### A Z80 assembler, and the half of it that was supposed to be boring
+
+The customer 2.5 has been waiting for, started the same evening it was named.
+`z80asm` went on the machine and the first thing built was **the comparison**,
+not the description: four programs, assembled by the oracle, and no expectation
+typed anywhere. That is the day's carry-forward applied before there was
+anything to be wrong about — every byte the suite checks came out of `z80asm`,
+so there is no literal for a later reading to have pasted.
+
+The subset is immediate loads, `inc`, `dec`, the three immediate arithmetic
+instructions, absolute jumps and calls, `ret`, `nop`, `halt`, and labels. 190
+lines. **`jr` is not in it on purpose**, and that is the whole design: every
+instruction here has one encoding and one length, so `layout` threading a `pc`
+and handing a label table back down — `solvm`'s two passes, unchanged — is
+enough.
+
+**All four programs agreed with `z80asm` on the first run.** That is the
+control doing its job rather than luck: if a subset with no choice of encoding
+had disagreed, the fault would have been in this description and the `jr`
+experiment would have been run on a broken instrument. It agreed, so what
+happens when `jr` is added is about the notation and nothing else.
+
+*One thing the notation made pleasant.* A register is written in the grammar as
+its **encoding** — `reg = "b" -> "0" | "c" -> "1"` and so on — because `ld r,
+n` is `0x06 + 8r`, `inc r` is `0x04 + 8r` and `dec r` is `0x05 + 8r`. Three
+clauses would otherwise each carry a copy of the same seven-entry table. It is
+`solveig.phx`'s `relation = "<=" -> "lessOrEqual"` in a language whose
+vocabulary happens to be numeric.
+
+*And one small mystery closed.* An empty `a.bin` had appeared in the repository
+root and nothing in the Makefile or the suite writes that name. `z80asm` writes
+it when `-o` is left off, the way `cc` writes `a.out`. The oracle runner passes
+`-o` into a temporary directory and says why in a comment.
+
+### Five checks, and the three records that went stale at once
+
+199 to 204, and the counts caught it before the commit existed — README.md and
+CHANGELOG.md both still said 199, which is the check written this morning
+working exactly as its own postmortem entry described: a wrong number surviving
+for the gap between two commands rather than for days.
+
+The third was `COMPLETED.md`'s languages table, and it went stale in two ways a
+number does not usually go stale: a new row was needed, and the sentence under
+it said **seven directories, six rows**. Both fixed — but the more useful part
+is that `tests/counts.sh` iterated `pascal solveig awk solvm calc phx`, a list
+with no z80 in it, so the new row's two numbers would have been unchecked from
+the moment they were written.
+
+That is [postmortem 14](postmortem.md#14-the-counts-check-scored-the-same-day-it-was-built)
+arriving four hours after it was written up. Its finding was that a check
+assembled from the cases a sweep found inherits the sweep's blind spot, and the
+fix it named was to derive the check's inputs from the question instead. The
+question is *which languages have a row*, so `z80` is in the loop now and the
+row is held against the tree like the other six.

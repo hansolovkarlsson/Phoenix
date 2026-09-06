@@ -1361,6 +1361,38 @@ else
     printf '%s\n' "$sa" | grep -A4 FAIL | sed 's/^/        /' | head -14
 fi
 
+# Z80: the second assembler, and the one written to make a mechanism
+# necessary rather than to have another language. Every instruction in the
+# subset has **one encoding and one length**, so the two passes solvm already
+# uses are enough -- which is the point. It is the control for `jr`, whose
+# length depends on a distance that depends on lengths, and which is what
+# ROADMAP 2.5 has been waiting for a customer to need.
+#
+# The oracle is `z80asm` and the comparison is **byte for byte**. That is a
+# stronger arbiter than the other languages have: Pascal and Solveig agree
+# about what a program prints, which a consistently wrong translation can
+# survive, and an assembler's whole output is the artefact.
+echo "Z80"
+accepts "the description reads" "$root/languages/z80/z80.phx"
+z="$root/languages/z80/tests/refused"
+refuses "a jump to a label nothing defines" "no label called 'nowhere'" \
+        "$root/languages/z80/z80.phx" "$z/nowhere.z80"
+refuses "one label at two addresses" "two labels have the same name" \
+        "$root/languages/z80/z80.phx" "$z/twice.z80"
+refuses "an immediate that does not fit its byte" "at most 255, and this is 300" \
+        "$root/languages/z80/z80.phx" "$z/wide.z80"
+if command -v z80asm >/dev/null 2>&1; then
+    if za=$("$root/languages/z80/tests/oracle/run.sh" 2>&1); then
+        n=$(printf '%s' "$za" | grep -c '^  ok')
+        report pass "$n Z80 programs assemble to the bytes z80asm makes, exactly"
+    else
+        report fail "Z80 programs agree with z80asm"
+        printf '%s\n' "$za" | grep -A3 FAIL | sed 's/^/        /' | head -12
+    fi
+else
+    skip 1 "the oracle needs z80asm, which is not on this machine"
+fi
+
 # awk: the third language, and the first whose grammar is not vendored -- there
 # is no awk grammar on this machine to hold it against, so the oracle carries
 # the whole weight. `/usr/bin/awk` is the arbiter of what awk means, and

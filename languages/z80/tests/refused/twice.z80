@@ -1,0 +1,4 @@
+; one name, two addresses -- and the second silently won under one pass.
+here:   nop
+here:   nop
+        halt

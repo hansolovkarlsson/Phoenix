@@ -1,0 +1,16 @@
+; every eight-bit register loaded, incremented and decremented -- no labels
+; and no jumps, so this one is about the encoding table alone.
+        ld a, 1
+        ld b, 2
+        ld c, 3
+        ld d, 4
+        ld e, 5
+        ld h, 6
+        ld l, 7
+        inc a
+        inc b
+        inc l
+        dec a
+        dec h
+        nop
+        halt

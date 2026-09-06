@@ -780,18 +780,19 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 199 checks, covering 35 Pascal programs against fpc
+make test       # 204 checks, covering 35 Pascal programs against fpc
                 #   and every Solveig program in a checkout, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 195 of the 199 need only what is vendored here, and it is worth
-being exact about the other four, because they surface as **two** skipped lines
-rather than four. One drives `fpc`. Three drive `solas` and `solvm` over a
+repository** — 199 of the 204 need only what is vendored here, and it is worth
+being exact about the other five, because they surface as **three** skipped
+lines rather than five. One drives `fpc`. Three drive `solas` and `solvm` over a
 checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are
-guarded together, so a machine without it prints one line for all three. Each
-reports itself skipped rather than failing, and a run with neither tool present
-is 195 passed, 0 failed and 4 skipped. The assembler is in the 195: its
+guarded together, so a machine without it prints one line for all three. One
+assembles the Z80 fixtures with `z80asm` and compares the bytes. Each reports
+itself skipped rather than failing, and a run with none of the three present is
+199 passed, 0 failed and 5 skipped. The SolVM assembler is in the 199: its
 programs are held against the bytes they assembled to last time, so it is
 tested without SolVM and held *against* SolVM when there is one.
 

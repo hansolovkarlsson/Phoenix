@@ -1,0 +1,6 @@
+; a backward conditional jump, and the label is above its use.
+        ld a, 5
+loop:   dec a
+        cp 0
+        jp nz, loop
+        halt

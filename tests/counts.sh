@@ -52,7 +52,7 @@ nodes_of() {
 # ---------------------------------------------------------------------------
 # COMPLETED.md's languages table, a row at a time.
 
-for d in pascal solveig awk solvm calc phx; do
+for d in pascal solveig awk solvm calc z80 phx; do
     row=$(grep -F "(../languages/$d/)" docs/COMPLETED.md | grep -F '| ' | head -1)
     if [ -z "$row" ]; then
         no "COMPLETED.md has a row for $d/"

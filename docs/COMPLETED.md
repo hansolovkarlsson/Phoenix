@@ -40,9 +40,10 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`awk/`](../languages/awk/) | 993 lines + a 682-line C runtime, 51 node types | POSIX awk: grammar, a call check, and a compiler to C. 6 programs that e2fsprogs, ncurses and vim ship compile and print what `/usr/bin/awk` prints |
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
 | [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
+| [`z80/`](../languages/z80/) | 190 lines, 14 node types | a Z80 subset and an assembler making raw bytes. Written to be the **control** for [2.5](#25-circular-attributes--from-jastadd): every instruction in it has one encoding and one length, so two passes are enough, and `jr` — whose length depends on a distance that depends on lengths — is deliberately absent. 4 programs assemble to the bytes `z80asm` makes, byte for byte |
 | [`phx/`](../languages/phx/) | 256 lines | the notation described in itself. It parses itself and every other description here |
 
-**Seven directories, six rows.** [`languages/units/`](../languages/units/) —
+**Eight directories, seven rows.** [`languages/units/`](../languages/units/) —
 229 lines, 11 node types, and two checks in the suite — is deliberately not
 here. It was written to answer a question rather than to be compiled: *do
 Pascal units need a scope graph?* The answer is under

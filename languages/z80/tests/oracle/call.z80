@@ -1,0 +1,9 @@
+; a call forward, a call backward, and arithmetic between them.
+start:  ld a, 1
+        call twice
+        call twice
+        jp done
+twice:  add a, 3
+        sub 1
+        ret
+done:   jp start
