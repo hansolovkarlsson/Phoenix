@@ -93,6 +93,9 @@ warns   "an attribute with a field's name" "is already a field of" \
         "$root/tests/grammars/attribute-shadows-field.phx"
 refuses "a field of a threaded attribute's name" "does not pass through here" \
         "$root/tests/grammars/thread-shadowed.phx"
+refuses "a thread declared below the rules that update it" \
+        "declared a thread further down this pass" \
+        "$root/tests/grammars/thread-declared-late.phx"
 warns   "a field of an inherited attribute's name" "cannot read" \
         "$root/tests/grammars/down-shadowed.phx"
 refuses "an inherited clause reading its own rule's work" \

@@ -4215,3 +4215,55 @@ count turned that failing check into a passing one and the total became 207.
 **The number of checks a red run reports is not the number a green one will.**
 The check that holds the records to the total is the thing that caught it, one
 command later, which is the third time today it has paid for itself.
+### The wart, fixed in the other file
+
+The sweep the standup asked for, and it went somewhere else than the standup
+said. The prediction was *the end of `read_one_pass` in `pass.c`*, which is
+where the classification happens and is the obvious place. It is wrong for one
+reason: **a pass is only whole once every `%import` has been read.** A rule in
+one module and the `thread` in another is the same defect, and a check running
+at the end of each file would not see it. So it is in `check.c`, next to the
+shadowed thread it is a family with, where the grammar is assembled.
+
+A `C_SYNTH` clause whose name the pass declares as a thread can only have been
+read before the declaration — anything after it was classified `C_THREAD` on
+the way in — so the test is one comparison and needs no new bookkeeping. The
+`otherwise` clauses needed a second loop, because `check_clause_order` walks
+the rules and a default is not one.
+
+    error: 'seen' is declared a thread further down this pass, so this clause
+           is an ordinary attribute and not an update -- the thread reaches
+           every node with the value it started at
+    phx: move `thread seen = ...` above the rules that update it
+
+Pinned now, which it deliberately was not four hours ago:
+`tests/grammars/thread-declared-late.phx`. The difference is the direction of
+the assertion. This morning the only test possible would have asserted **0**,
+the wrong answer, which is what `spaced-regex.awk` did and what took four hours
+to notice. A `refuses` asserts the complaint, and a complaint cannot be
+satisfied by the defect coming back.
+
+### What actually found it, which was not a test
+
+Worth its own paragraph because it is a kind of finder this repository has not
+recorded before, and it is the cheapest one in it.
+
+The z80 description has two backends — the bytes and a listing — and the
+listing exists only because `z80asm` cannot be handed a `br`. Neither is a
+test. What found the defect is that **one of them says out loud what the other
+encodes**: `jp top` where `jr top` was expected, in a five-line program. The
+bytes were a correct jump. They would have stayed correct forever, three bytes
+at a time, and the oracle would have agreed with them every run — because the
+oracle is handed the listing, and the listing was wrong in exactly the same
+way.
+
+> A second backend is not redundancy. It is the same tree said twice, and the
+> two ways of saying it fail differently.
+
+`calc/` has been making that argument since its awk backend shipped, about
+arithmetic. This is the same argument arriving from a direction nobody aimed
+at, which is the better kind of confirmation.
+
+*And the tool grew by 64 lines*, so `COMPLETED.md`, `lineage.md` and
+`postmortem.md` all wanted the new number and `counts.sh` said so before the
+commit existed. Third time today.

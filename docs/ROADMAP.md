@@ -481,9 +481,10 @@ that, written down. It is a different absence from
 notation says *no* to on purpose, and this is a thing nothing has yet made a
 case for.
 
-**A `thread` declared after the rules that assign it is silently not a
-thread.** Found on 2026-09-05, by `languages/z80/`'s `seen` table answering
-`empty` at every node. The clauses are classified as they are read —
+*A `thread` declared after the rules that assign it was silently not a thread,
+and is now refused.* Kept here because the shape is worth having written down.
+Found on 2026-09-05, by `languages/z80/`'s `seen` table answering `empty` at
+every node. The clauses are classified as they are read —
 `pass.c`'s `is_thread` is consulted at that moment — so a rule written above
 the declaration gets an ordinary synthesised attribute, and a rule below it
 gets the thread. Two different attributes, one name, and **no diagnostic**:
@@ -493,13 +494,17 @@ gets the thread. Two different attributes, one name, and **no diagnostic**:
       thread seen = 0                Num  : seen = $seen + 1 .
       Prog : total = $seen .         Prog : total = $seen .
 
-The same three digits give **0** on the left and **3** on the right. The
+The same three digits gave **0** on the left and **3** on the right. The
 comment in `pass.c` states the requirement — *declared before the clauses that
-update it* — so the reader is doing what it says it does; what is missing is
-the complaint when a description does not. This is the same family as the
-shadowed thread below, which **is** an error, and it should be one too: the
-fix is a sweep at the end of the pass, refusing a synthesised clause whose name
-is declared a thread further down.
+update it* — so the reader was doing what it said it did; what was missing was
+the complaint when a description does not.
+
+**It is an error now**, in `check.c` beside the shadowed thread it is a family
+with, and `otherwise` is covered as well as the rules. It went there rather
+than into `pass.c`, where the classification happens, because a pass is only
+whole once every `%import` has been read — a rule in one module and the
+`thread` in another is the same defect and would have slipped a check that ran
+per file. `tests/grammars/thread-declared-late.phx` is the witness.
 
 **A field can shadow an attribute handed down.** A field is read before an
 attribute, so a `down` clause naming one of its own node's fields hands a value

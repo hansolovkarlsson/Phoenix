@@ -13,7 +13,7 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **8,712 lines** hand-written.
+C11, no dependencies, **8,776 lines** hand-written.
 
 The figure usually quoted is ~12,900, and both are right about different
 things: `phoenix/` also holds `runtime.h`, 4,231 generated lines which are the
@@ -298,7 +298,7 @@ implementations appear.
 *Measuring it a fourth time also found a defect in the measuring* —
 `bench/run.sh` could not report a failed run, and two numbers in
 [performance.md](performance.md) had been parsed out of an error message. See
-the last row of *Defects found* below.
+the benchmark row of *Defects found* below.
 
 ### 2.1 Reference attributes — from JastAdd
 
@@ -375,8 +375,8 @@ Pascal units are not it.
 ## Defects found, and what found them
 
 Every one of these was found by a test comparing Phoenix against something
-outside it. None was found by reading the code — though the last row widens
-what *outside it* has meant, and the entry after the table says how.
+outside it. None was found by reading the code — though the last two rows
+widen what *outside it* has meant, and the entries after the table say how.
 
 | | |
 | --- | --- |
@@ -389,17 +389,18 @@ what *outside it* has meant, and the entry after the table says how.
 | `for (;;)` would not parse | the rule for "newlines or semicolons between two things" was eating a `for` header's own semicolons |
 | **the benchmark could not report a failure** | `bench/run.sh` never checked `phx`'s exit status, and `--stats` writes to the same stream as a diagnosis — so a failed run was parsed out of the error text and printed as a measurement. Two numbers in [performance.md](performance.md) came from it. Found by re-running a measurement that had been called settled |
 | **a syntax error named a token that was legal** | `parse_run` reported a leftover-input failure at the first token left over while keeping the *expected* list recorded wherever the match had really got stuck. `print a +;` blamed the `print`. A start rule that is a repetition never fails outright, so **every** syntax error in every language here took that path. Found by [reference.md](reference.md) disagreeing with the program |
+| **a `thread` declared below its updates was not a thread** | clauses are classified as they are read, so a rule above the declaration got an ordinary synthesised attribute and one below it got the thread — two attributes of one name, and the thread reached every node with the value it started at. **No diagnostic.** Found by [`languages/z80/`](../languages/z80/)'s *second backend*: the listing printed `jp` for a backward jump that `jr` reaches |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.
 [journal.md](journal.md) records that three times, in two languages.
 
-The row before last is the same rule about the *instrument* rather than the
+The benchmark row is the same rule about the *instrument* rather than the
 subject: a harness that cannot report failure reports something else, and a
 number nobody can reproduce is where that hides.
 
-**And the last row is a fourth kind of finder, which is why the claim above it
-is hedged.** Nothing outside this project was consulted and no test failed. The
+**The syntax-error row is a fourth kind of finder, which is why the claim
+above it is hedged.** Nothing outside this project was consulted and no test failed. The
 thing Phoenix was compared against was **its own reference manual**, which said
 the position reported is the one the match got furthest — and a two-line
 experiment said otherwise. The code was then read to find out which was right,
@@ -412,6 +413,17 @@ five-minute test can disagree with, which is the same property
 
 > A specification nothing runs is a document about a program. A specification
 > precise enough to be *wrong* is a test nobody has written yet.
+
+**And the last row is a fifth kind, which is the cheapest of them.** The z80
+description has two backends — bytes and a listing — and both were built
+because `z80asm` cannot be handed a `br`. Neither is a test. What found the
+defect is that one of them **says out loud what the other encodes**: `jp top`
+where `jr top` was expected, in a program short enough to read. The bytes were
+a correct jump and would have stayed correct forever, three bytes at a time.
+
+That is the argument `calc/` already makes for keeping a second backend, met in
+a place it was not being made for. A second view of one tree is not redundancy;
+it is the cheapest instrument in this repository.
 
 **A test was holding the defect in place**, and that is worth its own line
 because it looked like the opposite. `languages/awk/tests/divergent/spaced-regex.awk`

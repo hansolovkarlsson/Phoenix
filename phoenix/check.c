@@ -550,6 +550,13 @@ static bool type_has_field(const char *type, const char *field)
     return false;
 }
 
+static bool pass_declares_thread(const Pass *p, const char *name)
+{
+    for (int i = 0; i < p->nthreads; i++)
+        if (strcmp(p->threads[i], name) == 0) return true;
+    return false;
+}
+
 static void check_clause_order(Check *c)
 {
     Grammar *g = c->g;
@@ -565,6 +572,35 @@ static void check_clause_order(Check *c)
             for (int a = 0; a < rule->nclauses; a++) {
                 const Clause *def = &rule->clauses[a];
                 if (!def->attr) continue;
+
+                /* 0. A `thread` declared **below** the rules that update it.
+                 *
+                 * Clauses are classified as they are read -- `pass.c` asks
+                 * `is_thread` at that moment -- so a rule above the
+                 * declaration gets an ordinary synthesised attribute and one
+                 * below it gets the thread. Two attributes, one name, and the
+                 * thread arrives at every node with its starting value.
+                 *
+                 * It was silent until a description met it: `languages/z80/`
+                 * threads the labels it has passed so that a backward `br` can
+                 * take the two-byte form, the declaration sat under the rule
+                 * that fills it, and the table was empty everywhere. The long
+                 * form is a correct jump, so nothing looked wrong.
+                 *
+                 * A clause naming a thread declared *earlier* is already
+                 * C_THREAD, so a C_SYNTH that names one can only be this. */
+                if (def->kind == C_SYNTH
+                    && pass_declares_thread(pass, def->attr)) {
+                    diag_error(&g->src, def->pos,
+                               "'%s' is declared a thread further down this "
+                               "pass, so this clause is an ordinary attribute "
+                               "and not an update -- the thread reaches every "
+                               "node with the value it started at",
+                               def->attr);
+                    diag_note("move `thread %s = ...` above the rules that "
+                              "update it", def->attr);
+                    c->ok = false;
+                }
 
                 /* 1a. A **threaded** attribute with a field's name is the
                  * sharper version of the same hazard, and it was silent until
@@ -632,6 +668,33 @@ static void check_clause_order(Check *c)
                     c->ok = false;
                 }
             }
+        }
+    }
+}
+
+/* The same question for `otherwise`, which the loop above does not reach: it
+ * walks the rules, and a default is not one. */
+static void check_default_threads(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *pass = &g->passes[i];
+
+        for (int d = 0; d < pass->ndefaults; d++) {
+            const Clause *def = &pass->defaults[d];
+            if (!def->attr) continue;
+            if (def->kind != C_SYNTH) continue;
+            if (!pass_declares_thread(pass, def->attr)) continue;
+
+            diag_error(&g->src, def->pos,
+                       "'%s' is declared a thread further down this pass, so "
+                       "this default is an ordinary attribute and not an "
+                       "update -- the thread reaches every node with the value "
+                       "it started at", def->attr);
+            diag_note("move `thread %s = ...` above the clauses that update it",
+                      def->attr);
+            c->ok = false;
         }
     }
 }
@@ -1261,6 +1324,7 @@ bool grammar_check(Grammar *g)
 
     check_reachable(&c);
     check_clause_order(&c);
+    check_default_threads(&c);
     check_drivers(&c);
     check_include(&c);
     check_position_name(&c);

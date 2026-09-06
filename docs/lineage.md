@@ -120,7 +120,7 @@ transformation.
 **Not novel in its ideas.** Every mechanism above has a name and a literature.
 What is distinctive is the combination:
 
-- **8,712 lines of C11 against the C standard library and nothing else.** The
+- **8,776 lines of C11 against the C standard library and nothing else.** The
   point is not the language — Eli is a C-based system too — it is the footprint:
   Eli and Spoofax are *systems*, with toolchains and generators and editors.
   Phoenix is one binary and a `lib/` directory. That buys much less and costs

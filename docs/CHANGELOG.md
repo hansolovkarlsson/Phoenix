@@ -87,7 +87,14 @@ assembles the same four programs and the two binaries are compared whole —
 where Pascal and Solveig agree about what a program *prints*, and a
 consistently wrong translation can survive that.
 
-**Tests:** 189 → 207. Eighteen new ones: six for the calc backend; one for `<>`
+**A thread declared below the rules that update it is refused.** It used to be
+silent, and silence there is a wrong answer rather than a missing one: clauses
+are classified as they are read, so the rule above the declaration got an
+ordinary attribute and the rule below it got the thread, and the thread reached
+every node with the value it started at. The message names the fix, and
+`otherwise` is covered as well as the rules.
+
+**Tests:** 189 → 208. Nineteen new ones: six for the calc backend; one for `<>`
 and `or`, whose clauses no calc program had ever reached; one holding the
 records' own counts against the tree; and two for a claim `reference.md` had
 made since `%rewrite` shipped and nothing had run — **a node built by a rewrite
@@ -95,7 +102,8 @@ keeps the position of the node it replaced**, so a diagnostic from a later pass
 points at the program rather than at the rule. And seven for the Z80 subset: one
 that it reads, four refusals — an undefined label, one name at two addresses,
 an immediate that does not fit its byte, a hand-written `jr` that does not
-reach — the two pinned divergences, and the oracle. The calc
+reach — the two pinned divergences, and the oracle. And one for the defect
+below. The calc
 backend's tests need `awk` to run what it emits, in the same role `cc` already
 plays for the C backend; the Makefile requires both to build `phx` at all. The
 Z80 oracle needs `z80asm`, and skips without it.

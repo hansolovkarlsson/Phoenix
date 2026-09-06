@@ -1,0 +1,30 @@
+(* A `thread` declared below the rules that update it.
+ *
+ * Clauses are classified as they are read, so the rule above the declaration
+ * gets an ordinary synthesised attribute and one below it gets the thread.
+ * Two attributes of one name, and the thread arrives at every node with the
+ * value it started at.
+ *
+ * It was silent until a description met it: `languages/z80/` threads the
+ * labels it has already passed so that a backward `br` can take the two-byte
+ * relative form, the declaration sat under the rule that fills the table, and
+ * the table was empty at every node. Every `br` took the three-byte absolute
+ * form, which is a **correct jump** -- so the program ran, the bytes agreed
+ * with the assembler that was handed the same choice, and nothing looked
+ * wrong. Move the one line and the same file answers differently.
+ *)
+%fragment digit .
+digit = "0" .. "9" .
+space = " " { " " } .
+%skip space .
+
+%syntax .
+%start prog .
+prog = { n:digit -> Num(text: $n) } -> Prog(items: $1) .
+
+%pass p
+  Num  : seen = $seen + 1 .
+  thread seen = 0
+  Prog : total = $seen .
+
+%driver d = p -> total .
