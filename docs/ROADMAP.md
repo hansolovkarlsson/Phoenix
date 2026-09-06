@@ -33,8 +33,10 @@ than as work; what changed is [lineage.md](lineage.md) naming the prior art, so
 each is now *somebody's solved problem* rather than an open question.
 
 The rest of the page is section 3, what this project has decided **not** to
-have and why; section 4, what a description is checked for; and section 5, the
-warts it knows about.
+have and why; section 4, what a description is checked for; section 5, the
+warts it knows about; and section 6, **a C compiler** — the one arc here that
+is a language rather than a mechanism, opened 2026-09-06 with its first step
+named and the rest deliberately not.
 
 ---
 
@@ -578,3 +580,85 @@ because awk's own lexer asks the parser and Phoenix's scanner cannot — see
 business rather than the tool's, and the difference is that a description can
 write the guess down, test the shapes it gets wrong, and render them back
 visibly. `languages/awk/tests/divergent/` holds all three.
+
+---
+
+## 6. A C compiler
+
+**Why this page has a language on it.** Every other entry here is a mechanism
+the notation lacks, and a language arrives in `languages/` to test one. This
+entry is the other way round: the language is the goal and the mechanisms it
+turns out to need are the findings. The goal is the workspace's, not only this
+repository's — [`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md)
+records the intent that **every tool of a C toolchain eventually exist in the
+workspace**, says what the stages are, and says why Phoenix is the one to
+start from: its passes with `thread`, `down` and environments already carried
+a Pascal typechecker, and the three things a C compiler needs that no tool
+here has — a preprocessor, typedef feedback into the parse, a back end that
+reaches a machine — are outside the grammar, not a stronger grammar. That
+document has the order of the whole arc. This entry has the first step, and
+copies nothing else from it.
+
+**What Phoenix cannot say today, so that the step is honest about what it
+avoids.**
+
+| | |
+| --- | --- |
+| `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second — with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool |
+| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
+| a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
+
+### 6.1 Step one — a subset that runs, and `cc` as its oracle
+
+`languages/c/`, in the shape [`languages/README.md`](../languages/README.md)
+prescribes: `c.phx` holds the grammar, the tree and the symbols and has no
+opinion about a target; `c-arm64.phx` imports it and adds one emit pass. The
+target is **arm64 assembly text**, assembled and linked by `cc`, because that
+is the machine under this repository and because borrowing the assembler and
+linker is what every C compiler except tcc does.
+
+**The emit pass is a stack machine.** Every expression leaves its value in
+`x0`, every operand is pushed and popped, every local lives in the frame at an
+offset the symbol pass assigned, and there is no register allocator. That is
+chibicc's and tcc's shape, it is what `examples/asm.mx` in Metaxis sketched for
+a smaller subset, and it is the route the workspace document names first. The
+output is slow and correct, and slow is not a divergence.
+
+**The subset grows in chibicc's order**, one construct at a time with the
+suite green at each: `int main(){return 42;}`; then `+ - * /` and
+parentheses; unary minus and comparison; a local `int`; `;`-separated
+statements and `return`; `if`, `while`, `for`; blocks; a function with
+parameters and a call under the arm64 calling convention; `&` and `*`; arrays
+and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`
+on purpose — that is where the tool needs a change, and the change should
+arrive with the construct that wants it and not before.
+
+**The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
+awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
+once through Phoenix's output through `cc` — and their standard output and
+exit status compared. Nothing in this arc has a hand-written expected result.
+`tests/refused/` holds what must not compile, with the message, once the
+subset has anything to refuse. There is no vendored grammar and no need of one:
+the subset is described directly, and the C11 grammar in Annex A is what to
+check the description's *shape* against when it is large enough to matter.
+
+**What it borrows, written down so the borrowing is visible**: `cc -E` for
+anything with a `#` in it, which the first dozen constructs do not need; `cc`
+to assemble and link; the system libc, reached through a `printf` declared in
+the program rather than included, until the preprocessor exists.
+
+*The predictions, for [postmortem.md](postmortem.md) to score.* One: the
+subset reaches `struct` with **no change to the tool** — `%import`, the symbol
+pass, `thread` for frame offsets and one emit pass are enough. Two: the first
+change the tool needs is the typedef predicate, and it is wanted at `typedef`
+and not before. Three: the arm64 calling convention costs more than any
+construct before it, because it is the first place the emit pass has to know
+something the tree does not say. Each of these can be wrong in a way the
+journal would record.
+
+*The condition for the next step* is the first: a subset through `struct`
+whose oracle tests pass. Steps two to seven live in the workspace document and
+are not repeated here; the one that comes back to this page is the predicate,
+which will be an entry under section 1 with the failure written down first, as
+this page requires.
+
