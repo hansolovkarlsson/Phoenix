@@ -1381,6 +1381,27 @@ refuses "one label at two addresses" "two labels have the same name" \
         "$root/languages/z80/z80.phx" "$z/twice.z80"
 refuses "an immediate that does not fit its byte" "at most 255, and this is 300" \
         "$root/languages/z80/z80.phx" "$z/wide.z80"
+refuses "a jr the programmer wrote that does not reach" "'far' is 130 away" \
+        "$root/languages/z80/z80.phx" "$z/unreachable.z80"
+
+# **The two divergences, pinned rather than found.** `br` picks its own
+# encoding, and this description picks it in one walk -- so a backward target
+# is decided exactly and a forward one is assumed long, because assuming short
+# and being wrong emits a jump to somewhere else. That is correct and it is not
+# minimal, and ROADMAP 2.5 is the gap. A change to either answer shows up here
+# with the old one in it.
+v="$root/languages/z80/divergent"
+prints "a forward br takes three bytes where two would do" \
+"        jp done
+        nop
+done:
+        halt" --driver listing "$root/languages/z80/z80.phx" "$v/short-forward.z80"
+# 131 rather than 129, and the two bytes are the entry. Shrinking the forward
+# `br` is what brings the backward one into range, and shrinking the backward
+# one is what makes the forward one worth shrinking -- so it is a fixpoint and
+# not one more walk. The arithmetic is in the file, countable by hand.
+prints "and a chain of them settles two bytes above the minimum" "131" \
+       --run layout --show size "$root/languages/z80/z80.phx" "$v/chain.z80"
 if command -v z80asm >/dev/null 2>&1; then
     if za=$("$root/languages/z80/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$za" | grep -c '^  ok')

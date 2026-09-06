@@ -1,0 +1,10 @@
+; `br` in both directions -- the pseudo-instruction that picks its own
+; encoding. Backward, one walk knows the distance and takes the two-byte form;
+; forward, it does not and takes the three-byte one. z80asm has no `br`, so
+; what it assembles is this description's own listing, with the choice made.
+top:    ld a, 1
+        dec a
+        br top
+        br out
+        nop
+out:    halt

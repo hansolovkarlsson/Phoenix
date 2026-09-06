@@ -15,25 +15,27 @@
  * further branch into range. The sizes have to be iterated until they stop
  * changing.
  *
- * **`jr` is deliberately absent from this file.** Every instruction here has
- * one encoding and one length, which is what makes the two passes below
- * enough -- the same two `languages/solvm/` uses, and for the same reason. Its
- * comment says it best: a jump names a label, and a label is very often below
- * the jump.
+ * **`jr` is here, and `br` is what it costs.** A relative jump is two bytes
+ * and an absolute one is three, so an assembler that picks between them for
+ * you has a size that depends on a distance that depends on sizes. `br` is
+ * that pseudo-instruction, and this description **cannot decide it**: `layout`
+ * makes one walk, so a *backward* target's address is known and a forward
+ * one's is not. What it does instead is written under the pass, and the
+ * witnesses are in [`divergent/`](divergent/).
  *
- * This half is the control. If a subset with no choice of encoding does *not*
- * agree with `z80asm` byte for byte, the fault is here and not in the notation
- * -- and that has to be settled before `jr` is added and the notation is asked
- * for something it may not have.
+ * The finding, in one line: **the notation can check a relative jump and
+ * cannot choose one.** `jr` written by hand is verified against the label
+ * table in the second walk, where every address is known; `br` has to have its
+ * size settled in the first, where they are not.
  *
  * ---------------------------------------------------------------------------
  * The subset, and what is outside it
  *
  * Immediate loads into the eight-bit registers, the three immediate
  * arithmetic instructions that take `a`, `inc`, `dec`, the absolute jumps and
- * calls, and the three instructions that are one byte on their own. No index
- * registers, no sixteen-bit arithmetic, no `ld` between two registers, and no
- * relative jumps.
+ * calls, the relative jumps, `br`, and the three instructions that are one
+ * byte on their own. No index registers, no sixteen-bit arithmetic and no `ld`
+ * between two registers.
  *
  * Numbers are decimal. The assembly starts at address 0, which is `z80asm`'s
  * default with no `org`, and there is no `org` here to disagree with it.
@@ -79,6 +81,9 @@ instruction =
   | "dec"  r:reg               -> Dec(reg: $r)
   | "jp"   c:cond "," t:word   -> JpCond(cond: $c, target: $t)
   | "jp"   t:word              -> Jp(target: $t)
+  | "jr"   c:cond "," t:word   -> JrCond(cond: $c, target: $t)
+  | "jr"   t:word              -> Jr(target: $t)
+  | "br"   t:word              -> Br(target: $t)
   | "call" t:word              -> Call(target: $t)
   | "ret"                      -> Ret
   | "nop"                      -> Nop
@@ -91,16 +96,22 @@ instruction =
  * number is all any of them needs. It is a string because that is what an
  * action builds; `int` takes it back.
  *
- * This is `solveig.phx`'s `relation = "<=" -> "lessOrEqual"` in a language
- * whose vocabulary happens to be numeric. *)
-reg = "b" -> "0" | "c" -> "1" | "d" -> "2" | "e" -> "3"
-    | "h" -> "4" | "l" -> "5" | "a" -> "7" .
+ * A node rather than the number alone, because there are two backends now and
+ * the listing has to write the letter back out. That is the ordinary reason
+ * this repository keeps a second backend: one of them alone can throw away
+ * something the description should have kept. *)
+reg = "b" -> Reg(name: "b", code: "0") | "c" -> Reg(name: "c", code: "1")
+    | "d" -> Reg(name: "d", code: "2") | "e" -> Reg(name: "e", code: "3")
+    | "h" -> Reg(name: "h", code: "4") | "l" -> Reg(name: "l", code: "5")
+    | "a" -> Reg(name: "a", code: "7") .
 
 (* A condition is its whole opcode rather than a field of one, because the
  * four conditional jumps are four unrelated bytes and not a base plus an
  * index: 0xC2, 0xCA, 0xD2, 0xDA. *)
-cond = "nz" -> "194" | "z"  -> "202"
-     | "nc" -> "210" | "c"  -> "218" .
+cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
+     | "z"  -> Cond(name: "z",  jp: "202", jr: "40")
+     | "nc" -> Cond(name: "nc", jp: "210", jr: "48")
+     | "c"  -> Cond(name: "c",  jp: "218", jr: "56") .
 
 (* ------------------------------------------------------------------ *)
 (* Pass one: where does everything sit?                               *)
@@ -108,6 +119,10 @@ cond = "nz" -> "194" | "z"  -> "202"
 %pass layout
 
   thread pc = 0
+
+  (* The labels **already met**, which is every backward target and no forward
+   * one. A thread, because that is what *what has been passed* is. *)
+  thread seen = empty
 
   (* One byte. *)
   Nop  : pc = $pc + 1 .
@@ -137,13 +152,50 @@ cond = "nz" -> "194" | "z"  -> "202"
   JpCond : pc = $pc + 3 .
   Call   : pc = $pc + 3 .
 
-  (* The one item that occupies no space and is the reason for two passes. *)
-  Label : entry = [[$name, $pc]] : lname = [$name] .
+  (* An opcode and a signed displacement. Whether the target is *reachable*
+   * is not asked here -- that is a distance, and the pass that has every
+   * address is the next one. What is fixed here is only the size, and a `jr`
+   * the programmer wrote has one whether it reaches or not. *)
+  Jr     : addr = $pc : pc = $pc + 2 .
+  JrCond : addr = $pc : pc = $pc + 2 .
+
+  (* ---- `br`, which is the entry ----
+   *
+   * Two bytes if the target is within reach of a relative jump and three if
+   * it is not -- so the size of this instruction depends on a distance, and
+   * every distance past it depends on this size.
+   *
+   * `seen` is what one walk can offer: the labels **already met**, which is
+   * every backward target and no forward one. So a backward `br` is decided
+   * exactly, and a forward `br` is assumed long, because assuming short and
+   * being wrong emits a jump that goes somewhere else.
+   *
+   * **That is correct and it is not minimal**, and the gap is the roadmap
+   * entry. `divergent/short-forward.z80` is three bytes where two would do;
+   * `divergent/chain.z80` is the case a second walk would not fix either,
+   * because shrinking one `br` is what brings the next into range. The answer
+   * is to iterate until the sizes stop changing, and there is nothing in this
+   * notation that iterates over a table.
+   *)
+  Br : addr  = $pc
+     : known = defined($seen, $target)
+     : back  = lookup($seen, $target, 0) - ($pc + 2)
+     : short = $known and $back >= -128
+     : pc    = $pc + lookup([[true, 2]], $short, 3) .
+
+  (* The one item that occupies no space and is the reason for two passes.
+   * `seen` is a thread and `entry` is not, which is the whole difference
+   * between the two questions: a thread answers *what has been passed*, and
+   * the table handed back down answers *what is there*. `br` can only ask the
+   * first. *)
+  Label : entry = [[$name, $pc]] : lname = [$name]
+        : seen  = bind($seen, $name, $pc) .
 
   otherwise entry = []
   otherwise lname = []
 
   Program : labels = flatten($items.entry)
+          : size   = $pc
           ! size($items) = 0 : "there is nothing here to assemble"
           ! size(positions(flatten($items.lname))) < size(flatten($items.lname))
               : "two labels have the same name"
@@ -151,7 +203,25 @@ cond = "nz" -> "194" | "z"  -> "202"
               : "the assembly is {} bytes, and an address is two" of $pc .
 
 (* ------------------------------------------------------------------ *)
-(* Pass two: the bytes.                                               *)
+(* Pass two: how far is it?                                           *)
+(*                                                                     *)
+(* A pass of its own, and the tool asked for it. A check runs *before*  *)
+(* the attributes it guard, so a rule cannot both compute `disp` and    *)
+(* complain about it -- `phx` refuses that with the fix in the message: *)
+(* write the expression out here, or compute it in an earlier pass.     *)
+(* Writing it out means three copies of one subtraction in six places,  *)
+(* so it is a pass, and `code` below reads the answer.                  *)
+
+%pass reach
+
+  Program : down table = $labels .
+
+  Jr     : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
+  JrCond : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
+  Br     : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
+
+(* ------------------------------------------------------------------ *)
+(* Pass three: the bytes.                                             *)
 
 %pass code
 
@@ -162,9 +232,9 @@ cond = "nz" -> "194" | "z"  -> "202"
   Halt : out = bytes(118, 1) .
   Ret  : out = bytes(201, 1) .
 
-  LdImm : out = join([bytes(6 + 8 * int($reg), 1), bytes(int($value), 1)]) .
-  Inc   : out = bytes(4 + 8 * int($reg), 1) .
-  Dec   : out = bytes(5 + 8 * int($reg), 1) .
+  LdImm : out = join([bytes(6 + 8 * int($reg.code), 1), bytes(int($value), 1)]) .
+  Inc   : out = bytes(4 + 8 * int($reg.code), 1) .
+  Dec   : out = bytes(5 + 8 * int($reg.code), 1) .
 
   AddImm : out = join([bytes(198, 1), bytes(int($value), 1)]) .
   SubImm : out = join([bytes(214, 1), bytes(int($value), 1)]) .
@@ -176,10 +246,38 @@ cond = "nz" -> "194" | "z"  -> "202"
   Jp     : out = join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)])
          ! not defined($table, $target)
              : "no label called '{}'" of $target .
-  JpCond : out = join([bytes(int($cond), 1),
+  JpCond : out = join([bytes(int($cond.jp), 1),
                        bytes(lookup($table, $target, 0), 2)])
          ! not defined($table, $target)
              : "no label called '{}'" of $target .
+
+  (* ---- the relative jumps ----
+   *
+   * A displacement is counted from the byte **after** the instruction and is
+   * signed, so `mod 256` is what writes it: -2 is 0xFE. Every address is known
+   * in this walk, which is why the reach can be checked here and the size
+   * could not be decided in the last one.
+   *)
+  Jr : out = join([bytes(24, 1), bytes($disp mod 256, 1)])
+     ! not defined($table, $target)
+         : "no label called '{}'" of $target
+     ! defined($table, $target) and ($disp < -128 or $disp > 127)
+         : "'{}' is {} away, and a jr reaches 127" of $target, $disp .
+
+  JrCond : out = join([bytes(int($cond.jr), 1), bytes($disp mod 256, 1)])
+         ! not defined($table, $target)
+             : "no label called '{}'" of $target
+         ! defined($table, $target) and ($disp < -128 or $disp > 127)
+             : "'{}' is {} away, and a jr reaches 127" of $target, $disp .
+
+  (* `short` was decided in `layout` and is read back here, so the two walks
+   * cannot disagree about how many bytes this is. *)
+  Br : out = lookup([[true, join([bytes(24, 1), bytes($disp mod 256, 1)])]],
+                    $short,
+                    join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)]))
+     ! not defined($table, $target)
+         : "no label called '{}'" of $target .
+
   Call   : out = join([bytes(205, 1), bytes(lookup($table, $target, 0), 2)])
          ! not defined($table, $target)
              : "no label called '{}'" of $target .
@@ -187,4 +285,42 @@ cond = "nz" -> "194" | "z"  -> "202"
   (* A label is where the bytes after it are, and none of its own. *)
   otherwise out = ""
 
-%driver code = layout, code -> out .
+(* ------------------------------------------------------------------ *)
+(* The same tree as assembly, with every `br` resolved.                *)
+(*                                                                     *)
+(* This is what makes `br` checkable at all. `z80asm` has no `br`, so   *)
+(* the oracle cannot assemble the source this description was given --  *)
+(* it can assemble the source this description *decided on*, and the    *)
+(* bytes from the two routes have to be the same. A wrong displacement  *)
+(* or a wrong opcode shows up; a needlessly long encoding does not,     *)
+(* which is why the divergences are pinned separately.                  *)
+
+%pass listing
+
+  Program : out = join($items.out, "\n") .
+
+  Label : out = "{}:" of $name .
+  Nop   : out = "        nop" .
+  Halt  : out = "        halt" .
+  Ret   : out = "        ret" .
+
+  LdImm : out = "        ld {}, {}" of $reg.name, $value .
+  Inc   : out = "        inc {}" of $reg.name .
+  Dec   : out = "        dec {}" of $reg.name .
+
+  AddImm : out = "        add a, {}" of $value .
+  SubImm : out = "        sub {}" of $value .
+  CpImm  : out = "        cp {}" of $value .
+
+  Jp     : out = "        jp {}" of $target .
+  JpCond : out = "        jp {}, {}" of $cond.name, $target .
+  Jr     : out = "        jr {}" of $target .
+  JrCond : out = "        jr {}, {}" of $cond.name, $target .
+  Call   : out = "        call {}" of $target .
+
+  (* The decision, written out. *)
+  Br : out = lookup([[true, "        jr {}" of $target]], $short,
+                    "        jp {}" of $target) .
+
+%driver code    = layout, reach, code -> out .
+%driver listing = layout, listing -> out .

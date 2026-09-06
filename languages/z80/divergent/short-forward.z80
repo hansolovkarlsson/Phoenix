@@ -1,0 +1,11 @@
+; A forward `br` one byte from its target.
+;
+; `jr` reaches it with room to spare, and this description emits `jp`: three
+; bytes where two would do. The walk that fixes the size has not met `done`
+; yet, and guessing short and being wrong emits a jump to somewhere else.
+;
+; This is the small half of the divergence. `chain.z80` is the half that says
+; why a second walk is not the answer either.
+        br done
+        nop
+done:   halt

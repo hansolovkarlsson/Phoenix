@@ -148,13 +148,43 @@ rather than a diagnostic nobody asked for, and
 [`languages/solvm/`](../languages/solvm/) has already paid for everything an
 assembler costs here *except* that. `z80asm` assembles the same source for a
 byte-for-byte oracle, in the class of `fpc` and `solas` — present, or the test
-skips. **The control half is built** — [`languages/z80/`](../languages/z80/),
-190 lines, four programs agreeing with `z80asm` byte for byte — and it needed
-nothing the notation does not have, which is what a control is for. What
-remains is `jr`, and it is the whole entry: the moment an instruction's length
-depends on a distance that depends on lengths, `layout`'s single walk cannot
-answer, and the failure goes into `languages/z80/divergent/` next to the two in
-`units/`.
+skips.
+
+**The customer arrived on 2026-09-05**, and this entry is no longer waiting for
+one. [`languages/z80/`](../languages/z80/) assembles a Z80 subset, and `br` is
+the pseudo-instruction that picks its own encoding: two bytes relative when the
+target is in reach, three absolute when it is not.
+
+*What one walk can do, and where it stops.* `layout` threads the labels it has
+**already met**, so a backward `br` is decided exactly — the address is known.
+A forward one is not, and guessing short and being wrong emits a jump to
+somewhere else, so it is assumed long. That is correct and it is not minimal,
+and the gap is written down twice:
+
+| | |
+| --- | --- |
+| [`divergent/short-forward.z80`](../languages/z80/divergent/short-forward.z80) | a forward `br` one byte from its target takes three bytes. The small half |
+| [`divergent/chain.z80`](../languages/z80/divergent/chain.z80) | **131 bytes where 129 is reachable**, and the arithmetic is in the file. Shrinking the forward `br` is what brings the backward one into range, and shrinking the backward one is what makes the forward one worth shrinking |
+
+`chain.z80` is the one that settles the shape of the mechanism. **A second walk
+would not fix it**: the first shrink is what makes the second possible, so the
+sizes have to be recomputed until they stop moving. That is a fixpoint over a
+table, which is [5](#5-known-warts)'s *there is no iteration over data* met by
+something a person notices — two wasted bytes, countable by hand, in a program
+the suite pins.
+
+*What is still missing is only the mechanism.* An attribute that starts at a
+bottom value and is re-evaluated until it stops changing, which is what
+Magnusson and Hedin added to JastAdd. The bottom value here is *every `br` is
+short*, the step is one `layout`, and the test is whether any size moved. Both
+halves of the problem are now in the repository: the analysis that wants it,
+and the walk it would iterate.
+
+*And the half the notation already does.* A `jr` the programmer wrote is
+checked against the label table in the pass that has every address —
+`refused/unreachable.z80` is 130 bytes away and says so. **The notation can
+check a relative jump and cannot choose one**, which is a sharper statement of
+what is absent than the entry had before.
 
 It does nothing for [1.7](#17-a-repetition-that-counts), and that is worth
 writing down so it is not looked for twice: a Z80 instruction's length comes
@@ -450,6 +480,26 @@ that, written down. It is a different absence from
 [3.5](#35-conditionals-in-the-meta-language): a conditional is a thing the
 notation says *no* to on purpose, and this is a thing nothing has yet made a
 case for.
+
+**A `thread` declared after the rules that assign it is silently not a
+thread.** Found on 2026-09-05, by `languages/z80/`'s `seen` table answering
+`empty` at every node. The clauses are classified as they are read —
+`pass.c`'s `is_thread` is consulted at that moment — so a rule written above
+the declaration gets an ordinary synthesised attribute, and a rule below it
+gets the thread. Two different attributes, one name, and **no diagnostic**:
+
+    %pass late                     %pass early
+      Num  : seen = $seen + 1 .      thread seen = 0
+      thread seen = 0                Num  : seen = $seen + 1 .
+      Prog : total = $seen .         Prog : total = $seen .
+
+The same three digits give **0** on the left and **3** on the right. The
+comment in `pass.c` states the requirement — *declared before the clauses that
+update it* — so the reader is doing what it says it does; what is missing is
+the complaint when a description does not. This is the same family as the
+shadowed thread below, which **is** an error, and it should be one too: the
+fix is a sweep at the end of the pass, refusing a synthesised clause whose name
+is declared a thread further down.
 
 **A field can shadow an attribute handed down.** A field is read before an
 attribute, so a `down` clause naming one of its own node's fields hands a value

@@ -1,0 +1,11 @@
+; explicit relative jumps, forward and backward. z80asm assembles these as
+; they stand, so the displacement arithmetic is held against it rather than
+; against anything written here.
+        ld a, 3
+back:   dec a
+        jr nz, back
+        jr on
+        nop
+on:     ld b, 1
+        jr c, back
+        halt

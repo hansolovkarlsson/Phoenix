@@ -4139,3 +4139,79 @@ assembled from the cases a sweep found inherits the sweep's blind spot, and the
 fix it named was to derive the check's inputs from the question instead. The
 question is *which languages have a row*, so `z80` is in the loop now and the
 row is held against the tree like the other six.
+### `br`, and the two bytes that are the entry
+
+The step the standup called three. `jr` went into the grammar as an ordinary
+instruction — two bytes, a signed displacement from the byte after it — and
+that on its own changes nothing, because a `jr` the programmer wrote has a
+fixed size whether it reaches or not. What creates the problem is **`br`**: a
+pseudo-instruction that assembles to `jr` when the target is in reach and `jp`
+when it is not, so its size depends on a distance that depends on sizes.
+
+*What one walk can actually do.* More than expected, and the shape of what it
+cannot do is sharper for it. `layout` threads `seen`, the labels **already
+met**, so a backward `br` is decided exactly. A forward one is not, and
+assuming short and being wrong emits a jump to somewhere else, so it is assumed
+long. Correct, and not minimal.
+
+**The interesting witness is `chain.z80`**, because it rules out the cheap
+answer. One `nop`, a forward `br`, 123 more `nop`s, a backward `br`, and
+`halt`. With the forward `br` taking three bytes the backward one sits at 127
+and its displacement is -129, one out of range, so it takes three too: 131
+bytes. With the forward one taking two, the backward one sits at 126, the
+displacement is exactly -128, and both fit: 129.
+
+So a second walk is not the fix. The first shrink is what makes the second
+possible and the second is what makes the first worth having — recompute until
+nothing moves, which is the fixpoint ROADMAP 2.5 has been describing since it
+opened, now with a program that a person can count the waste in.
+
+> The notation can **check** a relative jump and cannot **choose** one. The
+> check needs every address, which the second walk has; the choice needs a size
+> the first walk is still deciding.
+
+*And the tool asked for a third pass.* A rule cannot both compute `disp` and
+complain about it — *a check runs before the attributes it guards* — and `phx`
+refuses that with the fix in the message: write the expression out here, or
+compute it in an earlier pass. Writing it out meant one subtraction copied into
+six places, so `reach` is a pass of its own between `layout` and `code`, whose
+whole job is how far each jump goes.
+
+### A thread declared in the wrong place is not a thread, and nothing says so
+
+`br` picked the long form for a **backward** target, which is the one case the
+walk knows the answer to. The label table was arriving empty at every node.
+
+The cause is position. `thread seen = empty` had been written in the middle of
+the pass, under the rule that assigns it, and clauses are classified as they
+are read — `pass.c` asks `is_thread` at that moment. A rule above the
+declaration gets an ordinary synthesised attribute; a rule below it gets the
+thread. **Two attributes, one name, no diagnostic.** Moving one line fixed it,
+and the same file with the line in the other place is a different program.
+
+Isolated, because a bug found through 326 lines of Z80 is not yet a bug:
+
+    %pass late                     %pass early
+      Num  : seen = $seen + 1 .      thread seen = 0
+      thread seen = 0                Num  : seen = $seen + 1 .
+      Prog : total = $seen .         Prog : total = $seen .
+
+Three digits in, **0** on the left and **3** on the right.
+
+It is written into [ROADMAP 5](ROADMAP.md#5-known-warts) and **not** pinned by
+a test, on purpose. A test asserting 0 would encode the defect as intended
+behaviour, which is precisely what `spaced-regex.awk` did this morning and what
+took four hours to notice. The shadowed *thread* is already an error in this
+tool; this belongs in the same family, and the fix is a sweep at the end of the
+pass rather than another expectation.
+
+### And the count read off a red run was already wrong
+
+A small one, worth a line because it wasted a cycle. `make test` printed
+`206 passed, 1 failed` — the failure being `counts.sh`, which had noticed the
+z80 row's numbers move — so the records were updated to say 206. Fixing the
+count turned that failing check into a passing one and the total became 207.
+
+**The number of checks a red run reports is not the number a green one will.**
+The check that holds the records to the total is the thing that caught it, one
+command later, which is the third time today it has paid for itself.
