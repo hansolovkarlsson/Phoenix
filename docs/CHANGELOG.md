@@ -75,12 +75,20 @@ beside the bytes.
 
 **And `br`, which is the point.** It assembles to a two-byte relative jump when
 the target is in reach and a three-byte absolute one when it is not — a size
-that depends on a distance that depends on sizes. This description decides it
-in one walk, so a backward `br` is exact and a forward one is assumed long:
-**correct, and not minimal**. `divergent/chain.z80` settles at 131 bytes where
-129 is reachable, and the two bytes are
-[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) — the entry now
-has the customer it was waiting for.
+that depends on a distance that depends on sizes. **The description walks the
+tree twice**, and the second walk is the first one written out a second time,
+because the notation has no way to say *again*: walk one has met no forward
+label and assumes three bytes, walk two decides against walk one's addresses,
+which over-state and therefore only shrink.
+
+That reaches the minimum on a program one round deep — `tests/oracle/chain.z80`
+goes 131 to 129 — and misses by a byte on
+[`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80), where
+the second `br` shrinking is what brings the first into range on a **third**
+walk nobody makes. No fixed number of walks is the answer, which is
+[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) — now with the
+customer, the witness, and a working prototype of the mechanism in front of
+it.
 
 **The oracle is byte for byte**, which none of the others are. `z80asm`
 assembles the same four programs and the two binaries are compared whole —
@@ -94,7 +102,7 @@ ordinary attribute and the rule below it got the thread, and the thread reached
 every node with the value it started at. The message names the fix, and
 `otherwise` is covered as well as the rules.
 
-**Tests:** 189 → 208. Nineteen new ones: six for the calc backend; one for `<>`
+**Tests:** 189 → 211. Twenty-two new ones: six for the calc backend; one for `<>`
 and `or`, whose clauses no calc program had ever reached; one holding the
 records' own counts against the tree; and two for a claim `reference.md` had
 made since `%rewrite` shipped and nothing had run — **a node built by a rewrite
@@ -102,8 +110,8 @@ keeps the position of the node it replaced**, so a diagnostic from a later pass
 points at the program rather than at the rule. And seven for the Z80 subset: one
 that it reads, four refusals — an undefined label, one name at two addresses,
 an immediate that does not fit its byte, a hand-written `jr` that does not
-reach — the two pinned divergences, and the oracle. And one for the defect
-below. The calc
+reach — five pinning the two walks and the one that needs a third, and the
+oracle. And one for the defect below. The calc
 backend's tests need `awk` to run what it emits, in the same role `cc` already
 plays for the C backend; the Makefile requires both to build `phx` at all. The
 Z80 oracle needs `z80asm`, and skips without it.

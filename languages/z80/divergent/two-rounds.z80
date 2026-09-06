@@ -1,0 +1,149 @@
+; A program that needs a **third** walk, which is why the answer is a fixpoint
+; and not a fixed number of passes.
+;
+; Two forward `br`s. The second one shrinks in the second walk, which pulls
+; `far` one byte closer -- and only then does the first one come into range.
+;
+;   walk 1   everything forward is assumed long
+;              br far at 0 (3), 123 nops, br mid at 126 (3), mid 129, far 130
+;   walk 2   using walk 1's table
+;              br far: 130 - 2 = 128, one out of reach, stays long
+;              br mid: 129 - 128 = 1, fits, shrinks to two bytes
+;              far is now 129, and the program is 130 bytes
+;   walk 3   using walk 2's table -- which this description does not do
+;              br far: 129 - 2 = 127, fits. Both short, and the program is 129
+;
+; So the second walk is not a fix, it is one round of one. Every round makes
+; the next round's estimate better, and the only stopping rule that is right
+; for every program is **until nothing moves**.
+;
+; `tests/oracle/chain.z80` is the same shape one round shallower, and it does
+; reach its minimum here -- which is what makes this file worth having: the
+; difference between the two is a single round.
+        br far
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
+        br mid
+mid:    nop
+far:    halt

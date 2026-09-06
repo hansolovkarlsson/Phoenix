@@ -1387,24 +1387,32 @@ refuses "an immediate that does not fit its byte" "at most 255, and this is 300"
 refuses "a jr the programmer wrote that does not reach" "'far' is 130 away" \
         "$root/languages/z80/z80.phx" "$z/unreachable.z80"
 
-# **The two divergences, pinned rather than found.** `br` picks its own
-# encoding, and this description picks it in one walk -- so a backward target
-# is decided exactly and a forward one is assumed long, because assuming short
-# and being wrong emits a jump to somewhere else. That is correct and it is not
-# minimal, and ROADMAP 2.5 is the gap. A change to either answer shows up here
-# with the old one in it.
-v="$root/languages/z80/divergent"
-prints "a forward br takes three bytes where two would do" \
-"        jp done
-        nop
-done:
-        halt" --driver listing "$root/languages/z80/z80.phx" "$v/short-forward.z80"
-# 131 rather than 129, and the two bytes are the entry. Shrinking the forward
-# `br` is what brings the backward one into range, and shrinking the backward
-# one is what makes the forward one worth shrinking -- so it is a fixpoint and
-# not one more walk. The arithmetic is in the file, countable by hand.
-prints "and a chain of them settles two bytes above the minimum" "131" \
-       --run layout --show size "$root/languages/z80/z80.phx" "$v/chain.z80"
+# **`br` picks its own encoding, and the two walks are pinned separately.**
+# `layout` has met no forward label and assumes three bytes; `relax` has
+# `layout`'s table and decides both directions against an over-estimate, which
+# is the only safe direction -- shrinking one `br` only pulls later addresses
+# down, so a `br` that fits against the estimate still fits when everything
+# settles. `size` is the first walk's answer and `size2` is the second's.
+o="$root/languages/z80/tests/oracle"
+prints "a forward br is three bytes in the first walk" "5" \
+       --driver code --show size "$root/languages/z80/z80.phx" "$o/short-forward.z80"
+prints "and two in the second" "4" \
+       --driver code --show size2 "$root/languages/z80/z80.phx" "$o/short-forward.z80"
+# The forward jump's size is what decides whether the backward one fits, and
+# one extra walk gets both. The arithmetic is in the file, countable by hand.
+prints "a chain settles two bytes above the minimum in one walk" "131" \
+       --driver code --show size "$root/languages/z80/z80.phx" "$o/chain.z80"
+prints "and reaches it in two" "129" \
+       --driver code --show size2 "$root/languages/z80/z80.phx" "$o/chain.z80"
+
+# **And the divergence that is left, which is the whole of ROADMAP 2.5.** Two
+# forward `br`s, where the second one shrinking in walk two is what brings the
+# first into range in walk *three* -- a walk this description does not make.
+# One round of one is not a fixpoint, and no fixed number is: every round makes
+# the next round's estimate better. 130 here, and 129 is reachable.
+prints "a program that needs a third walk does not get one" "130" \
+       --driver code --show size2 "$root/languages/z80/z80.phx" \
+       "$root/languages/z80/divergent/two-rounds.z80"
 if command -v z80asm >/dev/null 2>&1; then
     if za=$("$root/languages/z80/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$za" | grep -c '^  ok')

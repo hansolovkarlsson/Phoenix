@@ -180,8 +180,8 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   Br : addr  = $pc
      : known = defined($seen, $target)
      : back  = lookup($seen, $target, 0) - ($pc + 2)
-     : short = $known and $back >= -128
-     : pc    = $pc + lookup([[true, 2]], $short, 3) .
+     : first = $known and $back >= -128
+     : pc    = $pc + lookup([[true, 2]], $first, 3) .
 
   (* The one item that occupies no space and is the reason for two passes.
    * `seen` is a thread and `entry` is not, which is the whole difference
@@ -203,7 +203,67 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
               : "the assembly is {} bytes, and an address is two" of $pc .
 
 (* ------------------------------------------------------------------ *)
-(* Pass two: how far is it?                                           *)
+(* Pass two: the same walk again, with the first one's answers.       *)
+(*                                                                     *)
+(* **This pass is `layout` written a second time**, and that is the     *)
+(* entry. The first walk had to assume every forward `br` was long,     *)
+(* because it had not met the target. This one has `layout`'s table, so *)
+(* it can decide a forward `br` too -- against an address that is an    *)
+(* over-estimate, which is the only direction that is safe.             *)
+(*                                                                     *)
+(* *Why shrinking is monotone, and so why this terminates.* Every       *)
+(* address in the table came from a layout in which nothing was shorter *)
+(* than it will be. Shrinking a `br` only pulls later addresses down,   *)
+(* so a distance computed here can only over-state the final one -- and *)
+(* a `br` that fits here still fits when everything settles. The walk   *)
+(* can be run again and will never have to grow one back.               *)
+(*                                                                     *)
+(* *And that is why one round is not the answer.* Round two shrinks     *)
+(* what round one's estimate allowed; round three shrinks what round    *)
+(* two's shrinking allowed. `divergent/two-rounds.z80` is a program     *)
+(* that needs the third, and this description stops after the second.   *)
+(* The mechanism 2.5 wants is this pass with *until nothing moves* in    *)
+(* front of it, instead of a copy of it per round.                       *)
+
+%pass relax
+
+  thread pc2 = 0
+
+  Nop  : pc2 = $pc2 + 1 .
+  Halt : pc2 = $pc2 + 1 .
+  Ret  : pc2 = $pc2 + 1 .
+  Inc  : pc2 = $pc2 + 1 .
+  Dec  : pc2 = $pc2 + 1 .
+
+  LdImm  : pc2 = $pc2 + 2 .
+  AddImm : pc2 = $pc2 + 2 .
+  SubImm : pc2 = $pc2 + 2 .
+  CpImm  : pc2 = $pc2 + 2 .
+
+  Jp     : pc2 = $pc2 + 3 .
+  JpCond : pc2 = $pc2 + 3 .
+  Call   : pc2 = $pc2 + 3 .
+
+  Jr     : addr2 = $pc2 : pc2 = $pc2 + 2 .
+  JrCond : addr2 = $pc2 : pc2 = $pc2 + 2 .
+
+  (* The decision, made against the previous round's addresses. Both
+   * directions this time: the table has every label in it. *)
+  Br : addr2 = $pc2
+     : est   = lookup($table, $target, 0) - ($pc2 + 2)
+     : short = $est >= -128 and $est <= 127
+     : pc2   = $pc2 + lookup([[true, 2]], $short, 3) .
+
+  Label : entry2 = [[$name, $pc2]] .
+
+  otherwise entry2 = []
+
+  Program : down table = $labels
+          : labels2 = flatten($items.entry2)
+          : size2   = $pc2 .
+
+(* ------------------------------------------------------------------ *)
+(* Pass three: how far is it?                                         *)
 (*                                                                     *)
 (* A pass of its own, and the tool asked for it. A check runs *before*  *)
 (* the attributes it guard, so a rule cannot both compute `disp` and    *)
@@ -214,18 +274,18 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
 
 %pass reach
 
-  Program : down table = $labels .
+  Program : down table = $labels2 .
 
-  Jr     : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
-  JrCond : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
-  Br     : disp = lookup($table, $target, $addr + 2) - ($addr + 2) .
+  Jr     : disp = lookup($table, $target, $addr2 + 2) - ($addr2 + 2) .
+  JrCond : disp = lookup($table, $target, $addr2 + 2) - ($addr2 + 2) .
+  Br     : disp = lookup($table, $target, $addr2 + 2) - ($addr2 + 2) .
 
 (* ------------------------------------------------------------------ *)
-(* Pass three: the bytes.                                             *)
+(* Pass four: the bytes.                                              *)
 
 %pass code
 
-  Program : down table = $labels
+  Program : down table = $labels2
           : out = join($items.out) .
 
   Nop  : out = bytes(0, 1) .
@@ -276,7 +336,14 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
                     $short,
                     join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)]))
      ! not defined($table, $target)
-         : "no label called '{}'" of $target .
+         : "no label called '{}'" of $target
+     (* The monotonicity argument, checked rather than believed. A `br` that
+      * took the short form against an over-estimate must still reach now that
+      * every address is final -- if this ever fires, shrinking was not safe
+      * and the reasoning above is wrong. *)
+     ! $short and ($disp < -128 or $disp > 127)
+         : "'{}' was in reach when the size was chosen and is {} away now"
+             of $target, $disp .
 
   Call   : out = join([bytes(205, 1), bytes(lookup($table, $target, 0), 2)])
          ! not defined($table, $target)
@@ -322,5 +389,5 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   Br : out = lookup([[true, "        jr {}" of $target]], $short,
                     "        jp {}" of $target) .
 
-%driver code    = layout, reach, code -> out .
-%driver listing = layout, listing -> out .
+%driver code    = layout, relax, reach, code -> out .
+%driver listing = layout, relax, listing -> out .

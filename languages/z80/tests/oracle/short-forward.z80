@@ -1,0 +1,9 @@
+; A forward `br` one byte from its target, and the smallest thing the second
+; walk buys. The first walk has not met `done` and assumes three bytes; the
+; second has the table and takes two.
+;
+; It was a divergence for about an hour, in `divergent/`, when `layout` was
+; the only walk there was.
+        br done
+        nop
+done:   halt

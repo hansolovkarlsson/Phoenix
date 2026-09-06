@@ -1,7 +1,5 @@
-; The forward jump's size decides whether the backward one fits -- which is
-; the fixpoint, in eleven bytes of real instructions and 123 of filler.
-;
-; The arithmetic, and it is countable by hand:
+; The forward jump's size decides whether the backward one fits, and the
+; second walk gets both. 123 bytes of filler, and arithmetic countable by hand:
 ;
 ;   top:    nop            1 byte, at 0
 ;           br far         at 1, two bytes or three
@@ -9,17 +7,16 @@
 ;           br top         at A = 1 + (that size) + 123
 ;   far:    halt
 ;
-; A backward `jr` reaches -128. With the forward `br` taking three bytes,
-; A = 127 and the backward displacement is -129, one out of range -- so it
-; takes three bytes too, and the program is 131 bytes.
+; Walk one assumes the forward `br` is long, A is 127, and the backward
+; displacement is -129 -- one out of range, so that one is long too: 131 bytes.
 ;
-; With the forward `br` taking two, A = 126, the displacement is exactly -128,
-; and it fits. Both short is consistent, and the program is **129**.
+; Walk two has walk one's table. The forward `br` fits in two, which puts A at
+; 126, and the backward displacement is exactly -128, which fits. **129**, and
+; that is the minimum.
 ;
-; So the answer is not reachable by deciding each jump once, and not by one
-; more walk either: the first shrink is what makes the second possible, and
-; the second is what makes the first worth having. Iterate until the sizes
-; stop changing -- and nothing in this notation iterates over a table.
+; So one extra walk is enough *here*. `../../divergent/two-rounds.z80` is the
+; same shape one round deeper and is not enough there, which is the difference
+; between another pass and a fixpoint.
 top:    nop
         br far
         nop

@@ -158,33 +158,57 @@ target is in reach, three absolute when it is not.
 *What one walk can do, and where it stops.* `layout` threads the labels it has
 **already met**, so a backward `br` is decided exactly — the address is known.
 A forward one is not, and guessing short and being wrong emits a jump to
-somewhere else, so it is assumed long. That is correct and it is not minimal,
-and the gap is written down twice:
+somewhere else, so it is assumed long. Correct, and not minimal.
+
+*So the walk is written out a second time.* `relax` is `layout` again, with
+`layout`'s table in hand, deciding both directions. **Shrinking is the only
+safe direction and that is what makes it terminate**: every address in the
+table came from a layout in which nothing was shorter than it will be, so a
+distance computed against it can only over-state the final one, and a `br` that
+fits against the estimate still fits when everything settles. Nothing ever has
+to grow back.
+
+| | | |
+| --- | --- | --- |
+| [`tests/oracle/short-forward.z80`](../languages/z80/tests/oracle/short-forward.z80) | 5 → **4** | one walk assumes long, two gets it |
+| [`tests/oracle/chain.z80`](../languages/z80/tests/oracle/chain.z80) | 131 → **129** | the forward `br` shrinking is what brings the backward one into range. One round deep, and the second walk reaches the minimum |
+| [`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80) | 131 → 130, and **129 is reachable** | two forward `br`s: the second shrinking in walk two is what brings the first into range in walk **three**, which nobody makes |
+
+**`two-rounds.z80` is the entry, and it is what a second walk cannot answer.**
+Every round makes the next round's estimate better, so no fixed number of
+rounds is right for every program — three works here and a longer program wants
+four. The stopping rule that is right is *until nothing moves*, which is
+[5](#5-known-warts)'s **there is no iteration over data** met by something a
+person notices: one wasted byte, countable by hand, in a program the suite
+pins.
+
+*What is missing is now only the word for it.* The mechanism has a working
+prototype — `relax` **is** the step function, and the parts are settled by
+having built it:
 
 | | |
 | --- | --- |
-| [`divergent/short-forward.z80`](../languages/z80/divergent/short-forward.z80) | a forward `br` one byte from its target takes three bytes. The small half |
-| [`divergent/chain.z80`](../languages/z80/divergent/chain.z80) | **131 bytes where 129 is reachable**, and the arithmetic is in the file. Shrinking the forward `br` is what brings the backward one into range, and shrinking the backward one is what makes the forward one worth shrinking |
+| the step | one pass, exactly as written |
+| the bottom | every forward `br` long, which `layout` already produces |
+| the direction | shrink only, which is why it terminates and why every intermediate state is a valid program |
+| the test | did any size change since the last round |
+| the guard | a bound, and a diagnosis naming what was still moving when it ran out |
 
-`chain.z80` is the one that settles the shape of the mechanism. **A second walk
-would not fix it**: the first shrink is what makes the second possible, so the
-sizes have to be recomputed until they stop moving. That is a fixpoint over a
-table, which is [5](#5-known-warts)'s *there is no iteration over data* met by
-something a person notices — two wasted bytes, countable by hand, in a program
-the suite pins.
-
-*What is still missing is only the mechanism.* An attribute that starts at a
-bottom value and is re-evaluated until it stops changing, which is what
-Magnusson and Hedin added to JastAdd. The bottom value here is *every `br` is
-short*, the step is one `layout`, and the test is whether any size moved. Both
-halves of the problem are now in the repository: the analysis that wants it,
-and the walk it would iterate.
+*The open question is where the repetition is written*, and it is a notation
+question rather than an implementation one. A pass could declare it — `%pass
+relax` with a marker — or a **driver** could, since a driver is already the
+claim about what runs in what order and this is a claim about running one thing
+until it settles. The second reads better against
+[3.1](#31-an-interpreter-that-can-loop): a pass that iterates is not an
+interpreter that loops, because the thing being repeated is a whole walk with a
+termination test the tool owns, not a construct in the meta-language.
 
 *And the half the notation already does.* A `jr` the programmer wrote is
 checked against the label table in the pass that has every address —
 `refused/unreachable.z80` is 130 bytes away and says so. **The notation can
-check a relative jump and cannot choose one**, which is a sharper statement of
-what is absent than the entry had before.
+check a relative jump and cannot choose one** — and it can be made to choose
+one by writing the walk out per round, which is the workaround this entry now
+has instead of an absence.
 
 It does nothing for [1.7](#17-a-repetition-that-counts), and that is worth
 writing down so it is not looked for twice: a Z80 instruction's length comes

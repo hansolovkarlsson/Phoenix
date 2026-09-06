@@ -4267,3 +4267,50 @@ at, which is the better kind of confirmation.
 *And the tool grew by 64 lines*, so `COMPLETED.md`, `lineage.md` and
 `postmortem.md` all wanted the new number and `counts.sh` said so before the
 commit existed. Third time today.
+### The walk written out twice, which is the mechanism with the word missing
+
+2.5 has had a customer since the afternoon and the obvious next move was to
+build the circular attribute. What was cheaper, and turned out to settle more,
+was to **unroll one round by hand**: `relax` is `layout` written a second time,
+with `layout`'s table in hand, deciding forward `br`s against an estimate.
+
+*Two things it proved that an argument would not have.*
+
+**The direction matters, and it is the reason it terminates.** Every address in
+`layout`'s table came from a walk in which nothing was shorter than it will
+finally be, so a distance measured against it can only over-state. A `br` that
+fits against an over-estimate still fits when everything settles — shrink only,
+never grow back. That is not a claim in a comment now: `code` refuses a `br`
+that took the short form and no longer reaches, so if the reasoning is wrong
+the suite says so rather than a program jumping somewhere else.
+
+**And one round is enough more often than expected.** `chain.z80` went 131 to
+**129**, its minimum, and `short-forward.z80` 5 to 4. Both left `divergent/`
+and are ordinary oracle fixtures now. The entry needed a witness one round
+deeper, so it got one.
+
+`two-rounds.z80` is two forward `br`s where the second one shrinking in walk
+two is what brings the first into range in walk **three**. 131, then 130, and
+129 is reachable. Nobody makes the third walk. Three would do for that file and
+four for a longer one, which is the point: *no fixed number is right, and the
+stopping rule is until nothing moves*.
+
+> A workaround that is the mechanism run once by hand is worth more than a
+> mechanism built to a specification nothing has run. The specification is now
+> the diff.
+
+*What the prototype settled about the mechanism.* The step is one pass, exactly
+as written. The bottom is what `layout` already produces. The test is whether
+any size changed. The guard is a bound with a diagnosis naming what was still
+moving. **What is left is only where the repetition is written** — on the pass
+or on the driver — and the driver reads better, because a driver is already the
+claim about what runs in what order, and a pass repeated with a termination
+test the tool owns is not [3.1](ROADMAP.md#31-an-interpreter-that-can-loop)'s
+interpreter that loops.
+
+*Two things the tool refused on the way, both correctly.* Two `Program` rules
+in one pass — *clauses for one pattern go together in a single rule* — and a
+warning that `layout` and `relax` both defined `short`, with the later one
+winning. The second was a real hazard rather than pedantry: the first walk's
+guess and the second walk's decision are different values, and only one of them
+should reach the backends. `layout`'s is `first` now.
