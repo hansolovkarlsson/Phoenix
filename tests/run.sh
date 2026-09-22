@@ -1591,6 +1591,16 @@ refuses "a difference of two pointers to different types" \
 # `char`: a type is two numbers now, and both have to agree.
 refuses "and a 'char *' less an 'int *'" "only when they point at the same type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-char-from-int-pointer.c"
+# Character constants are printable ASCII or one of six escapes, and the lexer
+# says so, which is what lets the `types` pass find every code in its table.
+# All three below are C, and `cc` compiles them; they are refused here as
+# outside the subset, at the quote, by the lexer.
+refuses "a hex escape in a character constant" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-hex-escape.c"
+refuses "two characters in one" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-two-characters.c"
+refuses "and a tab typed between the quotes" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-a-tab.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the

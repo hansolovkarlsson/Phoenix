@@ -112,10 +112,17 @@ and an assignment to a `char` is worth what the `char` holds afterwards.
 Anything that is not a place or a pointer is promoted to `int`, so
 `sizeof(c + 1)` is 4. A type is now two numbers, the stars and the width of
 what is under them, and two pointers are the same type only when both agree.
-Character constants and string literals are the rest of the item. Eleven more
-oracle programs, 110 in all, and 26 refusals.
+Eleven more oracle programs, 110 in all, and 26 refusals.
 
-**Tests:** 224 → 241, nineteen in and two retired. The first thirteen were
+**Then character constants.** `'a'`, and six escapes, `\n \t \\ \' \" \0`.
+Each is an `int`, as C11 6.4.4.4 says, so `sizeof 'a'` is 4. Printable ASCII
+only: a hex or octal escape, two characters between the quotes and a tab typed
+between them are C, and are refused by the lexer as outside the subset. One
+oracle program checks all ninety-five printable characters. String literals
+are the rest of the item. Five more oracle programs, 115 in all, and 29
+refusals.
+
+**Tests:** 224 → 244, twenty-two in and two retired. The first thirteen were
 all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
@@ -128,7 +135,8 @@ the two refusals of pointer arithmetic were retired by indexing, and four came
 in: two pointers added, a pointer taken from a number, a subscript on an
 `int`, and two pointers to different types subtracted. And a second pin
 beside the first, on the size of a pointer difference, and a refusal of a
-`char *` less an `int *`.
+`char *` less an `int *`, and three of character constants outside the
+subset.
 
 ---
 

@@ -27,7 +27,7 @@
  * then functions with `int` parameters and calls, then `&` and `*` with the
  * pointer declarators that make them useful, then `sizeof`, then an array of
  * `int` or of pointers, which decays to a pointer to its first element, then
- * a subscript and the pointer arithmetic it is made of, then `char`. A function returning `int` with
+ * a subscript and the pointer arithmetic it is made of, then `char` and character constants. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -45,13 +45,27 @@
  * strings with escapes -- arrive with the constructs that need them.
  *)
 
-%fragment letter digit .
+%fragment letter digit escape plain .
 
 letter  = "a" .. "z" | "A" .. "Z" | "_" .
 digit   = "0" .. "9" .
 
 name    = letter { letter | digit } .
 integer = digit { digit } .
+
+(* A character constant is one character between single quotes, or one
+ * escape. **Printable ASCII only**, and the three ranges are that and nothing
+ * else: a space to `~`, less the quote at 39 and the backslash at 92, which
+ * are what an escape is for. A tab typed between the quotes is C and is
+ * refused here, as are `'ab'`, which C leaves to the implementation, and the
+ * octal and hex escapes, which arrive when a program wants one.
+ *
+ * The lexer saying exactly this is what lets the `types` pass work out a
+ * code without asking whether it can: anything that reaches it is one of the
+ * ninety-five characters in its table, or one of six escapes. *)
+escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" ) .
+plain     = " " .. "&" | "(" .. "[" | "]" .. "~" .
+character = "'" ( escape | plain ) "'" .
 
 space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
@@ -264,6 +278,7 @@ subscript = p:primary "[" e:expression "]"
  * expression cannot. *)
 primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
         | integer -> Number(text: $1)
+        | character -> Character(text: $1)
         | name    -> Variable(name: $1)
         | "(" expression ")" -> $2 .
 
@@ -556,6 +571,24 @@ arg  = e:expression -> Arg(value: $e) .
    * because the answers themselves, 4 and 8, are the ones `cc` gives. *)
   SizeOfType : type = 0 .
   SizeOfExpr : type = 0 .
+
+  (* **A character constant is an `int`**, C11 6.4.4.4, which the defaults
+   * above already say: no stars, four bytes, so `sizeof 'a'` is 4 as C has
+   * it and not 1 as C++ does. What this adds is its **code**.
+   *
+   * The notation has no function from a character to its code, and does not
+   * need one here. The ninety-five printable characters are written out in
+   * order, and a character's code is how much of that text comes before it,
+   * plus the 32 the table starts at: `split` at the character, and measure
+   * the first piece. An escape is looked up first, because its text is two
+   * characters and is not in the table. The lexer has already refused
+   * anything that is neither, so the measurement never meets a character it
+   * cannot find. `char-constant-every-one.c` walks the whole table. *)
+  Character : inner = slice($text, 2, size($text) - 1)
+            : code  = lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
+                              ["\\\"", 34], ["\\0", 0]], $inner,
+                             size(at(split(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+                                           $inner), 1)) + 32) .
 
   (* C11 6.5.6 lets `+` take a pointer and an integer in either order, and `-`
    * a pointer and then an integer, and counts the integer in what the pointer

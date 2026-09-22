@@ -5138,3 +5138,51 @@ caught, because two arrays would overlap.
 *Eleven oracle programs, 110 in all, every one agreeing on its first green
 run; one refusal, twenty-six, for a `char *` less an `int *`, which `cc`
 refuses too.* Nothing in `phoenix/` was touched.
+
+## 2026-09-22: character constants, and a code measured rather than looked up
+
+`'a'` is an `int`, C11 6.4.4.4, so the node answers the defaults the `types`
+pass already had: no stars, four bytes. `sizeof 'a'` is 4 here as in C, and
+would be 1 in C++. Everything this step added is the lexer's and one clause.
+
+**The lexer says exactly what a constant may be**, so no pass has to ask. A
+constant is one printable character or one of six escapes, and printable is
+three ranges, `" " .. "&" | "(" .. "[" | "]" .. "~"`: ASCII from the space to
+the tilde, less the quote at 39 and the backslash at 92, which are what an
+escape is for. A hex escape, two characters between the quotes and a tab
+typed between them are all C, `cc` compiles all three, and all three are
+refused at the quote as outside the subset.
+
+**The notation has no function from a character to its code, and the step
+did not need one.** The ninety-five printable characters are written out in
+order in the clause, and a character's code is how much of that text comes
+before it, plus 32:
+`size(at(split(table, c), 1)) + 32`. An escape is looked up first, because
+its text is two characters and is not in the table. That is the same move
+the reference makes for Pascal's doubled quote, a question about characters
+answered with `split` and `size` because they are what the library has, and
+it holds only because the lexer guarantees the character is in the table. A
+character that was not would measure as the whole table and come out as 127,
+silently; the three ranges are what make that impossible rather than
+unlikely.
+
+*Whether this wants a library function is not settled by one use.* `ord`
+would say it in a word. The rule the roadmap keeps is that a second use makes
+a mechanism, and string literals, next, will not be a second use unless their
+bytes are computed here rather than handed to the assembler.
+
+*Every step left out on purpose was caught*, with exact replacements this
+time that assert they applied: two characters swapped in the table, the table
+starting at 33, the entry for `\n` gone, and `\"` given the backslash's code.
+The swap is caught only by `char-constant-every-one.c`, which is generated
+and checks that each of the ninety-five is one more than the one before it,
+with the space anchored at 32, so that `cc` judges every character and
+nothing in it is an expected value somebody typed.
+
+*One refusal was not what it said.* `char-constant-hex-escape.c` was written
+with `echo`, and zsh's `echo` turned `\x41` into `A` on the way to the file,
+so the first run of it compiled a perfectly good `'A'`. Read back with
+`cat -v` and rewritten with a quoted heredoc.
+
+*Five oracle programs, 115 in all; three refusals, twenty-nine.* Nothing in
+`phoenix/` was touched.

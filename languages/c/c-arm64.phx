@@ -97,6 +97,10 @@
    * constant written in a C program is an `int`, so it is always a `w`. *)
   Number : out = "\tldr w0, ={}\n" of $text .
 
+  (* A character constant is an `int` too, and its code was worked out by the
+   * `types` pass, because what `'a'` is worth is C's business. *)
+  Character : out = "\tldr w0, ={}\n" of $code .
+
   (* ---- places, and the two questions a node can be asked ----
    *
    * A local starts at `x29` minus its offset and runs upward from there, so

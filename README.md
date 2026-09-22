@@ -780,12 +780,12 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 241 checks, covering 35 Pascal programs against fpc
+make test       # 244 checks, covering 35 Pascal programs against fpc
                 #   and every Solveig program in a checkout, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository** — 235 of the 241 need only what is vendored here, and it is worth
+repository** — 238 of the 244 need only what is vendored here, and it is worth
 being exact about the other five, because they surface as **three** skipped
 lines rather than five. One drives `fpc`. Three drive `solas` and `solvm` over a
 checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are

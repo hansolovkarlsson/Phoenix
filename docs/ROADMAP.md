@@ -634,8 +634,8 @@ is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-mo
 `sizeof` *(done 2026-09-22, indexing and the difference of two pointers
 last; ninety-nine programs against `cc`, twenty-five refused and two
 divergences pinned)*; **`char` and string
-literals** *(`char` as a type is in since 2026-09-22, 110 programs against
-`cc`; character constants and string literals are next)*; `struct`. It stops before `typedef`
+literals** *(`char` as a type and character constants are in since 2026-09-22, 115
+programs against `cc`; **string literals are next**)*; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
