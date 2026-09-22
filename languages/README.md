@@ -12,6 +12,7 @@ language arrives *beside* the first rather than mixed into it.
 | [`awk/`](awk/) | POSIX awk: pattern-action rules, no declarations, and concatenation with no operator. The first whose grammar is not vendored — `/usr/bin/awk` carries the whole weight instead |
 | [`solvm/`](solvm/) | an assembler for Solveig's `.sob` bytecode: labels, nested chunks, and the same instructions `solas` emits |
 | [`units/`](units/) | Turbo Pascal's unit system, described to answer a roadmap question — and the answer is in its README rather than in a compiler |
+| [`c/`](c/) | a C subset, begun: `int main(){return 42;}` compiled to arm64 assembly that `cc` assembles and links. The one language on the roadmap as a goal rather than a mechanism, and `cc` is its oracle |
 | [`phx/`](phx/) | the `.phx` notation described in itself. It parses itself and every other description here |
 
 ## What goes where

@@ -1,0 +1,52 @@
+(* c-arm64.phx -- the C subset, compiled to arm64 assembly.
+ *
+ *     phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
+ *     cc prog.s -o prog && ./prog
+ *
+ * **This file is only the emit pass.** The grammar and the tree are in
+ * `c.phx` and are imported, because neither has an opinion about a machine.
+ *
+ * ---------------------------------------------------------------------------
+ * The target is arm64 assembly text in the syntax `cc` assembles on this
+ * machine, which is macOS's: `_main` with the underscore, `.p2align 2`, and
+ * a local label that starts with `L` so the linker does not keep it. `cc`
+ * assembles and links, which is what every C compiler except tcc borrows.
+ *
+ * **The emit pass is a stack machine.** Every expression leaves its value in
+ * `x0`. There are no operands to push yet, so nothing is pushed; the frame is
+ * set up and torn down anyway, because the shape of a function is decided
+ * once and the later constructs fill it in rather than change it.
+ *
+ * The value is 64 bits wide in a register that C says is a 32-bit `int`. That
+ * is chibicc's first shape too, and the oracle is what will say when it
+ * matters: an operation whose answer differs between the two widths is a
+ * program on which `cc` and this file disagree.
+ *)
+
+%import "c.phx" .
+
+%pass emit-arm64
+
+  (* `ldr x0, =n` is the assembler's pseudo-instruction for *any* constant:
+   * it becomes a `mov` when the value fits and a load from a literal pool
+   * when it does not, and this description does not have to know which. *)
+  Number : out = "\tldr x0, ={}\n" of $text .
+
+  (* The value is already in `x0`, so returning is a jump to the epilogue.
+   * The epilogue's label is the enclosing function's, handed down. *)
+  Return : out = "{}\tb L{}.ret\n" of $value.out, $fname .
+
+  Block  : out = join($body.out) .
+
+  (* The prologue saves the frame pointer and the return address and makes a
+   * frame; the epilogue undoes it. Between them, the body -- and before the
+   * epilogue's label, on the path that falls off the end of the body, a zero.
+   * C11 5.1.2.2.3 says reaching the `}` of `main` returns 0, and for any other
+   * function it says nothing, of which 0 is one instance. *)
+  Function : down fname = $name
+           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
+               of $name, $name, $body.out, $name .
+
+  Program : out = "\t.text\n{}" of join($functions.out, "\n") .
+
+%driver arm64 = emit-arm64 -> out .

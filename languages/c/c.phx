@@ -1,0 +1,73 @@
+(* c.phx -- a C subset: what it looks like, and what it means.
+ *
+ * **The language, and nothing about any target.** The grammar and the tree it
+ * builds are here; `c-arm64.phx` imports this file and adds one emit pass.
+ * That is the split `languages/README.md` prescribes and the reason a second
+ * target could arrive without touching this file.
+ *
+ *   phx languages/c/c-arm64.phx prog.c                       the tree
+ *   phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
+ *   cc prog.s -o prog && ./prog
+ *
+ * ---------------------------------------------------------------------------
+ * What this is for
+ *
+ * [ROADMAP 6](../../docs/ROADMAP.md#6-a-c-compiler) is the one entry on that
+ * page that is a language rather than a mechanism: the compiler is the goal
+ * and the mechanisms it turns out to need are the findings. The subset grows
+ * in chibicc's order, one construct at a time with the suite green at each,
+ * and stops before `typedef` on purpose -- that is where the tool needs a
+ * change, and the change should arrive with the construct that wants it.
+ *
+ * **What is here is the first construct**: `int main(){return 42;}`. A
+ * function returning `int` with no parameters, a block, `return` with an
+ * integer constant. Nothing else parses, and nothing here is refused yet.
+ *
+ * ---------------------------------------------------------------------------
+ * The lexical half is written here rather than imported. `lib/lexical.phx`
+ * reads `#` as a line comment, which C does not, and every rule it carries
+ * would become a token kind whether the subset has it or not. C's own
+ * conventions -- hex and octal constants, suffixes, character literals,
+ * strings with escapes -- arrive with the constructs that need them.
+ *)
+
+%fragment letter digit .
+
+letter  = "a" .. "z" | "A" .. "Z" | "_" .
+digit   = "0" .. "9" .
+
+name    = letter { letter | digit } .
+integer = digit { digit } .
+
+space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
+line-comment  = "//" { ! "\n" } .
+block-comment = "/*" { ! "*/" } "*/" .
+
+symbol = "(" | ")" | "{" | "}" | ";" .
+
+%skip space line-comment block-comment .
+
+(* ------------------------------------------------------------------ *)
+(* Tokens to a program.                                               *)
+(*                                                                     *)
+(* `int` and `return` are reserved by appearing below, which is what   *)
+(* C's keyword list says about them too.                              *)
+
+%syntax .
+%start program .
+
+program = { function } -> Program(functions: $1) .
+
+(* One return type, no parameters. The parameter list and the calling
+ * convention are the construct ROADMAP 6 predicts will cost the most, and
+ * they are not here yet. *)
+function = "int" n:name "(" ")" b:block -> Function(name: $n, body: $b) .
+
+block = "{" { statement } "}" -> Block(body: $2) .
+
+statement = "return" e:expression ";" -> Return(value: $e) .
+
+(* The whole of expression, for now. When `lib/expression.phx` is wanted the
+ * question will be whether its precedence table is C's, and it is not:
+ * C has fifteen levels and the module has calc's. *)
+expression = integer -> Number(text: $1) .

@@ -4314,3 +4314,73 @@ warning that `layout` and `relax` both defined `short`, with the later one
 winning. The second was a real hazard rather than pedantry: the first walk's
 guess and the second walk's decision are different values, and only one of them
 should reach the backends. `layout`'s is `first` now.
+
+## 2026-09-21: the first C construct, and what starting it cost
+
+Sixteen days since the last entry, and one commit in between that this journal
+did not see: on 2026-09-06 another session wrote [ROADMAP 6](ROADMAP.md#6-a-c-compiler),
+a C compiler as an arc with a first step and three predictions, and closed
+without a changelog line or a paragraph here. This entry is where the arc
+starts moving.
+
+**The step is the smallest one the entry allows.** `int main(){return 42;}`:
+a grammar of five rules, a tree of five node types, one emit pass, one driver.
+`languages/c/c.phx` holds the language and `c-arm64.phx` imports it, so the
+split is the one `languages/README.md` prescribes and a second target would
+touch nothing above the emit pass. Four programs sit in `tests/oracle/` and
+[`run.sh`](../languages/c/tests/oracle/run.sh) compiles each through `cc` and
+through Phoenix's assembly through `cc`, and compares what they exit with.
+Four agree. Two checks in the suite, 213 in all.
+
+*Four decisions, each small, each written down because the next construct
+will lean on it.*
+
+**The lexical half is written, not imported.** `lib/lexical.phx` reads `#` as
+a line comment, which C does not, and every rule the module carries becomes a
+token kind whether the subset wants it or not. C has hex and octal constants,
+suffixes, character literals and strings with escapes, and each will arrive
+with the construct that needs it. The module's own README says to import only
+what a language uses, and this is the first language where the answer was
+*none of it*.
+
+**Falling off the end returns 0.** A `mov x0, #0` sits between the body and the
+epilogue's label, on the path that reaches the closing brace without a
+`return`. C11 5.1.2.2.3 requires that of `main` and says nothing about any
+other function, of which returning 0 is one legal outcome. `fall-off.c` is the
+oracle program for it, and `cc` agrees.
+
+**A constant is `ldr x0, =n`.** The assembler's pseudo-instruction takes any
+value: a `mov` when it fits, a literal pool when it does not, and the
+description does not have to know which. `wide.c` returns 1000000 and reaches
+the shell as 64, on both sides. The alternative, `mov` and `movk` computed in
+the emit pass, would have been Phoenix arithmetic modelling the target's,
+which `docs/semantics.md` says to write out when it is needed and not before.
+
+**The value is 64 bits wide in a register C calls a 32-bit `int`.** That is
+chibicc's first shape too. It is left to the oracle: an operation whose answer
+differs between the widths is a program on which `cc` and this description
+disagree, and that program will be found by the construct that makes it
+possible, not by guessing now.
+
+*One slip the tool caught.* `Block(body: $1)` where the block is
+`"{" { statement } "}"`: `$1` is the opening brace, and the repetition is
+`$2`. `phx` refused the description at read time with *`.out` reads an
+attribute, and this is text*, at the clause that reads `$body.out`. That is
+the miscounted factor [reference.md](reference.md#lists) already warns about
+under `...`, caught one rule earlier by a different check, and the lesson is
+the same: a literal counts.
+
+*What the oracle can and cannot see yet.* An exit status is eight bits, so
+two programs that return values congruent modulo 256 are the same program to
+it. That is the whole channel until a function can be called and `printf`
+declared, which is several constructs away, and it is enough for constants
+and arithmetic: a wrong answer is overwhelmingly a wrong low byte too. When it
+is not enough the entry's own rule holds: no hand-written expectation, so the
+answer is a `printf` and not a number typed into the suite.
+
+*The predictions stand untested.* Nothing here asked the tool for anything, so
+the first prediction, reaching `struct` with no change to it, has had no
+chance to fail. The third, that the calling convention costs the most, is
+several constructs away. What can be said is that the frame is already the
+shape the convention wants: `x29` and `x30` saved, `sp` restored from `x29`,
+so a call will find a function it can call.

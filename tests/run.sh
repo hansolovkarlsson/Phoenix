@@ -1514,6 +1514,26 @@ refuses "getline, which is read and not compiled" "getline is not compiled" \
 refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
+# C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
+# The first construct only, `int main(){return 42;}`, emitted as arm64 assembly
+# that `cc` assembles and links. The oracle is `cc` itself, and what is compared
+# is what a program exits with, because until a function can be called that is
+# all a program can say. Skipped where the machine is not arm64, since `cc`
+# there assembles something else.
+echo "C"
+accepts "the description reads" "$root/languages/c/c-arm64.phx"
+if [ "$(uname -m)" = "arm64" ]; then
+    if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
+        n=$(printf '%s' "$co" | grep -c '^  ok')
+        report pass "$n C programs exit with what cc makes them exit with"
+    else
+        report fail "C programs agree with cc"
+        printf '%s\n' "$co" | grep -A3 FAIL | sed 's/^/        /' | head -12
+    fi
+else
+    skip 1 "the C oracle needs an arm64 cc, and this machine is not arm64"
+fi
+
 echo
 if [ "$skipped" -eq 0 ]; then
     printf '%d passed, %d failed\n' "$pass" "$fail"

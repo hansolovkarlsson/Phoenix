@@ -16,6 +16,45 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-21: a C subset begins, with `cc` as its oracle
+
+**A C compiler has its first construct: [`languages/c/`](../languages/c/).**
+
+    phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
+    cc prog.s -o prog && ./prog
+
+`int main(){return 42;}`, and nothing more: a function returning `int` with no
+parameters, a block, `return` with an integer constant, and the two comment
+shapes. `c.phx` is the grammar and the tree and has no opinion about a machine;
+`c-arm64.phx` imports it and adds one emit pass, so the split is the one every
+other language here makes. The target is arm64 assembly in the syntax `cc`
+assembles on this machine, and `cc` assembles and links it.
+
+**The emit pass is a stack machine with nothing on the stack yet.** Every
+expression leaves its value in `x0`; the prologue and epilogue are the ones the
+later constructs will fill in rather than change. Falling off the end of a
+function returns 0, which C11 5.1.2.2.3 requires of `main` and permits of the
+rest.
+
+**The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
+awk's. [`tests/oracle/run.sh`](../languages/c/tests/oracle/run.sh) compiles
+each program twice and compares what the two exit with, which until a function
+can be called is all a program can say. Nothing in the directory has a
+hand-written expected result, which is the rule ROADMAP 6 set for the arc.
+
+**On the roadmap.** [6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+was written on 2026-09-06 and this is its first step taken; the entry itself is
+unchanged but for a marker at the construct that exists. Its three predictions
+are not yet scoreable: the first is about reaching `struct` with no change to
+the tool, and the tool has not been asked for anything.
+
+**Tests:** 211 → 213. Two new ones: that the description reads, and one that
+runs the four oracle programs and reports how many agree with `cc`. The first
+run of the suite said 212, because the check that the records' counts match
+the tree was failing on a missing row and is itself one of the 213.
+
+---
+
 ## 2026-09-05 — a second calc backend, and a conformance rule that reaches a loop
 
 **calc compiles to awk: [`languages/calc/calc-awk.phx`](../languages/calc/calc-awk.phx).**

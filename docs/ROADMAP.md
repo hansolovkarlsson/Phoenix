@@ -625,7 +625,8 @@ a smaller subset, and it is the route the workspace document names first. The
 output is slow and correct, and slow is not a divergence.
 
 **The subset grows in chibicc's order**, one construct at a time with the
-suite green at each: `int main(){return 42;}`; then `+ - * /` and
+suite green at each: `int main(){return 42;}`; *(in the tree since
+2026-09-21, four programs against `cc`)*; then `+ - * /` and
 parentheses; unary minus and comparison; a local `int`; `;`-separated
 statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention; `&` and `*`; arrays
