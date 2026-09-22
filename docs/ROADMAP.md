@@ -650,15 +650,21 @@ offsets and array layout, or in other words the rest of the arc.
 [postmortem 17](postmortem.md#17-left-to-the-oracle-is-not-a-decision-until-somebody-writes-the-program)
 scores the expectation and the journal has the reasoning.
 
-*What that leaves to build, with arrays and `sizeof`.* A type grows a width
-beside its star count, and the emit pass picks `w` or `x` from it, which is a
-column on the table it already has rather than a pass. On this machine `w0` is
-the low half of `x0` and every write to a `w` register zeroes the upper half,
-so the stack machine, the calling convention and the frame all stay as they
-are; a scalar keeps its eight-byte slot and is stored into it with `str w0`.
-What is new is one instruction, `sxtw` where a 32-bit index meets a 64-bit
-pointer, and it arrives with `a[i]`, which is the construct that wanted the
-width in the first place.
+*Built the same day.* The emit pass picks `w` or `x` from the star count the
+`types` pass already had, which came to nine clauses and a table with one row
+in it. On this machine `w0` is the low half of `x0` and every write to a `w`
+register zeroes the upper half, so the stack machine, the calling convention
+and the frame were all unchanged; a scalar keeps its eight-byte slot and is
+stored into it with `str w0`. `tests/oracle/overflow.c` went from 160 to 218,
+and two programs were added that a **half-finished** narrowing fails, which
+was checked by half-finishing it on purpose.
+
+*What is still owed to `sizeof`.* A star count says which register a value
+lives in, and that is the whole of what this subset needs while every
+declaration is a scalar. It does not say how many **bytes** a thing takes,
+which is what `sizeof` reports and what `a + 1` counts in. That number arrives
+with arrays, and brings `sxtw` with it, where a 32-bit index meets a 64-bit
+pointer.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and

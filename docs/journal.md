@@ -4730,3 +4730,64 @@ correctly. The argument was written out before it was run and would have been
 the strongest one in this entry. It is recorded here because a reason that
 sounds decisive and is false is worth more to a later reader than the three
 that held.
+
+## 2026-09-22: the width, built, and two tests made to fail on purpose
+
+Decided in the evening and built in the same one, because the estimate in the
+entry above turned out to be the whole of it.
+
+**Nine clauses and a table with one row.** `lookup([[0, "w"]], t, "x")`: no
+stars is an `int` and lives in a `w`, a star is a pointer and lives in an `x`.
+The `types` pass did not change at all, because the star count it already
+computed *is* the width once there is a table to read it through, and the
+table is in `c-arm64.phx` where a register is allowed to be mentioned. What
+moved: a constant, a load, a dereference, three stores, the arithmetic, the
+negation and the comparison.
+
+**Everything the estimate said would not change, did not.** The stack machine
+still pushes and pops `x0`, the calling convention still loads `x0` to `x7`,
+and the frame still gives a scalar eight bytes. All three for the same reason,
+which is worth stating once as the fact it is: on this machine **a write to a
+`w` register zeroes the upper half of its `x`**, so `x0` is always the
+zero-extended `w0` and there is nothing above the low half to lose. Two places
+in the pass now say so in a comment rather than leave a reader wondering why
+they were not touched: the condition test, `cmp x0, #0`, which is right for an
+`int` and a pointer both, and the argument load, which puts the right
+thirty-two bits in `w{i}` by loading the whole of `x{i}`.
+
+A store is `str w0` into an eight-byte slot, so the upper half of the slot
+keeps whatever was there. Nothing reads it, and nothing may: the slot is one
+`int` and its address is the low end of it. That stops being free when a
+declaration takes more than one slot, which is arrays.
+
+*The estimate is not scored in the [postmortem](postmortem.md), on purpose.*
+It was made two hours earlier and three of its instructions had been
+assembled by hand before it was written down. A prediction checked before it
+is published is a plan, and scoring a plan as though it had been a guess would
+make the file's other sixteen entries worth less.
+
+**The three programs catch three different mistakes**, which is the part that
+generalises. `overflow.c`, the witness recorded the day the decision was made,
+catches an `int` that does not wrap: 218 against 160. It is undefined
+behaviour, so `cc` is not right and this is not wrong, and what the test
+actually asserts is that the two implementations agree about a width, which is
+the thing the arc wants. The two added today are **defined**, and they catch
+something `overflow.c` cannot: a narrowing that is half done.
+
+```c
+int main() { int x = 0; int *p = &x; *p = 0 - 5; return (*p < 0) * 10 + (*p + 15); }
+```
+
+`ldr w0` zero-extends, so a negative `int` sits in `x0` as `0x00000000FFFFFFFB`
+and a comparison that asked `x0` rather than `w0` would call it positive. The
+other does the same through the calling convention, where AAPCS64 leaves the
+upper half of `x0` unspecified for a 32-bit argument and so nothing downstream
+may read it.
+
+Both were then **made to fail**, by forcing the comparison back to `x` and
+running them: 20 against 10, and 30 against 10. A test written for a change
+just made is the easiest kind to write so that it cannot fail, and the cost of
+finding out was two minutes.
+
+*Fifty-nine programs became sixty-one, and the suite is unchanged at 231
+checks*, because the oracle is one check however many programs it runs.

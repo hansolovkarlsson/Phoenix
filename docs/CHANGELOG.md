@@ -50,6 +50,18 @@ and taken out again, is one `cc` refuses to compile.
 **Sixteen more oracle programs and seven more refusals**, 58 and 18 in all.
 Every one of the sixteen agreed with `cc` on the first run.
 
+**Later the same day: `int` is thirty-two bits.** It had been sixty-four,
+which is a conforming implementation and was left open on 09-21 for the oracle
+to settle. The oracle had never been asked: `int a = 2000000000; int b = a + a;
+return b / 1000000;` exits 218 under `cc` and had exited 160 here, in a program
+the subset could compile since its second construct. `sizeof(int)` is 4 and a
+pointer stays 64 bits wide. On arm64 this costs one letter per instruction,
+`w` or `x` chosen from the star count the `types` pass already had, because
+`w0` is the low half of `x0` and writing it zeroes the half above; the stack
+machine, the calling convention and the frame are all untouched. Three more
+oracle programs, 61 in all, two of them written to catch a half-finished
+narrowing and checked by half-finishing one.
+
 **Tests:** 224 → 231. Seven new ones, every one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a

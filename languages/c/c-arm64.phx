@@ -36,12 +36,21 @@
  * other, so `&` is the `addr` of a place and `*` is an `ldr` from a value,
  * and neither needs a register or an instruction the subset did not have.
  *
- * The value is 64 bits wide in a register that C says is a 32-bit `int`. That
- * is chibicc's first shape too, and the oracle is what will say when it
- * matters: an operation whose answer differs between the two widths is a
- * program on which `cc` and this file disagree. A **pointer** is 64 bits on
- * this machine and so is exactly as wide as the register, which is why `&`
- * and `*` needed nothing said about width here.
+ * **An `int` is thirty-two bits and a pointer is sixty-four**, which is what
+ * this machine's C says and, since 2026-09-22, what this file says. The two
+ * are the same register: `w0` is the low half of `x0`, and **every write to a
+ * `w` register zeroes the upper half**, so `x0` always holds the zero-extended
+ * `w0` and a push of either is lossless. That is why the stack machine, the
+ * calling convention and the frame are all unchanged by the width: what
+ * changes is one letter per instruction, chosen from the node's type by a
+ * table with one row in it.
+ *
+ * The value used to be sixty-four bits wide in a register C calls a 32-bit
+ * `int`, which is chibicc's first shape. `tests/oracle/overflow.c` is the
+ * program that ended it: `cc` wraps at thirty-two bits and exits 218, and
+ * this file exited 160 until it wrapped too. See
+ * [ROADMAP 6.1](../../docs/ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+ * for why a sixty-four bit `int` was a legal answer that was not taken.
  *)
 
 %import "c.phx" .
@@ -54,10 +63,22 @@
    * because they start with `L`. *)
   thread label = 0
 
-  (* `ldr x0, =n` is the assembler's pseudo-instruction for *any* constant:
+  (* ---- which half of the register ----
+   *
+   * `lookup([[0, "w"]], t, "x")` is the whole of the width in this pass: a
+   * type of no stars is an `int` and lives in a `w`, and anything with a star
+   * is a pointer and lives in an `x`. It is written out at each use rather
+   * than hidden behind a name, because *which* type is being asked about is
+   * the part that differs: a load asks the node's own, a store asks the place
+   * it is storing into, and a comparison asks its left operand. The `types`
+   * pass in `c.phx` counts the stars and has no opinion about registers,
+   * which is the split this file exists for. *)
+
+  (* `ldr w0, =n` is the assembler's pseudo-instruction for *any* constant:
    * it becomes a `mov` when the value fits and a load from a literal pool
-   * when it does not, and this description does not have to know which. *)
-  Number : out = "\tldr x0, ={}\n" of $text .
+   * when it does not, and this description does not have to know which. A
+   * constant written in a C program is an `int`, so it is always a `w`. *)
+  Number : out = "\tldr w0, ={}\n" of $text .
 
   (* ---- places, and the two questions a node can be asked ----
    *
@@ -71,14 +92,16 @@
    * what an assignment and `&` want. Nothing else in the tree has an `addr`,
    * and nothing else can reach a position that asks for one -- the `place`
    * rule in `c.phx` sees to that, which is why no pass has to check it. *)
-  Variable  : out  = "\tldr x0, [x29, #-{}]\n" of 8 * $slot
+  Variable  : out  = "\tldr {}0, [x29, #-{}]\n"
+                  of lookup([[0, "w"]], $type, "x"), 8 * $slot
             : addr = "\tsub x0, x29, #{}\n" of 8 * $slot .
 
   (* A dereference is a load from what the value came out as, and its address
    * is that value before the load, so `&*p` emits exactly what `p` emits and
    * the identity C11 6.5.3.2 states falls out of the pair rather than being
    * written anywhere. *)
-  Deref     : out  = "{}\tldr x0, [x0]\n" of $value.out
+  Deref     : out  = "{}\tldr {}0, [x0]\n"
+                  of $value.out, lookup([[0, "w"]], $type, "x")
             : addr = $value.out .
 
   (* `&` is the address and nothing more. *)
@@ -89,12 +112,17 @@
    * an assignment is an expression worth what it assigned. Which side is
    * evaluated first C leaves unspecified, so this description decides, the
    * same way it decided for a binary operator: left first. *)
-  Assign    : out = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\tstr x0, [x1]\n"
-                of $place.addr, $value.out .
+  (* The address is pushed and popped as an `x` whatever is being stored
+   * through it, and the store itself takes the width of the **place**, which
+   * is what C11 6.5.16.1 converts to. *)
+  Assign    : out = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\tstr {}0, [x1]\n"
+                of $place.addr, $value.out,
+                   lookup([[0, "w"]], $place.type, "x") .
 
   (* A declaration with an initialiser knows its own slot, so it stores
    * straight into it rather than working out an address it already has. *)
-  LocalInit : out = "{}\tstr x0, [x29, #-{}]\n" of $value.out, 8 * $slot .
+  LocalInit : out = "{}\tstr {}0, [x29, #-{}]\n"
+                of $value.out, lookup([[0, "w"]], $stars, "x"), 8 * $slot .
   Local     : out = "" .
   Discard   : out = $value.out .
 
@@ -105,7 +133,12 @@
    * the thread for its own subtree and puts it back, so the outer argument
    * still counts from where it was. Every argument is pushed, sixteen bytes
    * each, so argument i of n sits 16 * (n - 1 - i) above `sp` once all are
-   * pushed, and that is where its register is loaded from. *)
+   * pushed, and that is where its register is loaded from.
+   *
+   * The load is an `x` whatever the argument is, and needs no width for the
+   * same reason the condition does not: an `int` was pushed zero-extended, so
+   * loading the whole register puts the right thirty-two bits in `w{i}`,
+   * which is where AAPCS64 says a 32-bit argument goes. *)
   thread argn = 0
 
   Arg  : index = $argn : argn = $argn + 1
@@ -119,11 +152,18 @@
        : out = "{}{}\tadd sp, sp, #{}\n\tbl _{}\n"
            of join($args.out), join($args.load), 16 * size($args), $name .
 
-  (* Parameter k is slot k, so its register is k - 1. *)
-  Param : out = "\tstr x{}, [x29, #-{}]\n" of $slot - 1, 8 * $slot .
+  (* Parameter k is slot k, so its register is k - 1, and its half is its
+   * own declaration's. AAPCS64 passes a 32-bit `int` in `w0` to `w7`, which
+   * are the same eight registers as `x0` to `x7`, so the convention did not
+   * notice the width change. *)
+  Param : out = "\tstr {}{}, [x29, #-{}]\n"
+            of lookup([[0, "w"]], $stars, "x"), $slot - 1, 8 * $slot .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
-   * say and what `cset` left there. *)
+   * say and what `cset` left there. This one needs no width: an `int` in
+   * `w0` is zero exactly when `x0` is, because `w0` was written last and
+   * writing it zeroed the half above, and a pointer wants the whole of `x0`
+   * tested anyway. So `cmp x0, #0` is right for both kinds of condition. *)
   If     : n = $label : label = $label + 1
          : out = "{}\tcmp x0, #0\n\tb.eq L{}.end\n{}L{}.end:\n"
              of $cond.out, $n, $then.out, $n .
@@ -156,18 +196,20 @@
    * `sdiv` truncates toward zero, which is what C11 6.5.5 says `/` does, so
    * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
    * and 0 on this processor, and no program in the oracle asks. *)
-  Binary : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\t{} x0, x0, x1\n"
+  Binary : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\t{} w0, w0, w1\n"
              of $left.out, $right.out,
                 lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?") .
 
-  Negate : out = "{}\tneg x0, x0\n" of $value.out .
+  Negate : out = "{}\tneg w0, w0\n" of $value.out .
 
   (* The same push and pop, then a compare and a conditional set: `x0` is 1
    * where the condition held and 0 where it did not, which is what C11 6.5.8
    * and 6.5.9 say a comparison is worth. The conditions are the **signed**
    * ones, `lt` and not `lo`, because `int` is signed and `-1 < 1` has to be 1. *)
-  Compare : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\tcmp x0, x1\n\tcset x0, {}\n"
+  Compare : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\tcmp {}0, {}1\n\tcset w0, {}\n"
               of $left.out, $right.out,
+                 lookup([[0, "w"]], $left.type, "x"),
+                 lookup([[0, "w"]], $left.type, "x"),
                  lookup([["==", "eq"], ["!=", "ne"], ["<", "lt"], ["<=", "le"],
                          [">", "gt"], [">=", "ge"]], $op, "?") .
 
