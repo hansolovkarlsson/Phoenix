@@ -4415,3 +4415,26 @@ popped in the right order. Overflow is not in the oracle. Wrapping at 32 bits
 is undefined in C, so a program that wraps is one on which `cc`'s answer is
 an accident rather than a standard, and the 64-bit register stays an open
 question the oracle cannot yet ask.
+
+*And the third: unary minus and comparison.* Three more levels, eight in the
+tree now, sixteen programs, and `cc` agrees with every one. `Negate` is one
+instruction. `Compare` is the same push and pop as `Binary`, then `cmp` and
+`cset` with the **signed** condition, which `signed-compare.c` holds: `-1 < 1`
+is 1, and the unsigned condition would say 0.
+
+**The oracle refused a valid program, and the fix names the refusal.** A
+comparison chains in C: `3 > 2 > 1` is `(3 > 2) > 1`, which is 0, and C11
+6.5.8 says so. This `cc` makes it an error, and `-w` does not reach it,
+because the diagnostic is one clang promotes to an error on its own. The
+program is the witness that the grammar groups to the left, so the oracle now
+passes `-Wno-error=parentheses` and says why in the line above it. That is the
+first place `cc` and C differ on a program in this directory, and the
+principle is that the oracle is C, and `cc` is how C is asked.
+
+**The width question was asked and not yet answered.** A comparison is where
+64 and 32 bits could first disagree in a defined way, and they do not: the
+operands are constants in `int`'s range, and a comparison of two values that
+fit is the same at either width. What would differ is a value that got there
+by overflowing, and overflow is undefined. So the register stays 64 bits wide
+for one more construct, and the entry that might change that is `char`, whose
+conversions are defined.

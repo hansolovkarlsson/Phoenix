@@ -45,8 +45,11 @@ for src in "$here"/*.c; do
     [ -n "$only" ] && [ "$only" != "$name" ] && continue
 
     # The oracle. `-w`, because a program written to probe the subset may be
-    # one cc has an opinion about, and the opinion is not the answer.
-    if ! cc -w -o "$tmp/$name.want" "$src" >"$tmp/$name.cc.log" 2>&1; then
+    # one cc has an opinion about, and the opinion is not the answer. One
+    # opinion survives `-w`: this cc makes a chained comparison an error, and
+    # `3 > 2 > 1` is C11 6.5.8 as written, so that one is downgraded by name.
+    if ! cc -w -Wno-error=parentheses -o "$tmp/$name.want" "$src" \
+            >"$tmp/$name.cc.log" 2>&1; then
         printf '  SKIP  %-14s cc would not compile it\n' "$name"
         sed 's/^/          /' "$tmp/$name.cc.log" | grep -i 'error' | head -2
         continue

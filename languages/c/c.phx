@@ -19,10 +19,11 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first two constructs**: `int main(){return 42;}`,
- * and then `+ - * /` with parentheses. A function returning `int` with no
- * parameters, a block, `return` with an expression over integer constants.
- * Nothing else parses, and nothing here is refused yet.
+ * **What is here is the first three constructs**: `int main(){return 42;}`,
+ * then `+ - * /` with parentheses, then unary minus and the six comparisons.
+ * A function returning `int` with no parameters, a block, `return` with an
+ * expression over integer constants. Nothing else parses, and nothing here
+ * is refused yet.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -44,7 +45,10 @@ space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
 block-comment = "/*" { ! "*/" } "*/" .
 
-symbol = "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" .
+(* Two characters before one, every time: `<` first would leave the `=` of
+ * `<=` behind, and the error would surface at the token after it. *)
+symbol = "==" | "!=" | "<=" | ">="
+       | "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" | "<" | ">" .
 
 %skip space line-comment block-comment .
 
@@ -68,18 +72,31 @@ block = "{" { statement } "}" -> Block(body: $2) .
 
 statement = "return" e:expression ";" -> Return(value: $e) .
 
-(* C's expression grammar, two of its fifteen levels. `lib/expression.phx`
+(* C's expression grammar, five of its fifteen levels. `lib/expression.phx`
  * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
  * it, and C's is written here a level at a time as the constructs arrive.
  * The shape is the module's, though, and so is the fold: `$$` is what has
  * been built so far, and an action naming it replaces that, which is what
  * makes `100 - 50 - 25` group to the left without anybody saying so. *)
-expression = additive .
+expression = equality .
+
+(* A comparison is an `int`, 0 or 1, and it chains: `3 > 2 > 1` is
+ * `(3 > 2) > 1`, which is 0, and C means that. So these are repetitions
+ * like the arithmetic below them, where `lib/expression.phx` has an option
+ * because calc does not chain. Equality is looser than the relations, so
+ * `0 == 1 < 2` is `0 == (1 < 2)`. *)
+equality       = relational     { ( "==" | "!=" ) relational
+                                    -> Compare(op: $1, left: $$, right: $2) } .
+relational     = additive       { ( "<" | "<=" | ">" | ">=" ) additive
+                                    -> Compare(op: $1, left: $$, right: $2) } .
 
 additive       = multiplicative { ( "+" | "-" ) multiplicative
                                     -> Binary(op: $1, left: $$, right: $2) } .
-multiplicative = primary        { ( "*" | "/" ) primary
+multiplicative = unary          { ( "*" | "/" ) unary
                                     -> Binary(op: $1, left: $$, right: $2) } .
+
+unary   = "-" u:unary -> Negate(value: $u)
+        | primary .
 
 primary = integer -> Number(text: $1)
         | "(" expression ")" -> $2 .

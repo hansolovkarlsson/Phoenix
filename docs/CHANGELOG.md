@@ -18,14 +18,16 @@ entry below that changes it says so.
 
 ## 2026-09-21: a C subset begins, with `cc` as its oracle
 
-**A C compiler has its first two constructs: [`languages/c/`](../languages/c/).**
+**A C compiler has its first three constructs: [`languages/c/`](../languages/c/).**
 
     phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
     cc prog.s -o prog && ./prog
 
-`int main(){return 42;}`, and then `+ - * /` with parentheses: a function
-returning `int` with no parameters, a block, `return` with an expression over
-integer constants, and the two comment shapes. `c.phx` is the grammar and the tree and has no opinion about a machine;
+`int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus
+and the six comparisons: a function returning `int` with no parameters, a
+block, `return` with an expression over integer constants, and the two comment
+shapes. Five of C's fifteen expression levels, and a comparison is an `int`
+worth 0 or 1 that chains to the left the way C11 says it does. `c.phx` is the grammar and the tree and has no opinion about a machine;
 `c-arm64.phx` imports it and adds one emit pass, so the split is the one every
 other language here makes. The target is arm64 assembly in the syntax `cc`
 assembles on this machine, and `cc` assembles and links it.
@@ -43,8 +45,11 @@ rest.
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. [`tests/oracle/run.sh`](../languages/c/tests/oracle/run.sh) compiles
 each program twice and compares what the two exit with, which until a function
-can be called is all a program can say. Ten programs, among them the two
-groupings the fold has to get right and a quotient that truncates toward zero. Nothing in the directory has a
+can be called is all a program can say. Sixteen programs, among them the
+groupings the folds have to get right, a quotient that truncates toward zero,
+and a signed comparison. One of them, `3 > 2 > 1`, is C11 as written and an
+error to this `cc` by default, so the oracle downgrades that one warning by
+name rather than lose the witness. Nothing in the directory has a
 hand-written expected result, which is the rule ROADMAP 6 set for the arc.
 
 **On the roadmap.** [6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)

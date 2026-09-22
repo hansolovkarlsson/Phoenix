@@ -51,6 +51,17 @@
              of $left.out, $right.out,
                 lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?") .
 
+  Negate : out = "{}\tneg x0, x0\n" of $value.out .
+
+  (* The same push and pop, then a compare and a conditional set: `x0` is 1
+   * where the condition held and 0 where it did not, which is what C11 6.5.8
+   * and 6.5.9 say a comparison is worth. The conditions are the **signed**
+   * ones, `lt` and not `lo`, because `int` is signed and `-1 < 1` has to be 1. *)
+  Compare : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\tcmp x0, x1\n\tcset x0, {}\n"
+              of $left.out, $right.out,
+                 lookup([["==", "eq"], ["!=", "ne"], ["<", "lt"], ["<=", "le"],
+                         [">", "gt"], [">=", "ge"]], $op, "?") .
+
   (* The value is already in `x0`, so returning is a jump to the epilogue.
    * The epilogue's label is the enclosing function's, handed down. *)
   Return : out = "{}\tb L{}.ret\n" of $value.out, $fname .
