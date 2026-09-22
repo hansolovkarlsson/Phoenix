@@ -101,6 +101,38 @@
    * `types` pass, because what `'a'` is worth is C's business. *)
   Character : out = "\tldr w0, ={}\n" of $code .
 
+  (* ---- string literals ----
+   *
+   * A string literal is an array in static storage, C11 6.4.5, so its bytes
+   * go in `__TEXT,__cstring` under a label of their own, and the expression
+   * is the address: `adrp` finds the 4K page the label is on and `add` the
+   * offset within it, which is how anything outside the frame is reached on
+   * this machine. The label is numbered from the thread every branch uses,
+   * so no two things share a number.
+   *
+   * The literals are collected by a second thread, `data`, in the order the
+   * walk meets them, and written out once by `Program`, after the code. A
+   * thread is what a walk in document order has, and reading one in the
+   * clause of the node that ends the walk gives its last value, which is how
+   * `Function` reads its frame size off `bytes` in `c.phx`.
+   *
+   * **The assembler is handed the text, not the bytes.** The notation has
+   * no way to walk text one character at a time, so the escapes cannot be
+   * turned into numbers here; the assembler reads `\n \t \\ \"` as C does.
+   * It does **not** read `\'`, which this machine's `as` refuses as an
+   * unrecognised escape and C allows, so that one is rewritten as the quote
+   * it stands for. A `\'` has to be told apart from the end of `\\'`,
+   * which is an escaped backslash and then a plain quote, so the escaped
+   * backslashes are set aside as tabs first, the way the `types` pass counts
+   * the length, and put back after. *)
+  thread data = ""
+
+  String : n    = $label : label = $label + 1
+         : asm  = join(split(join(split(join(split($body, "\\\\"), "\t"), "\\'"), "'"),
+                             "\t"), "\\\\")
+         : data = "{}Lstr{}:\n\t.asciz \"{}\"\n" of $data, $n, $asm
+         : out  = "\tadrp x0, Lstr{}@PAGE\n\tadd x0, x0, Lstr{}@PAGEOFF\n" of $n, $n .
+
   (* ---- places, and the two questions a node can be asked ----
    *
    * A local starts at `x29` minus its offset and runs upward from there, so
@@ -332,7 +364,7 @@
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .
-  Program   : out = "\t.text\n{}" of join($items.out, "\n") .
+  Program   : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
 
 %driver arm64 = functions, locals, types, emit-arm64 -> out .
 %driver check = functions, locals, types .

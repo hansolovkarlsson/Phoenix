@@ -27,7 +27,7 @@
  * then functions with `int` parameters and calls, then `&` and `*` with the
  * pointer declarators that make them useful, then `sizeof`, then an array of
  * `int` or of pointers, which decays to a pointer to its first element, then
- * a subscript and the pointer arithmetic it is made of, then `char` and character constants. A function returning `int` with
+ * a subscript and the pointer arithmetic it is made of, then `char`, character constants and string literals. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -45,7 +45,7 @@
  * strings with escapes -- arrive with the constructs that need them.
  *)
 
-%fragment letter digit escape plain .
+%fragment letter digit escape plain sescape splain .
 
 letter  = "a" .. "z" | "A" .. "Z" | "_" .
 digit   = "0" .. "9" .
@@ -66,6 +66,19 @@ integer = digit { digit } .
 escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" ) .
 plain     = " " .. "&" | "(" .. "[" | "]" .. "~" .
 character = "'" ( escape | plain ) "'" .
+
+(* A string literal is the same characters between double quotes, where the
+ * double quote needs an escape and the single one does not, and with **five**
+ * escapes rather than six. `\0` is left out because a string is where it
+ * stops meaning what it seems to: C reads up to three octal digits after the
+ * backslash, so `"\01"` is one byte and not a NUL and a `1`, and a lexer
+ * that knew only `\0` would count two. It is refused rather than
+ * miscounted, and arrives with the octal escapes. A character constant keeps
+ * it, because the closing quote ends it there. Two literals side by side,
+ * which C joins, are a syntax error here. *)
+sescape = "\\" ( "n" | "t" | "\\" | "'" | "\"" ) .
+splain  = " " .. "!" | "#" .. "[" | "]" .. "~" .
+string  = "\"" { sescape | splain } "\"" .
 
 space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
@@ -279,6 +292,7 @@ subscript = p:primary "[" e:expression "]"
 primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
         | integer -> Number(text: $1)
         | character -> Character(text: $1)
+        | string    -> String(text: $1)
         | name    -> Variable(name: $1)
         | "(" expression ")" -> $2 .
 
@@ -584,6 +598,30 @@ arg  = e:expression -> Arg(value: $e) .
    * characters and is not in the table. The lexer has already refused
    * anything that is neither, so the measurement never meets a character it
    * cannot find. `char-constant-every-one.c` walks the whole table. *)
+  (* **A string literal is an array of `char`**, C11 6.4.5, one longer than
+   * its characters for the NUL at the end, and it decays like any array: its
+   * `type` is a pointer to `char` and its `size` is the whole array, so
+   * `sizeof "abc"` is 4 and `"abc"[1]` is `'b'`.
+   *
+   * The length is counted rather than walked, because the notation has no
+   * way to walk text. Every escape is two characters in the source and one
+   * in the array, so the length is the text less one per escape. Counting
+   * the escapes is counting backslashes, except that `\\` is two of them
+   * and one escape. So the escaped backslashes are replaced first, by a
+   * tab, which the lexer guarantees is not in the text; after that every
+   * backslash left begins an escape of its own. Splitting at `\\` finds the
+   * same pairs the escapes are made of, because both read left to right and
+   * nothing else in an escape is a backslash.
+   *
+   * `string-length-agrees.c` holds this against the bytes the assembler
+   * wrote, counted by walking them. *)
+  String : body   = slice($text, 2, size($text) - 1)
+         : single = join(split($body, "\\\\"), "\t")
+         : length = size($single) - (size(split($single, "\\")) - 1)
+         : type   = 1
+         : width  = 1
+         : size   = $length + 1 .
+
   Character : inner = slice($text, 2, size($text) - 1)
             : code  = lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
                               ["\\\"", 34], ["\\0", 0]], $inner,

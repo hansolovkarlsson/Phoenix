@@ -5186,3 +5186,62 @@ so the first run of it compiled a perfectly good `'A'`. Read back with
 
 *Five oracle programs, 115 in all; three refusals, twenty-nine.* Nothing in
 `phoenix/` was touched.
+
+## 2026-09-22: string literals, and the bytes the notation could not write
+
+The item closes. `"hello, world"` is an array of `char` in static storage,
+C11 6.4.5, one longer than its characters for the NUL, and it decays like any
+array: the node's `type` is a `char *` and its `size` is the whole array. The
+emit pass gives each literal a label in `__TEXT,__cstring`, reaches it with
+`adrp` and `add`, and collects the literals in a thread that `Program` writes
+out once, the way `Function` reads its frame off `bytes`. **Programs print
+now**, through a `puts` or `putchar` the program declares, and the oracle
+compares their output as well as their exit status. That is the channel the
+`char` entry wanted: an exit status keeps eight bits and had already hidden
+one fault today.
+
+**The recommendation made before this step was wrong, and the notation is why.**
+The plan was to compute each literal's bytes in the description, so that the
+assembler would not be trusted with C's escapes. It cannot be done: the
+notation has no iteration over data, which ROADMAP 5 already lists as a wart,
+and `each` fills a template rather than applying anything to an element, so
+nothing can visit a string's characters one at a time. The one route left
+would have been a chain of ninety-five substitutions through control-character
+markers and ninety-five more back. So the assembler writes the bytes and the
+description writes only the length, and the question of an `ord` for
+character constants is still at one use, because this was not a second.
+
+**The assembler, asked, disagreed with C.** Before relying on it, one line
+was assembled with all six escapes in it, and `as` refused `\'` as an
+unrecognised escape, which C allows. The emit pass rewrites it as a plain
+quote. That has to tell `\'` apart from the end of `\\'`, an escaped
+backslash and a plain quote, so the escaped backslashes are set aside first,
+as tabs, which the lexer guarantees are not in the text, and put back after.
+The `types` pass counts the length the same way: with `\\` set aside, every
+backslash left begins an escape, and each escape is one byte less than its
+spelling. `string-length-agrees.c` holds that count against the bytes the
+assembler wrote, walked one at a time, so the two routes to the length are
+compared on every run.
+
+*`\0` is refused in a string.* C reads up to three octal digits after a
+backslash, so `"\01"` is one byte, and a lexer that knew only `\0` would
+count it as two. A character constant keeps `'\0'`, where the closing quote
+ends the escape. Two literals side by side, which C joins, are a syntax error
+at the second. `cc` compiles both programs.
+
+*Every step left out on purpose was caught*: no rewrite of `\'`, the rewrite
+without setting `\\` aside, the length without setting it aside, and a
+length that ignored escapes. The first two turn into assembler errors, which
+the oracle reports as such.
+
+*One warning was thrown away, by me.* The emit attribute that holds the
+rewritten text was first called `text`, which is the node's field, and a
+field is read before an attribute. `phx` warned, with the line and the
+reason, and the warning went to standard error, where a `| tail -6` on the
+output cut it off; the `.asciz` came out with the raw token in it, quotes and
+all. The tool did what the reference says. Warnings are now read with
+standard error captured on its own.
+
+*Eight oracle programs, 123 in all, every one agreeing on its first green
+run; two refusals, thirty-one.* Nothing in `phoenix/` was touched, and ROADMAP
+6.1 has one construct left before `typedef`: `struct`.

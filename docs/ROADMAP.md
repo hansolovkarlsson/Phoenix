@@ -634,8 +634,9 @@ is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-mo
 `sizeof` *(done 2026-09-22, indexing and the difference of two pointers
 last; ninety-nine programs against `cc`, twenty-five refused and two
 divergences pinned)*; **`char` and string
-literals** *(`char` as a type and character constants are in since 2026-09-22, 115
-programs against `cc`; **string literals are next**)*; `struct`. It stops before `typedef`
+literals** *(done 2026-09-22; 123 programs against `cc`, and the oracle
+compares what they print as well as how they exit)*; **`struct`, which is
+next**. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
@@ -704,8 +705,12 @@ check the description's *shape* against when it is large enough to matter.
 
 **What it borrows, written down so the borrowing is visible**: `cc -E` for
 anything with a `#` in it, which the first dozen constructs do not need; `cc`
-to assemble and link; the system libc, reached through a `printf` declared in
-the program rather than included, until the preprocessor exists.
+to assemble and link, and the assembler to turn a string literal's escapes
+into bytes, which the notation cannot do; the system libc, reached through a
+`puts` or a `putchar` declared in the program rather than included, until the
+preprocessor exists. *Not `printf`, since 2026-09-22*: it is variadic, and
+Apple's arm64 passes variadic arguments on the stack rather than in
+registers, which is a calling convention this subset does not have.
 
 *The predictions, for [postmortem.md](postmortem.md) to score.* One: the
 subset reaches `struct` with **no change to the tool** — `%import`, the symbol

@@ -118,11 +118,21 @@ Eleven more oracle programs, 110 in all, and 26 refusals.
 Each is an `int`, as C11 6.4.4.4 says, so `sizeof 'a'` is 4. Printable ASCII
 only: a hex or octal escape, two characters between the quotes and a tab typed
 between them are C, and are refused by the lexer as outside the subset. One
-oracle program checks all ninety-five printable characters. String literals
-are the rest of the item. Five more oracle programs, 115 in all, and 29
-refusals.
+oracle program checks all ninety-five printable characters. Five more oracle
+programs, 115 in all, and 29 refusals.
 
-**Tests:** 224 → 244, twenty-two in and two retired. The first thirteen were
+**And string literals, which close the item.** `"hello, world"` is an array
+of `char` in static storage, one longer than its characters, decaying to a
+`char *`: `sizeof "abc"` is 4 and `"abc"[1]` is `'b'`. **Programs can print
+now**, through a `puts` or `putchar` declared in the program, and the oracle
+compares what they print as well as how they exit. The escapes are five of
+the six character constants have: `\0` is refused in a string, because C
+reads octal digits after it. Two literals side by side, which C joins, are
+refused too. `printf` is not reachable yet: it is variadic, and Apple's arm64
+passes variadic arguments on the stack. Eight more oracle programs, 123 in
+all, and 31 refusals.
+
+**Tests:** 224 → 246, twenty-four in and two retired. The first thirteen were
 all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
@@ -135,8 +145,8 @@ the two refusals of pointer arithmetic were retired by indexing, and four came
 in: two pointers added, a pointer taken from a number, a subscript on an
 `int`, and two pointers to different types subtracted. And a second pin
 beside the first, on the size of a pointer difference, and a refusal of a
-`char *` less an `int *`, and three of character constants outside the
-subset.
+`char *` less an `int *`, three of character constants outside the
+subset, and two of string literals.
 
 ---
 

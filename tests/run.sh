@@ -1601,6 +1601,14 @@ refuses "two characters in one" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-two-characters.c"
 refuses "and a tab typed between the quotes" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-a-tab.c"
+# A string literal takes five of those escapes and not `\0`, because C reads
+# up to three octal digits after it and a lexer that knew only `\0` would
+# miscount `"\01"`. Two literals side by side, which C joins, reach the parser
+# as two strings and are a syntax error at the second. `cc` compiles both.
+refuses "a NUL written into a string" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-with-a-nul.c"
+refuses "and two strings side by side" 'and found ""b""' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-concatenated.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the
