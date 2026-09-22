@@ -104,7 +104,18 @@ way: `sizeof(&a[1] - a)` is 8 under `cc` and 4 here, and both answers are
 asserted. Subtracting pointers to different types is refused, as C requires.
 Twenty more oracle programs, 99 in all, 25 refusals and two divergences.
 
-**Tests:** 224 → 240, eighteen in and two retired. The first thirteen were
+**Then `char`, as a type.** Locals, parameters, arrays and pointers of
+`char`, `sizeof(char)`, and the conversions C11 6.3.1 asks for. A plain `char`
+is **signed** on Apple's arm64, where Apple departs from AAPCS64, so it is
+loaded with `ldrsb`; a store keeps the low byte, so `char c = 300;` holds 44;
+and an assignment to a `char` is worth what the `char` holds afterwards.
+Anything that is not a place or a pointer is promoted to `int`, so
+`sizeof(c + 1)` is 4. A type is now two numbers, the stars and the width of
+what is under them, and two pointers are the same type only when both agree.
+Character constants and string literals are the rest of the item. Eleven more
+oracle programs, 110 in all, and 26 refusals.
+
+**Tests:** 224 → 241, nineteen in and two retired. The first thirteen were
 all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
@@ -116,7 +127,8 @@ both answers so that closing the gap fails with the old numbers in it. Last,
 the two refusals of pointer arithmetic were retired by indexing, and four came
 in: two pointers added, a pointer taken from a number, a subscript on an
 `int`, and two pointers to different types subtracted. And a second pin
-beside the first, on the size of a pointer difference.
+beside the first, on the size of a pointer difference, and a refusal of a
+`char *` less an `int *`.
 
 ---
 

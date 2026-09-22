@@ -1587,6 +1587,10 @@ refuses "a pointer taken from a number" "'-' does not take a pointer from a numb
 refuses "a difference of two pointers to different types" \
         "only when they point at the same type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-unlike-pointers.c"
+# The same type means the same stars **and** the same thing under them, since
+# `char`: a type is two numbers now, and both have to agree.
+refuses "and a 'char *' less an 'int *'" "only when they point at the same type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-char-from-int-pointer.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the

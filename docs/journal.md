@@ -5089,3 +5089,52 @@ exactly like one that passes for the right one.
 run; the pointer-difference refusal became an oracle program, and one
 refusal for unlike pointers replaced it, twenty-five. Two divergences.* 240
 checks.
+
+## 2026-09-22: `char`, which needed a number and not a node
+
+The first half of *`char` and string literals*: `char` as a type. Character
+constants and string literals are the second half, and are separate because
+they are a question about the **lexer** and about static data, where this is
+a question about widths.
+
+**A type is two numbers now.** The grammar had said, since the first pointer,
+that `char` would be the day a type needs a node of its own. It needed one
+more number: the width of what is at the bottom of the stars, 4 for an `int`
+and 1 for a `char`. The declaration keeps the keyword, `locals` turns it into
+`basew` and binds it as a fourth value beside offset, stars and count, and
+`types` carries it as `width` through the expressions that can have a
+pointer's or a place's type. Everything else is 4 by an `otherwise`, and that
+default is C11 6.3.1.1's integer promotion rather than a convenience: a
+`char` in an expression is an `int` before any operator sees it, so only a
+thing that is still a place, or points at one, can be narrower. Every size
+question in both files became `lookup([[0, width]], stars, 8)`. `struct` is
+where two numbers stop being enough, because a member has a type and a number
+cannot hold one, so the prediction was one construct early rather than wrong.
+
+**This machine's `char` is signed.** AAPCS64 makes a plain `char` unsigned;
+Apple's arm64 ABI departs from it and makes it signed, and `cc` here agrees
+with Apple. So a load is `ldrsb`, which sign-extends into `w0`, and that one
+instruction is also the whole of the promotion: what arrives is the `int`.
+A store is `strb`. `char-is-signed.c` exits 101 under `cc` and is the program
+that knows which ABI this is.
+
+*An assignment is worth what its left side holds afterwards*, C11 6.5.16, so
+`(c = 300)` is 44 when `c` is a `char`, and the emit pass narrows `w0` with a
+`sxtb` after a one-byte store. The first program written for that passed
+without the `sxtb`, and was caught only because each step was left out on
+purpose again. It returned the value as its exit status, and the shell keeps
+eight bits of one, so 300 reached the comparison as 44 on both routes: the
+shell did the narrowing the program was checking the compiler for. It now
+divides by ten first. The breakage run itself had a second fault of the same
+kind: the `sed` that was to remove the `sxtb` matched nothing, and the green
+it reported was the unbroken file. Both were found by asking why a line that
+must matter did not.
+
+*One step has no witness and cannot have one*: a `char` array sized as though
+its elements were `int`s only makes the frame larger, which no program can
+observe, for the reason the frame entry gave about packing. Too small would be
+caught, because two arrays would overlap.
+
+*Eleven oracle programs, 110 in all, every one agreeing on its first green
+run; one refusal, twenty-six, for a `char *` less an `int *`, which `cc`
+refuses too.* Nothing in `phoenix/` was touched.

@@ -27,7 +27,7 @@
  * then functions with `int` parameters and calls, then `&` and `*` with the
  * pointer declarators that make them useful, then `sizeof`, then an array of
  * `int` or of pointers, which decays to a pointer to its first element, then
- * a subscript and the pointer arithmetic it is made of. A function returning `int` with
+ * a subscript and the pointer arithmetic it is made of, then `char`. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -98,7 +98,14 @@ item = "int" n:name "(" p:params ")" ";"
  * one parameter would arrive bare and two would arrive in a node called
  * `params`. `-> $1` says *the list, whatever its length*. *)
 params = [ param { "," q:param -> $q } ] -> $1 .
-param  = "int" s:{ "*" } n:name -> Param(name: $n, stars: size($s)) .
+param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
+
+(* What is at the bottom of the stars, kept as the keyword. `int` and `char`
+ * are the two, and a rule with no action answers the one literal it matched,
+ * so a declaration node carries the word and the `locals` pass turns it into
+ * a width. A function still returns an `int` and nothing else: `char` as a
+ * return type is not in this step, and the item's header says `int`. *)
+base   = "int" | "char" .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
@@ -108,9 +115,10 @@ block = "{" { statement } "}" -> Block(body: $2) .
  *
  * The stars are **counted** rather than kept: `int **p` declares a name with
  * two of them, and two is the whole of what any pass here asks. A type in this
- * subset is `int` and a number of stars, so it fits in a number the node was
- * going to carry anyway; the day a type is a `char` or a `struct` is the day
- * it needs a node of its own. *)
+ * subset is a base and a number of stars, so it fits in the keyword and the
+ * number the node was going to carry anyway. This said until 2026-09-22 that
+ * `char` would be the day a type needs a node of its own; `char` needed a
+ * second number, and `struct` is the day it needs a node. *)
 statement = "return" e:expression ";"              -> Return(value: $e)
           (* An array first, because the three declaration forms are told
            * apart by the token after the name and this one's is `[`. The
@@ -124,11 +132,12 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * count every pass has to ask about, and here the question has a
            * sharp edge. `int a[0]` is a count of zero and `int a;` is no
            * count at all, and one node would have to spell both the same. *)
-          | "int" s:{ "*" } n:name "[" c:integer "]" ";"
-                                     -> LocalArray(name: $n, stars: size($s), count: int($c))
-          | "int" s:{ "*" } n:name "=" e:expression ";"
-                                     -> LocalInit(name: $n, stars: size($s), value: $e)
-          | "int" s:{ "*" } n:name ";" -> Local(name: $n, stars: size($s), count: 0)
+          | b:base s:{ "*" } n:name "[" c:integer "]" ";"
+                   -> LocalArray(name: $n, base: $b, stars: size($s), count: int($c))
+          | b:base s:{ "*" } n:name "=" e:expression ";"
+                   -> LocalInit(name: $n, base: $b, stars: size($s), value: $e)
+          | b:base s:{ "*" } n:name ";"
+                   -> Local(name: $n, base: $b, stars: size($s), count: 0)
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
            * before the outer one does, which is what C11 6.8.4 says. *)
@@ -224,7 +233,7 @@ multiplicative = unary          { ( "*" | "/" ) unary
 unary   = "-" u:unary -> Negate(value: $u)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
-        | "sizeof" "(" "int" s:{ "*" } ")" -> SizeOfType(stars: size($s))
+        | "sizeof" "(" b:base s:{ "*" } ")" -> SizeOfType(base: $b, stars: size($s))
         | "sizeof" u:unary                 -> SizeOfExpr(value: $u)
         | postfix .
 
@@ -316,12 +325,19 @@ arg  = e:expression -> Arg(value: $e) .
 (* one that is kept, and `struct` will need member offsets rather than  *)
 (* this.                                                                *)
 (*                                                                     *)
-(* A name means **three** things: where it lives, how many stars stood  *)
-(* in front of it, and how many elements it has, zero meaning it is not *)
-(* an array. All three go in one table rather than in three side by     *)
-(* side, because a second table would need the same `down` at a         *)
-(* function and the same save-and-restore at a block, and two copies of *)
-(* a scope rule are two chances to disagree about what a scope is.      *)
+(* A name means **four** things: where it lives, how many stars stood   *)
+(* in front of it, how many elements it has, zero meaning it is not an  *)
+(* array, and how wide the thing at the bottom of the stars is, 4 for   *)
+(* an `int` and 1 for a `char`. All four go in one table rather than in *)
+(* four side by side, because a second table would need the same `down` *)
+(* at a function and the same save-and-restore at a block, and two      *)
+(* copies of a scope rule are two chances to disagree about what a      *)
+(* scope is.                                                            *)
+(*                                                                     *)
+(* The width is `basew` here and `width` in the `types` pass, which     *)
+(* reads it off a name and carries it through every expression. Two     *)
+(* names because two passes defining one attribute is a thing `phx`     *)
+(* warns about, rightly.                                                *)
 
 %pass locals
 
@@ -364,12 +380,13 @@ arg  = e:expression -> Arg(value: $e) .
             : down funcs  = bind($funcs, $name, size($params))
             : frame = $bytes .
 
-  (* A parameter is an `int` or a pointer and never an array, because the
+  (* A parameter is a scalar or a pointer and never an array, because the
    * subset has no declarator for one and C would have rewritten it to a
    * pointer if it had. So it takes eight bytes like any scalar. *)
-  Param : offset = $bytes + 8
+  Param : basew  = lookup([["char", 1]], $base, 4)
+        : offset = $bytes + 8
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $stars, 0])
+        : env    = bind($env, $name, [$offset, $stars, 0, $basew])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + 8
         : pindex = $pindex + 1
@@ -391,35 +408,38 @@ arg  = e:expression -> Arg(value: $e) .
         : env   = $held
         : scope = $heldscope .
 
-  (* A scalar is eight bytes of frame whether it is a four-byte `int` or an
-   * eight-byte pointer, and binds a count of zero, which is what *not an
-   * array* is spelled as everywhere below. *)
-  Local     : offset = $bytes + 8
-            : env    = bind($env, $name, [$offset, $stars, 0])
+  (* A scalar is eight bytes of frame whether it is a one-byte `char`, a
+   * four-byte `int` or an eight-byte pointer, and binds a count of zero,
+   * which is what *not an array* is spelled as everywhere below. *)
+  Local     : basew  = lookup([["char", 1]], $base, 4)
+            : offset = $bytes + 8
+            : env    = bind($env, $name, [$offset, $stars, 0, $basew])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + 8
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
   (* A declaration with an initialiser is never an array: the subset has no
    * way to write the initialiser one would want. *)
-  LocalInit : offset = $bytes + 8
-            : env    = bind($env, $name, [$offset, $stars, 0])
+  LocalInit : basew  = lookup([["char", 1]], $base, 4)
+            : offset = $bytes + 8
+            : env    = bind($env, $name, [$offset, $stars, 0, $basew])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + 8
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
-  (* An element is four bytes or eight, the whole thing is `count` of them,
-   * and what the frame gives it is that rounded up to eight.
+  (* An element is one byte, four or eight, the whole thing is `count` of
+   * them, and what the frame gives it is that rounded up to eight.
    *
    * A count of zero is refused rather than bound, and that is what keeps
    * *count of zero* free to mean *not an array* in every table and test
    * below. C11 6.7.6.2 wants a size greater than zero; this `cc` takes
    * `int a[0]` as an extension and gives it a `sizeof` of 0, so without the
    * refusal it is a program both compile and answer differently. *)
-  LocalArray : ebytes = lookup([[0, 4]], $stars, 8)
+  LocalArray : basew  = lookup([["char", 1]], $base, 4)
+             : ebytes = lookup([[0, $basew]], $stars, 8)
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $stars, $count])
+             : env    = bind($env, $name, [$offset, $stars, $count, $basew])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -427,17 +447,18 @@ arg  = e:expression -> Arg(value: $e) .
                      of $name
              ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
-  (* The triple once, and its parts named from it. `Assign` has no clause
+  (* The four once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and a place is one of these two
    * nodes, so the question is asked where the name is rather than twice.
    *
    * `Deref` answers `count` as well, and always zero, so that anything
    * asking a **place** whether it is an array gets an answer from either
    * kind of place rather than from one of them. *)
-  Variable : means  = lookup($env, $name, [0, 0, 0])
+  Variable : means  = lookup($env, $name, [0, 0, 0, 4])
            : offset = at($means, 1)
            : stars  = at($means, 2)
            : count  = at($means, 3)
+           : basew  = at($means, 4)
            ! not defined($env, $name) : "'{}' is not declared" of $name .
 
   Deref : count = 0 .
@@ -478,10 +499,25 @@ arg  = e:expression -> Arg(value: $e) .
    * what keeps the clauses below to the nodes that have something to say. *)
   otherwise type = 0
 
+  (* **A type is two numbers since `char`**: how many stars, and how wide the
+   * thing at the bottom of them is, 4 for an `int` and 1 for a `char`. The
+   * second was always 4 and so was never written, until there was a second
+   * answer. It is carried by the expressions that have a pointer's or a
+   * place's type, a name, a `*`, a `&`, an assignment and pointer
+   * arithmetic, and everything else is 4. That default is **C11 6.3.1.1's
+   * integer promotion**: a `char` in an expression is an `int` before any
+   * operator sees it, so `c + 1`, `-c` and `c < d` are all `int`s, and only
+   * a thing that is still a place, or points at one, can be narrower.
+   *
+   * `struct` is where two numbers stop being enough, because a member has a
+   * type of its own and a number cannot hold one. The line in the grammar
+   * that expected `char` to need a node was one construct early. *)
+  otherwise width = 4
+
   (* And a size falls out of the type for everything except a name, because a
    * name is the only thing that can be an array: no operator here answers
    * one. `Variable` therefore says its own and this covers the rest. *)
-  otherwise size = lookup([[0, 4]], $type, 8)
+  otherwise size = lookup([[0, $width]], $type, 8)
 
   (* **A name that is an array decays**, C11 6.3.2.1: in an expression it is a
    * pointer to its first element, so its `type` has one more star than it was
@@ -489,19 +525,23 @@ arg  = e:expression -> Arg(value: $e) .
    * the places C says the conversion does not happen, and the two attributes
    * being separate is what lets one of them answer a decayed question and the
    * other an undecayed one without either knowing about `sizeof`. *)
-  Variable : elem = lookup([[0, 4]], $stars, 8)
-           : type = lookup([[0, $stars]], $count, $stars + 1)
-           : size = lookup([[0, $elem]], $count, $count * $elem) .
-  Addr     : type = $place.type + 1 .
+  Variable : width = $basew
+           : elem  = lookup([[0, $width]], $stars, 8)
+           : type  = lookup([[0, $stars]], $count, $stars + 1)
+           : size  = lookup([[0, $elem]], $count, $count * $elem) .
+  Addr     : type  = $place.type + 1
+           : width = $place.width .
   (* An array is not an lvalue, C11 6.3.2.1 again: it decays before anything
    * can be assigned to it, so there is nothing to assign to. Without this the
    * emit pass would store through the array's address and write element
    * zero, which is a wrong answer rather than a refusal. *)
-  Assign   : type = $place.type
+  Assign   : type  = $place.type
+           : width = $place.width
            ! $place.count > 0
                : "an array is not something a value can be put in" .
   Arg      : type = $value.type .
-  Deref    : type = $value.type - 1
+  Deref    : type  = $value.type - 1
+           : width = $value.width
            ! $value.type < 1
                : "'*' wants a pointer, and this is an int" .
 
@@ -538,13 +578,19 @@ arg  = e:expression -> Arg(value: $e) .
    * a pointer less an int; two pointers of **different** types are refused,
    * as 6.5.6 requires, and that is also what keeps the difference from
    * coming out as a type no value has. *)
-  Binary(op: "+") : type = $left.type + $right.type
+  (* The width of a sum is the pointer's, from whichever side it is on, and
+   * 4 when there is no pointer, which is the promotion above. *)
+  Binary(op: "+") : type  = $left.type + $right.type
+                  : width = lookup([[0, 4]], $type,
+                                   lookup([[0, $right.width]], $left.type, $left.width))
       ! $left.type > 0 and $right.type > 0
           : "'+' does not add two pointers" .
-  Binary(op: "-") : type = $left.type - $right.type
+  Binary(op: "-") : type  = $left.type - $right.type
+                  : width = lookup([[0, 4]], $type, $left.width)
       ! $left.type = 0 and $right.type > 0
           : "'-' does not take a pointer from a number"
-      ! $left.type > 0 and $right.type > 0 and $left.type <> $right.type
+      ! $left.type > 0 and $right.type > 0
+            and ($left.type <> $right.type or $left.width <> $right.width)
           : "'-' takes two pointers only when they point at the same type" .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
    * either is C's own refusal rather than this subset's. *)
