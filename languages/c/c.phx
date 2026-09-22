@@ -25,7 +25,7 @@
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
  * then a local `int`, then `if`, `while`, `for` and blocks as statements,
  * then functions with `int` parameters and calls, then `&` and `*` with the
- * pointer declarators that make them useful. A function returning `int` with
+ * pointer declarators that make them useful, then `sizeof`. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -181,10 +181,19 @@ multiplicative = unary          { ( "*" | "/" ) unary
 (* `&` takes a place and `*` takes anything, which is C11 6.5.3.2 as written.
  * `&*p` is therefore `p` without anybody saying so: the address of a
  * dereference is the thing dereferenced, and the emit pass gets that from the
- * shape of the tree rather than from a rule about it. *)
+ * shape of the tree rather than from a rule about it.
+ *
+ * `sizeof` has two shapes and the **type** one goes first, because `sizeof
+ * (x)` would otherwise be taken by the expression form's parenthesised
+ * primary and `sizeof(int)` would fail there: `int` is a reserved word and
+ * no expression begins with it. The two build different nodes rather than
+ * one node with a field that is sometimes a type, for the reason the
+ * declarations give above. *)
 unary   = "-" u:unary -> Negate(value: $u)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
+        | "sizeof" "(" "int" s:{ "*" } ")" -> SizeOfType(stars: size($s))
+        | "sizeof" u:unary                 -> SizeOfExpr(value: $u)
         | primary .
 
 (* A call before a variable, because `f` fails at `(` and falls through.
@@ -373,6 +382,16 @@ arg  = e:expression -> Arg(value: $e) .
                : "'*' wants a pointer, and this is an int" .
 
   Negate ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
+
+  (* `sizeof` is worth an `int` here and a `size_t` in C. `size_t` is a
+   * **typedef**, and ROADMAP 6.1 stops before `typedef` on purpose, so this
+   * subset has no way to name the type the answer ought to have. The cost is
+   * one program: `sizeof(sizeof(int))` is 8 under `cc` and 4 here, and it is
+   * written down in `tests/divergent/` with a check that it still diverges,
+   * rather than compiled around. Everything else about `sizeof` agrees,
+   * because the answers themselves, 4 and 8, are the ones `cc` gives. *)
+  SizeOfType : type = 0 .
+  SizeOfExpr : type = 0 .
 
   (* C11 6.5.6 lets `+` and `-` take a pointer and an integer, and counts the
    * integer in what the pointer points at. That size is the thing this subset

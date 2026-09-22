@@ -1517,8 +1517,8 @@ refuses "and the piped form, which needed a rung of its own to read" \
 # C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
 # The first seven constructs, `int main(){return 42;}`, `+ - * /` with
 # parentheses, unary minus with the comparisons, a local `int`, `if`, `while`,
-# `for` and blocks, functions with parameters and calls, and `&` and `*` with
-# the pointer declarators, emitted as arm64 assembly that `cc` assembles and
+# `for` and blocks, functions with parameters and calls, `&` and `*` with
+# the pointer declarators, and `sizeof`, emitted as arm64 assembly that `cc` assembles and
 # links. The oracle is `cc` itself, and what is compared is what a program
 # exits with, because until a function can be called that is all a program
 # can say. Skipped where the machine is not arm64, since `cc`
@@ -1577,6 +1577,13 @@ refuses "a '*' between a pointer and a number" "'*' does not take a pointer" \
 refuses "pointer arithmetic, which needs a size the subset has not got" \
         "counts in what it points at" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-arithmetic.c"
+# `sizeof` does not evaluate its operand, and the passes walk it anyway, which
+# is C: the name still has to be declared and the call still has to have the
+# right number of arguments.
+refuses "a 'sizeof' of a name nothing declared" "'y' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/sizeof-undeclared.c"
+refuses "and a '*' on what a 'sizeof' is worth" "'*' wants a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/deref-a-sizeof.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
@@ -1585,8 +1592,31 @@ if [ "$(uname -m)" = "arm64" ]; then
         report fail "C programs agree with cc"
         printf '%s\n' "$co" | grep -A3 FAIL | sed 's/^/        /' | head -12
     fi
+    # **One program where the two disagree, pinned rather than fixed**, the
+    # way `languages/awk/tests/divergent/` pins the lexical seam. `sizeof` is
+    # worth a `size_t` in C and an `int` here, because `size_t` is a typedef
+    # and ROADMAP 6.1 stops before `typedef`. Both answers are asserted, so
+    # closing the gap fails this with the old numbers in it.
+    dv="$root/languages/c/tests/divergent/sizeof-of-sizeof.c"
+    dt="$root/build/c-divergent"; rm -rf "$dt"; mkdir -p "$dt"
+    if cc -w -o "$dt/want" "$dv" 2>/dev/null \
+       && "$phx" --driver arm64 "$root/languages/c/c-arm64.phx" "$dv" \
+              > "$dt/got.s" 2>/dev/null \
+       && cc -o "$dt/got" "$dt/got.s" 2>/dev/null; then
+        "$dt/want"; want=$?
+        "$dt/got";  got=$?
+        if [ "$want" = 8 ] && [ "$got" = 4 ]; then
+            report pass "sizeof(sizeof(int)) is 8 to cc and 4 here, as written down"
+        else
+            report fail "the sizeof divergence is the one written down" \
+                   "cc says $want and phoenix says $got; divergent/ says 8 and 4"
+        fi
+    else
+        report fail "the sizeof divergence compiles on both routes"
+    fi
+    rm -rf "$dt"
 else
-    skip 1 "the C oracle needs an arm64 cc, and this machine is not arm64"
+    skip 2 "the C oracle and the sizeof divergence need an arm64 cc, and this machine is not arm64"
 fi
 
 echo

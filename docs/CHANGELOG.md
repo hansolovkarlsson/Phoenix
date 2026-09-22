@@ -62,12 +62,28 @@ machine, the calling convention and the frame are all untouched. Three more
 oracle programs, 61 in all, two of them written to catch a half-finished
 narrowing and checked by half-finishing one.
 
-**Tests:** 224 → 231. Seven new ones, every one a refusal: the address of
+**Later again: `sizeof`.** Both shapes, `sizeof(int)` and `sizeof(int **)`
+and `sizeof x` and `sizeof *p`, and the operand is **not evaluated**, which
+C11 6.5.3.4 requires and which two oracle programs check by putting an
+assignment and a side-effecting call inside one. It wanted nothing from the
+passes: while `int` is the only base type a star count already is a size, so
+this reads the table the register letter comes from for its other column.
+
+**One number disagrees with `cc`, and is written down rather than refused.**
+C makes `sizeof` worth a `size_t`, which is a typedef, and this subset stops
+before `typedef`, so `sizeof` is worth an `int` and `sizeof(sizeof(int))` is
+8 under `cc` and 4 here. `languages/c/tests/divergent/` holds the program and
+the suite pins **both** answers, so closing the gap fails with the old numbers
+in it.
+
+**Tests:** 224 → 234. Ten new ones, every one a refusal but the last: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
 pointer; and pointer arithmetic, which after the ninth parameter is the
 second thing in the C subset refused for being outside the subset rather than
-outside the language.
+outside the language. Then a `sizeof` of a name nothing declared and a `*` on
+what a `sizeof` is worth, and the pin on `sizeof(sizeof(int))`, which asserts
+both answers so that closing the gap fails with the old numbers in it.
 
 ---
 

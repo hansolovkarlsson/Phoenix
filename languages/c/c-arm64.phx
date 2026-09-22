@@ -159,6 +159,19 @@
   Param : out = "\tstr {}{}, [x29, #-{}]\n"
             of lookup([[0, "w"]], $stars, "x"), $slot - 1, 8 * $slot .
 
+  (* **The operand is not evaluated**, which is C11 6.5.3.4 and the whole
+   * reason these two clauses do not mention `$value.out`: `sizeof bump(&x)`
+   * does not call `bump`, and `sizeof(x = 2)` does not assign. The earlier
+   * passes still walk the operand, so a name nothing declared and a call with
+   * the wrong arity are refused inside a `sizeof` exactly as outside one,
+   * which is also C.
+   *
+   * The size itself is the same table the register letter comes from, read
+   * for the other column: no stars is an `int` and four bytes, a star is a
+   * pointer and eight. *)
+  SizeOfType : out = "\tldr w0, ={}\n" of lookup([[0, 4]], $stars, 8) .
+  SizeOfExpr : out = "\tldr w0, ={}\n" of lookup([[0, 4]], $value.type, 8) .
+
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
    * say and what `cset` left there. This one needs no width: an `int` in
    * `w0` is zero exactly when `x0` is, because `w0` was written last and

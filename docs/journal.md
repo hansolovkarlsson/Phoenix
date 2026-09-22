@@ -4791,3 +4791,53 @@ finding out was two minutes.
 
 *Fifty-nine programs became sixty-one, and the suite is unchanged at 231
 checks*, because the oracle is one check however many programs it runs.
+
+## 2026-09-22: `sizeof`, which wanted nothing, and the one number it got wrong
+
+The roadmap's next item is *arrays and `sizeof`*. They came apart on
+inspection: `sizeof` is testable on its own and arrays are not testable
+without it, so `sizeof` went first with the suite green, which is the rule
+this arc was set up under.
+
+**It wanted nothing.** Two alternatives in `unary`, two node types, two emit
+clauses, and the `types` pass did not grow a line. The reason is worth having
+written down, because it will stop being true: while `int` is the only base
+type, **a star count already is a size**. No stars is four bytes and any star
+is eight, so `lookup([[0, 4]], t, 8)` is the whole of `sizeof`, read from the
+same table the register letter comes from and for its other column. When
+`char` arrives that table gets a second row and a size stops being derivable,
+and that is the day a type needs a node rather than a number.
+
+**The type form goes before the expression form**, which ordered choice makes
+a decision rather than a preference. `sizeof(x)` would otherwise be taken by
+the expression form, whose primary is a parenthesised expression, and then
+`sizeof(int)` would fail there because `int` is reserved and no expression
+begins with it. Tried the other way round, both work.
+
+**The operand is not evaluated**, C11 6.5.3.4, which is one absence in two
+clauses: neither mentions `$value.out`. `sizeof(x = 2)` does not assign and
+`sizeof bump(&x)` does not call, and both are oracle programs because an
+absence is the kind of thing that is right by accident until somebody checks.
+The earlier passes still walk the operand, so a name nothing declared and a
+call with the wrong arity are refused inside a `sizeof` exactly as outside
+one, which is also C.
+
+**One number is wrong, and it is the first thing in this arc to be written
+down as wrong rather than refused.** C makes `sizeof` worth a `size_t`, which
+is eight bytes here; `size_t` is a **typedef**, and ROADMAP 6.1 stops the
+subset before `typedef` on purpose, so there is no way to name the type this
+answer ought to have. So `sizeof` is worth an `int`, and
+`sizeof(sizeof(int))` is 8 under `cc` and 4 here.
+
+Everything else agrees, because the answers themselves, 4 and 8, are `cc`'s.
+The gap goes in `tests/divergent/`, which is the shape
+`languages/awk/tests/divergent/` already established for the lexical seam, and
+the suite asserts **both** numbers rather than the difference: closing it
+fails the check with the old answers in it, which is what will happen when
+`typedef` arrives and brings `size_t` with it. A refusal would have been
+wrong here. `sizeof(sizeof(int))` is a legal program that this compiler
+compiles and gets a different answer to, and calling that a refusal would hide
+it behind a message.
+
+*Eight oracle programs, sixty-nine in all, and all eight agreed on the first
+run.* Two more refusals, twenty. Three more checks, 234.

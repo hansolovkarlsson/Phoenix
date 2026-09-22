@@ -630,9 +630,10 @@ parentheses; unary minus and comparison; a local `int`; `;`-separated
 statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention *(prediction three
 is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
-`&` and `*` *(through here in the tree since 2026-09-22, fifty-eight programs
-against `cc` and eighteen refused)*; arrays
-and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`
+`&` and `*`; arrays and
+`sizeof` *(`sizeof` through here in the tree since 2026-09-22, sixty-nine
+programs against `cc` and twenty refused; arrays are what is left of this
+item)*; `char` and string literals; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
@@ -659,12 +660,22 @@ stored into it with `str w0`. `tests/oracle/overflow.c` went from 160 to 218,
 and two programs were added that a **half-finished** narrowing fails, which
 was checked by half-finishing it on purpose.
 
-*What is still owed to `sizeof`.* A star count says which register a value
-lives in, and that is the whole of what this subset needs while every
-declaration is a scalar. It does not say how many **bytes** a thing takes,
-which is what `sizeof` reports and what `a + 1` counts in. That number arrives
-with arrays, and brings `sxtw` with it, where a 32-bit index meets a 64-bit
-pointer.
+*`sizeof` came next, the same day, and wanted nothing.* A star count already
+says how many bytes a value takes while `int` is the only base type, so the
+two `sizeof` shapes read that table for its other column and the `types` pass
+did not grow. What `sizeof` did want was a decision: C11 6.5.3.4 makes it
+worth a `size_t`, `size_t` is a **typedef**, and this arc stops before
+`typedef` on purpose, so it is worth an `int` here and
+`tests/divergent/sizeof-of-sizeof.c` pins the one program that shows the
+difference, 8 against 4.
+
+*What arrays still want, and it is the first thing on this list that the
+notation has not already answered.* A size that is **not** derivable from a
+star count: `int a[10]` is forty bytes and takes more than one slot, so a
+declaration's type reaches the frame for the first time, and `a + 1` counts in
+elements, which is the refusal in the `types` pass waiting to be replaced by
+the arithmetic it stands in for. `sxtw` arrives here, where a 32-bit index
+meets a 64-bit pointer.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
