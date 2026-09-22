@@ -1515,10 +1515,10 @@ refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 # C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
-# The first five constructs, `int main(){return 42;}`, `+ - * /` with
-# parentheses, unary minus with the comparisons, a local `int`, and `if`,
-# `while`, `for` and blocks, emitted as arm64 assembly that `cc` assembles and
-# links. The oracle is `cc` itself, and what is compared
+# The first six constructs, `int main(){return 42;}`, `+ - * /` with
+# parentheses, unary minus with the comparisons, a local `int`, `if`, `while`,
+# `for` and blocks, and functions with parameters and calls, emitted as arm64
+# assembly that `cc` assembles and links. The oracle is `cc` itself, and what is compared
 # is what a program exits with, because until a function can be called that is
 # all a program can say. Skipped where the machine is not arm64, since `cc`
 # there assembles something else.
@@ -1535,6 +1535,24 @@ refuses "a name declared twice in one scope" "'x' is declared twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/twice.c"
 refuses "and one read after its block has closed" "'y' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/out-of-scope.c"
+refuses "a parameter declared again in the body" "'a' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/param-redeclared.c"
+# C99 6.5.2.2 wants a declaration above every call, so what awk answered with
+# a gathered table C answers with a thread, and a prototype is how a call
+# reaches a function below it.
+refuses "a call to nothing" "'f' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/undefined-function.c"
+refuses "a call above the definition, with no prototype" \
+        "'twice' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/forward-call.c"
+refuses "a call with the wrong number of arguments" "takes 2 arguments, and this gives 1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/wrong-arity.c"
+refuses "a function defined twice" "a function is defined twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/defined-twice.c"
+refuses "a prototype and a definition that disagree" "two different numbers of parameters" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/two-arities.c"
+refuses "a ninth parameter, which is outside the subset" "only eight are compiled" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/nine-params.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

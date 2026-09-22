@@ -4505,3 +4505,43 @@ has them early, but ROADMAP 6.1's list does not name them and this arc walks
 that list. They are an afternoon each and none of them asks the tool for
 anything; the next construct, a function with parameters and a call, is the
 one the entry predicts will cost the most, and it is next.
+
+*And the sixth: functions with parameters, and calls.* The construct the
+entry predicted would cost the most, and it did: three rounds against the
+tool before the oracle ran, where every construct before it took one or none.
+Eight more programs, forty-two in all, and seven more refusals, eleven.
+[Postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given)
+scores the prediction; this is what happened.
+
+**The convention itself was the cheap part.** A parameter is a node, so
+that it can take a slot the way a local does, and parameter k is slot k, so
+its register is k - 1 and the prologue stores it there. An argument is a
+node, so that it can know its index from a thread the call resets and its
+count from an attribute the call hands down; every argument is pushed as it
+is evaluated, and the registers are loaded from the stack afterwards, so an
+argument that is itself a call finds the ones before it safe. Sixteen lines,
+and `eight-params.c` weights each register so that a swap shows.
+
+**C refused the forward call, and the awk answer was the wrong one.** The
+first version gathered every function into a table on the way up and handed
+it down, which is what `languages/awk/` does because awk lets a call come
+above its function. `cc` refused `forward.c`: C99 6.5.2.2 wants a declaration
+above every call. So the declared functions are a thread, a definition binds
+itself on the way *in* so that its body can recurse, and a prototype is in
+the grammar because that is what C offers instead. The gather pass stayed for
+the two questions no order can answer, a function defined twice and one
+declared with two arities, both asked at the top with the expressions written
+out, because a check cannot read what its own rule computes.
+
+**A rule with no action answers the one thing it matched.** `params` with
+one parameter arrived as the `Param` itself and with two as a node called
+`params`, and the emit pass wanted a list either way. The reference says so
+under *No action at all*, and the collapse is the feature that keeps
+`expression` from wrapping a number in six nodes; a list rule has to say
+`-> $1` to keep its list. Both list rules now do, with a comment, because
+this will catch the next person too.
+
+*Two refusals from the tool, both mine.* Two `Function` rules in one pass,
+the same slip as 2026-09-05's, and a check reading its own rule's
+attribute, which `z80.phx` had already answered by writing the expression
+out. Neither cost more than the message took to read.

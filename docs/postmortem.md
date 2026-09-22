@@ -866,3 +866,41 @@ justified by a file that no longer needs it.
 206. Fixing the failure turned that check into a passing one and the answer was
 207. **The number of checks a red run reports is not the number a green one
 will**, which is obvious once written down and was not before.
+
+---
+
+## 16. The calling convention cost the most, and not for the reason given
+
+ROADMAP 6.1 made three predictions on 2026-09-06. The first two are still
+open. The third was: *the arm64 calling convention costs more than any
+construct before it, because it is the first place the emit pass has to know
+something the tree does not say.*
+
+**Right on the cost, wrong on the cause.** It took three rounds against the
+tool before the oracle ran, where the five constructs before it took one or
+none. But the convention itself, registers and pushes and the prologue's
+stores, went in unchanged from the first draft and was sixteen lines. What
+cost the rounds:
+
+| | |
+| --- | --- |
+| C99 6.5.2.2 | a call needs a declaration above it. The draft gathered a table on the way up, awk's answer, and `cc` refused the oracle program that relied on it. Prototypes went into the grammar and the table became a thread |
+| a rule with no action | answers the one thing it matched, so one parameter arrived bare. `-> $1` on the list rule |
+| two rules for one pattern, and a check reading its own rule | both refused by the tool at read time, both already answered in `z80.phx` |
+
+Only the first is about C, and none is about the emit pass knowing something
+the tree does not say. What the emit pass needed, an argument's index and a
+parameter's register, the tree *was* made to say: `Arg` and `Param` are nodes
+so that a pass can put an attribute on them. The prediction imagined the
+convention as knowledge outside the description; the description absorbed it
+by giving the tree two more node kinds.
+
+> A prediction about *where* the cost lands is worth scoring separately from
+> one about *how much*. This one got the size right and the place wrong, and
+> the place is the useful half: the expensive thing was a rule of C, met by
+> the oracle, not a rule of the machine.
+
+**What the first two predictions look like from here.** One, no change to the
+tool through `struct`: six constructs in and nothing in `phoenix/` has been
+touched. Two, that the typedef predicate is the first change wanted: nothing
+has yet wanted anything, so it is neither confirmed nor threatened.

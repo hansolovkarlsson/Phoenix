@@ -20,6 +20,15 @@
  * lives in the frame at an offset the `locals` pass assigned, below the saved
  * frame pointer, eight bytes a slot.
  *
+ * **The calling convention** is the machine's, AAPCS64 as Apple applies it:
+ * the first eight integer arguments in `x0` to `x7`, the result in `x0`, and
+ * `sp` sixteen-aligned at the call. A caller evaluates its arguments left to
+ * right, pushing each, then loads the registers from the stack and drops it,
+ * so an argument that is itself a call finds the ones before it safe. A
+ * callee stores each parameter register into the parameter's slot in the
+ * prologue, and from then on a parameter is a local. Nothing is kept in a
+ * register across a call, so no register has to be saved.
+ *
  * The value is 64 bits wide in a register that C says is a 32-bit `int`. That
  * is chibicc's first shape too, and the oracle is what will say when it
  * matters: an operation whose answer differs between the two widths is a
@@ -51,6 +60,30 @@
   LocalInit : out = "{}\tstr x0, [x29, #-{}]\n" of $value.out, 8 * $slot .
   Local     : out = "" .
   Discard   : out = $value.out .
+
+  (* ---- calls ----
+   *
+   * An argument knows its index from a thread the call resets, and how many
+   * there are from an attribute the call hands down; a nested call resets
+   * the thread for its own subtree and puts it back, so the outer argument
+   * still counts from where it was. Every argument is pushed, sixteen bytes
+   * each, so argument i of n sits 16 * (n - 1 - i) above `sp` once all are
+   * pushed, and that is where its register is loaded from. *)
+  thread argn = 0
+
+  Arg  : index = $argn : argn = $argn + 1
+       : out  = "{}\tstr x0, [sp, #-16]!\n" of $value.out
+       : load = "\tldr x{}, [sp, #{}]\n" of $index, 16 * ($nargs - 1 - $index) .
+
+  Call : down held  = $argn
+       : down argn  = 0
+       : down nargs = size($args)
+       : argn = $held
+       : out = "{}{}\tadd sp, sp, #{}\n\tbl _{}\n"
+           of join($args.out), join($args.load), 16 * size($args), $name .
+
+  (* Parameter k is slot k, so its register is k - 1. *)
+  Param : out = "\tstr x{}, [x29, #-{}]\n" of $slot - 1, 8 * $slot .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
    * say and what `cset` left there. *)
@@ -115,10 +148,12 @@
    * `main` returns 0, and for any other function it says nothing, of which 0
    * is one instance. *)
   Function : down fname = $name
-           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
-               of $name, $name, ((8 * $frame + 15) div 16) * 16, $body.out, $name .
+           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
+               of $name, $name, ((8 * $frame + 15) div 16) * 16,
+                  join($params.out), join($body.out), $name .
 
-  Program : out = "\t.text\n{}" of join($functions.out, "\n") .
+  Prototype : out = "" .
+  Program   : out = "\t.text\n{}" of join($items.out, "\n") .
 
-%driver arm64 = locals, emit-arm64 -> out .
-%driver check = locals .
+%driver arm64 = functions, locals, emit-arm64 -> out .
+%driver check = functions, locals .

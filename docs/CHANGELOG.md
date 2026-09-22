@@ -18,16 +18,32 @@ entry below that changes it says so.
 
 ## 2026-09-21: a C subset begins, with `cc` as its oracle
 
-**A C compiler has its first five constructs: [`languages/c/`](../languages/c/).**
+**A C compiler has its first six constructs: [`languages/c/`](../languages/c/).**
 
     phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
     cc prog.s -o prog && ./prog
 
 `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus
 and the six comparisons, then a local `int`, then `if`, `while`, `for` and
-blocks: a function returning `int` with no parameters, a block of
-declarations, assignments, expression statements, control flow and `return`s,
-expressions over constants and locals, and the two comment shapes.
+blocks, then functions with parameters and calls: functions returning `int`
+with up to eight `int` parameters, prototypes, a body of declarations,
+assignments, expression statements, control flow and `return`s, expressions
+over constants, locals and calls, and the two comment shapes.
+
+**The calling convention is AAPCS64 as Apple applies it**: the first eight
+arguments in `x0` to `x7`, the result in `x0`. A caller pushes each argument
+as it is evaluated, then loads the registers from the stack and drops it; a
+callee stores each register into its parameter's slot in the prologue, after
+which a parameter is a local. Recursion, mutual recursion through a
+prototype, and a call nested in an argument are in the oracle. A ninth
+parameter is refused by name rather than mis-compiled.
+
+**C99 6.5.2.2 wants a declaration above every call**, and `cc` enforces it,
+so the gathered table awk uses for a call above its function is not what C
+needs. The declared functions are a thread; a definition binds itself on the
+way in so its body can recurse. A gather pass remains for the two questions
+no order can answer, a function defined twice and one declared with two
+arities.
 Six of C's fifteen expression levels; a comparison is an `int` worth 0 or 1
 that chains to the left the way C11 says it does, and assignment is an
 expression worth what it assigned, grouping to the right.
@@ -35,9 +51,11 @@ expression worth what it assigned, grouping to the right.
 **The first pass that can say no.** `locals` is a symbol pass in `c.phx`: a
 thread of what has been declared, set afresh at each function and saved and
 restored around each block, and a slot counter that only grows. A name nothing
-declared, one declared twice in a scope, or one read after its block has
-closed, is refused with a position, and `tests/refused/` holds the four
-programs that show it. A second thread holds only the current block's names,
+declared, one declared twice in a scope, one read after its block has closed,
+a parameter declared again in the body, a call before its declaration or with
+the wrong number of arguments, a function defined twice or declared with two
+arities, and a ninth parameter, are refused with a position, and
+`tests/refused/` holds the eleven programs that show it. A second thread holds only the current block's names,
 because C11 6.2.1 lets an inner block shadow an outer one and a single table
 cannot tell shadowing from redeclaring. The emit pass turns a
 slot into an offset below the frame pointer and lowers `sp` past the locals in
@@ -59,7 +77,7 @@ rest.
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. [`tests/oracle/run.sh`](../languages/c/tests/oracle/run.sh) compiles
 each program twice and compares what the two exit with, which until a function
-can be called is all a program can say. Thirty-four programs, among them the
+can be called is all a program can say. Forty-two programs, among them the
 groupings the folds have to get right, a quotient that truncates toward zero,
 a signed comparison, five locals whose slots must not overlap, a dangling
 `else`, a `for (;;)` that only a `return` leaves, and two nested loops whose
@@ -76,9 +94,9 @@ unchanged but for a marker at the construct that exists. Its three predictions
 are not yet scoreable: the first is about reaching `struct` with no change to
 the tool, and the tool has not been asked for anything.
 
-**Tests:** 211 → 217. Six new ones: that the description reads, one that
-runs the oracle programs and reports how many agree with `cc`, and four
-refusals from the `locals` pass. The first
+**Tests:** 211 → 224. Thirteen new ones: that the description reads, one
+that runs the oracle programs and reports how many agree with `cc`, and
+eleven refusals from the `functions` and `locals` passes. The first
 run of the suite said 212, because the check that the records' counts match
 the tree was failing on a missing row and is itself one of the 213.
 

@@ -21,13 +21,17 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first five constructs**: `int main(){return 42;}`,
+ * **What is here is the first six constructs**: `int main(){return 42;}`,
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
- * then a local `int`, then `if`, `while`, `for` and blocks as statements. A
- * function returning `int` with no parameters, a block of declarations,
- * assignments, expression statements, control flow and `return`s, and
- * expressions over constants and locals. A name nothing declared, one
- * declared twice in a scope, or one used outside its block, is refused.
+ * then a local `int`, then `if`, `while`, `for` and blocks as statements,
+ * then functions with `int` parameters and calls. A function returning `int`
+ * with up to eight parameters, a body of declarations, assignments,
+ * expression statements, control flow and `return`s, and expressions over
+ * constants, locals and calls, and prototypes so that a call can come above
+ * the function it names. A name nothing declared, one declared twice in a
+ * scope, one used outside its block, a call before a declaration or with the
+ * wrong number of arguments, a function defined twice or declared with two
+ * arities, and a ninth parameter, are refused.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -52,7 +56,7 @@ block-comment = "/*" { ! "*/" } "*/" .
 (* Two characters before one, every time: `<` first would leave the `=` of
  * `<=` behind, and the error would surface at the token after it. *)
 symbol = "==" | "!=" | "<=" | ">="
-       | "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" | "<" | ">" | "=" .
+       | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "<" | ">" | "=" .
 
 %skip space line-comment block-comment .
 
@@ -65,12 +69,31 @@ symbol = "==" | "!=" | "<=" | ">="
 %syntax .
 %start program .
 
-program = { function } -> Program(functions: $1) .
+program = { item } -> Program(items: $1) .
 
-(* One return type, no parameters. The parameter list and the calling
- * convention are the construct ROADMAP 6 predicts will cost the most, and
- * they are not here yet. *)
-function = "int" n:name "(" ")" b:block -> Function(name: $n, body: $b) .
+(* A prototype or a definition, and the prototype first because it is the
+ * shorter: the header is the same and `;` fails on `{`. C99 6.5.2.2 wants a
+ * declaration above every call, so a prototype is how a call reaches a
+ * function defined below it, and how two functions call each other.
+ *
+ * One return type. The body is the statements themselves and not a `Block`,
+ * because C11 6.2.1 puts the parameters in the same scope as the body's
+ * outermost declarations: `int f(int a) { int a; }` is declared twice, and a
+ * `Block` would open a scope the parameters are not in. *)
+item = "int" n:name "(" p:params ")" ";"
+         -> Prototype(name: $n, params: $p)
+     | "int" n:name "(" p:params ")" "{" s:{ statement } "}"
+         -> Function(name: $n, params: $p, body: $s) .
+
+(* A parameter is a node and not a name, because it takes a slot the way a
+ * local does and the emit pass has to store a register into it. The
+ * repetition's action is what makes this a list of parameters rather than a
+ * list of parameters and commas, and the rule's own action is what makes it
+ * a list at all: a rule with no action answers the one thing it matched, so
+ * one parameter would arrive bare and two would arrive in a node called
+ * `params`. `-> $1` says *the list, whatever its length*. *)
+params = [ param { "," q:param -> $q } ] -> $1 .
+param  = "int" n:name -> Param(name: $n) .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
@@ -132,18 +155,63 @@ multiplicative = unary          { ( "*" | "/" ) unary
 unary   = "-" u:unary -> Negate(value: $u)
         | primary .
 
-primary = integer -> Number(text: $1)
+(* A call before a variable, because `f` fails at `(` and falls through.
+ * Each argument is a node of its own for the same reason a parameter is:
+ * the emit pass has to know which register it goes in, and that is a fact
+ * about the argument's place in the list, which a node can be handed and an
+ * expression cannot. *)
+primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
+        | integer -> Number(text: $1)
         | name    -> Variable(name: $1)
         | "(" expression ")" -> $2 .
 
+args = [ arg { "," b:arg -> $b } ] -> $1 .   (* `-> $1` as for params *)
+arg  = e:expression -> Arg(value: $e) .
+
 (* ------------------------------------------------------------------ *)
-(* Pass one: which local is which, and where does each one live?      *)
+(* Pass one: the questions about functions that no order can answer.   *)
+(*                                                                     *)
+(* Whether a call names a declared function is a question about what   *)
+(* came *above*, and the next pass asks it of a thread. Whether a       *)
+(* function is defined twice, or declared with two different numbers of *)
+(* parameters, is a question about the whole file, and this pass       *)
+(* gathers what it needs on the way up and asks at the top. awk needed  *)
+(* the gathered table for the call itself, because awk lets a call come *)
+(* first; C does not, and the table here is only for the two checks.    *)
+
+%pass functions
+
+  (* A shape is a name and an arity as one text, so that `positions` can
+   * count how many distinct ones there are: more shapes than names means a
+   * name with two arities. *)
+  Prototype : shape = ["{}/{}" of $name, size($params)]
+            : dname = [$name]
+            : fname = []
+            ! size($params) > 8
+                : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
+                    of $name, size($params) .
+  Function  : shape = ["{}/{}" of $name, size($params)]
+            : dname = [$name]
+            : fname = [$name]
+            ! size($params) > 8
+                : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
+                    of $name, size($params) .
+
+  (* Written out rather than named: a check runs before the attributes its
+   * rule computes, so it cannot read them, and `phx` says so. *)
+  Program ! size(positions(flatten($items.fname))) < size(flatten($items.fname))
+              : "a function is defined twice"
+          ! size(positions(flatten($items.shape))) > size(positions(flatten($items.dname)))
+              : "a function is declared with two different numbers of parameters" .
+
+(* ------------------------------------------------------------------ *)
+(* Pass two: which local is which, and where does each one live?      *)
 (*                                                                     *)
 (* A local is a slot in its function's frame, numbered from one in the  *)
 (* order declared, and the frame is how many slots the function has.   *)
-(* The emit pass turns a slot into an offset from the frame pointer,    *)
-(* because the width of a slot is the machine's business and not the    *)
-(* language's.                                                          *)
+(* The parameters come first, so parameter k is slot k. The emit pass   *)
+(* turns a slot into an offset from the frame pointer, because the      *)
+(* width of a slot is the machine's business and not the language's.    *)
 
 %pass locals
 
@@ -161,10 +229,35 @@ primary = integer -> Number(text: $1)
   thread scope = empty
   thread slots = 0
 
-  Function : down env   = empty
-           : down scope = empty
-           : down slots = 0
-           : frame = $slots .
+  (* The functions declared so far, name to arity. A definition binds itself
+   * on the way *in*, with a `down` clause, so that its own body can call it;
+   * the value flows on to the functions after it, which is what a `down` on
+   * a thread does when nothing restores it. A prototype binds on the way
+   * out, which for a node with no body is the same moment. *)
+  thread funcs = empty
+
+  Prototype : down env   = empty
+            : down scope = empty
+            : down slots = 0
+            : funcs = bind($funcs, $name, size($params)) .
+
+  Function  : down env   = empty
+            : down scope = empty
+            : down slots = 0
+            : down funcs = bind($funcs, $name, size($params))
+            : frame = $slots .
+
+  Param : slot  = $slots + 1
+        : env   = bind($env, $name, $slots + 1)
+        : scope = bind($scope, $name, true)
+        : slots = $slots + 1
+        ! defined($scope, $name) : "'{}' is a parameter twice" of $name .
+
+  Call ! not defined($funcs, $name)
+           : "'{}' is called before it is declared" of $name
+       ! defined($funcs, $name) and size($args) <> lookup($funcs, $name, 0)
+           : "'{}' takes {} arguments, and this gives {}"
+               of $name, lookup($funcs, $name, 0), size($args) .
 
   (* A block is a scope: its declarations are torn down on the way out and
    * the enclosing tables come back. The slot counter is *not* restored,
