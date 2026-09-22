@@ -159,9 +159,17 @@ assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
  * A place builds the same `Variable` and `Deref` nodes a *read* of one builds,
  * because they are the same nodes: what differs is which attribute the parent
  * asks them for. The emit pass gives both an address as well as a value, and
- * an assignment reads the address where a read reads the value. *)
-place = "*" u:unary -> Deref(value: $u)
-      | n:name      -> Variable(name: $n) .
+ * an assignment reads the address where a read reads the value.
+ *
+ * The third alternative is a **parenthesised** place, which C allows and this
+ * rule refused until 2026-09-22: `(x) = 4` and `&(x)` are ordinary C and were
+ * a syntax error here. Parentheses group without changing what a thing is,
+ * and the action says exactly that by answering the place inside them rather
+ * than building anything. It has to come before the name and after the `*`,
+ * for the reason every ordered choice here does: `(` decides it. *)
+place = "*" u:unary   -> Deref(value: $u)
+      | "(" p:place ")" -> $p
+      | n:name        -> Variable(name: $n) .
 
 (* A comparison is an `int`, 0 or 1, and it chains: `3 > 2 > 1` is
  * `(3 > 2) > 1`, which is 0, and C means that. So these are repetitions

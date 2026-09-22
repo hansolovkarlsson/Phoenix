@@ -4841,3 +4841,30 @@ it behind a message.
 
 *Eight oracle programs, sixty-nine in all, and all eight agreed on the first
 run.* Two more refusals, twenty. Three more checks, 234.
+
+## 2026-09-22: the place rule gains the alternative it was short
+
+The narrowing written down in the first entry of the day, closed. C lets a
+place be parenthesised and this rule did not, so `(x) = 4` and `&(x)` were
+ordinary C and a syntax error here.
+
+```ebnf
+place = "*" u:unary     -> Deref(value: $u)
+      | "(" p:place ")" -> $p
+      | n:name          -> Variable(name: $n) .
+```
+
+One alternative, and its action answers the place inside the parentheses
+rather than building anything, which is what parentheses are: they group and
+they do not change what a thing is. It goes after the `*` and before the name
+for the reason every ordered choice in this file does, which is that the
+first token decides. Two oracle programs, seventy-one in all.
+
+*The refusal it was keeping company with moved, and that is the part worth
+recording.* `&1` was refused with *expected `*` or name*, and is now refused
+with *expected `*`, `(` or name*. The suite asserted the old text, so widening
+the rule turned a green check red with the message in it, which is exactly
+what that check is for: the expectation is a statement about **what a place
+is**, and the rule changed what a place is. It was updated rather than
+loosened. A check written as *it was refused somehow* would have said nothing
+here.

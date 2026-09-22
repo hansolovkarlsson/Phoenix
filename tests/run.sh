@@ -1559,7 +1559,7 @@ refuses "a ninth parameter, which is outside the subset" "only eight are compile
 # 6.5.16 wants one before `=`, and a rule that only matches those two is that
 # constraint at no cost. The rest are the `types` pass, which knows how many
 # stars a value has and nothing else about its type.
-refuses "the address of something that is not a place" "expected * or name" \
+refuses "the address of something that is not a place" "expected *, ( or name" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
 refuses "and an assignment to one" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
