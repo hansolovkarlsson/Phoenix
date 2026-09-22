@@ -1578,16 +1578,15 @@ refuses "a '-' on a pointer" "'-' wants a number" \
 refuses "a '*' between a pointer and a number" "'*' does not take a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/multiply-a-pointer.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
-# for `+` and pointer first for `-`, and the two refused here `cc` refuses
-# too. The difference of two pointers is C and is refused as outside the
-# subset, the way the ninth parameter is.
+# for `+` and pointer first for `-`, and two pointers may be subtracted when
+# they point at the same type. All three refused here `cc` refuses too.
 refuses "a '+' of two pointers" "'+' does not add two pointers" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/add-two-pointers.c"
 refuses "a pointer taken from a number" "'-' does not take a pointer from a number" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/number-minus-a-pointer.c"
-refuses "the difference of two pointers, which is C and not built yet" \
-        "the difference of two pointers is C" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-difference.c"
+refuses "a difference of two pointers to different types" \
+        "only when they point at the same type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-unlike-pointers.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the
@@ -1618,31 +1617,36 @@ if [ "$(uname -m)" = "arm64" ]; then
         report fail "C programs agree with cc"
         printf '%s\n' "$co" | grep -A3 FAIL | sed 's/^/        /' | head -12
     fi
-    # **One program where the two disagree, pinned rather than fixed**, the
-    # way `languages/awk/tests/divergent/` pins the lexical seam. `sizeof` is
-    # worth a `size_t` in C and an `int` here, because `size_t` is a typedef
-    # and ROADMAP 6.1 stops before `typedef`. Both answers are asserted, so
-    # closing the gap fails this with the old numbers in it.
-    dv="$root/languages/c/tests/divergent/sizeof-of-sizeof.c"
+    # **Programs where the two disagree, pinned rather than fixed**, the way
+    # `languages/awk/tests/divergent/` pins the lexical seam. Both come from
+    # a type C names with a typedef, which ROADMAP 6.1 stops before: `sizeof`
+    # is worth a `size_t` and the difference of two pointers a `ptrdiff_t`,
+    # eight bytes each under `cc`, and both are an `int` here. Both answers
+    # are asserted, so closing either gap fails with the old numbers in it.
     dt="$root/build/c-divergent"; rm -rf "$dt"; mkdir -p "$dt"
-    if cc -w -o "$dt/want" "$dv" 2>/dev/null \
-       && "$phx" --driver arm64 "$root/languages/c/c-arm64.phx" "$dv" \
-              > "$dt/got.s" 2>/dev/null \
-       && cc -o "$dt/got" "$dt/got.s" 2>/dev/null; then
-        "$dt/want"; want=$?
-        "$dt/got";  got=$?
-        if [ "$want" = 8 ] && [ "$got" = 4 ]; then
-            report pass "sizeof(sizeof(int)) is 8 to cc and 4 here, as written down"
+    diverges() { # what, program, cc's answer, ours
+        dv="$root/languages/c/tests/divergent/$2.c"
+        if cc -w -o "$dt/want" "$dv" 2>/dev/null \
+           && "$phx" --driver arm64 "$root/languages/c/c-arm64.phx" "$dv" \
+                  > "$dt/got.s" 2>/dev/null \
+           && cc -o "$dt/got" "$dt/got.s" 2>/dev/null; then
+            "$dt/want"; want=$?
+            "$dt/got";  got=$?
+            if [ "$want" = "$3" ] && [ "$got" = "$4" ]; then
+                report pass "$1 is $3 to cc and $4 here, as written down"
+            else
+                report fail "the $2 divergence is the one written down" \
+                       "cc says $want and phoenix says $got; divergent/ says $3 and $4"
+            fi
         else
-            report fail "the sizeof divergence is the one written down" \
-                   "cc says $want and phoenix says $got; divergent/ says 8 and 4"
+            report fail "the $2 divergence compiles on both routes"
         fi
-    else
-        report fail "the sizeof divergence compiles on both routes"
-    fi
+    }
+    diverges "sizeof(sizeof(int))" sizeof-of-sizeof 8 4
+    diverges "sizeof of a pointer difference" sizeof-a-pointer-difference 8 4
     rm -rf "$dt"
 else
-    skip 2 "the C oracle and the sizeof divergence need an arm64 cc, and this machine is not arm64"
+    skip 3 "the C oracle and the two divergences need an arm64 cc, and this machine is not arm64"
 fi
 
 echo

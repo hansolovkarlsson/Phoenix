@@ -631,9 +631,9 @@ statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention *(prediction three
 is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
 `&` and `*`; arrays and
-`sizeof` *(done 2026-09-22, indexing last; ninety-four programs against `cc`
-and twenty-five refused. **The difference of two pointers** is the one piece
-of C11 6.5.6 left out, and waits on a decision, below)*; **`char` and string
+`sizeof` *(done 2026-09-22, indexing and the difference of two pointers
+last; ninety-nine programs against `cc`, twenty-five refused and two
+divergences pinned)*; **`char` and string
 literals, which is next**; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
@@ -683,12 +683,14 @@ does not.
 `sxtw` arrived where predicted, inside one `add` that sign-extends the index,
 scales it by the element and adds it to the pointer.
 
-*Owed: the difference of two pointers.* `&a[3] - a` is C and refused here as
-not built. C11 6.5.6 makes it a `ptrdiff_t`, which is a typedef, so it is the
-`sizeof` question again: worth an `int` with the divergence pinned, as
-`sizeof` was, or left refused until `typedef` brings the type. The
-arithmetic is two instructions either way, a `sub` and an `asr` by the
-element's width.
+*The difference of two pointers, decided the same day: an `int`.* C11 6.5.6
+makes it a `ptrdiff_t`, which is a typedef, so it was the `sizeof` question
+again and got the `sizeof` answer. It is also what K&R's first edition said
+the difference was, before ANSI C gave it a name.
+`tests/divergent/sizeof-a-pointer-difference.c` pins the one program that
+shows it, 8 against 4. **Both are to be revisited when `typedef` arrives**,
+together: `size_t` and `ptrdiff_t` are the two typedefs this subset already
+owes an answer to.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and

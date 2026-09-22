@@ -5048,3 +5048,44 @@ different one. That decision belongs to the person who made the first one.
 twenty-five.* Nothing in `phoenix/` was touched, so prediction one stands at
 nine constructs of eleven with the ninth now whole, and the tool said nothing
 at read time.
+
+## 2026-09-22: the difference of two pointers is an `int`
+
+The one piece of C11 6.5.6 the indexing entry left refused, decided the way
+`sizeof` was decided that morning. The standard makes the difference a
+`ptrdiff_t`, which is a typedef, and the subset stops before `typedef`, so it
+is an `int` here: the count of elements between the two pointers. That is
+also what it was in K&R's first edition, before ANSI C gave it a name, which
+is the reason given for taking the same answer twice rather than a new one.
+**`size_t` and `ptrdiff_t` are to be revisited together when `typedef`
+arrives**, and `tests/divergent/` now pins one program for each, both 8
+under `cc` and 4 here. The suite's single-purpose check for the first became
+a function called twice.
+
+The type is a difference of star counts, which is 0 for two pointers of one
+type and the pointer's own for a pointer less an int. Two pointers of
+different types are refused, as 6.5.6 requires and `cc` does, and that
+refusal is also what keeps the subtraction from producing a type no value
+has. The emit pass subtracts the addresses, shifts right by the element's
+width, and writes `w0` to itself so that `x0` holds the zero-extended `int`
+the file's header promises.
+
+**Leaving each step out on purpose found two instructions with no witness,
+and neither can have one yet.** The width was caught, by
+`pointer-difference-of-pointers`. `mov w0, w0` was not, which was expected:
+it restores an upper half nothing reads. `asr` was not caught either, and
+that was not expected. A difference can be negative, so the shift has to
+keep the sign, and `pointer-difference-negative` was written to check that.
+It passes with `lsr`, because the two shifts differ only in the top two or
+three of sixty-four bits and an `int` keeps the bottom thirty-two. **No
+program can tell them apart while the difference is an `int`.** Both are
+kept, for what they will be when the answer is the whole of `x0`: the `asr`
+becomes the one that matters and the `mov` the one to delete, and the
+negative program becomes the witness it was written to be. That is recorded
+at the instruction, because a test that passes for the wrong reason looks
+exactly like one that passes for the right one.
+
+*Five oracle programs, ninety-nine in all, every one agreeing on the first
+run; the pointer-difference refusal became an oracle program, and one
+refusal for unlike pointers replaced it, twenty-five. Two divergences.* 240
+checks.

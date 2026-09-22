@@ -525,17 +525,27 @@ arg  = e:expression -> Arg(value: $e) .
    * width off this type.
    *
    * These were refusals until 2026-09-22, standing in for a size the subset
-   * did not have. They are now the three things C itself refuses, and one
-   * thing it does not: the **difference** of two pointers is C, worth a
-   * `ptrdiff_t`, and is refused here as not built yet rather than as wrong. *)
+   * did not have. They are now the things C itself refuses.
+   *
+   * **The difference of two pointers is an `int`**, which is the count of
+   * elements between them. C11 6.5.6 makes it a `ptrdiff_t`, and that is a
+   * typedef, so this is `sizeof`'s decision taken a second time and for the
+   * same reason: the subset stops before `typedef`, and an `int` is what the
+   * difference was in K&R's first edition, before ANSI C named a type for
+   * it. `tests/divergent/` pins the one program that shows it, and both are
+   * to be revisited when `typedef` arrives. The type is a difference of star
+   * counts, which is 0 for two pointers of one type and the pointer's own for
+   * a pointer less an int; two pointers of **different** types are refused,
+   * as 6.5.6 requires, and that is also what keeps the difference from
+   * coming out as a type no value has. *)
   Binary(op: "+") : type = $left.type + $right.type
       ! $left.type > 0 and $right.type > 0
           : "'+' does not add two pointers" .
-  Binary(op: "-") : type = $left.type
+  Binary(op: "-") : type = $left.type - $right.type
       ! $left.type = 0 and $right.type > 0
           : "'-' does not take a pointer from a number"
-      ! $left.type > 0 and $right.type > 0
-          : "the difference of two pointers is C, and not in this subset yet" .
+      ! $left.type > 0 and $right.type > 0 and $left.type <> $right.type
+          : "'-' takes two pointers only when they point at the same type" .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
    * either is C's own refusal rather than this subset's. *)
   Binary ! $left.type > 0 or $right.type > 0

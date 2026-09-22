@@ -229,16 +229,42 @@
    * counting in elements: 2 for a four-byte `int`, 3 for an eight-byte
    * pointer, read off the result's type, which has the one star the element
    * does not. `-` takes the pointer on the left only, which is all C allows,
-   * so the same template serves. *)
-  Binary : mnemonic = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
-         : plain    = "\t{} w0, w0, w1\n" of $mnemonic
-         : scaled   = "\t{} x0, x{}, w{}, sxtw #{}\n"
-                        of $mnemonic,
-                           lookup([[0, 1]], $left.type, 0),
-                           lookup([[0, 0]], $left.type, 1),
-                           lookup([[1, 2]], $type, 3)
+   * so the same template serves.
+   *
+   * **Two pointers is the other way round**: subtract the addresses, then
+   * shift right by the element's width. The answer is an `int`, so the last
+   * instruction writes `w0` to itself, which is what puts the header's
+   * promise back: `x0` holds the zero-extended `w0`. The two sides have the
+   * same width, because the `types` pass refuses two pointers that differ, so
+   * the shift reads the left one.
+   *
+   * *Two of these three instructions have no witness, and cannot yet.* Each
+   * was left out on purpose and the oracle stayed green. The `mov` restores
+   * the upper half nothing here reads. The shift is `asr` because a
+   * difference can be negative, but `lsr` differs from it only in the top two
+   * or three of sixty-four bits, and an `int` keeps the bottom thirty-two, so
+   * no program can tell them apart while the difference is an `int`. Both are
+   * written for what they will be when `ptrdiff_t` arrives with `typedef` and
+   * the answer is the whole of `x0`: the `asr` becomes the one that matters,
+   * and the `mov` becomes the one to delete. `pointer-difference-negative.c`
+   * is the program that will catch an `lsr` then.
+   *
+   * Which of the three a node is, the `types` pass has already said: a
+   * pointer on each side is a difference, a pointer answer is a step, and
+   * anything else is two `int`s. *)
+  Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
+         : plain      = "\t{} w0, w0, w1\n" of $mnemonic
+         : scaled     = "\t{} x0, x{}, w{}, sxtw #{}\n"
+                          of $mnemonic,
+                             lookup([[0, 1]], $left.type, 0),
+                             lookup([[0, 0]], $left.type, 1),
+                             lookup([[1, 2]], $type, 3)
+         : difference = "\tsub x0, x0, x1\n\tasr x0, x0, #{}\n\tmov w0, w0\n"
+                          of lookup([[1, 2]], $left.type, 3)
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n{}"
-             of $left.out, $right.out, lookup([[0, $plain]], $type, $scaled) .
+             of $left.out, $right.out,
+                lookup([[true, $difference]], $left.type > 0 and $right.type > 0,
+                       lookup([[0, $plain]], $type, $scaled)) .
 
   Negate : out = "{}\tneg w0, w0\n" of $value.out .
 

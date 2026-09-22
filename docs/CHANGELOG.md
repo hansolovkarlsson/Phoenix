@@ -97,12 +97,14 @@ its own and anything the passes already said about `*` and `+` holds for it.
 Pointer `+` and `-` now count in elements, as C11 6.5.6 says, with one arm64
 `add` that sign-extends a 32-bit index, scales it by the element's width and
 adds it to the pointer. Adding two pointers and taking a pointer from a number
-are refused, as `cc` refuses them. **The difference of two pointers is C and
-is refused here as not built yet**: it is worth a `ptrdiff_t`, a typedef, and
-so waits on the same decision `sizeof` took. Fifteen more oracle programs, 94
-in all, and 25 refusals.
+are refused, as `cc` refuses them. **The difference of two pointers is an
+`int`**, the count of elements between them. C makes it a `ptrdiff_t`, which
+is a typedef, so it takes the decision `sizeof` took and is pinned the same
+way: `sizeof(&a[1] - a)` is 8 under `cc` and 4 here, and both answers are
+asserted. Subtracting pointers to different types is refused, as C requires.
+Twenty more oracle programs, 99 in all, 25 refusals and two divergences.
 
-**Tests:** 224 → 239, seventeen in and two retired. The first thirteen were
+**Tests:** 224 → 240, eighteen in and two retired. The first thirteen were
 all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
@@ -113,7 +115,8 @@ what a `sizeof` is worth, and the pin on `sizeof(sizeof(int))`, which asserts
 both answers so that closing the gap fails with the old numbers in it. Last,
 the two refusals of pointer arithmetic were retired by indexing, and four came
 in: two pointers added, a pointer taken from a number, a subscript on an
-`int`, and the difference of two pointers.
+`int`, and two pointers to different types subtracted. And a second pin
+beside the first, on the size of a pointer difference.
 
 ---
 
