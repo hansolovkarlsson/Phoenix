@@ -26,7 +26,8 @@
  * then a local `int`, then `if`, `while`, `for` and blocks as statements,
  * then functions with `int` parameters and calls, then `&` and `*` with the
  * pointer declarators that make them useful, then `sizeof`, then an array of
- * `int` or of pointers, which decays to a pointer to its first element. A function returning `int` with
+ * `int` or of pointers, which decays to a pointer to its first element, then
+ * a subscript and the pointer arithmetic it is made of. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -181,8 +182,16 @@ assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
  * a syntax error here. Parentheses group without changing what a thing is,
  * and the action says exactly that by answering the place inside them rather
  * than building anything. It has to come before the name and after the `*`,
- * for the reason every ordered choice here does: `(` decides it. *)
-place = "*" u:unary   -> Deref(value: $u)
+ * for the reason every ordered choice here does: `(` decides it.
+ *
+ * A subscripted place is the fourth, and `a[i]` is a place because it is a
+ * `*`, which is all a subscript is. It is **first**, before the parenthesised
+ * one, because ordered choice does not come back: `(a)[1] = 2` would match
+ * `(a)` as a parenthesised place, fail at `[` where the `=` was wanted, and
+ * never be tried as anything else. Tried first, a place that has no subscript
+ * fails at the token after its primary and the choice moves on. *)
+place = indexed
+      | "*" u:unary   -> Deref(value: $u)
       | "(" p:place ")" -> $p
       | n:name        -> Variable(name: $n) .
 
@@ -217,7 +226,27 @@ unary   = "-" u:unary -> Negate(value: $u)
         | "*" u:unary -> Deref(value: $u)
         | "sizeof" "(" "int" s:{ "*" } ")" -> SizeOfType(stars: size($s))
         | "sizeof" u:unary                 -> SizeOfExpr(value: $u)
-        | primary .
+        | postfix .
+
+(* **A subscript builds no node of its own.** C11 6.5.2.1 defines `E1[E2]` as
+ * `(*((E1)+(E2)))`, and these actions build exactly that, so indexing is a
+ * `Deref` of a `+` and every pass already knows what those are. What made
+ * `a[i]` wait was never the brackets: it was the `+`, which has to count in
+ * elements, and that is the `types` pass's business and the emit pass's.
+ * `2[a]` is therefore `*(2 + a)`, which is C, and `x[0]` on an `int` is a
+ * `*` on an `int` and refused as one.
+ *
+ * `indexed` has at least one subscript and `postfix` may have none. The place
+ * rule wants the first, because a place without a subscript is one of its
+ * other three; an expression wants the second. The fold is written twice
+ * because a rule cannot both build its first subscript and fold the rest in
+ * one list: `$$` needs its base in the list it folds, and `subscript` is that
+ * base. *)
+postfix   = indexed | primary .
+indexed   = subscript { "[" e:expression "]"
+                          -> Deref(value: Binary(op: "+", left: $$, right: $e)) } .
+subscript = p:primary "[" e:expression "]"
+              -> Deref(value: Binary(op: "+", left: $p, right: $e)) .
 
 (* A call before a variable, because `f` fails at `(` and falls through.
  * Each argument is a node of its own for the same reason a parameter is:
@@ -422,11 +451,11 @@ arg  = e:expression -> Arg(value: $e) .
 (* where C says otherwise, and they are what this pass is for.         *)
 (*                                                                     *)
 (* One is `p + 1`, which C11 6.5.6 says is the **next int** and not the *)
-(* next byte. Nothing in this subset has a size yet, so that is refused *)
-(* by name; arrays and `sizeof` are where a size arrives and where this *)
-(* check gets replaced by the arithmetic it stands in for. The other is *)
-(* `*x` on an `int`, which C11 6.5.3.2 forbids and which would compile  *)
-(* here into a load from whatever the int happened to be.              *)
+(* next byte, so the answer is a pointer and the emit pass has to know  *)
+(* how wide a step is. It was refused by name until a size arrived with *)
+(* arrays; it is now a type this pass works out. The other is `*x` on   *)
+(* an `int`, which C11 6.5.3.2 forbids and which would compile here     *)
+(* into a load from whatever the int happened to be.                   *)
 (*                                                                     *)
 (* What this pass deliberately does **not** do is check that what is    *)
 (* assigned, or passed, has the type it is given. C11 6.5.16.1 has a    *)
@@ -488,15 +517,25 @@ arg  = e:expression -> Arg(value: $e) .
   SizeOfType : type = 0 .
   SizeOfExpr : type = 0 .
 
-  (* C11 6.5.6 lets `+` and `-` take a pointer and an integer, and counts the
-   * integer in what the pointer points at. That size is the thing this subset
-   * has not got, so the construct is refused by name rather than compiled as
-   * though the size were one -- which is the difference between a subset and
-   * a wrong answer. *)
-  Binary(op: "+") ! $left.type > 0 or $right.type > 0
-      : "'+' on a pointer counts in what it points at, and nothing here has a size yet" .
-  Binary(op: "-") ! $left.type > 0 or $right.type > 0
-      : "'-' on a pointer counts in what it points at, and nothing here has a size yet" .
+  (* C11 6.5.6 lets `+` take a pointer and an integer in either order, and `-`
+   * a pointer and then an integer, and counts the integer in what the pointer
+   * points at. The answer is a pointer of the same type, which is why the
+   * type is a **sum** for `+`: exactly one side has stars, and the other adds
+   * none. Counting in elements is the emit pass's, which reads the element's
+   * width off this type.
+   *
+   * These were refusals until 2026-09-22, standing in for a size the subset
+   * did not have. They are now the three things C itself refuses, and one
+   * thing it does not: the **difference** of two pointers is C, worth a
+   * `ptrdiff_t`, and is refused here as not built yet rather than as wrong. *)
+  Binary(op: "+") : type = $left.type + $right.type
+      ! $left.type > 0 and $right.type > 0
+          : "'+' does not add two pointers" .
+  Binary(op: "-") : type = $left.type
+      ! $left.type = 0 and $right.type > 0
+          : "'-' does not take a pointer from a number"
+      ! $left.type > 0 and $right.type > 0
+          : "the difference of two pointers is C, and not in this subset yet" .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
    * either is C's own refusal rather than this subset's. *)
   Binary ! $left.type > 0 or $right.type > 0

@@ -90,14 +90,30 @@ zero free to mean *not an array*; and indexing, `a[i]` and `a + 1`, is the
 rest of the roadmap item and is refused by name until it arrives. Eight more
 oracle programs, 79 in all.
 
-**Tests:** 224 → 237. Thirteen new ones, all but one a refusal: the address of
+**And last: indexing, which closes the item.** `a[i]`, `a + 1`, `p - 1`,
+`2[a]`, `m[1][1] = 4` and `&a[2]`. A subscript is C11 6.5.2.1's
+`*((E1)+(E2))`, built as exactly that by the grammar, so it needs no node of
+its own and anything the passes already said about `*` and `+` holds for it.
+Pointer `+` and `-` now count in elements, as C11 6.5.6 says, with one arm64
+`add` that sign-extends a 32-bit index, scales it by the element's width and
+adds it to the pointer. Adding two pointers and taking a pointer from a number
+are refused, as `cc` refuses them. **The difference of two pointers is C and
+is refused here as not built yet**: it is worth a `ptrdiff_t`, a typedef, and
+so waits on the same decision `sizeof` took. Fifteen more oracle programs, 94
+in all, and 25 refusals.
+
+**Tests:** 224 → 239, seventeen in and two retired. The first thirteen were
+all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
 pointer; and pointer arithmetic, which after the ninth parameter is the
 second thing in the C subset refused for being outside the subset rather than
 outside the language. Then a `sizeof` of a name nothing declared and a `*` on
 what a `sizeof` is worth, and the pin on `sizeof(sizeof(int))`, which asserts
-both answers so that closing the gap fails with the old numbers in it.
+both answers so that closing the gap fails with the old numbers in it. Last,
+the two refusals of pointer arithmetic were retired by indexing, and four came
+in: two pointers added, a pointer taken from a number, a subscript on an
+`int`, and the difference of two pointers.
 
 ---
 

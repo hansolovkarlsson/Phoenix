@@ -1560,7 +1560,12 @@ refuses "a ninth parameter, which is outside the subset" "only eight are compile
 # 6.5.16 wants one before `=`, and a rule that only matches those two is that
 # constraint at no cost. The rest are the `types` pass, which knows how many
 # stars a value has and nothing else about its type.
-refuses "the address of something that is not a place" "expected *, ( or name" \
+#
+# The message for `&1` names `[`, and has moved twice. A subscript is the one
+# way a number becomes a place, `&1[a]` being `&(1[a])`, so the refusal is
+# only certain at the token after the `1`. `address-of-a-subscripted-number`
+# in the oracle is the program that makes the message true.
+refuses "the address of something that is not a place" 'expected [, and found ";"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
 refuses "and an assignment to one" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
@@ -1572,12 +1577,23 @@ refuses "a '-' on a pointer" "'-' wants a number" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/negate-a-pointer.c"
 refuses "a '*' between a pointer and a number" "'*' does not take a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/multiply-a-pointer.c"
-# Valid C, and the second thing here refused for being outside the subset
-# rather than outside the language, after the ninth parameter: `p + 1` is the
-# next int, and a size is what arrives with arrays.
-refuses "pointer arithmetic, which needs a size the subset has not got" \
-        "counts in what it points at" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-arithmetic.c"
+# Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
+# for `+` and pointer first for `-`, and the two refused here `cc` refuses
+# too. The difference of two pointers is C and is refused as outside the
+# subset, the way the ninth parameter is.
+refuses "a '+' of two pointers" "'+' does not add two pointers" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-two-pointers.c"
+refuses "a pointer taken from a number" "'-' does not take a pointer from a number" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/number-minus-a-pointer.c"
+refuses "the difference of two pointers, which is C and not built yet" \
+        "the difference of two pointers is C" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-difference.c"
+# A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
+# `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
+# the program is refused either way, and the message names the operator the
+# standard defines a subscript as.
+refuses "a subscript on an int" "'*' wants a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/index-an-int.c"
 # `sizeof` does not evaluate its operand, and the passes walk it anyway, which
 # is C: the name still has to be declared and the call still has to have the
 # right number of arguments.
@@ -1586,18 +1602,14 @@ refuses "a 'sizeof' of a name nothing declared" "'y' is not declared" \
 refuses "and a '*' on what a 'sizeof' is worth" "'*' wants a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/deref-a-sizeof.c"
 # An array decays to a pointer, so there is nothing left to assign to, which
-# `cc` says too. The other two are refused where `cc` compiles: a zero-length
+# `cc` says too. The other is refused where `cc` compiles: a zero-length
 # array is a C11 6.7.6.2 violation this `cc` takes as an extension, and
 # refusing it is what keeps a count of zero free to mean *not an array*
-# everywhere else; indexing is the rest of this roadmap item and is refused by
-# name until it arrives.
+# everywhere else.
 refuses "an assignment to an array" "an array is not something a value can be put in" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-an-array.c"
 refuses "an array of no elements" "C11 6.7.6.2 forbids" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-no-elements.c"
-refuses "and arithmetic on one, which is the rest of the item" \
-        "counts in what it points at" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/index-an-array.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

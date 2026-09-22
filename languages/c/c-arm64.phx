@@ -216,10 +216,29 @@
    *
    * `sdiv` truncates toward zero, which is what C11 6.5.5 says `/` does, so
    * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
-   * and 0 on this processor, and no program in the oracle asks. *)
-  Binary : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\t{} w0, w0, w1\n"
-             of $left.out, $right.out,
-                lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?") .
+   * and 0 on this processor, and no program in the oracle asks.
+   *
+   * **A pointer and an int is one instruction.** After the pop the left
+   * operand is in `x0` and the right in `x1`, and the `types` pass has said
+   * which of them is the pointer: `add x0, x{p}, w{i}, sxtw #s` takes the
+   * int's thirty-two bits, **sign-extends** them to sixty-four, shifts them
+   * left by the element's width and adds. All three steps are needed. The
+   * sign extension is where a 32-bit index meets a 64-bit pointer: an `int`
+   * sits in its register zero-extended, so `p[-1]` without it lands four
+   * gigabytes past `p` rather than four bytes before. The shift is C11 6.5.6
+   * counting in elements: 2 for a four-byte `int`, 3 for an eight-byte
+   * pointer, read off the result's type, which has the one star the element
+   * does not. `-` takes the pointer on the left only, which is all C allows,
+   * so the same template serves. *)
+  Binary : mnemonic = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
+         : plain    = "\t{} w0, w0, w1\n" of $mnemonic
+         : scaled   = "\t{} x0, x{}, w{}, sxtw #{}\n"
+                        of $mnemonic,
+                           lookup([[0, 1]], $left.type, 0),
+                           lookup([[0, 0]], $left.type, 1),
+                           lookup([[1, 2]], $type, 3)
+         : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n{}"
+             of $left.out, $right.out, lookup([[0, $plain]], $type, $scaled) .
 
   Negate : out = "{}\tneg w0, w0\n" of $value.out .
 

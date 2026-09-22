@@ -631,9 +631,10 @@ statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention *(prediction three
 is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
 `&` and `*`; arrays and
-`sizeof` *(`sizeof` and an array's declaration, size and decay are in the tree
-since 2026-09-22, seventy-nine programs against `cc` and twenty-three refused;
-**indexing is what is left of this item**)*; `char` and string literals; `struct`. It stops before `typedef`
+`sizeof` *(done 2026-09-22, indexing last; ninety-four programs against `cc`
+and twenty-five refused. **The difference of two pointers** is the one piece
+of C11 6.5.6 left out, and waits on a decision, below)*; **`char` and string
+literals, which is next**; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
@@ -677,9 +678,17 @@ decays to a pointer to its first element, C11 6.3.2.1, everywhere except under
 `sizeof`, which is why a node answers a `type` that decays and a `size` that
 does not.
 
-*What is left of the item is indexing*, `a[i]` and `a + 1`, which is the
-refusal in the `types` pass waiting to be replaced by the arithmetic it stands
-in for. `sxtw` arrives there, where a 32-bit index meets a 64-bit pointer.
+*Indexing closed the item, the same day.* A subscript is C11 6.5.2.1's
+`*((E1)+(E2))` built by the grammar action and no node of its own, and
+`sxtw` arrived where predicted, inside one `add` that sign-extends the index,
+scales it by the element and adds it to the pointer.
+
+*Owed: the difference of two pointers.* `&a[3] - a` is C and refused here as
+not built. C11 6.5.6 makes it a `ptrdiff_t`, which is a typedef, so it is the
+`sizeof` question again: worth an `int` with the divergence pinned, as
+`sizeof` was, or left refused until `typedef` brings the type. The
+arithmetic is two instructions either way, a `sub` and an `asr` by the
+element's width.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and

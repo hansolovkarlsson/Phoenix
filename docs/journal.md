@@ -4977,3 +4977,74 @@ prediction one untouched at nine constructs of eleven. The tool spoke twice,
 both at read time, both about an attribute name defined by two passes in one
 driver. That is a warning about this description, not a need for a different
 tool.
+
+## 2026-09-22: indexing, which is a `*` of a `+`
+
+The rest of *arrays and `sizeof`*, after the day had been read back. `a[i]`,
+`a + 1`, `2[a]`, `p[-1]`, `m[1][1] = 4` and `&a[2]` compile, and ROADMAP 6.1's
+item is closed.
+
+**A subscript builds no node of its own.** C11 6.5.2.1 says `E1[E2]` is
+identical to `(*((E1)+(E2)))`, and the grammar action builds exactly that:
+
+```ebnf
+subscript = p:primary "[" e:expression "]"
+              -> Deref(value: Binary(op: "+", left: $p, right: $e)) .
+```
+
+So every pass already knew what a subscript was, `2[a]` is C because `+`
+commutes, and `x[0]` on an `int` is refused as the `*` on an `int` it is.
+What had made indexing wait was never the brackets. It was the `+`, which has
+to count in elements, and that was a clause in `types` and one instruction in
+the emit pass. The day read back said the expensive half is deciding what a
+thing is. Here the standard had decided it in one sentence, and the sentence
+went into the grammar as written.
+
+*The place rule's new alternative goes **first**, and ordered choice is why.*
+`(a)[1] = 2` would otherwise match `(a)` as a parenthesised place, fail at `[`
+where the `=` was wanted, and never be tried again, because a PEG does not
+revisit a choice that succeeded. Tried first, a place with no subscript fails
+at the token after its primary and the choice moves on. The fold is written
+twice, once in `indexed` for the place and once reached through `postfix` for
+an expression, because `$$` needs its base in the list it folds.
+
+**A pointer and an int is one instruction**, `add x0, x{p}, w{i}, sxtw #s`:
+sign-extend the int's thirty-two bits, shift them by the element's width, add.
+The `types` pass says which side is the pointer and what it points at; the
+emit pass reads both. Each of the three steps was then **left out on
+purpose**, one at a time, to see that a program notices:
+
+| left out | what went red |
+| --- | --- |
+| the sign extension, `uxtw` in its place | `index-negative`, where `p[-2]` lands four gigabytes away |
+| the width, always a shift of 2 | `index-of-pointers`, `index-twice`, `pointer-to-pointer-arith` |
+| which side the pointer is on | `index-commutes`, `pointer-plus-int` |
+
+That is yesterday's habit applied before the code rather than after it: the
+fourteen programs were written and run red first, and all fourteen agreed with
+`cc` on the first green run.
+
+*`&1` changed its message a second time, and the new one is true.* It was
+*expected `*`, `(` or name* and is now *expected `[`*, one token later. That
+looked like a worse message until the program was written: `&1[a]` is
+`&(1[a])`, which is C, and `cc` compiles it. A subscript is the one way a
+number becomes a place, so the refusal of `&1` is only certain at the `;`.
+The expectation was updated and `address-of-a-subscripted-number.c` went into
+the oracle as the program that makes the message right.
+
+*The two refusals indexing replaced did not move to the oracle.* Both were
+undefined behaviour once they compiled: `pointer-arithmetic.c` read one `int`
+past a scalar, and `index-an-array.c` read an element nobody had written. A
+program whose answer the standard does not define cannot be an oracle program,
+so they were deleted. Four refusals replace them. Two are C's own and `cc`
+refuses them too: two pointers added, and a pointer taken from a number. One
+is the subscript on an `int`. The fourth is the **difference of two
+pointers**, which is C and refused here as not built. It is worth a
+`ptrdiff_t`, and `ptrdiff_t` is a typedef exactly as `size_t` is, so building
+it means either taking the `sizeof` decision a second time or making a
+different one. That decision belongs to the person who made the first one.
+
+*Fifteen oracle programs, ninety-four in all; four refusals in and two out,
+twenty-five.* Nothing in `phoenix/` was touched, so prediction one stands at
+nine constructs of eleven with the ninth now whole, and the tool said nothing
+at read time.
