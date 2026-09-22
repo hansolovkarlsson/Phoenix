@@ -4545,3 +4545,16 @@ this will catch the next person too.
 the same slip as 2026-09-05's, and a check reading its own rule's
 attribute, which `z80.phx` had already answered by writing the expression
 out. Neither cost more than the message took to read.
+
+*The day, read back.* Six constructs, six commits, forty-two programs, and
+the oracle ran on every one before the records were written. Counting where
+each round's cost landed: the tool refused five things at read time, all of
+them slips the reference already names, and each cost the time it took to
+read the message. The oracle refused three, and every one of those was C
+rather than the machine: a chained comparison this `cc` rejects by default,
+shadowing across blocks that one table could not tell from redeclaring, and
+a call above its function that C99 forbids without a prototype. The machine
+refused nothing. That is the shape postmortem 16 scores in the prediction
+about the calling convention, and it held for the whole day: **the expensive
+half of a C compiler in this notation is the rules of C, and the oracle is
+where they are met.** Nothing in `phoenix/` was touched.
