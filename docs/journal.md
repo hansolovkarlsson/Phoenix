@@ -4585,6 +4585,12 @@ would have meant an attribute on every node kind saying whether it was a
 place. The grammar already distinguishes them for free, because it is the
 thing that built them.
 
+The rule is narrower than C by one alternative, and the narrowing is written
+down here because nothing else records it: C lets a place be parenthesised, so
+`(x) = 4` and `&(x)` are programs `cc` compiles and this subset refuses. They
+are refused with a position rather than mis-compiled, which is the line this
+arc holds, and the day something wants them the rule gains an alternative.
+
 **A place is a second attribute, not a second node.** `x` on the right of an
 `=` is a load and `x` on the left is an address, and both are the same
 `Variable` in the tree. The emit pass gives that node two attributes: `out`,
@@ -4650,3 +4656,20 @@ row in a table.
 asked the tool for anything: a rule, an attribute, a pair in a table and a
 pass, all of which the notation already had. Prediction two, that `typedef`
 is the first thing to want a change, has still not been asked.
+
+*The day read back, and one expectation moved.* The 09-21 entry left the
+eight-byte `int` to the oracle and said `char` was where it would be decided.
+Today found the first program on which the two compilers really do disagree
+about it, and then found that `cc` refuses to compile that program, which is
+why the note survived the morning unchanged. What did not survive was the
+`char` part, and what moved it cost one command: asking `cc` about the
+**next** construct rather than this one. `sizeof(int)` is 4 and
+`sizeof(int *)` is 8, both are programs `cc` compiles without a word, and the
+description as it stands would answer 8 to the first. So the width is settled
+at `sizeof`, two constructs earlier than the last entry expected, by a
+program the oracle cannot help seeing;
+[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+states the choice and does not take it. The general form of that is the
+cheaper lesson: **the construct after the one being written is a free place
+to look for what will be expensive**, because its oracle programs can be run
+against `cc` before a line of it is described.

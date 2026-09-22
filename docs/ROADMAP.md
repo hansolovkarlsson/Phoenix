@@ -636,6 +636,19 @@ and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
+**The next construct has a decision in it, found on 2026-09-22 and not
+taken.** `sizeof(int)` is 4 under this `cc` and would be 8 under this
+description, whose value is sixty-four bits wide in a register C calls a
+32-bit `int`. It is the first program on which the two disagree that `cc` will
+*compile*: the other witness for the same width, a pointer put in an `int` and
+taken out again, is a constraint violation this `cc` refuses, so the oracle
+never sees it. That makes `sizeof` the place the width gets decided rather
+than `char`, which is where the journal expected it on 2026-09-21. Either the
+value narrows to thirty-two bits, in which case every arithmetic program in
+the oracle becomes a witness for the narrowing, or `sizeof` answers the
+machine's truth and the subset is knowingly not C at that one point. The
+choice belongs to the construct and is not made here.
+
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
 once through Phoenix's output through `cc` — and their standard output and
