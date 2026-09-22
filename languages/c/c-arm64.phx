@@ -17,8 +17,8 @@
  * `x0`; a binary operator pushes the left operand, computes the right into
  * `x0`, and pops the left into `x1`. There is no register allocator, and the
  * output is slow and correct, which is chibicc's shape and tcc's. Every local
- * lives in the frame at an offset the `locals` pass assigned, below the saved
- * frame pointer, eight bytes a slot.
+ * lives in the frame at a byte offset the `locals` pass assigned, below the
+ * saved frame pointer.
  *
  * **The calling convention** is the machine's, AAPCS64 as Apple applies it:
  * the first eight integer arguments in `x0` to `x7`, the result in `x0`, and
@@ -82,9 +82,9 @@
 
   (* ---- places, and the two questions a node can be asked ----
    *
-   * Slot n is eight bytes times n below the frame pointer. `x29` is the
-   * frame pointer and the saved pair sits at it, so the first slot is at
-   * -8 and the frame extends downward from there.
+   * A local starts at `x29` minus its offset and runs upward from there, so
+   * `[x29, #-offset]` is its first byte. `x29` is the frame pointer and the
+   * saved pair sits at it, so the frame extends downward.
    *
    * A `Variable` and a `Deref` each answer **two** attributes, because each
    * is two things depending on who is asking: `out` is the value, which is
@@ -92,16 +92,23 @@
    * what an assignment and `&` want. Nothing else in the tree has an `addr`,
    * and nothing else can reach a position that asks for one -- the `place`
    * rule in `c.phx` sees to that, which is why no pass has to check it. *)
-  Variable  : out  = "\tldr {}0, [x29, #-{}]\n"
-                  of lookup([[0, "w"]], $type, "x"), 8 * $slot
-            : addr = "\tsub x0, x29, #{}\n" of 8 * $slot .
+  (* **An array is its own address.** A name that is an array decays to a
+   * pointer to its first element, and the address is what it already had, so
+   * the load a scalar needs is the thing an array does not do. `$count` picks
+   * between them, and the array's `load` is built and never used, which costs
+   * a string. The register for a scalar comes from its `size` rather than its
+   * stars, because `size` is now the thing that knows. *)
+  Variable  : load = "\tldr {}0, [x29, #-{}]\n"
+                  of lookup([[4, "w"]], $size, "x"), $offset
+            : addr = "\tsub x0, x29, #{}\n" of $offset
+            : out  = lookup([[0, $load]], $count, $addr) .
 
   (* A dereference is a load from what the value came out as, and its address
    * is that value before the load, so `&*p` emits exactly what `p` emits and
    * the identity C11 6.5.3.2 states falls out of the pair rather than being
    * written anywhere. *)
   Deref     : out  = "{}\tldr {}0, [x0]\n"
-                  of $value.out, lookup([[0, "w"]], $type, "x")
+                  of $value.out, lookup([[4, "w"]], $size, "x")
             : addr = $value.out .
 
   (* `&` is the address and nothing more. *)
@@ -117,13 +124,14 @@
    * is what C11 6.5.16.1 converts to. *)
   Assign    : out = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\tstr {}0, [x1]\n"
                 of $place.addr, $value.out,
-                   lookup([[0, "w"]], $place.type, "x") .
+                   lookup([[4, "w"]], $place.size, "x") .
 
   (* A declaration with an initialiser knows its own slot, so it stores
    * straight into it rather than working out an address it already has. *)
   LocalInit : out = "{}\tstr {}0, [x29, #-{}]\n"
-                of $value.out, lookup([[0, "w"]], $stars, "x"), 8 * $slot .
-  Local     : out = "" .
+                of $value.out, lookup([[0, "w"]], $stars, "x"), $offset .
+  Local      : out = "" .
+  LocalArray : out = "" .
   Discard   : out = $value.out .
 
   (* ---- calls ----
@@ -157,7 +165,7 @@
    * are the same eight registers as `x0` to `x7`, so the convention did not
    * notice the width change. *)
   Param : out = "\tstr {}{}, [x29, #-{}]\n"
-            of lookup([[0, "w"]], $stars, "x"), $slot - 1, 8 * $slot .
+            of lookup([[0, "w"]], $stars, "x"), $preg, $offset .
 
   (* **The operand is not evaluated**, which is C11 6.5.3.4 and the whole
    * reason these two clauses do not mention `$value.out`: `sizeof bump(&x)`
@@ -170,7 +178,7 @@
    * for the other column: no stars is an `int` and four bytes, a star is a
    * pointer and eight. *)
   SizeOfType : out = "\tldr w0, ={}\n" of lookup([[0, 4]], $stars, 8) .
-  SizeOfExpr : out = "\tldr w0, ={}\n" of lookup([[0, 4]], $value.type, 8) .
+  SizeOfExpr : out = "\tldr w0, ={}\n" of $value.size .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
    * say and what `cset` left there. This one needs no width: an `int` in
@@ -233,7 +241,9 @@
   Block  : out = join($body.out) .
 
   (* The prologue saves the frame pointer and the return address, and lowers
-   * `sp` past the locals, rounded up to the sixteen the machine insists on;
+   * `sp` past the locals, rounded up to the sixteen the machine insists on
+   * (the frame is a count of bytes since arrays arrived, and was a count of
+   * slots before);
    * the epilogue restores `sp` from `x29` and so needs no count. Between
    * them, the body -- and before the epilogue's label, on the path that falls
    * off the end of the body, a zero. C11 5.1.2.2.3 says reaching the `}` of
@@ -241,7 +251,7 @@
    * is one instance. *)
   Function : down fname = $name
            : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
-               of $name, $name, ((8 * $frame + 15) div 16) * 16,
+               of $name, $name, (($frame + 15) div 16) * 16,
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .

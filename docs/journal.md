@@ -4868,3 +4868,60 @@ what that check is for: the expectation is a statement about **what a place
 is**, and the rule changed what a place is. It was updated rather than
 loosened. A check written as *it was refused somehow* would have said nothing
 here.
+
+## 2026-09-22: an array, and a frame that stopped counting slots
+
+The first half of *arrays and `sizeof`*'s remaining half: a declaration, a
+size, and the decay that makes a name usable. Indexing is the other half and
+is refused by name until it arrives.
+
+**The frame was the work, and it was not the part with brackets in it.** A
+local was a numbered slot and `8 * $slot` was in four places; forty bytes do
+not fit in a slot, so a local now lives at a byte offset and **a
+declaration's type reaches the frame for the first time**. All seventy-one
+existing programs went through that change and none of them noticed, which is
+what it was hoped they would do: everything is still given a multiple of eight
+and started on one, so a scalar sits exactly where it sat.
+
+*Packing each thing at its own width was considered and dropped.* It was the
+recommendation when this step was sketched, on the grounds that `struct` will
+want real offsets. `struct` will want **member** offsets inside one object,
+which is a different mechanism from handing out frame space, and no C program
+can observe the distance between two separate objects: that distance is not
+defined, and the distance between two elements of one array is the element's
+width whichever way the frame is handed out. So the change that no test can
+see was not made.
+
+**A node answers a `type` that decays and a `size` that does not**, which is
+the whole of C11 6.3.2.1 in this description. A name that is an array is a
+pointer to its first element in an expression, so `Variable.type` has one more
+star than the declaration had; `sizeof` is one of the places the conversion
+does not happen, so `Variable.size` is the array's forty. Two attributes
+answering two questions, and neither has to know that `sizeof` exists. `*a` is
+element zero and `int *p = a;` is the same address, both of them falling out.
+
+**An array is its own address**, so the load a scalar needs is the thing an
+array does not do, and `$count` picks between a `ldr` and a `sub`.
+
+*The zero-length array is the reason there are two declaration nodes.* `int
+a[0]` is a count of zero and `int a;` is no count at all, and one node spells
+both the same, which would have made `count > 0` an unreliable way to ask
+*is this an array*. So the bracketed form is `LocalArray` and the count it
+binds is refused below one. C11 6.7.6.2 wants a size greater than zero and
+this `cc` takes `int a[0]` as an extension with a `sizeof` of 0, so without
+the refusal it is a program both compile and answer differently. The file
+already had the argument written down for `Local` and `LocalInit`: a field
+that is sometimes there is a field every pass has to ask about.
+
+*Two attribute names collided across passes, and the tool said so at read
+time.* `elem` was defined by `locals` on `LocalArray` and by `types` on
+`Variable`, and `index` by `locals` on `Param` and by the emit pass on `Arg`.
+Different node kinds in each case, so nothing was actually wrong, and the
+warning is still right: a driver names the passes that run in order, and two
+passes writing one attribute name is a thing to have said out loud rather
+than discovered. Renamed to `ebytes` and `preg`.
+
+*Eight oracle programs, seventy-nine in all, every one agreeing on the first
+run; three more refusals, twenty-three.* Two of the three are refused where
+`cc` compiles: the zero-length array, and indexing, which is the rest of the
+item.

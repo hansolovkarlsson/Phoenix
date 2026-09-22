@@ -1518,7 +1518,8 @@ refuses "and the piped form, which needed a rung of its own to read" \
 # The first seven constructs, `int main(){return 42;}`, `+ - * /` with
 # parentheses, unary minus with the comparisons, a local `int`, `if`, `while`,
 # `for` and blocks, functions with parameters and calls, `&` and `*` with
-# the pointer declarators, and `sizeof`, emitted as arm64 assembly that `cc` assembles and
+# the pointer declarators, `sizeof`, and an array that decays to a pointer to
+# its first element, emitted as arm64 assembly that `cc` assembles and
 # links. The oracle is `cc` itself, and what is compared is what a program
 # exits with, because until a function can be called that is all a program
 # can say. Skipped where the machine is not arm64, since `cc`
@@ -1584,6 +1585,19 @@ refuses "a 'sizeof' of a name nothing declared" "'y' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/sizeof-undeclared.c"
 refuses "and a '*' on what a 'sizeof' is worth" "'*' wants a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/deref-a-sizeof.c"
+# An array decays to a pointer, so there is nothing left to assign to, which
+# `cc` says too. The other two are refused where `cc` compiles: a zero-length
+# array is a C11 6.7.6.2 violation this `cc` takes as an extension, and
+# refusing it is what keeps a count of zero free to mean *not an array*
+# everywhere else; indexing is the rest of this roadmap item and is refused by
+# name until it arrives.
+refuses "an assignment to an array" "an array is not something a value can be put in" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-an-array.c"
+refuses "an array of no elements" "C11 6.7.6.2 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-no-elements.c"
+refuses "and arithmetic on one, which is the rest of the item" \
+        "counts in what it points at" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/index-an-array.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

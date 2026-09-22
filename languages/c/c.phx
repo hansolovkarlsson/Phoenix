@@ -25,7 +25,8 @@
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
  * then a local `int`, then `if`, `while`, `for` and blocks as statements,
  * then functions with `int` parameters and calls, then `&` and `*` with the
- * pointer declarators that make them useful, then `sizeof`. A function returning `int` with
+ * pointer declarators that make them useful, then `sizeof`, then an array of
+ * `int` or of pointers, which decays to a pointer to its first element. A function returning `int` with
  * up to eight parameters, a body of declarations, assignments, expression
  * statements, control flow and `return`s, and expressions over constants,
  * locals, calls and pointers, and prototypes so that a call can come above
@@ -59,7 +60,7 @@ block-comment = "/*" { ! "*/" } "*/" .
  * `<=` behind, and the error would surface at the token after it. *)
 symbol = "==" | "!=" | "<=" | ">="
        | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "<" | ">" | "="
-       | "&" .
+       | "&" | "[" | "]" .
 
 %skip space line-comment block-comment .
 
@@ -110,9 +111,23 @@ block = "{" { statement } "}" -> Block(body: $2) .
  * going to carry anyway; the day a type is a `char` or a `struct` is the day
  * it needs a node of its own. *)
 statement = "return" e:expression ";"              -> Return(value: $e)
+          (* An array first, because the three declaration forms are told
+           * apart by the token after the name and this one's is `[`. The
+           * count is a constant in the source and so is a field rather than a
+           * subtree: C99's variable-length arrays are not in this subset, and
+           * a count that a pass would have to evaluate is a different
+           * mechanism from a count that is written down.
+           *
+           * It is a **node of its own** for the reason `Local` and
+           * `LocalInit` are two nodes: a count that is sometimes there is a
+           * count every pass has to ask about, and here the question has a
+           * sharp edge. `int a[0]` is a count of zero and `int a;` is no
+           * count at all, and one node would have to spell both the same. *)
+          | "int" s:{ "*" } n:name "[" c:integer "]" ";"
+                                     -> LocalArray(name: $n, stars: size($s), count: int($c))
           | "int" s:{ "*" } n:name "=" e:expression ";"
                                      -> LocalInit(name: $n, stars: size($s), value: $e)
-          | "int" s:{ "*" } n:name ";" -> Local(name: $n, stars: size($s))
+          | "int" s:{ "*" } n:name ";" -> Local(name: $n, stars: size($s), count: 0)
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
            * before the outer one does, which is what C11 6.8.4 says. *)
@@ -256,19 +271,28 @@ arg  = e:expression -> Arg(value: $e) .
 (* ------------------------------------------------------------------ *)
 (* Pass two: which local is which, where does it live, and what is it? *)
 (*                                                                     *)
-(* A local is a slot in its function's frame, numbered from one in the  *)
-(* order declared, and the frame is how many slots the function has.   *)
-(* The parameters come first, so parameter k is slot k. The emit pass   *)
-(* turns a slot into an offset from the frame pointer, because the      *)
-(* width of a slot is the machine's business and not the language's.    *)
+(* A local lives at a **byte offset** below its function's frame        *)
+(* pointer, and the frame is how many bytes the function needs. It was  *)
+(* a numbered slot until arrays arrived: `int a[10]` is forty bytes and *)
+(* one slot cannot hold it, so a declaration's type reaches the frame   *)
+(* here for the first time.                                             *)
 (*                                                                     *)
-(* A name means **two** things since `int *p` could be written: where   *)
-(* it lives and how many stars stood in front of it. Both are facts a   *)
-(* use of the name wants, and both go in one table as a pair rather     *)
-(* than in two tables side by side -- a second table would need the     *)
-(* same `down` at a function and the same save-and-restore at a block,  *)
-(* and two copies of a scope rule are two chances to disagree about     *)
-(* what a scope is.                                                     *)
+(* Everything is given a multiple of eight and started on one. An       *)
+(* `int` is four bytes and takes eight, which wastes half of every      *)
+(* scalar and is what the frame did anyway when a slot was eight. The   *)
+(* alternative, packing each thing at its own width, is not observable  *)
+(* by any program: the distance between two **separate** objects is not *)
+(* something C defines, and the distance between two elements of one    *)
+(* array is the element's width either way. So the cheaper rule is the  *)
+(* one that is kept, and `struct` will need member offsets rather than  *)
+(* this.                                                                *)
+(*                                                                     *)
+(* A name means **three** things: where it lives, how many stars stood  *)
+(* in front of it, and how many elements it has, zero meaning it is not *)
+(* an array. All three go in one table rather than in three side by     *)
+(* side, because a second table would need the same `down` at a         *)
+(* function and the same save-and-restore at a block, and two copies of *)
+(* a scope rule are two chances to disagree about what a scope is.      *)
 
 %pass locals
 
@@ -284,7 +308,12 @@ arg  = e:expression -> Arg(value: $e) .
    * as declared twice. *)
   thread env   = empty
   thread scope = empty
-  thread slots = 0
+  thread bytes = 0
+
+  (* Which register a parameter arrives in is its **position**, which a byte
+   * offset no longer says. It said it while every declaration was one slot
+   * and parameter k was slot k; now it is counted on its own. *)
+  thread pindex = 0
 
   (* The functions declared so far, name to arity. A definition binds itself
    * on the way *in*, with a `down` clause, so that its own body can call it;
@@ -293,21 +322,28 @@ arg  = e:expression -> Arg(value: $e) .
    * out, which for a node with no body is the same moment. *)
   thread funcs = empty
 
-  Prototype : down env   = empty
-            : down scope = empty
-            : down slots = 0
+  Prototype : down env    = empty
+            : down scope  = empty
+            : down bytes  = 0
+            : down pindex = 0
             : funcs = bind($funcs, $name, size($params)) .
 
-  Function  : down env   = empty
-            : down scope = empty
-            : down slots = 0
-            : down funcs = bind($funcs, $name, size($params))
-            : frame = $slots .
+  Function  : down env    = empty
+            : down scope  = empty
+            : down bytes  = 0
+            : down pindex = 0
+            : down funcs  = bind($funcs, $name, size($params))
+            : frame = $bytes .
 
-  Param : slot  = $slots + 1
-        : env   = bind($env, $name, [$slots + 1, $stars])
-        : scope = bind($scope, $name, true)
-        : slots = $slots + 1
+  (* A parameter is an `int` or a pointer and never an array, because the
+   * subset has no declarator for one and C would have rewritten it to a
+   * pointer if it had. So it takes eight bytes like any scalar. *)
+  Param : offset = $bytes + 8
+        : preg   = $pindex
+        : env    = bind($env, $name, [$offset, $stars, 0])
+        : scope  = bind($scope, $name, true)
+        : bytes  = $bytes + 8
+        : pindex = $pindex + 1
         ! defined($scope, $name) : "'{}' is a parameter twice" of $name .
 
   Call ! not defined($funcs, $name)
@@ -317,33 +353,65 @@ arg  = e:expression -> Arg(value: $e) .
                of $name, lookup($funcs, $name, 0), size($args) .
 
   (* A block is a scope: its declarations are torn down on the way out and
-   * the enclosing tables come back. The slot counter is *not* restored,
-   * because a slot in the frame is taken whether or not its name is still
-   * in sight, and two blocks side by side may as well not share one. *)
+   * the enclosing tables come back. The byte counter is *not* restored,
+   * because frame space is taken whether or not the name for it is still in
+   * sight, and two blocks side by side may as well not share any. *)
   Block : down held      = $env
         : down heldscope = $scope
         : down scope     = empty
         : env   = $held
         : scope = $heldscope .
 
-  Local     : slot  = $slots + 1
-            : env   = bind($env, $name, [$slots + 1, $stars])
-            : scope = bind($scope, $name, true)
-            : slots = $slots + 1
+  (* A scalar is eight bytes of frame whether it is a four-byte `int` or an
+   * eight-byte pointer, and binds a count of zero, which is what *not an
+   * array* is spelled as everywhere below. *)
+  Local     : offset = $bytes + 8
+            : env    = bind($env, $name, [$offset, $stars, 0])
+            : scope  = bind($scope, $name, true)
+            : bytes  = $bytes + 8
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
-  LocalInit : slot  = $slots + 1
-            : env   = bind($env, $name, [$slots + 1, $stars])
-            : scope = bind($scope, $name, true)
-            : slots = $slots + 1
+  (* A declaration with an initialiser is never an array: the subset has no
+   * way to write the initialiser one would want. *)
+  LocalInit : offset = $bytes + 8
+            : env    = bind($env, $name, [$offset, $stars, 0])
+            : scope  = bind($scope, $name, true)
+            : bytes  = $bytes + 8
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
-  (* The pair once, and its halves named from it. `Assign` has no clause here
-   * any more: what it assigns to is a place, and a place is one of these two
-   * nodes, so the question is asked where the name is rather than twice. *)
-  Variable : means = lookup($env, $name, [0, 0])
-           : slot  = at($means, 1)
-           : stars = at($means, 2)
+  (* An element is four bytes or eight, the whole thing is `count` of them,
+   * and what the frame gives it is that rounded up to eight.
+   *
+   * A count of zero is refused rather than bound, and that is what keeps
+   * *count of zero* free to mean *not an array* in every table and test
+   * below. C11 6.7.6.2 wants a size greater than zero; this `cc` takes
+   * `int a[0]` as an extension and gives it a `sizeof` of 0, so without the
+   * refusal it is a program both compile and answer differently. *)
+  LocalArray : ebytes = lookup([[0, 4]], $stars, 8)
+             : whole  = $count * $ebytes
+             : takes  = (($whole + 7) div 8) * 8
+             : offset = $bytes + $takes
+             : env    = bind($env, $name, [$offset, $stars, $count])
+             : scope  = bind($scope, $name, true)
+             : bytes  = $bytes + $takes
+             ! $count < 1
+                 : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
+                     of $name
+             ! defined($scope, $name) : "'{}' is declared twice" of $name .
+
+  (* The triple once, and its parts named from it. `Assign` has no clause
+   * here: what it assigns to is a place, and a place is one of these two
+   * nodes, so the question is asked where the name is rather than twice.
+   *
+   * `Deref` answers `count` as well, and always zero, so that anything
+   * asking a **place** whether it is an array gets an answer from either
+   * kind of place rather than from one of them. *)
+  Variable : means  = lookup($env, $name, [0, 0, 0])
+           : offset = at($means, 1)
+           : stars  = at($means, 2)
+           : count  = at($means, 3)
            ! not defined($env, $name) : "'{}' is not declared" of $name .
+
+  Deref : count = 0 .
 
 (* ------------------------------------------------------------------ *)
 (* Pass three: how many stars, and what that makes impossible.         *)
@@ -381,9 +449,28 @@ arg  = e:expression -> Arg(value: $e) .
    * what keeps the clauses below to the nodes that have something to say. *)
   otherwise type = 0
 
-  Variable : type = $stars .
+  (* And a size falls out of the type for everything except a name, because a
+   * name is the only thing that can be an array: no operator here answers
+   * one. `Variable` therefore says its own and this covers the rest. *)
+  otherwise size = lookup([[0, 4]], $type, 8)
+
+  (* **A name that is an array decays**, C11 6.3.2.1: in an expression it is a
+   * pointer to its first element, so its `type` has one more star than it was
+   * declared with. Its `size` does **not** decay, because `sizeof` is one of
+   * the places C says the conversion does not happen, and the two attributes
+   * being separate is what lets one of them answer a decayed question and the
+   * other an undecayed one without either knowing about `sizeof`. *)
+  Variable : elem = lookup([[0, 4]], $stars, 8)
+           : type = lookup([[0, $stars]], $count, $stars + 1)
+           : size = lookup([[0, $elem]], $count, $count * $elem) .
   Addr     : type = $place.type + 1 .
-  Assign   : type = $place.type .
+  (* An array is not an lvalue, C11 6.3.2.1 again: it decays before anything
+   * can be assigned to it, so there is nothing to assign to. Without this the
+   * emit pass would store through the array's address and write element
+   * zero, which is a wrong answer rather than a refusal. *)
+  Assign   : type = $place.type
+           ! $place.count > 0
+               : "an array is not something a value can be put in" .
   Arg      : type = $value.type .
   Deref    : type = $value.type - 1
            ! $value.type < 1

@@ -76,7 +76,21 @@ before `typedef`, so `sizeof` is worth an `int` and `sizeof(sizeof(int))` is
 the suite pins **both** answers, so closing the gap fails with the old numbers
 in it.
 
-**Tests:** 224 → 234. Ten new ones, every one a refusal but the last: the address of
+**Later still: an array, and a frame measured in bytes.** `int a[10]` and
+`int *a[10]`, `sizeof a`, and the decay C11 6.3.2.1 requires: a name that is
+an array is a pointer to its first element everywhere except under `sizeof`,
+so `*a` is element zero and `int *p = a;` is the same address. A local now
+lives at a **byte offset** rather than in a numbered slot, because forty bytes
+do not fit in a slot, which is the first time a declaration's type reaches the
+frame. Everything is still given a multiple of eight, because the distance
+between two separate objects is not something a C program can observe.
+Assigning to an array is refused, as `cc` refuses it; a zero-length array is
+refused where `cc` takes it as an extension, which is what keeps a count of
+zero free to mean *not an array*; and indexing, `a[i]` and `a + 1`, is the
+rest of the roadmap item and is refused by name until it arrives. Eight more
+oracle programs, 79 in all.
+
+**Tests:** 224 → 237. Thirteen new ones, all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
 pointer; and pointer arithmetic, which after the ninth parameter is the

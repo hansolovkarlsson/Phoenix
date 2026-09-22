@@ -631,9 +631,9 @@ statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention *(prediction three
 is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
 `&` and `*`; arrays and
-`sizeof` *(`sizeof` through here in the tree since 2026-09-22, sixty-nine
-programs against `cc` and twenty refused; arrays are what is left of this
-item)*; `char` and string literals; `struct`. It stops before `typedef`
+`sizeof` *(`sizeof` and an array's declaration, size and decay are in the tree
+since 2026-09-22, seventy-nine programs against `cc` and twenty-three refused;
+**indexing is what is left of this item**)*; `char` and string literals; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
@@ -669,13 +669,17 @@ worth a `size_t`, `size_t` is a **typedef**, and this arc stops before
 `tests/divergent/sizeof-of-sizeof.c` pins the one program that shows the
 difference, 8 against 4.
 
-*What arrays still want, and it is the first thing on this list that the
-notation has not already answered.* A size that is **not** derivable from a
-star count: `int a[10]` is forty bytes and takes more than one slot, so a
-declaration's type reaches the frame for the first time, and `a + 1` counts in
-elements, which is the refusal in the `types` pass waiting to be replaced by
-the arithmetic it stands in for. `sxtw` arrives here, where a 32-bit index
-meets a 64-bit pointer.
+*An array's declaration, size and decay went in the same day, and the frame
+moved with them.* `int a[10]` is forty bytes and no slot holds forty, so a
+local now lives at a **byte offset** rather than in a numbered slot, which is
+the first time a declaration's type reached the frame. A name that is an array
+decays to a pointer to its first element, C11 6.3.2.1, everywhere except under
+`sizeof`, which is why a node answers a `type` that decays and a `size` that
+does not.
+
+*What is left of the item is indexing*, `a[i]` and `a + 1`, which is the
+refusal in the `types` pass waiting to be replaced by the arithmetic it stands
+in for. `sxtw` arrives there, where a 32-bit index meets a 64-bit pointer.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
