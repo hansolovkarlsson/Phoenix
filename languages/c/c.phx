@@ -21,17 +21,19 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first six constructs**: `int main(){return 42;}`,
+ * **What is here is the first seven constructs**: `int main(){return 42;}`,
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
  * then a local `int`, then `if`, `while`, `for` and blocks as statements,
- * then functions with `int` parameters and calls. A function returning `int`
- * with up to eight parameters, a body of declarations, assignments,
- * expression statements, control flow and `return`s, and expressions over
- * constants, locals and calls, and prototypes so that a call can come above
+ * then functions with `int` parameters and calls, then `&` and `*` with the
+ * pointer declarators that make them useful. A function returning `int` with
+ * up to eight parameters, a body of declarations, assignments, expression
+ * statements, control flow and `return`s, and expressions over constants,
+ * locals, calls and pointers, and prototypes so that a call can come above
  * the function it names. A name nothing declared, one declared twice in a
  * scope, one used outside its block, a call before a declaration or with the
  * wrong number of arguments, a function defined twice or declared with two
- * arities, and a ninth parameter, are refused.
+ * arities, a ninth parameter, a `*` on what is not a pointer, and arithmetic
+ * on one, are refused.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -56,7 +58,8 @@ block-comment = "/*" { ! "*/" } "*/" .
 (* Two characters before one, every time: `<` first would leave the `=` of
  * `<=` behind, and the error would surface at the token after it. *)
 symbol = "==" | "!=" | "<=" | ">="
-       | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "<" | ">" | "=" .
+       | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "<" | ">" | "="
+       | "&" .
 
 %skip space line-comment block-comment .
 
@@ -93,16 +96,23 @@ item = "int" n:name "(" p:params ")" ";"
  * one parameter would arrive bare and two would arrive in a node called
  * `params`. `-> $1` says *the list, whatever its length*. *)
 params = [ param { "," q:param -> $q } ] -> $1 .
-param  = "int" n:name -> Param(name: $n) .
+param  = "int" s:{ "*" } n:name -> Param(name: $n, stars: size($s)) .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
 (* A declaration is two nodes rather than one with an optional initialiser,
  * because a node whose field is sometimes there is a node every pass has to
- * ask about. `int x = e;` is `int x; x = e;` and the emit pass says so. *)
+ * ask about. `int x = e;` is `int x; x = e;` and the emit pass says so.
+ *
+ * The stars are **counted** rather than kept: `int **p` declares a name with
+ * two of them, and two is the whole of what any pass here asks. A type in this
+ * subset is `int` and a number of stars, so it fits in a number the node was
+ * going to carry anyway; the day a type is a `char` or a `struct` is the day
+ * it needs a node of its own. *)
 statement = "return" e:expression ";"              -> Return(value: $e)
-          | "int" n:name "=" e:expression ";"       -> LocalInit(name: $n, value: $e)
-          | "int" n:name ";"                        -> Local(name: $n)
+          | "int" s:{ "*" } n:name "=" e:expression ";"
+                                     -> LocalInit(name: $n, stars: size($s), value: $e)
+          | "int" s:{ "*" } n:name ";" -> Local(name: $n, stars: size($s))
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
            * before the outer one does, which is what C11 6.8.4 says. *)
@@ -129,13 +139,29 @@ statement = "return" e:expression ";"              -> Return(value: $e)
 expression = assignment .
 
 (* Assignment is an expression in C, worth the value assigned, and it groups
- * to the right: `a = b = 21` sets both. The left side is a name and nothing
- * else until there is something else it could be. The first alternative
+ * to the right: `a = b = 21` sets both. What is on the left is a **place**
+ * and no longer a name, which is the whole of what `&` and `*` change about
+ * this rule: `*p = 3` puts a value where a pointer says, and C11 6.5.16 asks
+ * for an lvalue there rather than for an expression. The first alternative
  * fails at `=` on anything that is not an assignment and the choice moves on,
  * which is what ordered choice is for; `==` is a different token, so `x == 1`
  * never gets this far. *)
-assignment = n:name "=" a:assignment -> Assign(name: $n, value: $a)
+assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
            | equality .
+
+(* A place is somewhere a value can be **put**, and it is the one thing `&`
+ * can be asked for. There are two: a name, and a dereference of anything.
+ * Saying that here rather than in a pass is what keeps `1 = 2` and `&1` out
+ * without any pass having to ask what kind of node it was handed -- C11
+ * 6.5.3.2 makes the operand of `&` an lvalue, and this rule is that
+ * constraint written in the grammar, where it costs nothing to check.
+ *
+ * A place builds the same `Variable` and `Deref` nodes a *read* of one builds,
+ * because they are the same nodes: what differs is which attribute the parent
+ * asks them for. The emit pass gives both an address as well as a value, and
+ * an assignment reads the address where a read reads the value. *)
+place = "*" u:unary -> Deref(value: $u)
+      | n:name      -> Variable(name: $n) .
 
 (* A comparison is an `int`, 0 or 1, and it chains: `3 > 2 > 1` is
  * `(3 > 2) > 1`, which is 0, and C means that. So these are repetitions
@@ -152,7 +178,13 @@ additive       = multiplicative { ( "+" | "-" ) multiplicative
 multiplicative = unary          { ( "*" | "/" ) unary
                                     -> Binary(op: $1, left: $$, right: $2) } .
 
+(* `&` takes a place and `*` takes anything, which is C11 6.5.3.2 as written.
+ * `&*p` is therefore `p` without anybody saying so: the address of a
+ * dereference is the thing dereferenced, and the emit pass gets that from the
+ * shape of the tree rather than from a rule about it. *)
 unary   = "-" u:unary -> Negate(value: $u)
+        | "&" p:place -> Addr(place: $p)
+        | "*" u:unary -> Deref(value: $u)
         | primary .
 
 (* A call before a variable, because `f` fails at `(` and falls through.
@@ -205,13 +237,21 @@ arg  = e:expression -> Arg(value: $e) .
               : "a function is declared with two different numbers of parameters" .
 
 (* ------------------------------------------------------------------ *)
-(* Pass two: which local is which, and where does each one live?      *)
+(* Pass two: which local is which, where does it live, and what is it? *)
 (*                                                                     *)
 (* A local is a slot in its function's frame, numbered from one in the  *)
 (* order declared, and the frame is how many slots the function has.   *)
 (* The parameters come first, so parameter k is slot k. The emit pass   *)
 (* turns a slot into an offset from the frame pointer, because the      *)
 (* width of a slot is the machine's business and not the language's.    *)
+(*                                                                     *)
+(* A name means **two** things since `int *p` could be written: where   *)
+(* it lives and how many stars stood in front of it. Both are facts a   *)
+(* use of the name wants, and both go in one table as a pair rather     *)
+(* than in two tables side by side -- a second table would need the     *)
+(* same `down` at a function and the same save-and-restore at a block,  *)
+(* and two copies of a scope rule are two chances to disagree about     *)
+(* what a scope is.                                                     *)
 
 %pass locals
 
@@ -248,7 +288,7 @@ arg  = e:expression -> Arg(value: $e) .
             : frame = $slots .
 
   Param : slot  = $slots + 1
-        : env   = bind($env, $name, $slots + 1)
+        : env   = bind($env, $name, [$slots + 1, $stars])
         : scope = bind($scope, $name, true)
         : slots = $slots + 1
         ! defined($scope, $name) : "'{}' is a parameter twice" of $name .
@@ -270,17 +310,80 @@ arg  = e:expression -> Arg(value: $e) .
         : scope = $heldscope .
 
   Local     : slot  = $slots + 1
-            : env   = bind($env, $name, $slots + 1)
+            : env   = bind($env, $name, [$slots + 1, $stars])
             : scope = bind($scope, $name, true)
             : slots = $slots + 1
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
   LocalInit : slot  = $slots + 1
-            : env   = bind($env, $name, $slots + 1)
+            : env   = bind($env, $name, [$slots + 1, $stars])
             : scope = bind($scope, $name, true)
             : slots = $slots + 1
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
-  Variable : slot = lookup($env, $name, 0)
+  (* The pair once, and its halves named from it. `Assign` has no clause here
+   * any more: what it assigns to is a place, and a place is one of these two
+   * nodes, so the question is asked where the name is rather than twice. *)
+  Variable : means = lookup($env, $name, [0, 0])
+           : slot  = at($means, 1)
+           : stars = at($means, 2)
            ! not defined($env, $name) : "'{}' is not declared" of $name .
-  Assign   : slot = lookup($env, $name, 0)
-           ! not defined($env, $name) : "'{}' is not declared" of $name .
+
+(* ------------------------------------------------------------------ *)
+(* Pass three: how many stars, and what that makes impossible.         *)
+(*                                                                     *)
+(* Every value here is eight bytes, so almost nothing comes out wrong   *)
+(* from a pointer being taken for an `int`: the same register holds     *)
+(* both and the same `ldr` fetches both. There are exactly two places   *)
+(* where C says otherwise, and they are what this pass is for.         *)
+(*                                                                     *)
+(* One is `p + 1`, which C11 6.5.6 says is the **next int** and not the *)
+(* next byte. Nothing in this subset has a size yet, so that is refused *)
+(* by name; arrays and `sizeof` are where a size arrives and where this *)
+(* check gets replaced by the arithmetic it stands in for. The other is *)
+(* `*x` on an `int`, which C11 6.5.3.2 forbids and which would compile  *)
+(* here into a load from whatever the int happened to be.              *)
+(*                                                                     *)
+(* What this pass deliberately does **not** do is check that what is    *)
+(* assigned, or passed, has the type it is given. C11 6.5.16.1 has a    *)
+(* table for that and `cc` warns from it, but nothing compiled here     *)
+(* comes out wrong for getting it wrong, and a check that only          *)
+(* reproduces somebody else's diagnostic is a second opinion rather     *)
+(* than a compiler. This pass refuses what it would otherwise           *)
+(* mis-compile, and nothing else.                                       *)
+(*                                                                     *)
+(* That holds because of where the eight-byte `int` could show: a       *)
+(* pointer put in an `int` and taken out again keeps sixty-four bits    *)
+(* here and thirty-two under `cc`. It is a program this `cc` refuses to *)
+(* compile at all, so the oracle never sees it and the subset needs no  *)
+(* check to stay honest about it. See journal 2026-09-22.               *)
+
+%pass types
+
+  (* Zero is "not a pointer", which is what a statement is, what a program is,
+   * and what every node that is not an expression is. Saying it once here is
+   * what keeps the clauses below to the nodes that have something to say. *)
+  otherwise type = 0
+
+  Variable : type = $stars .
+  Addr     : type = $place.type + 1 .
+  Assign   : type = $place.type .
+  Arg      : type = $value.type .
+  Deref    : type = $value.type - 1
+           ! $value.type < 1
+               : "'*' wants a pointer, and this is an int" .
+
+  Negate ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
+
+  (* C11 6.5.6 lets `+` and `-` take a pointer and an integer, and counts the
+   * integer in what the pointer points at. That size is the thing this subset
+   * has not got, so the construct is refused by name rather than compiled as
+   * though the size were one -- which is the difference between a subset and
+   * a wrong answer. *)
+  Binary(op: "+") ! $left.type > 0 or $right.type > 0
+      : "'+' on a pointer counts in what it points at, and nothing here has a size yet" .
+  Binary(op: "-") ! $left.type > 0 or $right.type > 0
+      : "'-' on a pointer counts in what it points at, and nothing here has a size yet" .
+  (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
+   * either is C's own refusal rather than this subset's. *)
+  Binary ! $left.type > 0 or $right.type > 0
+      : "'{}' does not take a pointer" of $op .

@@ -1515,12 +1515,13 @@ refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 # C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
-# The first six constructs, `int main(){return 42;}`, `+ - * /` with
+# The first seven constructs, `int main(){return 42;}`, `+ - * /` with
 # parentheses, unary minus with the comparisons, a local `int`, `if`, `while`,
-# `for` and blocks, and functions with parameters and calls, emitted as arm64
-# assembly that `cc` assembles and links. The oracle is `cc` itself, and what is compared
-# is what a program exits with, because until a function can be called that is
-# all a program can say. Skipped where the machine is not arm64, since `cc`
+# `for` and blocks, functions with parameters and calls, and `&` and `*` with
+# the pointer declarators, emitted as arm64 assembly that `cc` assembles and
+# links. The oracle is `cc` itself, and what is compared is what a program
+# exits with, because until a function can be called that is all a program
+# can say. Skipped where the machine is not arm64, since `cc`
 # there assembles something else.
 echo "C"
 accepts "the description reads" "$root/languages/c/c-arm64.phx"
@@ -1553,6 +1554,29 @@ refuses "a prototype and a definition that disagree" "two different numbers of p
         --driver check "$root/languages/c/c-arm64.phx" "$r/two-arities.c"
 refuses "a ninth parameter, which is outside the subset" "only eight are compiled" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/nine-params.c"
+# What `&` and `*` add to the list. The first two are the grammar's, because a
+# place is a rule and not a pass: C11 6.5.3.2 wants an lvalue after `&` and
+# 6.5.16 wants one before `=`, and a rule that only matches those two is that
+# constraint at no cost. The rest are the `types` pass, which knows how many
+# stars a value has and nothing else about its type.
+refuses "the address of something that is not a place" "expected * or name" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
+refuses "and an assignment to one" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
+refuses "a '*' on an int" "'*' wants a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/deref-an-int.c"
+refuses "and on a name nothing declared" "'p' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/deref-undeclared.c"
+refuses "a '-' on a pointer" "'-' wants a number" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/negate-a-pointer.c"
+refuses "a '*' between a pointer and a number" "'*' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/multiply-a-pointer.c"
+# Valid C, and the second thing here refused for being outside the subset
+# rather than outside the language, after the ninth parameter: `p + 1` is the
+# next int, and a size is what arrives with arrays.
+refuses "pointer arithmetic, which needs a size the subset has not got" \
+        "counts in what it points at" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-arithmetic.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

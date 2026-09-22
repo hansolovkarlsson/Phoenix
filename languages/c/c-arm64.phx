@@ -29,10 +29,19 @@
  * prologue, and from then on a parameter is a local. Nothing is kept in a
  * register across a call, so no register has to be saved.
  *
+ * **A place is a second attribute and not a second node.** `x` on the right
+ * of an `=` is a load and `x` on the left is an address, and both are the
+ * same `Variable` in the tree; this pass gives it an `out` and an `addr` and
+ * lets the parent ask for the one it meant. A pointer is a value like any
+ * other, so `&` is the `addr` of a place and `*` is an `ldr` from a value,
+ * and neither needs a register or an instruction the subset did not have.
+ *
  * The value is 64 bits wide in a register that C says is a 32-bit `int`. That
  * is chibicc's first shape too, and the oracle is what will say when it
  * matters: an operation whose answer differs between the two widths is a
- * program on which `cc` and this file disagree.
+ * program on which `cc` and this file disagree. A **pointer** is 64 bits on
+ * this machine and so is exactly as wide as the register, which is why `&`
+ * and `*` needed nothing said about width here.
  *)
 
 %import "c.phx" .
@@ -50,13 +59,41 @@
    * when it does not, and this description does not have to know which. *)
   Number : out = "\tldr x0, ={}\n" of $text .
 
-  (* Slot n is eight bytes times n below the frame pointer. `x29` is the
+  (* ---- places, and the two questions a node can be asked ----
+   *
+   * Slot n is eight bytes times n below the frame pointer. `x29` is the
    * frame pointer and the saved pair sits at it, so the first slot is at
-   * -8 and the frame extends downward from there. *)
-  Variable  : out = "\tldr x0, [x29, #-{}]\n" of 8 * $slot .
-  (* The value stays in `x0`, which is what makes `a = b = 21` work: the
-   * inner assignment is an expression worth 21. *)
-  Assign    : out = "{}\tstr x0, [x29, #-{}]\n" of $value.out, 8 * $slot .
+   * -8 and the frame extends downward from there.
+   *
+   * A `Variable` and a `Deref` each answer **two** attributes, because each
+   * is two things depending on who is asking: `out` is the value, which is
+   * what an expression wants, and `addr` is where that value lives, which is
+   * what an assignment and `&` want. Nothing else in the tree has an `addr`,
+   * and nothing else can reach a position that asks for one -- the `place`
+   * rule in `c.phx` sees to that, which is why no pass has to check it. *)
+  Variable  : out  = "\tldr x0, [x29, #-{}]\n" of 8 * $slot
+            : addr = "\tsub x0, x29, #{}\n" of 8 * $slot .
+
+  (* A dereference is a load from what the value came out as, and its address
+   * is that value before the load, so `&*p` emits exactly what `p` emits and
+   * the identity C11 6.5.3.2 states falls out of the pair rather than being
+   * written anywhere. *)
+  Deref     : out  = "{}\tldr x0, [x0]\n" of $value.out
+            : addr = $value.out .
+
+  (* `&` is the address and nothing more. *)
+  Addr      : out  = $place.addr .
+
+  (* The address first, pushed, then the value, then the store. The value
+   * stays in `x0`, which is what makes `a = b = 21` and `*p = *q = 4` work:
+   * an assignment is an expression worth what it assigned. Which side is
+   * evaluated first C leaves unspecified, so this description decides, the
+   * same way it decided for a binary operator: left first. *)
+  Assign    : out = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\tstr x0, [x1]\n"
+                of $place.addr, $value.out .
+
+  (* A declaration with an initialiser knows its own slot, so it stores
+   * straight into it rather than working out an address it already has. *)
   LocalInit : out = "{}\tstr x0, [x29, #-{}]\n" of $value.out, 8 * $slot .
   Local     : out = "" .
   Discard   : out = $value.out .
@@ -155,5 +192,5 @@
   Prototype : out = "" .
   Program   : out = "\t.text\n{}" of join($items.out, "\n") .
 
-%driver arm64 = functions, locals, emit-arm64 -> out .
-%driver check = functions, locals .
+%driver arm64 = functions, locals, types, emit-arm64 -> out .
+%driver check = functions, locals, types .

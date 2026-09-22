@@ -16,6 +16,49 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-22: `&` and `*`, and a left side that is a place
+
+**The C subset's seventh construct**: the address of a thing, and the thing a
+pointer points at. `int *p = &x; *p = 7;` compiles, and so do `int **q = &p`,
+a pointer parameter a function writes through, and a `swap` written the way C
+programs write one.
+
+**What is on the left of an `=` is a place and no longer a name.** A place is
+a rule with two alternatives, a name or a `*` on anything, and unary `&` goes
+through the same rule. That is C11 6.5.3.2's *the operand shall be an lvalue*,
+said once in the grammar. `&1` and `1 = 2` are refused by the parser with a
+position, rather than by a pass asking what kind of node it was handed.
+
+**A place is a second attribute rather than a second node.** A `Variable` and
+a `Deref` each answer both the value and the address of the value, and the
+parent asks for the one it meant, so `&*p` emits exactly what `p` emits and
+C11's identity for it is never written down. The declarators `int *p` and
+`int **q` are read and their stars counted; a name in the symbol table now
+means a slot **and** a star count, as one pair in the one table that already
+had a scope rule.
+
+**A third pass, `types`, which exists to refuse what would otherwise
+mis-compile.** Every value here is eight bytes, so a pointer taken for an
+`int` is harmless, except that C11 6.5.6 counts `p + 1` in what `p` points
+at, and nothing in this subset has a size yet. So pointer arithmetic is
+refused by name until arrays and `sizeof` bring a size, `*` on an `int` is
+refused as 6.5.3.2 requires, and `-` and `*` on a pointer with it. Whether an
+assignment or an argument has the type it was given is **not** checked: the
+one program that would show the eight-byte `int`, a pointer put in an `int`
+and taken out again, is one `cc` refuses to compile.
+
+**Sixteen more oracle programs and seven more refusals**, 58 and 18 in all.
+Every one of the sixteen agreed with `cc` on the first run.
+
+**Tests:** 224 → 231. Seven new ones, every one a refusal: the address of
+something that is not a place and an assignment to one, both from the grammar;
+a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
+pointer; and pointer arithmetic, which after the ninth parameter is the
+second thing in the C subset refused for being outside the subset rather than
+outside the language.
+
+---
+
 ## 2026-09-21: a C subset begins, with `cc` as its oracle
 
 **A C compiler has its first six constructs: [`languages/c/`](../languages/c/).**

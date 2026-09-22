@@ -628,9 +628,10 @@ output is slow and correct, and slow is not a divergence.
 suite green at each: `int main(){return 42;}`; then `+ - * /` and
 parentheses; unary minus and comparison; a local `int`; `;`-separated
 statements and `return`; `if`, `while`, `for`; blocks; a function with
-parameters and a call under the arm64 calling convention *(through here in
-the tree since 2026-09-21, forty-two programs against `cc`; prediction three
-is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*; `&` and `*`; arrays
+parameters and a call under the arm64 calling convention *(prediction three
+is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
+`&` and `*` *(through here in the tree since 2026-09-22, fifty-eight programs
+against `cc` and eighteen refused)*; arrays
 and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.

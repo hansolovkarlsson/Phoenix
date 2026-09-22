@@ -4558,3 +4558,95 @@ refused nothing. That is the shape postmortem 16 scores in the prediction
 about the calling convention, and it held for the whole day: **the expensive
 half of a C compiler in this notation is the rules of C, and the oracle is
 where they are met.** Nothing in `phoenix/` was touched.
+
+
+## 2026-09-22: `&` and `*`, and a place that turned out to be a rule
+
+The seventh construct, and the one the roadmap's list said would change the
+`assignment` rule. It did, on one line, and the line it changed was not the
+interesting part of the day.
+
+**A place is a rule, not a pass.** C11 6.5.3.2 wants an lvalue after `&` and
+6.5.16 wants one before `=`, and both are the same question: *where can a
+value be put?* The subset's answer is two alternatives:
+
+```ebnf
+place = "*" u:unary -> Deref(value: $u)
+      | n:name      -> Variable(name: $n) .
+```
+
+Both `assignment` and unary `&` go through it, so `&1` and `1 = 2` are
+refused by the parser, with a position, and nothing downstream had to ask what
+kind of node it was handed. The shape that was nearly written instead was C's
+own, `assignment = unary "=" assignment` with a pass rejecting the operands
+that are not lvalues; that needs a pass that can ask what a node **is**, which
+is a question about the tree rather than about the program, and answering it
+would have meant an attribute on every node kind saying whether it was a
+place. The grammar already distinguishes them for free, because it is the
+thing that built them.
+
+**A place is a second attribute, not a second node.** `x` on the right of an
+`=` is a load and `x` on the left is an address, and both are the same
+`Variable` in the tree. The emit pass gives that node two attributes: `out`,
+the value, and `addr`, where the value lives. The parent asks for the one it
+meant. `Deref` answers both too, and its `addr` is its child's
+`out`, which is the whole of it: **`&*p` emits exactly what `p` emits**, and
+the identity C11 6.5.3.2 states falls out of the shape of the tree rather than
+being written down anywhere. Nothing else in the tree has an `addr`, and the
+`place` rule is what guarantees nothing else is ever asked for one.
+
+**One table, not two.** A name now means two things: which slot it lives in,
+and how many stars stood in front of it. The second nearly arrived as a
+second thread beside `env`. It would have needed the same `down` at a
+function and the same save-and-restore at a block, and two copies of a scope
+rule are two chances to disagree about what a scope is. So `env` binds a
+**pair**, the name is looked up once and its halves are read off it with
+`at`, and the `locals` pass's title gained a third clause: *which local is
+which, where does it live, and what is it*. That is one question about a name
+rather than two about the same name. The declarators are counted rather than
+kept: a type in this subset is `int` and a number of stars, and a number is
+what the node already carried.
+
+**A third pass, and the one thing it is for.** Every value here is eight bytes,
+so almost nothing comes out wrong from a pointer being taken for an `int`:
+the same register holds both and the same `ldr` fetches both. C says otherwise
+in one place, 6.5.6: `p + 1` is the **next `int`** and not the next byte.
+Nothing in this subset has a size yet, so the `types` pass counts stars and
+refuses that by name, along with `*x` on an `int`, which 6.5.3.2 forbids and
+which would have compiled into a load from whatever the int happened to be.
+What it deliberately does not do is check that what is assigned, or passed,
+has the type it is given. 6.5.16.1 has a table for that and `cc` warns from
+it, but the rule this pass was written to is narrower and load-bearing:
+**refuse what would otherwise mis-compile, and nothing else.** A check that
+only reproduces somebody else's diagnostic is a second opinion rather than a
+compiler.
+
+**The program that would show the eight-byte `int`, and why the oracle cannot
+see it.** That rule is only honest if nothing *does* mis-compile from a type
+being wrong, so the program that would break it was written:
+`int q = 0; q = &x; int *p = q; return *p;`. Phoenix keeps sixty-four bits and
+it works; `cc` puts the pointer in thirty-two and it does not. Except that
+`cc` will not compile it at all. This one makes `-Wint-conversion` an error
+by default and `-w` does not move it, the way `-w` did not move the chained
+comparison on 09-21. The difference is that the chained comparison was C11 as
+written and worth downgrading by name, and this is a constraint violation that
+is worth leaving refused. So the only programs on which the width could show
+are ones the oracle will not build, and the 09-21 note stands unchanged:
+`char` is still where the width gets decided.
+
+*Sixteen programs, seven refusals, and neither the oracle nor the tool refused
+anything.* Fifty-eight against `cc` now, eighteen refused. All sixteen agreed
+on the first run and `phx` read the description without complaint, which is
+the first construct of which both are true. Yesterday's lesson was that the
+expensive half of a C compiler here is C rather than the machine, and that the
+oracle is where C is met; today C was met in 6.5.3.2 and 6.5.6 before anything
+was written, and the oracle confirmed instead of correcting. That is either
+the lesson working or the construct being small, and the next one will say
+which: **arrays and `sizeof` are where the size this pass is missing has to
+arrive**, and a size is a change to what a type *is* here rather than another
+row in a table.
+
+*Prediction one is seven constructs in and still untouched.* Nothing today
+asked the tool for anything: a rule, an attribute, a pair in a table and a
+pass, all of which the notation already had. Prediction two, that `typedef`
+is the first thing to want a change, has still not been asked.
