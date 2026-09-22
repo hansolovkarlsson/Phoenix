@@ -4384,3 +4384,34 @@ chance to fail. The third, that the calling convention costs the most, is
 several constructs away. What can be said is that the frame is already the
 shape the convention wants: `x29` and `x30` saved, `sp` restored from `x29`,
 so a call will find a function it can call.
+
+*Later the same day: the second construct.* `+ - * /` and parentheses, and
+the stack machine gets its push and pop. Two levels of C's fifteen, written
+as `lib/expression.phx` writes them and not imported from it, because the
+module's table is calc's: `and`, `or`, `not` and `<>` are in it and C has none
+of them. Six more programs, ten in all, and `cc` agrees with every one.
+
+**The tool refused the obvious layout, correctly.** Four rules, one per
+operator, under a general `Binary` rule computing the shared push-and-pop as
+an attribute: *`Binary(op: ...)` can never match, `Binary` above it already
+takes everything it is for*. Clauses for one pattern go together, and first
+match wins, both of which the reference says. What replaced it is one rule
+and a four-row table from operator to instruction, which is shorter and puts
+the whole encoding in one place, the way `z80.phx` keeps a register's code in
+the grammar. The refusal was a better design review than the one the file got
+before it was run.
+
+**Sixteen bytes a push.** `sp` on this machine must be sixteen-aligned at
+every instruction that uses it, so an eight-byte value takes a sixteen-byte
+slot. chibicc on x86 pushes eight; on arm64 there is no cheaper honest
+answer than this until the pass keeps a depth and pairs its pushes, and no
+construct has asked for that.
+
+**What the oracle saw.** Two groupings the fold decides, `100 - 50 - 25` and
+`64 / 4 / 2`, where the other associativity gives 75 and 32; a quotient
+`(0 - 7) / 2` that must be -3 and not -4, made with subtraction because there
+is no unary minus yet; and a nest of parentheses whose pushes have to be
+popped in the right order. Overflow is not in the oracle. Wrapping at 32 bits
+is undefined in C, so a program that wraps is one on which `cc`'s answer is
+an accident rather than a standard, and the 64-bit register stays an open
+question the oracle cannot yet ask.

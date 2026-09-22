@@ -13,9 +13,11 @@
  * assembles and links, which is what every C compiler except tcc borrows.
  *
  * **The emit pass is a stack machine.** Every expression leaves its value in
- * `x0`. There are no operands to push yet, so nothing is pushed; the frame is
- * set up and torn down anyway, because the shape of a function is decided
- * once and the later constructs fill it in rather than change it.
+ * `x0`; a binary operator pushes the left operand, computes the right into
+ * `x0`, and pops the left into `x1`. There is no register allocator, and the
+ * output is slow and correct, which is chibicc's shape and tcc's. The frame
+ * is set up and torn down by every function, because the shape of a function
+ * is decided once and the later constructs fill it in rather than change it.
  *
  * The value is 64 bits wide in a register that C says is a 32-bit `int`. That
  * is chibicc's first shape too, and the oracle is what will say when it
@@ -31,6 +33,23 @@
    * it becomes a `mov` when the value fits and a load from a literal pool
    * when it does not, and this description does not have to know which. *)
   Number : out = "\tldr x0, ={}\n" of $text .
+
+  (* The push is sixteen bytes for an eight-byte value, because `sp` on this
+   * machine must stay sixteen-aligned at every instruction that uses it, and
+   * a push that kept the value dense would have to be paired to hold that.
+   * The operands are evaluated left first, which C leaves unspecified and
+   * this description therefore decides.
+   *
+   * One rule and a table, rather than a rule per operator: clauses for one
+   * pattern go together, and a general `Binary` above `Binary(op: "+")` would
+   * take everything, which `phx` refuses at read time.
+   *
+   * `sdiv` truncates toward zero, which is what C11 6.5.5 says `/` does, so
+   * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
+   * and 0 on this processor, and no program in the oracle asks. *)
+  Binary : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n\t{} x0, x0, x1\n"
+             of $left.out, $right.out,
+                lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?") .
 
   (* The value is already in `x0`, so returning is a jump to the epilogue.
    * The epilogue's label is the enclosing function's, handed down. *)

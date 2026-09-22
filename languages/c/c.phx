@@ -19,9 +19,10 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first construct**: `int main(){return 42;}`. A
- * function returning `int` with no parameters, a block, `return` with an
- * integer constant. Nothing else parses, and nothing here is refused yet.
+ * **What is here is the first two constructs**: `int main(){return 42;}`,
+ * and then `+ - * /` with parentheses. A function returning `int` with no
+ * parameters, a block, `return` with an expression over integer constants.
+ * Nothing else parses, and nothing here is refused yet.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -43,7 +44,7 @@ space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
 block-comment = "/*" { ! "*/" } "*/" .
 
-symbol = "(" | ")" | "{" | "}" | ";" .
+symbol = "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" .
 
 %skip space line-comment block-comment .
 
@@ -67,7 +68,18 @@ block = "{" { statement } "}" -> Block(body: $2) .
 
 statement = "return" e:expression ";" -> Return(value: $e) .
 
-(* The whole of expression, for now. When `lib/expression.phx` is wanted the
- * question will be whether its precedence table is C's, and it is not:
- * C has fifteen levels and the module has calc's. *)
-expression = integer -> Number(text: $1) .
+(* C's expression grammar, two of its fifteen levels. `lib/expression.phx`
+ * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
+ * it, and C's is written here a level at a time as the constructs arrive.
+ * The shape is the module's, though, and so is the fold: `$$` is what has
+ * been built so far, and an action naming it replaces that, which is what
+ * makes `100 - 50 - 25` group to the left without anybody saying so. *)
+expression = additive .
+
+additive       = multiplicative { ( "+" | "-" ) multiplicative
+                                    -> Binary(op: $1, left: $$, right: $2) } .
+multiplicative = primary        { ( "*" | "/" ) primary
+                                    -> Binary(op: $1, left: $$, right: $2) } .
+
+primary = integer -> Number(text: $1)
+        | "(" expression ")" -> $2 .

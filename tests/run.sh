@@ -1515,8 +1515,8 @@ refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 # C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
-# The first construct only, `int main(){return 42;}`, emitted as arm64 assembly
-# that `cc` assembles and links. The oracle is `cc` itself, and what is compared
+# The first two constructs, `int main(){return 42;}` and `+ - * /` with
+# parentheses, emitted as arm64 assembly that `cc` assembles and links. The oracle is `cc` itself, and what is compared
 # is what a program exits with, because until a function can be called that is
 # all a program can say. Skipped where the machine is not arm64, since `cc`
 # there assembles something else.
