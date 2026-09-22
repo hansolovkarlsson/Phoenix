@@ -786,4 +786,83 @@ coverage decided by where the last bug was found, and a number wrong in a way
 that reads as plausible. Neither is fixed by care. The first is fixed by
 deriving the check's inputs from the question, and the second is not fixed at
 all — it is the reason the check has to exist.
+---
 
+## 15. Four predictions about one afternoon, and the one that was cheap to be wrong about
+
+Every one of these was made and settled on 2026-09-05, most of them within a
+few hours. They are worth keeping together because three failed in the same
+direction: **the plan named the thing it had last thought about, and the work
+wanted the thing next to it.**
+
+### "Step three is `jr`" — wrong, and the entry had it right
+
+The standup's handoff said the next step was to add `jr` and watch the notation
+fail. Adding `jr` changed nothing at all. A relative jump the programmer wrote
+is two bytes whether it reaches or not, so `layout` sizes it without asking a
+single question — and the range check it *does* want turned out to be
+comfortable, because the walk after `layout` has every address.
+
+What creates the problem is not the instruction but the **choice**: `br`,
+which is `jr` when the target is in reach and `jp` when it is not.
+[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) had said so in
+the sentence that opened it — *choosing the short form shrinks the code* — and
+the plan compressed that to the mnemonic and lost the verb.
+
+> A plan that names an instruction where the entry named a decision has
+> dropped the part that was hard.
+
+### "One walk cannot decide a `br`" — over-stated, and the correction is the useful half
+
+The expectation was that a single walk could say nothing about an encoding that
+depends on distances. It can say quite a lot: a thread of the labels **already
+met** is exactly what one walk has, so every *backward* `br` is decided exactly
+and only forward ones have to be assumed.
+
+That is a sharper limit than the one predicted, and it is what made the second
+walk worth writing rather than a token gesture — half the problem was already
+solved, and the half that was left had a shape.
+
+### "The fix belongs at the end of `read_one_pass`" — right shape, wrong file
+
+The thread-declaration wart was written up with its own fix attached: a sweep at
+the end of the pass reader, refusing a synthesised clause whose name is
+declared a thread further down. The sweep is exactly what was built. It is in
+`check.c`.
+
+**A pass is only whole once every `%import` has been read.** A rule in one
+module and its `thread` in another is the same defect, and a check running at
+the end of each file would not see it — it would see a pass with no thread
+declared at all. The prediction was made from where the *classification*
+happens rather than from where the *question* can be answered, which is the
+same error as the two above at a smaller scale.
+
+### "Next is building the circular attribute" — and unrolling it by hand was better
+
+This is the one that paid. 2.5 had its customer, its witness and a written
+condition that had been met, so the obvious move was to build the mechanism.
+What happened instead was one round of it written out by hand — `relax`, which
+is `layout` a second time — and it settled three things the mechanism would
+have had to guess at:
+
+| | |
+| --- | --- |
+| the direction | shrink only. Every address in the previous table over-states, so a `br` that fits against it still fits when everything settles — and that is now **checked**, not argued: `code` refuses a `br` that shrank and no longer reaches |
+| the step | one pass exactly as written, with nothing added for iteration |
+| the witness | wrong. One round reached the minimum on `chain.z80`, so the file that had been the evidence stopped being evidence and a deeper one had to be built |
+
+That last row is the reason to write the workaround first. **The witness a
+mechanism is justified by can be retired by the prototype of that mechanism**,
+and finding that out after building the real thing would have meant a feature
+justified by a file that no longer needs it.
+
+> A workaround that is the mechanism run once by hand is a specification that
+> executes. Building from it is cheaper than building from an argument, and it
+> is the only version that can tell you the argument was about the wrong file.
+
+### And one that cost a cycle rather than a day
+
+`make test` printed `206 passed, 1 failed` and the records were updated to say
+206. Fixing the failure turned that check into a passing one and the answer was
+207. **The number of checks a red run reports is not the number a green one
+will**, which is obvious once written down and was not before.
