@@ -4925,3 +4925,55 @@ than discovered. Renamed to `ebytes` and `preg`.
 run; three more refusals, twenty-three.* Two of the three are refused where
 `cc` compiles: the zero-length array, and indexing, which is the rest of the
 item.
+
+## 2026-09-22: the day read back, and nothing cost what it was supposed to
+
+Eight commits, five of them a construct or a decision, and the suite from 224
+checks to 237. What is worth carrying out of the day is none of the
+constructs.
+
+**Nothing cost what it was supposed to.** `&` and `*` were the construct
+[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+said would change the assignment rule, and they changed one line; the thinking
+went into deciding that a place is a *rule* rather than a pass. Narrowing
+`int` to thirty-two bits sounded like a rewrite of the emit pass and was one
+letter per instruction, because `w0` is the low half of `x0`. `sizeof` wanted
+nothing at all. Arrays cost the frame, which is the part with no brackets in
+it. In every case the expensive half was **deciding what a thing is**: what a
+place is, how wide an `int` is, what counts as an array. Emitting it was cheap
+once that was settled.
+
+That refines yesterday's reading rather than replacing it. Yesterday: the
+expensive half of a C compiler here is C, not the machine. Today: the
+expensive half of C is not its constructs either. It is the few questions each
+construct forces about what things *are*, and those are the questions the
+standard has already answered. 6.5.3.2 says what a place is. 6.3.2.1 says what
+an array is in an expression. 6.7.6.2 says an array has at least one element.
+Reading them before writing anything is why **thirty-seven oracle programs
+were added today and every one agreed with `cc` on its first run**, except the
+one written to be red.
+
+**Everything written down in the morning was corrected by evidence in the
+afternoon, and the writing is what made correcting it cheap.** Five times:
+
+| what was written | what corrected it |
+| --- | --- |
+| `char` is where the eight-byte `int` gets decided | `sizeof`, two constructs earlier, and by a program that had been possible for a day |
+| the `types` pass needs no compatibility table, because nothing mis-compiles without one | true, and only because the program that would show it is one `cc` refuses. The reason was found by writing that program |
+| a sixty-four bit `int` would break `printf`, which is how the oracle gets a channel wider than eight bits | it would not. Apple's arm64 varargs give every argument eight bytes and `%d` reads the low four |
+| the `place` rule is C11 6.5.3.2 written in the grammar | it was 6.5.3.2 minus one alternative, and `(x) = 4` is ordinary C |
+| pack the frame at each thing's real width, because `struct` will want it | `struct` wants **member** offsets inside one object, a different mechanism, and no C program can observe frame layout |
+
+None of the five was expensive to correct, and all five were cheap for one
+reason: the claim had been written somewhere a program or a check could be
+pointed at. The cheapest of all, the `printf` argument, was the one that had
+been written out in full and not yet run, and it took a single file to kill.
+The most expensive was the one nobody had written a program for at all, which
+is [postmortem 17](postmortem.md#17-left-to-the-oracle-is-not-a-decision-until-somebody-writes-the-program)
+and cost a day of a wrong `int`.
+
+*What the day did not do.* It did not ask the tool for anything, which leaves
+prediction one untouched at nine constructs of eleven. The tool spoke twice,
+both at read time, both about an attribute name defined by two passes in one
+driver. That is a warning about this description, not a need for a different
+tool.

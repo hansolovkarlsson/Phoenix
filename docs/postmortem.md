@@ -901,9 +901,16 @@ by giving the tree two more node kinds.
 > the oracle, not a rule of the machine.
 
 **What the first two predictions look like from here.** One, no change to the
-tool through `struct`: six constructs in and nothing in `phoenix/` has been
-touched. Two, that the typedef predicate is the first change wanted: nothing
-has yet wanted anything, so it is neither confirmed nor threatened.
+tool through `struct`: **nine constructs in** as of 2026-09-22 and nothing in
+`phoenix/` has been touched. That day is the strongest evidence it has,
+because two of its changes were the ones most likely to have broken it: the
+value narrowed from sixty-four bits to thirty-two, and the frame stopped
+counting slots and started counting bytes. Neither wanted anything the
+notation did not have. Two, that the typedef predicate is the first change
+wanted: still neither confirmed nor threatened. The tool has spoken twice
+since, both at read time and both about an attribute name defined by two
+passes in one driver, which is a warning about this description and not a
+need for a different tool.
 
 ---
 
