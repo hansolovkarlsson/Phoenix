@@ -21,12 +21,13 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first four constructs**: `int main(){return 42;}`,
+ * **What is here is the first five constructs**: `int main(){return 42;}`,
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
- * then a local `int`. A function returning `int` with no parameters, a block
- * of declarations, assignments, expression statements and `return`s, and
- * expressions over constants and locals. A name nothing declared, or one
- * declared twice in a scope, is refused.
+ * then a local `int`, then `if`, `while`, `for` and blocks as statements. A
+ * function returning `int` with no parameters, a block of declarations,
+ * assignments, expression statements, control flow and `return`s, and
+ * expressions over constants and locals. A name nothing declared, one
+ * declared twice in a scope, or one used outside its block, is refused.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -79,6 +80,21 @@ block = "{" { statement } "}" -> Block(body: $2) .
 statement = "return" e:expression ";"              -> Return(value: $e)
           | "int" n:name "=" e:expression ";"       -> LocalInit(name: $n, value: $e)
           | "int" n:name ";"                        -> Local(name: $n)
+          (* The `else` form first. Trying it first is also what settles the
+           * dangling else: an inner `if` gets the chance to take the `else`
+           * before the outer one does, which is what C11 6.8.4 says. *)
+          | "if" "(" c:expression ")" t:statement "else" f:statement
+                                                    -> IfElse(cond: $c, then: $t, else: $f)
+          | "if" "(" c:expression ")" t:statement   -> If(cond: $c, then: $t)
+          | "while" "(" c:expression ")" b:statement
+                                                    -> While(cond: $c, body: $b)
+          (* Each clause of a `for` may be missing, and an option is a list
+           * that is empty when it did not match, so the node carries three
+           * lists of at most one. That is the same shape as a block's body,
+           * and the emit pass joins them the same way. *)
+          | "for" "(" i:[ expression ] ";" c:[ expression ] ";" s:[ expression ] ")"
+                b:statement                         -> For(init: $i, cond: $c, step: $s, body: $b)
+          | block
           | e:expression ";"                        -> Discard(value: $e) .
 
 (* C's expression grammar, six of its fifteen levels. `lib/expression.phx`
@@ -132,30 +148,44 @@ primary = integer -> Number(text: $1)
 %pass locals
 
   (* The table is a thread, because *what has been declared so far* is what
-   * a walk in document order has. Both are set afresh at each function by a
-   * `down` clause, which is what makes a thread nest. *)
+   * a walk in document order has. All three are set afresh at each function
+   * by a `down` clause, which is what makes a thread nest.
+   *
+   * `env` is every name in sight and `scope` is only this block's, and they
+   * answer different questions: a read asks the first, and a declaration
+   * asks the second, because C11 6.2.1 lets an inner block declare a name
+   * the outer one already has. One table cannot answer both -- the first
+   * version of this pass had one, and refused `{ int x = 1; { int x = 2; } }`
+   * as declared twice. *)
   thread env   = empty
+  thread scope = empty
   thread slots = 0
 
   Function : down env   = empty
+           : down scope = empty
            : down slots = 0
            : frame = $slots .
 
   (* A block is a scope: its declarations are torn down on the way out and
-   * the enclosing table comes back. The slot counter is *not* restored,
+   * the enclosing tables come back. The slot counter is *not* restored,
    * because a slot in the frame is taken whether or not its name is still
    * in sight, and two blocks side by side may as well not share one. *)
-  Block : down held = $env
-        : env = $held .
+  Block : down held      = $env
+        : down heldscope = $scope
+        : down scope     = empty
+        : env   = $held
+        : scope = $heldscope .
 
   Local     : slot  = $slots + 1
             : env   = bind($env, $name, $slots + 1)
+            : scope = bind($scope, $name, true)
             : slots = $slots + 1
-            ! defined($env, $name) : "'{}' is declared twice" of $name .
+            ! defined($scope, $name) : "'{}' is declared twice" of $name .
   LocalInit : slot  = $slots + 1
             : env   = bind($env, $name, $slots + 1)
+            : scope = bind($scope, $name, true)
             : slots = $slots + 1
-            ! defined($env, $name) : "'{}' is declared twice" of $name .
+            ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   Variable : slot = lookup($env, $name, 0)
            ! not defined($env, $name) : "'{}' is not declared" of $name .

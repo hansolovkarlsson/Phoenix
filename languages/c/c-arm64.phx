@@ -30,6 +30,12 @@
 
 %pass emit-arm64
 
+  (* Every branch needs a label the program never wrote. A thread, counted on
+   * leaving, so the number a node takes is one no node before it in the walk
+   * took, its own children included. The names are local to the assembler
+   * because they start with `L`. *)
+  thread label = 0
+
   (* `ldr x0, =n` is the assembler's pseudo-instruction for *any* constant:
    * it becomes a `mov` when the value fits and a load from a literal pool
    * when it does not, and this description does not have to know which. *)
@@ -45,6 +51,27 @@
   LocalInit : out = "{}\tstr x0, [x29, #-{}]\n" of $value.out, 8 * $slot .
   Local     : out = "" .
   Discard   : out = $value.out .
+
+  (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
+   * say and what `cset` left there. *)
+  If     : n = $label : label = $label + 1
+         : out = "{}\tcmp x0, #0\n\tb.eq L{}.end\n{}L{}.end:\n"
+             of $cond.out, $n, $then.out, $n .
+  IfElse : n = $label : label = $label + 1
+         : out = "{}\tcmp x0, #0\n\tb.eq L{}.else\n{}\tb L{}.end\nL{}.else:\n{}L{}.end:\n"
+             of $cond.out, $n, $then.out, $n, $n, $else.out, $n .
+  While  : n = $label : label = $label + 1
+         : out = "L{}.top:\n{}\tcmp x0, #0\n\tb.eq L{}.end\n{}\tb L{}.top\nL{}.end:\n"
+             of $n, $cond.out, $n, $body.out, $n, $n .
+  (* A missing condition is a loop that runs until a `return`, so the test
+   * is there only when the condition is: the table answers "" for an empty
+   * list and the branch for one of one. The other two clauses join to
+   * nothing when empty and need no table. *)
+  For    : n = $label : label = $label + 1
+         : test = lookup([[0, ""]], size($cond),
+                         "{}\tcmp x0, #0\n\tb.eq L{}.end\n" of join($cond.out), $n)
+         : out = "{}L{}.top:\n{}{}{}\tb L{}.top\nL{}.end:\n"
+             of join($init.out), $n, $test, $body.out, join($step.out), $n, $n .
 
   (* The push is sixteen bytes for an eight-byte value, because `sp` on this
    * machine must stay sixteen-aligned at every instruction that uses it, and

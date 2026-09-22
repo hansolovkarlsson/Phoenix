@@ -4472,3 +4472,36 @@ between the store's address being decided and the load, which is where a
 frame offset computed from `sp` instead of `x29` would have gone wrong; and
 an expression statement whose value has to be thrown away and not stored
 anywhere.
+
+*And the fifth: `if`, `while`, `for`, and blocks as statements.* Eleven more
+programs, thirty-four in all, and one more refusal. The emit pass invents its
+first labels, from a thread counted on leaving, so the number a node takes is
+one nothing before it in the walk took, its own children included; nested
+loops are the witness. A `for` carries its three clauses as lists of at most
+one, because an option is a list that is empty when it did not match, and the
+emit pass joins each the way it joins a block. The one place that is not
+enough is the missing condition, which must emit no test rather than a test
+of nothing, and a two-row table on the list's size says so.
+
+**The dangling else cost nothing.** The `else` alternative is tried first,
+so an inner `if` gets the chance to take an `else` before the outer one does,
+which is C11 6.8.4.1's rule. Ordered choice did that; nobody wrote it.
+
+**The oracle caught a wrong refusal, and it was a wrong question.** The
+first version refused `int x = 1; { int x = 2; }` as declared twice. C11
+6.2.1 lets an inner block shadow an outer name; what it forbids is two
+declarations in *one* scope. The pass had one table, of every name in sight,
+and was asking it both questions. It has two threads now: `env`, which a read
+asks, and `scope`, which only a declaration asks, and the second is reset at
+every block. The reference's example saves and restores one thread; this
+saves and restores two, with the same three clauses each.
+
+> A wrong refusal is found the same way a wrong translation is: by a program
+> the oracle accepts. `block-scope.c` was written to test shadowing's
+> *offsets*, and it found the check instead.
+
+**What is not here, and why.** `&&`, `||`, `!` and `%` are C, and chibicc
+has them early, but ROADMAP 6.1's list does not name them and this arc walks
+that list. They are an afternoon each and none of them asks the tool for
+anything; the next construct, a function with parameters and a call, is the
+one the entry predicts will cost the most, and it is next.
