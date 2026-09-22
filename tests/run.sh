@@ -1515,14 +1515,23 @@ refuses "and the piped form, which needed a rung of its own to read" \
         "getline is not compiled" --driver c "$c" "$t/getline-pipe.awk"
 
 # C: the language ROADMAP 6 puts on the page as a goal rather than a mechanism.
-# The first three constructs, `int main(){return 42;}`, `+ - * /` with
-# parentheses, and unary minus with the comparisons, emitted as arm64 assembly
-# that `cc` assembles and links. The oracle is `cc` itself, and what is compared
+# The first four constructs, `int main(){return 42;}`, `+ - * /` with
+# parentheses, unary minus with the comparisons, and a local `int`, emitted as
+# arm64 assembly that `cc` assembles and links. The oracle is `cc` itself, and what is compared
 # is what a program exits with, because until a function can be called that is
 # all a program can say. Skipped where the machine is not arm64, since `cc`
 # there assembles something else.
 echo "C"
 accepts "the description reads" "$root/languages/c/c-arm64.phx"
+# What the subset refuses, by name and with a position: the `locals` pass is
+# the first thing in this language that can say no.
+r="$root/languages/c/tests/refused"
+refuses "a name nothing declared" "'x' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/undeclared.c"
+refuses "and one assigned before it is declared" "'y' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-undeclared.c"
+refuses "a name declared twice in one scope" "'x' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/twice.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

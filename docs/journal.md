@@ -4438,3 +4438,37 @@ fit is the same at either width. What would differ is a value that got there
 by overflowing, and overflow is undefined. So the register stays 64 bits wide
 for one more construct, and the entry that might change that is `char`, whose
 conversions are defined.
+
+*And the fourth: a local `int`.* Declarations with and without an
+initialiser, assignment as an expression, expression statements, and a
+`locals` pass, the first in this language that can say no. Seven more
+programs agree with `cc`, twenty-three in all, and three are refused with a
+position. Nothing in the tool was touched, which is the first prediction still
+standing.
+
+**The pass is the reference's own example, and it worked first time.** A
+thread of declarations set afresh at each function by a `down` clause, saved
+into an ordinary `down` attribute at each block and restored by the block's
+leaving clause, and a slot counter that is reset per function and never
+restored, because a slot is taken whether or not its name is still in sight.
+Every line of that is in reference.md under *Threads*, written for Pascal, and
+C wanted it unchanged. `Function : frame = $slots` on leaving reads the count
+the body left behind, before the next function's `down` resets it.
+
+**Two nodes for a declaration, not one with an optional field.** `int x;` is
+`Local` and `int x = e;` is `LocalInit`, and the emit pass says the second is
+the first followed by an assignment. A node whose field is sometimes there
+is a node every pass has to ask about, and the notation has no way to ask.
+
+**Assignment is an expression.** `a = b = 21` sets both, and the value stays
+in `x0` after the store, which is all it costs. The left side is a name and
+nothing else, because there is nothing else it could be yet; `*p = 1` and
+`a[i] = 1` arrive with `*` and `[]` and will make the left side a place
+rather than a name, which is the construct that changes this rule.
+
+**What the oracle saw.** Five locals in one frame, where a wrong slot width
+makes two of them share; an assignment whose right side pushes and pops
+between the store's address being decided and the load, which is where a
+frame offset computed from `sp` instead of `x29` would have gone wrong; and
+an expression statement whose value has to be thrown away and not stored
+anywhere.

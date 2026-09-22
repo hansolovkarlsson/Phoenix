@@ -626,8 +626,9 @@ output is slow and correct, and slow is not a divergence.
 
 **The subset grows in chibicc's order**, one construct at a time with the
 suite green at each: `int main(){return 42;}`; then `+ - * /` and
-parentheses; unary minus and comparison *(these three in the tree since
-2026-09-21, sixteen programs against `cc`)*; a local `int`; `;`-separated
+parentheses; unary minus and comparison; a local `int` *(these four in the
+tree since 2026-09-21, twenty-three programs against `cc`, and the local
+brought `;`-separated statements and assignment with it)*; `;`-separated
 statements and `return`; `if`, `while`, `for`; blocks; a function with
 parameters and a call under the arm64 calling convention; `&` and `*`; arrays
 and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`

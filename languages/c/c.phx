@@ -1,11 +1,13 @@
 (* c.phx -- a C subset: what it looks like, and what it means.
  *
- * **The language, and nothing about any target.** The grammar and the tree it
- * builds are here; `c-arm64.phx` imports this file and adds one emit pass.
+ * **The language, and nothing about any target.** The grammar, the tree it
+ * builds and the symbol pass are here; `c-arm64.phx` imports this file and
+ * adds one emit pass.
  * That is the split `languages/README.md` prescribes and the reason a second
  * target could arrive without touching this file.
  *
  *   phx languages/c/c-arm64.phx prog.c                       the tree
+ *   phx --driver check languages/c/c-arm64.phx prog.c         the symbols
  *   phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
  *   cc prog.s -o prog && ./prog
  *
@@ -19,11 +21,12 @@
  * and stops before `typedef` on purpose -- that is where the tool needs a
  * change, and the change should arrive with the construct that wants it.
  *
- * **What is here is the first three constructs**: `int main(){return 42;}`,
- * then `+ - * /` with parentheses, then unary minus and the six comparisons.
- * A function returning `int` with no parameters, a block, `return` with an
- * expression over integer constants. Nothing else parses, and nothing here
- * is refused yet.
+ * **What is here is the first four constructs**: `int main(){return 42;}`,
+ * then `+ - * /` with parentheses, then unary minus and the six comparisons,
+ * then a local `int`. A function returning `int` with no parameters, a block
+ * of declarations, assignments, expression statements and `return`s, and
+ * expressions over constants and locals. A name nothing declared, or one
+ * declared twice in a scope, is refused.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -48,7 +51,7 @@ block-comment = "/*" { ! "*/" } "*/" .
 (* Two characters before one, every time: `<` first would leave the `=` of
  * `<=` behind, and the error would surface at the token after it. *)
 symbol = "==" | "!=" | "<=" | ">="
-       | "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" | "<" | ">" .
+       | "(" | ")" | "{" | "}" | ";" | "+" | "-" | "*" | "/" | "<" | ">" | "=" .
 
 %skip space line-comment block-comment .
 
@@ -70,15 +73,30 @@ function = "int" n:name "(" ")" b:block -> Function(name: $n, body: $b) .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
-statement = "return" e:expression ";" -> Return(value: $e) .
+(* A declaration is two nodes rather than one with an optional initialiser,
+ * because a node whose field is sometimes there is a node every pass has to
+ * ask about. `int x = e;` is `int x; x = e;` and the emit pass says so. *)
+statement = "return" e:expression ";"              -> Return(value: $e)
+          | "int" n:name "=" e:expression ";"       -> LocalInit(name: $n, value: $e)
+          | "int" n:name ";"                        -> Local(name: $n)
+          | e:expression ";"                        -> Discard(value: $e) .
 
-(* C's expression grammar, five of its fifteen levels. `lib/expression.phx`
+(* C's expression grammar, six of its fifteen levels. `lib/expression.phx`
  * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
  * it, and C's is written here a level at a time as the constructs arrive.
  * The shape is the module's, though, and so is the fold: `$$` is what has
  * been built so far, and an action naming it replaces that, which is what
  * makes `100 - 50 - 25` group to the left without anybody saying so. *)
-expression = equality .
+expression = assignment .
+
+(* Assignment is an expression in C, worth the value assigned, and it groups
+ * to the right: `a = b = 21` sets both. The left side is a name and nothing
+ * else until there is something else it could be. The first alternative
+ * fails at `=` on anything that is not an assignment and the choice moves on,
+ * which is what ordered choice is for; `==` is a different token, so `x == 1`
+ * never gets this far. *)
+assignment = n:name "=" a:assignment -> Assign(name: $n, value: $a)
+           | equality .
 
 (* A comparison is an `int`, 0 or 1, and it chains: `3 > 2 > 1` is
  * `(3 > 2) > 1`, which is 0, and C means that. So these are repetitions
@@ -99,4 +117,47 @@ unary   = "-" u:unary -> Negate(value: $u)
         | primary .
 
 primary = integer -> Number(text: $1)
+        | name    -> Variable(name: $1)
         | "(" expression ")" -> $2 .
+
+(* ------------------------------------------------------------------ *)
+(* Pass one: which local is which, and where does each one live?      *)
+(*                                                                     *)
+(* A local is a slot in its function's frame, numbered from one in the  *)
+(* order declared, and the frame is how many slots the function has.   *)
+(* The emit pass turns a slot into an offset from the frame pointer,    *)
+(* because the width of a slot is the machine's business and not the    *)
+(* language's.                                                          *)
+
+%pass locals
+
+  (* The table is a thread, because *what has been declared so far* is what
+   * a walk in document order has. Both are set afresh at each function by a
+   * `down` clause, which is what makes a thread nest. *)
+  thread env   = empty
+  thread slots = 0
+
+  Function : down env   = empty
+           : down slots = 0
+           : frame = $slots .
+
+  (* A block is a scope: its declarations are torn down on the way out and
+   * the enclosing table comes back. The slot counter is *not* restored,
+   * because a slot in the frame is taken whether or not its name is still
+   * in sight, and two blocks side by side may as well not share one. *)
+  Block : down held = $env
+        : env = $held .
+
+  Local     : slot  = $slots + 1
+            : env   = bind($env, $name, $slots + 1)
+            : slots = $slots + 1
+            ! defined($env, $name) : "'{}' is declared twice" of $name .
+  LocalInit : slot  = $slots + 1
+            : env   = bind($env, $name, $slots + 1)
+            : slots = $slots + 1
+            ! defined($env, $name) : "'{}' is declared twice" of $name .
+
+  Variable : slot = lookup($env, $name, 0)
+           ! not defined($env, $name) : "'{}' is not declared" of $name .
+  Assign   : slot = lookup($env, $name, 0)
+           ! not defined($env, $name) : "'{}' is not declared" of $name .

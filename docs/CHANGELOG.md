@@ -18,16 +18,26 @@ entry below that changes it says so.
 
 ## 2026-09-21: a C subset begins, with `cc` as its oracle
 
-**A C compiler has its first three constructs: [`languages/c/`](../languages/c/).**
+**A C compiler has its first four constructs: [`languages/c/`](../languages/c/).**
 
     phx --driver arm64 languages/c/c-arm64.phx prog.c > prog.s
     cc prog.s -o prog && ./prog
 
 `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus
-and the six comparisons: a function returning `int` with no parameters, a
-block, `return` with an expression over integer constants, and the two comment
-shapes. Five of C's fifteen expression levels, and a comparison is an `int`
-worth 0 or 1 that chains to the left the way C11 says it does. `c.phx` is the grammar and the tree and has no opinion about a machine;
+and the six comparisons, then a local `int`: a function returning `int` with
+no parameters, a block of declarations, assignments, expression statements and
+`return`s, expressions over constants and locals, and the two comment shapes.
+Six of C's fifteen expression levels; a comparison is an `int` worth 0 or 1
+that chains to the left the way C11 says it does, and assignment is an
+expression worth what it assigned, grouping to the right.
+
+**The first pass that can say no.** `locals` is a symbol pass in `c.phx`: a
+thread of what has been declared, set afresh at each function and saved and
+restored around each block, and a slot counter that only grows. A name nothing
+declared, or one declared twice in a scope, is refused with a position, and
+`tests/refused/` holds the three programs that show it. The emit pass turns a
+slot into an offset below the frame pointer and lowers `sp` past the locals in
+the prologue, rounded to sixteen. `c.phx` is the grammar and the tree and has no opinion about a machine;
 `c-arm64.phx` imports it and adds one emit pass, so the split is the one every
 other language here makes. The target is arm64 assembly in the syntax `cc`
 assembles on this machine, and `cc` assembles and links it.
@@ -45,9 +55,10 @@ rest.
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. [`tests/oracle/run.sh`](../languages/c/tests/oracle/run.sh) compiles
 each program twice and compares what the two exit with, which until a function
-can be called is all a program can say. Sixteen programs, among them the
+can be called is all a program can say. Twenty-three programs, among them the
 groupings the folds have to get right, a quotient that truncates toward zero,
-and a signed comparison. One of them, `3 > 2 > 1`, is C11 as written and an
+a signed comparison, five locals whose slots must not overlap, and an
+assignment that pushes between the store and the load. One of them, `3 > 2 > 1`, is C11 as written and an
 error to this `cc` by default, so the oracle downgrades that one warning by
 name rather than lose the witness. Nothing in the directory has a
 hand-written expected result, which is the rule ROADMAP 6 set for the arc.
@@ -58,8 +69,9 @@ unchanged but for a marker at the construct that exists. Its three predictions
 are not yet scoreable: the first is about reaching `struct` with no change to
 the tool, and the tool has not been asked for anything.
 
-**Tests:** 211 → 213. Two new ones: that the description reads, and one that
-runs the oracle programs and reports how many agree with `cc`. The first
+**Tests:** 211 → 216. Five new ones: that the description reads, one that
+runs the oracle programs and reports how many agree with `cc`, and three
+refusals from the `locals` pass. The first
 run of the suite said 212, because the check that the records' counts match
 the tree was failing on a missing row and is itself one of the 213.
 
