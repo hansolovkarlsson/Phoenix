@@ -904,3 +904,51 @@ by giving the tree two more node kinds.
 tool through `struct`: six constructs in and nothing in `phoenix/` has been
 touched. Two, that the typedef predicate is the first change wanted: nothing
 has yet wanted anything, so it is neither confirmed nor threatened.
+
+---
+
+## 17. "Left to the oracle" is not a decision until somebody writes the program
+
+The 2026-09-21 entry left the eight-byte `int` open and said how it would
+close: *an operation whose answer differs between the two widths is a program
+on which `cc` and this description disagree*, and *`char` is where conversions
+become defined, and that is where this gets decided*. The 09-22 standup
+carried it forward unchanged under **held on purpose**.
+
+**Both halves were wrong, and differently.**
+
+*The place was wrong by two constructs.* `sizeof` comes before `char` in
+[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)'s
+own list, and `sizeof(int)` is 4 under this `cc` where the description would
+answer 8. Finding it cost one command, aimed at the construct *after* the one
+being written rather than at the one in hand.
+
+*The deferral was worse.* "Left to the oracle" reads as a decision to let
+evidence settle a question, and it is only that if somebody writes the program
+that puts it. Nobody had. The program is two lines and had been possible since
+the second construct:
+
+```c
+int main() { int a = 2000000000; int b = a + a; return b / 1000000; }
+```
+
+`cc` exits **218**, wrapping at thirty-two bits to -294967296 and dividing to
+-294. This description exits **160**, keeping 4000000000 and dividing to 4000.
+Signed overflow is undefined, so neither is wrong by the standard and the
+09-21 phrasing, *no defined divergence exists yet*, was exactly accurate. But
+accuracy was not the job: the sentence was guarding an open decision, and the
+disagreement it was waiting for had been sitting in the subset for a day. An
+oracle answers what it is asked, and fifty-eight programs had not asked.
+
+> A question handed to an oracle without the program that puts it is not
+> deferred, it is dropped. The cure is the same habit that found the place:
+> write the witness on the day the question is raised, not on the day the
+> construct that forces it arrives.
+
+**Decided 2026-09-22: `sizeof(int)` is 4 and `int` narrows to thirty-two
+bits.** A 64-bit `int` is a conforming implementation, the standard asking
+only for sixteen bits, so this was a choice between two legal answers rather
+than a defect to fix. It went the way it did because the other answer costs
+`cc` as the oracle for every size-shaped construct left in the arc.
+[journal.md](journal.md) under that date has the reasoning and what the
+machine makes it cost.

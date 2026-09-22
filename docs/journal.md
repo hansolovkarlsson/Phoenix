@@ -4673,3 +4673,60 @@ states the choice and does not take it. The general form of that is the
 cheaper lesson: **the construct after the one being written is a free place
 to look for what will be expensive**, because its oracle programs can be run
 against `cc` before a line of it is described.
+
+## 2026-09-22: the width, decided after the day was closed
+
+The closeout wrote the `sizeof` question onto the roadmap and left it there.
+It was taken the same evening, because the argument turned out to be shorter
+than expected and one leg of it turned out to be false.
+
+**`sizeof(int)` is 4, and the value narrows to thirty-two bits.** Both answers
+were available: the standard asks `int` to be at least sixteen bits, so a
+sixty-four bit one is a conforming implementation and this subset would have
+been a different implementation rather than a broken one. That is a real
+defence and it is why this needed deciding instead of fixing.
+
+*What settled it was not `sizeof`.* Looking for the argument turned up a
+better thing: the subset **already** disagreed with `cc`, in the tree as
+committed, in a program the second construct made possible on 09-21.
+
+```c
+int main() { int a = 2000000000; int b = a + a; return b / 1000000; }
+```
+
+218 against 160. Undefined behaviour on both sides, so neither compiler is
+wrong, but the arc's rule is *where they differ, Phoenix is wrong until
+somebody shows otherwise*, and the reason this one had never come up is that
+nobody had written it. [postmortem 17](postmortem.md#17-left-to-the-oracle-is-not-a-decision-until-somebody-writes-the-program)
+is about that rather than about the width.
+
+**The machine made the choice cheap, which is the part worth writing down.**
+On arm64 `w0` is not a second register, it is the low half of `x0`, and every
+write to a `w` register zeroes the upper thirty-two bits. So `x0` always holds
+the zero-extended `w0`, and:
+
+| | |
+| --- | --- |
+| the stack machine | unchanged. `str x0, [sp, #-16]!` and `ldr x0, [sp], #16` are still lossless, because there is nothing above the low half to lose |
+| the calling convention | unchanged. AAPCS64 passes a 32-bit `int` in `w0` to `w7`, which *are* `x0` to `x7`. The prologue's store becomes `str w0` and nothing else moves |
+| the frame | unchanged. A scalar keeps its eight-byte slot, written with `str w0` and read with `ldr w0`, so `sub x0, x29, #8n` is still the address of it and the slot counter never hears about this |
+| the operators | one letter, chosen by the node's type: `add w0, w0, w1` on ints, `add x0, x0, x1` on pointers. `sdiv w0` still truncates toward zero and `cmp w0` with `cset` still answers 0 or 1 |
+
+So what looked like a rewrite of the emit pass is a second column on the table
+it already has, and the `types` pass grows from *how many stars* to *how many
+stars and how wide the base is*, which arrays were going to force anyway. One
+instruction is genuinely new, `sxtw` where a 32-bit index meets a 64-bit
+pointer, and it arrives with `a[i]`. Nothing here asks the tool for anything,
+so prediction one is not threatened by the decision either.
+
+*One argument was made, tested, and dropped.* The expectation was that a
+sixty-four bit `int` would break `printf`, which ROADMAP 6.1 reaches through
+the system libc with a declaration rather than an include, and which is how
+the oracle gets a channel wider than eight bits at `char` and string literals.
+It does not. Apple's arm64 variadic convention gives every argument an
+eight-byte stack slot and `%d` reads the low four of it, little-endian, so
+passing sixty-four bit values to `printf("%d %d %d\n", ...)` prints them
+correctly. The argument was written out before it was run and would have been
+the strongest one in this entry. It is recorded here because a reason that
+sounds decisive and is false is worth more to a later reader than the three
+that held.

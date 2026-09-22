@@ -636,18 +636,29 @@ and `sizeof`; `char` and string literals; `struct`. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
-**The next construct has a decision in it, found on 2026-09-22 and not
-taken.** `sizeof(int)` is 4 under this `cc` and would be 8 under this
-description, whose value is sixty-four bits wide in a register C calls a
-32-bit `int`. It is the first program on which the two disagree that `cc` will
-*compile*: the other witness for the same width, a pointer put in an `int` and
-taken out again, is a constraint violation this `cc` refuses, so the oracle
-never sees it. That makes `sizeof` the place the width gets decided rather
-than `char`, which is where the journal expected it on 2026-09-21. Either the
-value narrows to thirty-two bits, in which case every arithmetic program in
-the oracle becomes a witness for the narrowing, or `sizeof` answers the
-machine's truth and the subset is knowingly not C at that one point. The
-choice belongs to the construct and is not made here.
+**The width, decided 2026-09-22: `sizeof(int)` is 4, and `int` narrows to
+thirty-two bits.** Until that day the value was sixty-four bits wide in a
+register C calls a 32-bit `int`, left open on 2026-09-21 with the note that
+the oracle would settle it at `char`. It was settled two constructs earlier
+and by a program that had been available since the second construct:
+`int a = 2000000000; int b = a + a; return b / 1000000;` exits 218 under `cc`,
+which wraps at thirty-two bits, and 160 here, which does not. A 64-bit `int`
+would have been a **conforming** implementation, the standard asking only for
+sixteen bits, so this was a choice and not a defect; what it would have cost
+is `cc` as the oracle for everything size-shaped, which is `sizeof`, `struct`
+offsets and array layout, or in other words the rest of the arc.
+[postmortem 17](postmortem.md#17-left-to-the-oracle-is-not-a-decision-until-somebody-writes-the-program)
+scores the expectation and the journal has the reasoning.
+
+*What that leaves to build, with arrays and `sizeof`.* A type grows a width
+beside its star count, and the emit pass picks `w` or `x` from it, which is a
+column on the table it already has rather than a pass. On this machine `w0` is
+the low half of `x0` and every write to a `w` register zeroes the upper half,
+so the stack machine, the calling convention and the frame all stay as they
+are; a scalar keeps its eight-byte slot and is stored into it with `str w0`.
+What is new is one instruction, `sxtw` where a 32-bit index meets a 64-bit
+pointer, and it arrives with `a[i]`, which is the construct that wanted the
+width in the first place.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
