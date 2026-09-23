@@ -488,6 +488,18 @@ refuses "a driver answering with nothing" "none of its passes defines one" \
         "$root/tests/grammars/driver-no-answer.phx"
 refuses "two drivers of one name" "two drivers called" \
         "$root/tests/grammars/duplicate-driver.phx"
+# **A bare `$name` that nothing could answer**, refused when the description
+# is read, since 2026-09-23. Before, it was looked up only as the pass ran, so
+# it was reported once per node that reached it, or never. ROADMAP 5 has the
+# two sightings these reproduce: a name nothing defines, and a thread read by
+# a pass other than its own. The third holds every kind of bare name that
+# can answer, so the check stays as generous as the lookup it guards.
+refuses "a bare name nothing could answer" "nothing can be called 'sig' here" \
+        "$root/tests/grammars/bare-name-nothing.phx"
+refuses "a bare name that is another pass's thread" "lives only in that pass's walk" \
+        "$root/tests/grammars/bare-name-another-pass-thread.phx"
+accepts "and every kind of bare name that can answer" \
+        "$root/tests/grammars/bare-name-every-kind.phx"
 
 # The default driver is the first declared, and it compiles.
 if "$phx" --quiet "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \

@@ -5667,3 +5667,52 @@ time. Both were run against the stale paragraph first and both went red,
 the full run on the arithmetic and the bare run on 292 against 301; the
 first version of the extraction did not see a number at the start of a
 line, and the red message printed two blanks, which is how that was found.
+
+## 2026-09-23: a bare name that nothing could answer
+
+ROADMAP 5's newest wart, with two sightings in two days: a bare `$name` in a
+pass was looked up only as the pass ran, so a name that meant nothing read
+cleanly and was then reported once per node that reached it, or never. The
+roadmap left one question open, whether what the reader already knows is
+enough to judge a bare name, and the answer turned out to depend on which
+question is asked.
+
+**The driver check's own comment said it could not be done**, and it was
+right about the question it was asking. `check_drivers` reads `$x.attr` and
+not `$name`, because a bare name may be a field, a binding, a thread or
+something handed down, and *which* of those answers depends on the shapes
+that reach the clause. That is undecidable at read time without knowing the
+programs. But the two sightings were not about which: they were names that
+**no** kind could ever answer, and whether any of six could is a question
+about the whole description, not about a program. So the check is written
+to be as generous as the lookup it guards. A name passes if it is `pos`,
+bound by the rule's pattern, a field of any node type anywhere, anything
+this pass defines, anything any pass leaves on a node, or an embed. Only a
+thread and an inherited attribute are held to their own pass, because they
+live in one walk and nowhere else, which is the 09-22 sighting exactly.
+What it refuses is a mistake in every program and every driver order; a
+name that is wrong only for some shapes is still the runtime's to report.
+
+*A module is not asked*, for the reason `check_spellable` gives:
+`lib/expression.phx` reads `$text` of a `Number` that only the language
+importing it builds. The first run of the check over every description in
+the repository found exactly that and nothing else, which is also the
+evidence that the generosity is not too tight.
+
+*Both sightings were reproduced on copies of the C description*: `$sig` in
+the `Call` check, and `$rets`, a `locals` thread, read from the `types`
+pass. Before the change the first read with exit 0; after it, each is
+refused with the line, and the thread gets a note naming the pass it lives
+in. Two grammars in `tests/grammars/` hold the two refusals, and a third
+holds every kind of bare name that can answer, so a check made stricter
+later fails there rather than in somebody's description.
+
+*One false alarm, and it was the observer.* After a `git stash` round trip
+to measure the old behaviour, the thread case read cleanly, which would
+have meant the check did not work. The stash had given the source and the
+binary the same modification second, so `make` saw nothing to do and the
+run used the old `phx`. A forced rebuild gave the refusal. Postmortem 18
+says to check the observer first, and that is what the second look did.
+
+The tool is 9,312 lines, and the records that quote its size say so. 306
+checks to 309, all passing, and 304 with the three optional oracles absent.

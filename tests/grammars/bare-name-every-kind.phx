@@ -1,0 +1,27 @@
+(* Every kind of bare name a pass may read, each of which must still be
+ * accepted by the check that refuses a name nothing could answer: a field
+ * (`$text`, and `$right` under a `.`), a binding (`$l`), this pass's own
+ * thread (`$seen`), something it hands down (`$depth`), what an earlier
+ * pass left on this node (`$total`), and `$pos`, in a default. *)
+%import "lexical.phx" .
+%skip space .
+%syntax .
+%start line .
+
+line = a:atom b:atom -> Pair(left: $a, right: $b) .
+atom = integer       -> N(text: $1) .
+
+%pass count
+  thread n = 0
+  N    : n = $n + 1 .
+  Pair : total = $n .
+
+%pass show
+  thread seen = 0
+  otherwise tag = size([$pos.line])
+  N           : seen = $seen + 1
+              : show = "{}@{}/{}" of $text, $depth, $seen .
+  Pair(left: l) : down depth = 1
+              : show = "{} {} of {}" of $l.show, $right.show, $total .
+
+%driver run = count, show -> show .

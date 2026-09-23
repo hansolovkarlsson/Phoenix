@@ -1013,6 +1013,7 @@ correct file reported as broken, at a place that is not the mistake.
 | a check reading the attributes it guards | a check runs first, by design |
 | two `otherwise` clauses for one attribute | two answers to what a node answers when it has none of its own |
 | `otherwise down` | what a node hands its children is not what it answers with |
+| a bare `$name` nothing could answer | not bound by the pattern, a field of any node, an attribute this pass defines or any pass leaves on a node, or an embed. A thread or an inherited attribute counts only in its own pass, which is the one walk it exists in |
 | a clause defining `pos` | one reserved name, meaning one thing |
 
 ### About rewrites and drivers

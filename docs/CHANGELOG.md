@@ -75,10 +75,17 @@ pointer is refused by name, although `cc` compiles both, and so is a `main`
 that returns a struct, which `cc` only warns about. Ten more oracle
 programs, 185 in all, and 82 refusals.
 
+**`phx` refuses a name in a pass that nothing could answer**, when the
+description is read. `$sig` with no binding, field, attribute or embed of
+that name was accepted and then reported once for every node that reached
+it, or not at all if no program did. So is a thread or an inherited
+attribute read by a pass other than its own, which no later pass can see.
+Every description in this repository reads as it did.
+
 **Phoenix has a license**: MIT, in [`LICENSE`](../LICENSE). There was none
 before.
 
-**Tests:** 264 → 306. Eight for `%names`, on a small grammar made to have
+**Tests:** 264 → 309. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
 itself. Nine for `typedef`: four refusals of what C refuses too, three of
@@ -88,7 +95,9 @@ Then sixteen for the copy: the calling convention against `cc`'s, and
 eighteen new refusals, nine of them of programs that compiled into an
 address, less the three refusals that became oracle programs. Then nine
 refusals for a struct returned, six that `cc` makes too and three this
-subset adds.
+subset adds. Then three for a bare name: the two ways of getting one wrong,
+and a grammar holding every kind that is right, so the check stays as
+generous as the lookup it guards.
 
 ---
 

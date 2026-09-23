@@ -593,28 +593,6 @@ business rather than the tool's, and the difference is that a description can
 write the guess down, test the shapes it gets wrong, and render them back
 visibly. `languages/awk/tests/divergent/` holds all three.
 
-**A bare name in a pass is resolved only when the pass runs.** `$x.attr` is
-checked when the description is read: a driver that runs a pass reading
-`.nosuch` with nothing before it defining one is refused, once, with the line.
-`$nosuch` on its own is not. It is looked up node by node in `run.c`, so a
-description with such a name in it reads cleanly, is reported **once per node
-that reaches it**, and is not reported at all if no program in hand reaches
-it. Found on 2026-09-22 while writing `struct`: a check in the C `types` pass
-named a `locals` thread, which a later pass cannot read, and a program with
-six members printed the same error six times. Replaced on a copy, the same
-name read cleanly with no program, gave six errors over that program and one
-over a program with one member, and a clause behaved as a check does. The
-reader already knows which attributes each pass defines, since that is what
-the `.attr` check reads; whether that is enough to judge a bare name, which
-may also be a binding, a field, a thread or an inherited attribute, has not
-been looked at.
-
-*Met a second time on 2026-09-23*, and this time before any program ran: a
-`Call` check in the `types` pass read `$sig` while nothing defined it yet,
-and `phx` read the description without a word. It would have been reported
-once per call. Two sightings in two days, both while a pass was being
-written, which is when a read-time check pays.
-
 ---
 
 ## 6. A C compiler

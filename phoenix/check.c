@@ -720,7 +720,9 @@ static void check_default_threads(Check *c)
  * the node, a binding, a threaded attribute or an inherited one, and deciding
  * which would mean knowing what shapes reach this clause. So the check catches
  * a pass reading another node's work -- which is the ordinary case and the one
- * that goes wrong -- and stays quiet about a pass reading its own.
+ * that goes wrong -- and stays quiet about a pass reading its own. A bare name
+ * that can mean *nothing* is a different question, and `check_bare_names`
+ * below asks it.
  */
 
 static void expr_reads(const Expr *x, const char **names, int *n, int cap)
@@ -810,6 +812,99 @@ static bool is_a_field(const char *name)
         for (int k = 0; k < vocabulary[i].nfields; k++)
             if (strcmp(vocabulary[i].fields[k], name) == 0) return true;
     return false;
+}
+
+/* ------------------------------------------------------------------ */
+/* A bare name that can mean nothing
+ *
+ * `$name` on its own is looked up when the pass runs, node by node, in six
+ * places: the pattern's bindings, the node's fields, what a pass left on the
+ * node, this pass's threads, what this pass handed down, and the embedded
+ * files. Which of them answers depends on what reaches the clause, so it is
+ * not decided here. **Whether any of them could** is, and a name none of
+ * them could ever answer was, until 2026-09-23, read without a word and then
+ * reported once per node that reached it, or never, if no program in hand
+ * did. ROADMAP 5 had it twice in two days, both while a pass was being
+ * written: a C `types` check naming a `locals` thread, and a `$sig` that
+ * nothing defined.
+ *
+ * So the question is asked of the whole description, generously. A name
+ * passes if it is `pos`, bound by the rule's pattern, a field of **any** node
+ * type, anything this pass defines, anything **any** pass leaves on a node,
+ * or an embed. Generous because the runtime lookup is: a field of some other
+ * node type, or an attribute a pass run by a different driver leaves, is a
+ * mistake only in some programs or some orders, and this refuses only what
+ * is a mistake in all of them. A thread or an inherited attribute counts
+ * only in its own pass, because that is the only walk it exists in, which is
+ * exactly the first of the two sightings.
+ */
+
+static bool pass_leaves_on_node(const Pass *p, const char *attr)
+{
+    if (attr_on_node(p, attr)) return true;
+    for (int i = 0; i < p->ndefaults; i++)
+        if (p->defaults[i].attr && strcmp(p->defaults[i].attr, attr) == 0)
+            return true;
+    return false;
+}
+
+static void bare_name(Check *c, const Pass *pass, const Pattern *pat,
+                      const Expr *x)
+{
+    Grammar    *g    = c->g;
+    const char *name = x->name;
+
+    if (is_intrinsic(name)) return;
+    if (pat && pattern_binds(pat, name)) return;
+    if (is_a_field(name)) return;
+    if (pass_defines(pass, name)) return;
+    for (int i = 0; i < g->npasses; i++)
+        if (pass_leaves_on_node(&g->passes[i], name)) return;
+    for (int i = 0; i < g->nembeds; i++)
+        if (strcmp(g->embeds[i].name, name) == 0) return;
+
+    diag_error(&g->src, x->pos,
+               "nothing can be called '%s' here -- it is not bound by the "
+               "pattern, a field of any node, an attribute this pass defines "
+               "or any pass leaves on a node, or a file this description "
+               "embeds", name);
+    for (int i = 0; i < g->npasses; i++)
+        if (&g->passes[i] != pass && pass_defines(&g->passes[i], name)) {
+            diag_note("'%s' is threaded or handed down in pass '%s', and "
+                      "lives only in that pass's walk -- keep it on a node "
+                      "there to read it here", name, g->passes[i].name);
+            break;
+        }
+    c->ok = false;
+}
+
+static void bare_names_in(Check *c, const Pass *pass, const Pattern *pat,
+                          const Expr *x)
+{
+    if (!x) return;
+    if (x->kind == X_REF && x->name) bare_name(c, pass, pat, x);
+    for (int i = 0; i < x->nkids; i++) bare_names_in(c, pass, pat, x->kids[i]);
+}
+
+static void check_bare_names(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *pass = &g->passes[i];
+
+        for (int k = 0; k < pass->nrules; k++) {
+            const PassRule *rule = &pass->rules[k];
+            for (int m = 0; m < rule->nclauses; m++) {
+                bare_names_in(c, pass, rule->pattern, rule->clauses[m].value);
+                bare_names_in(c, pass, rule->pattern, rule->clauses[m].when);
+            }
+        }
+        for (int d = 0; d < pass->ndefaults; d++)
+            bare_names_in(c, pass, NULL, pass->defaults[d].value);
+        for (int t = 0; t < pass->nthreads; t++)
+            bare_names_in(c, pass, NULL, pass->initial[t]);
+    }
 }
 
 static void check_drivers(Check *c)
@@ -1481,6 +1576,10 @@ bool grammar_check(Grammar *g)
     check_clause_order(&c);
     check_default_threads(&c);
     check_drivers(&c);
+    /* Not in a module with a hole in it, for `check_spellable`'s reason
+     * below: `lib/expression.phx` reads `$text` of a `Number` that only the
+     * language importing it builds. */
+    if (!g->incomplete) check_bare_names(&c);
     check_include(&c);
     check_names(&c);
     check_position_name(&c);
