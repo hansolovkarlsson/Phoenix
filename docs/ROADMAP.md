@@ -692,3 +692,12 @@ and `typedef` gave it a second spelling. A typedef as a function's return
 type was a fourth until the same day, when a struct could be returned and a
 function's return type became a base.
 
+
+*Why this entry stays open, decided 2026-09-23.* Every construct step one
+listed is built, and so are `typedef`, a struct copied whole and a struct
+returned. What is not built is the answer to the two divergences pinned in
+`tests/divergent/`: `sizeof` and the difference of two pointers are `long`s
+under `cc` and `int`s here, and `long` is step four. Moving 6.1 to
+[COMPLETED.md](COMPLETED.md) now would leave those two pins with no entry,
+or split one entry across both halves of the ledger. It moves when `long`
+arrives and the two programs agree.
