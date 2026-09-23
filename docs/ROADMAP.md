@@ -819,9 +819,10 @@ document. The two divergent programs stay pinned.
 
 What is **not** here, each a refusal or a syntax error: a typedef in a block,
 as a struct is at file scope only; a typedef of an array, whose count belongs
-to a declaration here and not to a type; a typedef as a function's return
-type, where only `int` is written; and a local named in its own initialiser,
+to a declaration here and not to a type; and a local named in its own initialiser,
 `int x = sizeof(x);`, because the `locals` pass binds a name at the end of its
 declaration and C at the end of its declarator. That last one was always so,
-and `typedef` gave it a second spelling.
+and `typedef` gave it a second spelling. A typedef as a function's return
+type was a fourth until the same day, when a struct could be returned and a
+function's return type became a base.
 

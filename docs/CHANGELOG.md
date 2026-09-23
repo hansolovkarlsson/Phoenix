@@ -75,6 +75,9 @@ pointer is refused by name, although `cc` compiles both, and so is a `main`
 that returns a struct, which `cc` only warns about. Ten more oracle
 programs, 185 in all, and 82 refusals.
 
+**Phoenix has a license**: MIT, in [`LICENSE`](../LICENSE). There was none
+before.
+
 **Tests:** 264 → 306. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
