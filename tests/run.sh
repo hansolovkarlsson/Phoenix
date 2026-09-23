@@ -336,6 +336,36 @@ else
     report fail "a fault in an included file names it" "$(printf '%s' "$out" | head -1)"
 fi
 
+echo "names the parse keeps"
+# `%names`: `t * x;` declares when `t` was declared a type above it, and
+# multiplies when it was not. The shape of the tree is the answer, so the node
+# types are read off it in order. Each of the three things below was broken on
+# purpose when this was written, and each broke this line: no undo made
+# `maybe u;` declare `u`, no scope left the block's `t` hiding the type after
+# it, no guard made every `a * b` a declaration, and binding when the node was
+# built rather than when its name was read made `let t = t;` end in `IsType`.
+want="Program Product Type Var Block Var Product Var Maybe Product Type Var Block Let IsName"
+got=$("$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" 2>&1 \
+      | grep -oE '[A-Z][a-zA-Z]+$' | tr '\n' ' ' | sed 's/ $//')
+if [ "$got" = "$want" ]; then
+    report pass "a guard asks what the parse declared, a scope ends, a failure undoes"
+else
+    report fail "a guard asks what the parse declared, a scope ends, a failure undoes" \
+                "wanted '$want', got '$got'"
+fi
+refuses "%names binding a node nothing builds" "nothing in this description builds" \
+        "$root/tests/grammars/names-unknown-node.phx"
+refuses "%names binding a field that is not one" "is not a field of" \
+        "$root/tests/grammars/names-unknown-field.phx"
+refuses "%names binding a field the action computes" "no moment to bind it at" \
+        "$root/tests/grammars/names-computed-field.phx"
+refuses "%names guarding more than one token" "which is more than one token" \
+        "$root/tests/grammars/names-guard-not-a-token.phx"
+refuses "%names scoping a rule nobody wrote" "which is not a rule" \
+        "$root/tests/grammars/names-scope-not-a-rule.phx"
+warns "%names that nothing asks" "guards nothing" \
+      "$root/tests/grammars/names-guards-nothing.phx"
+
 echo "where a node came from"
 # `$pos` is the one name in a pass that is not a field, an attribute or a
 # binding. It answers a node -- Position(line, column, file) -- so reading part
@@ -968,6 +998,23 @@ if "$phx" "$root/tests/grammars/embed.phx" -o "$tmp0/emb.c" 2>/dev/null \
     fi
 else
     report fail "an embedded file survives the freezing" "it did not build"
+fi
+
+# The table is kept by the matcher, which a generated compiler carries, and
+# which rules scope and guard are flags on its rules: all three have to be
+# written out, or the compiler parses `t * x;` the way it would without them.
+if "$phx" "$root/tests/grammars/names.phx" -o "$tmp0/names.c" 2>/dev/null \
+   && cc -o "$tmp0/namesc" "$tmp0/names.c" 2>/dev/null; then
+    "$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" \
+           > "$tmp0/names-phx" 2>/dev/null
+    "$tmp0/namesc" "$root/tests/sources/names.txt" > "$tmp0/names-cc" 2>/dev/null
+    if cmp -s "$tmp0/names-phx" "$tmp0/names-cc"; then
+        report pass "a generated compiler keeps the names"
+    else
+        report fail "a generated compiler keeps the names"
+    fi
+else
+    report fail "a generated compiler keeps the names" "it did not build"
 fi
 
 # A generated compiler follows includes too, and has to: whether one file
@@ -1689,6 +1736,40 @@ refuses "a struct parameter" "'s' is a struct passed whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter.c"
 refuses "and a struct argument" "'struct t' is passed whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-argument.c"
+# `typedef`, which is what `%names` is for. A name the parse has hidden is not
+# a type again until its scope ends, so `T x` after `int T` is two names in a
+# row, which is a syntax error here as it is under `cc`; and the hiding ends
+# with the function, which is why the third file's `T T` parses. A second
+# typedef of one name is C11 6.7p3's only when it names the same type.
+refuses "a typedef hidden by a local, then used as a type" 'and found "x"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-then-used-as-a-type.c"
+refuses "and one hidden by its own local, in another function" 'and found "y"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-by-its-own-local.c"
+refuses "a typedef twice, for two types" "'T' is a typedef twice, for two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-differently.c"
+refuses "a typedef used as a value" "'T' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-used-as-a-value.c"
+# A local is in scope from the end of its declaration here, and from the end
+# of its declarator in C11 6.2.1p7, so `int x = sizeof(x);` is refused where
+# `cc` answers 4. That was so before `typedef`, and is written down now
+# because `typedef` gave it a second form: `int T = sizeof(T);` with `T` a
+# typedef of `char`. The parse reads the second `T` as the variable, because
+# `%names` binds at the name, and the pass refuses it as the first. Before the
+# binding moved to the name it compiled, and answered 1 where `cc` says 4.
+refuses "a local in its own initialiser" "'x' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/local-in-its-own-initialiser.c"
+refuses "and a typedef hidden in its hider's initialiser" "'T' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-in-its-own-initialiser.c"
+# Three that `cc` compiles and this subset leaves out, each a refusal rather
+# than a wrong answer: a typedef in a block, as a struct is at file scope only;
+# a typedef of an array, whose count belongs to a declaration here and not to
+# a type; and a pointer to a struct nobody defines, as for a declaration.
+refuses "a typedef in a function" 'and found "typedef"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-in-a-function.c"
+refuses "a typedef of an array" 'expected ;, and found "["' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-array.c"
+refuses "a typedef of a struct nobody defines" "'struct nope' is not defined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-undefined-struct.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

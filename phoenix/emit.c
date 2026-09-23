@@ -134,8 +134,10 @@ static int emit_gnode(Emit *e, const GNode *n)
     else       fputs("NULL,0,", e->out);
     fprintf(e->out, "%d,", n->ref);
     emit_string(e, n->label);
-    if (action >= 0) fprintf(e->out, ",&x%d,%zu};\n", action, n->pos);
-    else             fprintf(e->out, ",NULL,%zu};\n", n->pos);
+    if (action >= 0) fprintf(e->out, ",&x%d,%zu,%d,%d};\n", action, n->pos,
+                             n->bind, n->declares);
+    else             fprintf(e->out, ",NULL,%zu,%d,%d};\n", n->pos,
+                             n->bind, n->declares);
     return id;
 }
 
@@ -229,10 +231,42 @@ static void emit_rules(Emit *e)
         emit_string(e, r->name);
         if (body[i] >= 0) fprintf(e->out, ",&g%d,", body[i]);
         else              fputs(",NULL,", e->out);
-        fprintf(e->out, "%d,%d,%d,%d,%d,%d,%zu},\n",
+        fprintf(e->out, "%d,%d,%d,%d,%d,%d,%zu,%d,%d},\n",
                 r->lexical, r->fragment, r->skip, r->used, r->required,
-                r->nullable, r->pos);
+                r->nullable, r->pos, r->scope, r->guard);
     }
+    fputs("};\n", e->out);
+}
+
+/* `%names`. Which factors bind, which rules scope and which guard are all
+ * flags on the grammar already, so this is only the tables' names and what
+ * they were declared with, for a reader of the generated file. */
+static void emit_names(Emit *e)
+{
+    const Grammar *g = e->g;
+
+    for (int k = 0; k < g->nnames; k++) {
+        const Names *t = &g->names[k];
+        fprintf(e->out, "static Binder nb%d[] = {", k);
+        for (int m = 0; m < t->nbinders; m++) {
+            fputc('{', e->out);
+            emit_string(e, t->binders[m].type);
+            fputc(',', e->out);
+            emit_string(e, t->binders[m].field);
+            fprintf(e->out, ",%d,%zu},", t->binders[m].declares, t->binders[m].pos);
+        }
+        if (!t->nbinders) fputs("{0}", e->out);
+        fputs("};\n", e->out);
+    }
+
+    fputs("\nstatic Names phx_names[] = {\n", e->out);
+    for (int k = 0; k < g->nnames; k++) {
+        fputs("  {", e->out);
+        emit_string(e, g->names[k].name);
+        fprintf(e->out, ",nb%d,%d,NULL,0,NULL,0,%zu},\n",
+                k, g->names[k].nbinders, g->names[k].pos);
+    }
+    if (!g->nnames) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -443,6 +477,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
     fputs("\n/* ---- the description, frozen ---- */\n\n", out);
 
     emit_rules(&e);
+    emit_names(&e);
     emit_passes(&e);
     emit_rewrites(&e);
     emit_embeds(&e);
@@ -505,7 +540,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
     emit_string(&e, g->include_type);
     fputs(", ", out);
     emit_string(&e, g->include_field);
-    fprintf(out, ", %zu,\n  false\n};\n", g->include_pos);
+    fprintf(out, ", %zu,\n  false,\n  phx_names, %d, %d\n};\n",
+            g->include_pos, g->nnames, g->nnames);
 
     fprintf(out, "%s", "\n"
         "/* ------------------------------------------------------------------ */\n"

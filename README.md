@@ -430,6 +430,45 @@ Send(to: c, message: "ifTrue", args: [Block(params: [], temps: [], body: b)])
 A rewrite is a stage of a `%driver` like a pass, and is named the same way:
 `%driver sob = inline, sob -> out`.
 
+## `%names`: what the parse has read so far
+
+Everywhere else the matcher is a function of the tokens and nothing else. C is
+where that stops being enough: `x * y;` declares `y` when `x` names a type and
+multiplies when it does not, and `sizeof(x)` is the size of a type or of a
+variable by the same test. Which rule a name belongs to depends on the
+declarations **above** it, and a pass runs too late to say, because by then
+the tree is built one way or the other. So a table of names is kept *while*
+matching:
+
+```
+%names typedef-names
+    declare Typedef.name
+    hide    Param.name Local.name LocalInit.name LocalArray.name
+    scope   block function
+    guard   typedef-name .
+
+typedef-name = name .
+```
+
+A node an action builds **declares** the text of one of its fields, or
+**hides** it: `int T;` in a block makes a typedef `T` an ordinary name again.
+The binding is made when the factor that field comes from is matched, not
+when the node is finished, because C starts a name's scope at the end of its
+declarator: in `int T = sizeof(T);` the second `T` is already the variable.
+A **scope** rule drops whatever was bound inside it when it finishes, so the
+hiding ends with the block. A **guard** rule matches only when the name it
+matched was last declared rather than hidden or never seen, and it is one
+token rule by another name, because what the table is asked about is how one
+token was spelled.
+
+**Nothing is written as code, and nothing is said twice.** Which nodes declare
+a name is a fact about the tree the actions already build, so the directive
+names node types rather than adding a second notation inside productions. The
+table is undone as the match is: a failed alternative takes back everything it
+bound, so ordered choice means what it meant before. Rats! calls this *stateful
+parsing* and parses C with it; [lineage.md](docs/lineage.md) has where it
+comes from.
+
 ## What a `.phx` file is called
 
 Worth settling, because the docs say it on every page.
@@ -725,6 +764,12 @@ that is a proper prefix of a later one — and *within a rule*, ordered choice
 applies to the lexical half too, so `symbol = ":=" | ":"` must put the longer
 first. Phoenix warns when it does not.
 
+**One thing a match can remember**, since 2026-09-23: the names `%names`
+keeps. A guarded rule's answer depends on what was declared above it, which
+makes the matcher a function of the tokens *and the table*. The table is a
+stack, and every match that fails truncates it to where it stood when that
+match began, so a backtrack never leaves a binding behind.
+
 ## What it checks before it runs
 
 Every one of these exists because getting it wrong produces the same failure:
@@ -747,6 +792,7 @@ a correct file reported as broken, at a place that is not the mistake.
 | an inherited clause reading its own rule's work | `down` runs on the way in and the attribute is computed on the way out |
 | a check reading the attributes it guards | a check runs first, by design |
 | `%include` naming a node nothing builds | or a field that node has not got — the mechanism would then do nothing, quietly, and every include would reach a pass as a node it has no clause for |
+| `%names` binding a node nothing builds | or a field that node has not got, or one an action computes rather than takes from a factor, since then there is no moment to bind it at; or scoping or guarding a rule that is not one; and a guard over more than one token, because a guard asks how one token was spelled |
 | a field or an attribute called `pos` | the name every node says its position with, so it has to mean one thing everywhere |
 | a rewrite named like a pass | a driver names a stage by its name, so which one it meant has to be one stage |
 | a rewrite reading an attribute | it runs to change the tree, so the walk it would be reading has not happened |
@@ -780,21 +826,21 @@ says what goes where.
 
 ```sh
 make            # bin/phx
-make test       # 264 checks, covering 35 Pascal programs against fpc
+make test       # 281 checks, covering 35 Pascal programs against fpc
                 #   and every Solveig program in a checkout, byte for byte
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository**: 258 of the 264 need only what is vendored here, and it is worth
+repository**: 275 of the 281 need only what is vendored here, and it is worth
 being exact about the other five, because they surface as **three** skipped
 lines rather than five. One drives `fpc`. Three drive `solas` and `solvm` over a
 checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are
 guarded together, so a machine without it prints one line for all three. One
 assembles the Z80 fixtures with `z80asm` and compares the bytes. Each reports
 itself skipped rather than failing, and a run with none of the three present is
-250 passed, 0 failed and 5 skipped. The C oracle needs `cc` on arm64, which is
+267 passed, 0 failed and 5 skipped. The C oracle needs `cc` on arm64, which is
 what this repository is built on, and is skipped elsewhere. The SolVM assembler
-is in the 250: its programs are held against the bytes they assembled to last
+is in the 267: its programs are held against the bytes they assembled to last
 time, so it is tested without SolVM and held *against* SolVM when there is one.
 
 *The Solveig figures above are deliberately not numbers.* What that leg counts

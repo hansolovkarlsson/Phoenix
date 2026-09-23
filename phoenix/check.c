@@ -1141,6 +1141,161 @@ static void check_include(Check *c)
     c->ok = false;
 }
 
+/* `%names`: every node it binds is one something builds, with that field;
+ * every rule it scopes or guards is a syntactic rule; and a guarded rule is
+ * one token by another name, because what is asked of the table is the text
+ * that one token was spelled with.
+ *
+ * The last is stricter than it has to be. A guard over a rule that answered a
+ * node would have to say which of its fields is the name, which is a second
+ * notation for a question with one answer in every language that has wanted
+ * this, so it waits for a language that wants it. */
+static const NodeType *find_type(const char *type)
+{
+    for (int i = 0; i < nvocabulary; i++)
+        if (strcmp(vocabulary[i].type, type) == 0) return &vocabulary[i];
+    return NULL;
+}
+
+static Rule *names_rule(Check *c, const Names *t, const Named *n, const char *word)
+{
+    Grammar *g = c->g;
+    int      i = grammar_find(g, n->name, strlen(n->name));
+    if (i < 0 || !g->rules[i].body) {
+        diag_error(&g->src, n->pos, "%%names %s %s names '%s', which is not a rule",
+                   t->name, word, n->name);
+        c->ok = false;
+        return NULL;
+    }
+    if (g->rules[i].lexical) {
+        diag_error(&g->src, n->pos,
+                   "%%names %s %s names '%s', which is a token rule, and the "
+                   "table is kept by the parse and not by the scanner",
+                   t->name, word, n->name);
+        c->ok = false;
+        return NULL;
+    }
+    return &g->rules[i];
+}
+
+/* Marks the factor each action fills a binder's field from, so that the
+ * matcher can bind it the moment that factor is matched. A field computed
+ * rather than named, `name: text($n)`, has no such moment, and is refused
+ * where it is written. Answers how many factors it marked. */
+static int mark_binders(Check *c, GNode *n, int table, const Binder *b)
+{
+    int marked = 0;
+    for (int i = 0; i < n->nkids; i++) marked += mark_binders(c, n->kids[i], table, b);
+
+    if (n->kind != G_SEQ || !n->action || n->action->kind != X_NODE
+        || strcmp(n->action->name, b->type) != 0)
+        return marked;
+
+    const Expr *x = n->action;
+    for (int k = 0; k < x->nkids; k++) {
+        if (!x->fields || !x->fields[k] || strcmp(x->fields[k], b->field) != 0) continue;
+
+        const Expr *v = x->kids[k];
+        int index = v->kind == X_REF ? v->index : 0;
+        if (v->kind == X_REF && v->name)
+            for (int f = 0; f < n->nkids; f++)
+                if (n->kids[f]->label && strcmp(n->kids[f]->label, v->name) == 0)
+                    index = f + 1;
+
+        if (index < 1 || index > n->nkids) {
+            diag_error(&c->g->src, v->pos,
+                       "%%names %s binds '%s.%s', and this fills it with something "
+                       "other than one factor, so there is no moment to bind it at",
+                       c->g->names[table].name, b->type, b->field);
+            c->ok = false;
+            return marked;
+        }
+
+        GNode *f = n->kids[index - 1];
+        if (f->bind && (f->bind != table + 1 || f->declares != b->declares)) {
+            diag_error(&c->g->src, f->pos,
+                       "this is bound twice by %%names, which could only mean "
+                       "one of them");
+            c->ok = false;
+            return marked;
+        }
+        f->bind     = table + 1;
+        f->declares = b->declares;
+        marked++;
+    }
+    return marked;
+}
+
+static void check_names(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int k = 0; k < g->nnames; k++) {
+        const Names *t = &g->names[k];
+
+        for (int m = 0; m < t->nbinders; m++) {
+            const Binder   *b  = &t->binders[m];
+            const NodeType *nt = find_type(b->type);
+            if (!nt) {
+                diag_error(&g->src, b->pos,
+                           "%%names %s binds '%s', which nothing in this "
+                           "description builds", t->name, b->type);
+                diag_note("`phx --nodes` lists the ones it does");
+                c->ok = false;
+                continue;
+            }
+            if (!type_has_field(b->type, b->field)) {
+                diag_error(&g->src, b->pos,
+                           "%%names %s binds '%s.%s', and '%s' is not a field of '%s'",
+                           t->name, b->type, b->field, b->field, b->type);
+                c->ok = false;
+                continue;
+            }
+            int marked = 0;
+            for (int r = 0; r < g->nrules; r++)
+                if (!g->rules[r].lexical && g->rules[r].body)
+                    marked += mark_binders(c, g->rules[r].body, k, b);
+            if (!marked && c->ok) {
+                diag_error(&g->src, b->pos,
+                           "%%names %s binds '%s', and no production builds one "
+                           "as the whole of what it answers", t->name, b->type);
+                c->ok = false;
+            }
+        }
+
+        for (int m = 0; m < t->nscopes; m++) {
+            Rule *r = names_rule(c, t, &t->scopes[m], "scope");
+            if (r) r->scope = true;
+        }
+
+        for (int m = 0; m < t->nguards; m++) {
+            Rule *r = names_rule(c, t, &t->guards[m], "guard");
+            if (!r) continue;
+            if (r->guard) {
+                diag_error(&g->src, t->guards[m].pos,
+                           "'%s' is guarded by %%names %s already",
+                           r->name, g->names[r->guard - 1].name);
+                c->ok = false;
+                continue;
+            }
+            if (r->body->kind != G_NAME || !g->rules[r->body->ref].lexical) {
+                diag_error(&g->src, t->guards[m].pos,
+                           "%%names %s guards '%s', which is more than one "
+                           "token, and a guard asks about the spelling of one",
+                           t->name, r->name);
+                c->ok = false;
+                continue;
+            }
+            r->guard = k + 1;
+        }
+
+        if (!t->nguards)
+            diag_warn(&g->src, t->pos,
+                      "%%names %s guards nothing, so nothing asks what it holds",
+                      t->name);
+    }
+}
+
 /* `pos` is taken.
  *
  * Every node has a position and `$pos` is what reads it, in every clause of
@@ -1327,6 +1482,7 @@ bool grammar_check(Grammar *g)
     check_default_threads(&c);
     check_drivers(&c);
     check_include(&c);
+    check_names(&c);
     check_position_name(&c);
     check_rewrites(&c);
     check_defaults(&c);

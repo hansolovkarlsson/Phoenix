@@ -134,6 +134,7 @@ directive-item = "%tokens" "."     -> Tokens
                | "%import" p:literal "." -> Import(path: $p)
                | "%embed" n:name p:literal "." -> Embed(name: $n, path: $p)
                | "%include" t:name f:name "." -> Include(type: $t, field: $f)
+               | "%names" n:name w:{ names-word } "." -> Names(name: $n, words: $w)
                | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)
                | "%rewrite" n:name h:name r:{ rewrite-rule }
                    -> RewriteBlock(name: $n, how: $h, rules: $r)
@@ -141,6 +142,15 @@ directive-item = "%tokens" "."     -> Tokens
                    a:answer "." -> Driver(name: $n, passes: [$p, ...$5], answer: $a) .
 
 names  = n:name { m:name -> $m } -> [$n, ...$2] .
+
+(* `%names` takes `declare`, `hide`, `scope` and `guard` as its four words,
+ * and they are names here rather than literals. A literal would reserve
+ * them, and `scope` is a thread in `languages/c/c.phx`: the reader knows the
+ * four from a name by where it is looking, and this description cannot say
+ * that, which is the wart `word` below is about. A node and its field,
+ * `Typedef.name`, are a name and then an attribute. *)
+names-word = t:name f:attribute -> Binder(type: $t, field: $f)
+           | name .
 
 (* **Every word-shaped literal in a syntactic rule becomes a reserved word**,
  * worked out from the grammar rather than declared -- which is a good rule

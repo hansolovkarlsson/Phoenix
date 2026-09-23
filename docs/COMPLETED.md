@@ -13,10 +13,10 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **8,776 lines** hand-written.
+C11, no dependencies, **9,213 lines** hand-written.
 
-The figure usually quoted is ~12,900, and both are right about different
-things: `phoenix/` also holds `runtime.h`, 4,231 generated lines which are the
+The figure usually quoted is ~13,600, and both are right about different
+things: `phoenix/` also holds `runtime.h`, 4,359 generated lines which are the
 seven runtime files re-emitted as a C string literal so that a compiler `phx`
 writes is one file. Counting it measures what is in the directory; not counting
 it measures what anybody wrote. The runtime is in both numbers, once or twice.
@@ -41,8 +41,8 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
 | [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
 | [`z80/`](../languages/z80/) | 393 lines, 19 node types | a Z80 subset, an assembler making raw bytes, and a listing backend. **The customer [2.5](#25-circular-attributes--from-jastadd) was waiting for**: `br` picks between a two-byte relative jump and a three-byte absolute one, which is a size that depends on a distance that depends on sizes. Two walks, because the notation cannot say *again* — the second is the first one **written out a second time**, and it reaches the minimum on programs one round deep and misses by a byte on [`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80), which needs a third. 9 programs agree with `z80asm` byte for byte, four through the listing, because `z80asm` has no `br` |
-| [`c/`](../languages/c/) | 1,316 lines, 33 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is never copied whole, so assigning, initialising and passing one are refused. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 143 programs exit with what `cc` makes them exit with, 49 are refused with a position, two are written-down divergences with both their answers pinned, and nothing in the directory has a hand-written expected result |
-| [`phx/`](../languages/phx/) | 256 lines | the notation described in itself. It parses itself and every other description here |
+| [`c/`](../languages/c/) | 1,419 lines, 35 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is never copied whole, so assigning, initialising and passing one are refused. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 156 programs exit with what `cc` makes them exit with, 58 are refused with a position, two are written-down divergences with both their answers pinned, and nothing in the directory has a hand-written expected result |
+| [`phx/`](../languages/phx/) | 266 lines | the notation described in itself. It parses itself and every other description here |
 
 **Nine directories, eight rows.** [`languages/units/`](../languages/units/) —
 229 lines, 11 node types, and two checks in the suite — is deliberately not
@@ -62,6 +62,7 @@ Everything below is built, and each line names the entry that argued for it.
 | `%import` | a description assembled from modules, each read once |
 | `%embed` | a file's bytes under a name, frozen at read time — [1.5](#15-a-runtime-that-is-not-a-literal) |
 | `%include` | a *target* language's own includes, spliced by the reader — [1.0](#10-a-reader-level-mechanism-for-a-target-languages-imports) |
+| `%names` | names the parse keeps while it matches, declared and hidden by the nodes it builds, and asked by one rule: [1.8](#18-names-the-parse-keeps) |
 | `->` actions | what a production *builds*; no host-language splices — [3.2](ROADMAP.md#32-actions-as-host-language-fragments) |
 | `%pass`, clauses keyed on node type | attributes: synthesised, `down`, `thread` |
 | `otherwise` | what a node answers when its own rule works nothing out — [1.3](#13-a-way-for-a-description-to-share-a-computation) |
@@ -221,6 +222,54 @@ have been consistently wrong about.
 
 Still not **compiled**: `awk-c.phx` refuses every form of `getline` by name,
 and the piped one now among them.
+
+### 1.8 Names the parse keeps
+
+`%names typedef-names declare Typedef.name hide Local.name scope block guard
+typedef-name .`: a table of names kept **while** matching, bound by the nodes
+the actions build, ended by the rules that are scopes, and asked by one rule
+that matches a name only when the table says it was declared.
+
+**The failure, written down first.** C's `x * y;` declares `y` when `x` names
+a type and multiplies when it does not, so the grammar has to know, and
+before this it could not be told. The one thing a description could do was
+let a declaration's base be any name and leave the rest to ordered choice.
+That was tried on a copy of `c.phx` against all 143 programs then in
+`tests/oracle/`, and one moved: `sizeof(x)` in `sizeof-parens.c`, `x` a
+variable, was read as the type named `x` and refused with *'struct x' is not
+defined*. `x * y;` became a declaration of `y`. Both are refusals rather than
+wrong answers, which is the best the description could do and is the
+**tool's** limit, since no pass runs before the tree has taken one shape or
+the other.
+
+*Predicted since 2026-09-06, as the arc's second prediction: that this is the
+first change the tool needs, and at `typedef` and not before.* Held, and
+[postmortem 20](postmortem.md#20-prediction-two-held-and-the-predicate-was-a-table)
+scores it. What was predicted as a **predicate** on the identifier rule
+arrived as a **table** with one guarded rule asking it. The predicate is the
+small half; the part the prediction did not name is that the table needs
+writing to, from the declarations, and undoing, on every backtrack. Rats!
+calls this stateful parsing ([lineage](lineage.md)).
+
+**Written down rather than programmed.** Which nodes declare a name is a fact
+the actions already state, so the directive names node types and fields and
+adds nothing inside a production. The checks find, in each action that builds
+such a node, the factor the field is filled from, and the matcher binds that
+factor's text **the moment it is matched**: C11 6.2.1p7 starts a name's scope
+at the end of its declarator, so in `int T = sizeof(T);` the second `T` is
+the variable. The first version bound when the node was finished, after the
+initialiser, and compiled that program to 1 where `cc` says 4. The table is
+one stack shared by every `%names`, and a failed match truncates it to where
+it stood when that match began, so a backtracking choice leaves it as it
+found it. Five refusals: a node nothing builds, a field it has not got, a
+field an action computes rather than takes from a factor, a scope or guard
+that is not a rule, and a guard over more than one token.
+
+Four breakages of the matcher, each asserted applied, each red on
+`tests/grammars/names.phx`: no undo, no scope, no guard, and binding when
+the node is built. The table is on
+the generated compiler's rules too, and `-o` is held to `phx` on the same
+file.
 
 ### 2.2 Strategies — from Stratego
 

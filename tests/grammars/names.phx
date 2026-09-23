@@ -1,0 +1,45 @@
+(* `%names` -- a table of names the parse keeps, and one rule that asks it.
+ *
+ * The smallest language with C's problem: `t * x;` declares `x` when `t` was
+ * declared a type above it, and multiplies when it was not. A variable
+ * declared with a type's name hides the type until its block ends, which is
+ * C11 6.2.1, and what a failed alternative bound is taken back. *)
+%fragment letter .
+letter = "a" .. "z" .
+name   = letter { letter } .
+symbol = "*" | ";" | "{" | "}" | "!" | "=" .
+space  = ( " " | "\n" ) { " " | "\n" } .
+%skip space .
+%syntax .
+%start program .
+
+%names types
+    declare Type.name
+    hide    Var.name Let.name
+    scope   block
+    guard   type-name .
+
+program = { statement } -> Program(body: $1) .
+
+statement = "type" n:name ";"                      -> Type(name: $n)
+          | t:type-name s:{ "*" } n:name ";"       -> Var(type: $t, stars: size($s), name: $n)
+          (* `maybe u!` declares `u`, and `maybe u;` does not: the first
+           * alternative builds its `Type` and then fails at the `!`, and
+           * what it bound goes with it. *)
+          | m:maybe "!"                            -> $m
+          | "maybe" n:name ";"                     -> Maybe(name: $n)
+          (* `let t = t;` hides `t` **at its name**, before the `=`, so the
+           * second `t` is already not a type. A binding made when the node
+           * was built would have come after it. *)
+          | "let" n:name "=" v:thing ";"          -> Let(name: $n, value: $v)
+          | block
+          | a:name "*" b:name ";"                  -> Product(left: $a, right: $b) .
+
+block = "{" { statement } "}" -> Block(body: $2) .
+
+thing = t:type-name -> IsType(name: $t)
+      | n:name      -> IsName(name: $n) .
+
+maybe = "maybe" n:name -> Type(name: $n) .
+
+type-name = name .

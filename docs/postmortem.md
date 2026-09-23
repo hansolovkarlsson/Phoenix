@@ -9,13 +9,13 @@ this is what was **believed** about it.*
 *Revised after awk, which is the first language described here that was not
 chosen to suit the tool.*
 
-Phoenix is 8,776 hand-written lines of C11 with no dependencies (~12,900 if
+Phoenix is 9,213 hand-written lines of C11 with no dependencies (~13,600 if
 the generated `runtime.h` is counted; [COMPLETED.md](COMPLETED.md#the-tool)
 says why both are true). The descriptions written
 against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and
 two backends), Solveig in 1,129 (15 node types) with a bytecode backend, awk in
 993 with a 682-line C runtime it embeds, calc in 494 across three backends, and
-Phoenix's own notation in 256.
+Phoenix's own notation in 266.
 
 ---
 
@@ -1079,3 +1079,79 @@ instruction.
 Prediction two, the typedef predicate as the first change wanted, is now the
 next thing the arc tests, and nothing between here and `typedef` stands in
 the way.
+
+## 20. Prediction two held, and the predicate was a table
+
+The same entry predicted on 2026-09-21 that **the first change the tool
+needs is the typedef predicate, and it is wanted at `typedef` and not
+before**. `typedef` went in on 2026-09-23 with `%names`, and it was the first
+change to `phoenix/` since the arc began. **Held**, on both halves.
+
+*Wanted at `typedef`: measured, not argued.* Before a line of the tool was
+touched, a copy of `c.phx` let a declaration's base be any name, which is the
+most a description can do alone, and all 143 programs were run through it.
+One moved: `sizeof(x)`, with `x` a variable, became the size of a type named
+`x` and was refused. So the wall was real, the witness was already in the
+suite, and nothing before `typedef` had reached it.
+
+*The first change: a predicate, as named, and not only one.* The toolchain
+document called it "an identifier rule that succeeds as a type name only if a
+scope stack maintained during the parse says so". That sentence has two
+halves, and the prediction was about the first. The asking is one rule and
+ten lines of the matcher. The **stack** is the rest: something has to write
+to it from the declarations, end what a block wrote, and take back what a
+failed alternative wrote, and that is most of the work. It arrived as one
+directive naming node types, with no code in the grammar, which is the part
+the prediction did not say and the thesis did.
+
+*The notation was chosen, not found*, and is written here so that it can be
+scored later. `declare` and `hide` name a node and a field; `scope` and
+`guard` name rules. The alternative, a binding written inside a production,
+would have been a second place where a declaration is described, and the
+tree already says which nodes are declarations.
+
+*The first version gave a wrong answer, and no test found it.* It bound a
+name when the node naming it was finished, which for `int T = sizeof(T);` is
+after the initialiser: the second `T` was still the typedef of `char`, and
+the program answered 1 where `cc` answers 4. Every oracle program agreed,
+because none declared a name and used it before its own `;`. It was found by
+writing the journal entry, while stating *when* a binding happens in C's
+terms: C11 6.2.1p7 says the end of the declarator, and the implementation
+said the end of the declaration. The binding moved to the factor, and the
+program is now refused by the `locals` pass, which has the same off-by-one
+for every local (`int x = sizeof(x);` has always been refused). A wrong
+answer became a refusal, which is the trade this subset makes everywhere.
+
+> A mechanism that is about *when* has to be checked against the standard's
+> sentence about when, not only against programs. The oracle can only answer
+> the questions somebody wrote a program for.
+
+*The breakages, eleven, each asserted applied.* Four in the matcher, no
+undo, no scope, no guard and binding at the node, each red on the grammar
+written to test it. Seven in
+the description, and all seven red. But two programs named for the hiding
+they tested, a parameter and a local of the typedef's own name, **stayed
+green with the hiding removed**, while others went red under it: nothing in either asked a question
+whose answer depended on it, because `return T * 2` begins with `return` and
+no reading of it declares anything. Both were rewritten to ask `sizeof(T)`,
+where the variable and the type differ, and both go red now. That is
+[§ 18](#18-what-a-silent-breakage-means) again, one level down: a program
+named for a property is not a witness to it until the property is taken away
+and the program notices.
+
+*And the observer, once more.* The first run of the matcher breakages said
+that restoring the source had not restored the behaviour. It had. `make`
+compared timestamps within one second, saw the binary as new as the source
+it had just been copied back from, and did not rebuild, so the "restored"
+line was the previous breakage still running. `make -B` gave the answer the
+source said. A harness that edits and rebuilds inside a second has to force
+the build, or its results describe the build before.
+
+*`size_t` and `ptrdiff_t` were revisited, as promised, and kept.* `typedef`
+gives C a way to name them and gives this subset nothing to name them as:
+both are `long`s on this machine, and `long` is step four. The two divergent
+programs stay pinned with both answers.
+
+What prediction three said about the calling convention is scored in § 16.
+The arc has now used all three, and the next change to the tool is not
+predicted by anything written down.

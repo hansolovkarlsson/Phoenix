@@ -5404,3 +5404,94 @@ runs, while `$child.nosuch` is refused once, when the description is read.
 It is in [ROADMAP 5](ROADMAP.md#5-known-warts) as a known wart, with what was
 measured and what was not.
 
+
+## 2026-09-23: `typedef`, and the first thing a parse remembers
+
+Step two of ROADMAP 6, and the first change to `phoenix/` since the C arc
+began. The entry asked for the failure to be written down before the
+mechanism, so that came first.
+
+**The failure, measured on a copy.** The most a description could do alone
+was let a declaration's base be any name and trust ordered choice with the
+rest. A copy of `c.phx` did that, and all 143 programs were run through both
+it and the committed description. One moved: `sizeof-parens.c`, where
+`sizeof(x)` names a variable, was read as the type called `x` and refused.
+`x * y;` became a declaration of `y`. Both refusals, neither a wrong answer,
+and neither something a pass could repair, because by the time a pass runs
+the tree has already taken one shape. So the predicate was wanted, and at
+`typedef`, which is prediction two.
+
+**What the prediction called a predicate turned out to be a table.** Asking
+is the small part. Something has to write the names in as declarations are
+read, end what a block wrote, and take back what an alternative wrote before
+it failed. Rats! calls this stateful parsing and parses C with it, which is
+the precedent, now in lineage.md.
+
+*Why a directive and not syntax inside productions.* A binding written into
+a production would be a second place that says what a declaration is, and
+the actions already say it: a `Typedef` node is a typedef. So `%names` names
+node types and fields, `declare Typedef.name`, `hide Local.name`, and adds
+nothing to any rule. `scope` and `guard` name rules, the way `%fragment` and
+`%skip` do.
+
+*Why one stack and truncation.* Every `%names` shares one stack of
+(table, name, declared-or-hidden) entries, the newest in force. `parse_match`
+notes the stack's height on the way in and cuts it back if the match fails,
+which is the whole of the undo, in the one function every match passes
+through. A scope rule cuts it back on success as well. Rats! has
+transactions; a PEG that already backtracks by position only needs the
+position of the stack.
+
+*Why a guard is one token.* What is asked is how a token was spelled. A
+guard over a rule that answered a node would need a way to say which field
+is the name, and no language here has wanted that, so `typedef-name = name .`
+is the shape and anything else is refused.
+
+*Why the four words are not literals in `phoenix.phx`.* A literal reserves
+its word in every description the self-description reads, and `scope` is a
+thread in `c.phx`. They are names there, the same wart `word` already
+records.
+
+**The mistake, found by writing this entry.** The first version bound a name
+when the node naming it was finished. Stating that in C's terms, C11 6.2.1p7
+starts a scope at the end of the declarator, and a `LocalInit` finishes after
+its initialiser. `typedef char T; int main() { int T = sizeof(T); return T; }`
+answers 4 under `cc` and compiled here to 1. No oracle program declared a
+name and used it before its own `;`, so all 156 agreed. The binding moved to
+the factor: the checks find, in each action building a bound node, the factor
+its field is filled from, and the matcher binds right after matching it. A
+field the action computes, `name: text($n)`, has no such moment and is
+refused. The program is now refused by the `locals` pass, which binds every
+local on the way out and has always refused `int x = sizeof(x);` for the same
+reason. Both are in `tests/refused/` now, with what the difference is.
+
+**In the description.** `function` became a rule so that it could be a
+scope: a parameter hides a typedef from the `(` to the end of the body, or to
+the `;` of a prototype. A typedef name builds `Named` beside `Base`, because
+it names a base *and some stars* and a `Base` has none, and every declaration
+reads `ptrs = $stars + $base.ptrs` where it read `$stars`. The checks could
+not read `ptrs`, since a check runs before its rule's attributes, so they
+write the sum out, which is what the tool told them to do. C11 6.7p3 allows a
+typedef declared twice to the same type, and lists compare structurally, so
+only a second typedef *for a different type* is refused.
+
+**The observer, twice.** The first run of the matcher's breakages said
+restoring the source had not restored the behaviour. `make` had seen a binary
+built in the same second as the restored `parse.c` and not rebuilt. `make -B`
+throughout, after that. Then two oracle programs named for the hiding they
+tested stayed green with the hiding removed, because `return T * 2` begins
+with `return` and nothing in them depended on how `T` was read. Both now ask
+`sizeof(T)`, where the variable and the type differ, and both go red.
+
+*Eleven breakages, each asserted applied, all red*: four in the matcher (no
+undo, no scope, no guard, binding at the node) and seven in the description
+(no hide, no function scope, no block scope, a typedef's stars dropped, a
+typedef's base's stars dropped, `sizeof` ignoring a typedef's stars, no
+twice check). The assembly for all 145 programs that were here before is
+byte for byte what the committed tool produced.
+
+*`size_t` and `ptrdiff_t`, revisited.* Both are `long`s on this machine, and
+`long` is step four, so both stay `int`s and the divergent pins stay.
+
+Thirteen oracle programs, 156 in all; nine refusals, 58. 264 checks to 281,
+all passing.

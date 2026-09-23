@@ -1,0 +1,15 @@
+(* `%names` binding a node nothing builds. *)
+%fragment letter .
+letter = "a" .. "z" .
+name   = letter { letter } .
+symbol = ";" .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start program .
+program = { statement } -> Program(body: $1) .
+statement = "type" n:name ";" -> Type(name: $n)
+          | t:type-name n:name ";" -> Var(type: $t, name: $n) .
+type-name = name .
+
+%names types declare Typ.name guard type-name .

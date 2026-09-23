@@ -16,6 +16,50 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-23: `typedef`, and the first thing a parse remembers
+
+**The notation changed.** `%names` is a new directive: a table of names the
+parse keeps while it matches, and one rule that may ask it.
+
+```
+%names typedef-names
+    declare Typedef.name
+    hide    Param.name Local.name LocalInit.name LocalArray.name
+    scope   block function
+    guard   typedef-name .
+
+typedef-name = name .
+```
+
+A node the grammar builds **declares** a name or **hides** one, at the moment
+the name is read; a **scope** rule ends what was bound inside it; and a
+**guard** rule matches a name only when the table says it is declared. A
+failed alternative takes back what it bound, so ordered choice behaves as it
+did before. It is written into compilers made with `-o` as well. Five
+mistakes in a `%names` are refused when the description is read, with the
+line.
+
+**The C subset has `typedef`**, which is what the directive is for. `typedef
+int number;`, `typedef int *intp;`, a typedef of a typedef, and `typedef
+struct node *list;` all compile, and a typedef can be a parameter's type, a
+member's and a `sizeof`'s. `x * y;` is a declaration when `x` is a typedef
+and a multiplication when it is not, and a variable declared with a
+typedef's name hides it until its block or function ends, as C says. A
+typedef declared twice for two different types is refused. Not yet: a
+typedef inside a function, a typedef of an array, and a typedef as a
+function's return type. `sizeof` and the difference of two pointers are
+still `int`s, because what C makes them is a `long`, which the subset does
+not have. Thirteen more oracle programs, 156 in all, and 58 refusals.
+
+**Tests:** 264 → 281. Eight for `%names`, on a small grammar made to have
+C's problem and nothing else: what it parses, the same through a compiler
+written out with `-o`, and five refusals and a warning about the directive
+itself. Nine for `typedef`: four refusals of what C refuses too, three of
+what this subset leaves out, and two of a local named in its own
+initialiser, which were refused before today and are written down now.
+
+---
+
 ## 2026-09-22: `&` and `*`, and a left side that is a place
 
 **The C subset's seventh construct**: the address of a thing, and the thing a

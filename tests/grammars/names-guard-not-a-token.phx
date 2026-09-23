@@ -1,0 +1,15 @@
+(* `%names` guarding a rule that is more than one token. *)
+%fragment letter .
+letter = "a" .. "z" .
+name   = letter { letter } .
+symbol = ";" .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start program .
+program = { statement } -> Program(body: $1) .
+statement = "type" n:name ";" -> Type(name: $n)
+          | t:type-name n:name ";" -> Var(type: $t, name: $n) .
+type-name = name .
+
+%names types declare Type.name guard statement .

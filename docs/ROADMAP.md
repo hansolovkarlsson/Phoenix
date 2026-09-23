@@ -42,10 +42,13 @@ named and the rest deliberately not.
 
 ## 1. The stages
 
-**Seven have left, and one is open.** [COMPLETED.md](COMPLETED.md) has the
-seven, with what each predicted against what it cost. Three of the seven
+**Eight have left, and one is open.** [COMPLETED.md](COMPLETED.md) has the
+eight, with what each predicted against what it cost. Three of the first seven
 predicted wrong, which is the more useful half, and one left **settled against
-building it** after four measurements.
+building it** after four measurements. The eighth, 1.8, arrived and left on
+the same day, 2026-09-23, with its failure measured before any code: ROADMAP 6
+said the predicate would be an entry here, and it was one for as long as it
+took to build.
 
 ### 1.7 A repetition that counts
 
@@ -83,6 +86,7 @@ workaround; two is a mechanism. `.sob` is the one.
 | [1.5](COMPLETED.md#15-a-runtime-that-is-not-a-literal) | `%embed` — a file's bytes under a name |
 | [1.2](COMPLETED.md#12-compiling-the-tables-to-code) | compiling the tables to code — settled **against**: measured four times, and the fourth found the control |
 | [1.6](COMPLETED.md#16--as-an-expression-operator-for-getline) | `\|` as an expression operator — awk's `cmd \| getline` |
+| [1.8](COMPLETED.md#18-names-the-parse-keeps) | `%names`: names the parse keeps, for C's `typedef` |
 
 **Open:** [1.7](#17-a-repetition-that-counts), a repetition whose count is a
 value the parse has just produced.
@@ -277,6 +281,14 @@ have had nowhere to write any of that.
 What a scanner with parser feedback would cost is the thing to weigh if this
 ever comes up twice: two languages have been described without wanting one, and
 the third wants it in one construct.
+
+**It came up twice, with C's `typedef`, and the answer was not the scanner.**
+The seam C has is not lexical: `T` is a `name` token either way, and what
+differs is which rule of the grammar it belongs to. So the feedback went into
+the parse rather than across the seam, as a table the parse keeps and one
+rule asks ([1.8](COMPLETED.md#18-names-the-parse-keeps)), and the scanner is
+still longest match with no opinion. awk's `/` would want the other kind, and
+still does not have it.
 
 ### 3.4 A library that grows without deciding
 
@@ -620,7 +632,7 @@ avoids.**
 
 | | |
 | --- | --- |
-| `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second — with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool |
+| `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
 
@@ -653,9 +665,10 @@ divergences pinned)*; **`char` and string
 literals** *(done 2026-09-22; 123 programs against `cc`, and the oracle
 compares what they print as well as how they exit)*; **`struct`** *(done
 2026-09-22, which completes the list; 143 programs against `cc`, 49
-refused)*. It stops before `typedef`
-on purpose — that is where the tool needs a change, and the change should
-arrive with the construct that wants it and not before.
+refused)*. It stopped before `typedef`
+on purpose, because that was where the tool was expected to need a change,
+and the change was to arrive with the construct that wanted it and not
+before. *It did, on 2026-09-23*: see step two below.
 
 **The width, decided 2026-09-22: `sizeof(int)` is 4, and `int` narrows to
 thirty-two bits.** Until that day the value was sixty-four bits wide in a
@@ -760,4 +773,25 @@ scores it. Steps two to seven live in the workspace document and
 are not repeated here; the one that comes back to this page is the predicate,
 which will be an entry under section 1 with the failure written down first, as
 this page requires.
+
+**Step two, `typedef`, done 2026-09-23**, and with it the predicate:
+[1.8](COMPLETED.md#18-names-the-parse-keeps), whose failure was measured on a
+copy of `c.phx` before the tool was touched. Prediction two held, and
+[postmortem 20](postmortem.md#20-prediction-two-held-and-the-predicate-was-a-table)
+scores it. A typedef names a base and some stars, a struct's included, at
+file scope, and an ordinary name declared in a block or as a parameter hides
+it until that scope ends. 156 programs against `cc`, 58 refused.
+
+*`size_t` and `ptrdiff_t`, revisited as promised, stay `int`s.* `typedef`
+gives C a way to name them and gives this subset nothing to name them as:
+both are `long`s on this machine, and `long` is step four of the workspace
+document. The two divergent programs stay pinned.
+
+What is **not** here, each a refusal or a syntax error: a typedef in a block,
+as a struct is at file scope only; a typedef of an array, whose count belongs
+to a declaration here and not to a type; a typedef as a function's return
+type, where only `int` is written; and a local named in its own initialiser,
+`int x = sizeof(x);`, because the `locals` pass binds a name at the end of its
+declaration and C at the end of its declarator. That last one was always so,
+and `typedef` gave it a second spelling.
 

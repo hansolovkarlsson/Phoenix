@@ -1,0 +1,15 @@
+(* `%names` that nothing asks: a warning, not a refusal. *)
+%fragment letter .
+letter = "a" .. "z" .
+name   = letter { letter } .
+symbol = ";" .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start program .
+program = { statement } -> Program(body: $1) .
+statement = "type" n:name ";" -> Type(name: $n)
+          | t:type-name n:name ";" -> Var(type: $t, name: $n) .
+type-name = name .
+
+%names types declare Type.name .

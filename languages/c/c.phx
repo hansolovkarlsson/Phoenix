@@ -17,9 +17,11 @@
  * [ROADMAP 6](../../docs/ROADMAP.md#6-a-c-compiler) is the one entry on that
  * page that is a language rather than a mechanism: the compiler is the goal
  * and the mechanisms it turns out to need are the findings. The subset grows
- * in chibicc's order, one construct at a time with the suite green at each,
- * and stops before `typedef` on purpose -- that is where the tool needs a
- * change, and the change should arrive with the construct that wants it.
+ * in chibicc's order, one construct at a time with the suite green at each.
+ * Step one stopped before `typedef` on purpose, because that was where the
+ * tool was expected to need a change, and the change was to arrive with the
+ * construct that wanted it. It did: `typedef` is here, and `%names`, below,
+ * is the change.
  *
  * **What is here is every construct of step one**: `int main(){return 42;}`,
  * then `+ - * /` with parentheses, then unary minus and the six comparisons,
@@ -38,6 +40,11 @@
  * arities, a ninth parameter, a `*` on what is not a pointer, and arithmetic
  * on one, are refused, and so is a struct copied whole, by assignment, by
  * initialisation or as an argument.
+ *
+ * **Then `typedef`**, at file scope, of a base and any number of stars, a
+ * struct included, and hidden by an ordinary name declared in a block or as
+ * a parameter until that scope ends. A typedef declared twice for two types
+ * is refused.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -105,6 +112,26 @@ symbol = "==" | "!=" | "<=" | ">=" | "->"
 
 program = { item } -> Program(items: $1) .
 
+(* **What the parse keeps**, which is the one thing C asks of a parser that
+ * no other language here has. `x * y;` declares `y` when `x` names a type and
+ * multiplies when it does not, and `sizeof(x)` is the size of a type or of a
+ * variable by the same test, so which rule a name belongs to is a question
+ * about the declarations **above** it. ROADMAP 1.8 has the failure this
+ * answers, measured before the notation had a way to say it.
+ *
+ * A `Typedef` declares its name a type. Every declaration of an ordinary
+ * name hides one, because C11 6.2.1 lets `int T;` in a block make `T` a
+ * variable until the block ends; a member does not, because members are a
+ * name space of their own, 6.2.3. A block and a function each end what was
+ * bound inside them, which is what makes the hiding end, and `function`
+ * covers a prototype's parameters as much as a definition's, since C11 gives
+ * a prototype a scope of its own. `typedef-name` is the one rule that asks. *)
+%names typedef-names
+    declare Typedef.name
+    hide    Param.name Local.name LocalInit.name LocalArray.name
+    scope   block function
+    guard   typedef-name .
+
 (* A prototype or a definition, and the prototype first because it is the
  * shorter: the header is the same and `;` fails on `{`. C99 6.5.2.2 wants a
  * declaration above every call, so a prototype is how a call reaches a
@@ -114,10 +141,7 @@ program = { item } -> Program(items: $1) .
  * because C11 6.2.1 puts the parameters in the same scope as the body's
  * outermost declarations: `int f(int a) { int a; }` is declared twice, and a
  * `Block` would open a scope the parameters are not in. *)
-item = "int" n:name "(" p:params ")" ";"
-         -> Prototype(name: $n, params: $p)
-     | "int" n:name "(" p:params ")" "{" s:{ statement } "}"
-         -> Function(name: $n, params: $p, body: $s)
+item = function
      (* A struct is defined at file scope and only there, and always with a
       * tag. C allows both a definition inside a block, with the block's scope,
       * and a struct with no tag at all; neither is here yet, and a program
@@ -125,7 +149,23 @@ item = "int" n:name "(" p:params ")" ";"
       * struct with no members is **not** a syntax error, so that it can be
       * refused by name: see the `locals` pass. *)
      | "struct" n:name "{" f:{ member } "}" ";"
-         -> StructDef(name: $n, members: $f) .
+         -> StructDef(name: $n, members: $f)
+     (* **A typedef is a name for a declaration's type**, a base and some
+      * stars, and like a struct it is at file scope only: C allows one in a
+      * block, with the block's scope, and a program that writes one gets a
+      * syntax error. No array, `typedef int v[3];`, because a declaration's
+      * count is a field of the declaration and not of its type; that arrives
+      * when a program wants it. *)
+     | "typedef" b:base s:{ "*" } n:name ";"
+         -> Typedef(name: $n, base: $b, stars: size($s)) .
+
+(* A function is a rule of its own because it is a **scope**: see `%names`
+ * above. Its parameters hide a typedef of the same name from the `(` to the
+ * end of the body, or to the `;` of a prototype, and no further. *)
+function = "int" n:name "(" p:params ")" ";"
+             -> Prototype(name: $n, params: $p)
+         | "int" n:name "(" p:params ")" "{" s:{ statement } "}"
+             -> Function(name: $n, params: $p, body: $s) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
@@ -153,11 +193,23 @@ param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
  * declaration at once. The name is the keyword or the tag, and cannot be
  * both, because `int` and `char` are reserved and no tag can be spelled so.
  *
+ * **A typedef's name is the fourth**, and builds a node of its own rather
+ * than a `Base`, because what it names is a base *and some stars*, and a
+ * `Base` has no stars to give. The `locals` pass has each answer how many,
+ * and a declaration adds its own.
+ *
  * A function still returns an `int` and nothing else: the item's header says
- * `int`, and a struct returned whole is a calling convention of its own. *)
+ * `int`, and a struct returned whole is a calling convention of its own. A
+ * typedef of `int` is not taken there either, which C would. *)
 base   = "int"             -> Base(name: "int")
        | "char"            -> Base(name: "char")
-       | "struct" t:name   -> Base(name: $t) .
+       | "struct" t:name   -> Base(name: $t)
+       | t:typedef-name    -> Named(name: $t) .
+
+(* A name that the declarations above have made a type, and not hidden
+ * since. It is a `name` like any other to the scanner; what makes it a type
+ * is `%names`, which is the only thing that can know. *)
+typedef-name = name .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
@@ -373,6 +425,9 @@ arg  = e:expression -> Arg(value: $e) .
   StructDef : shape = []
             : dname = []
             : fname = [] .
+  Typedef   : shape = []
+            : dname = []
+            : fname = [] .
 
   (* Written out rather than named: a check runs before the attributes its
    * rule computes, so it cannot read them, and `phx` says so. *)
@@ -461,6 +516,13 @@ arg  = e:expression -> Arg(value: $e) .
    * it, which is C11 6.2.1's scope for a tag declared outside any block. *)
   thread layouts = [["int", [4, 4, empty]], ["char", [1, 1, empty]]]
 
+  (* **The typedefs so far**, name to the four things a declaration asks
+   * of its base: a width, an alignment, a tag, and how many stars the typedef
+   * already has. File scope only, like `layouts`, so never reset. The parse
+   * has already decided which names are typedefs, with `%names`; this is what
+   * each one *means*, which the parse has no way to hold. *)
+  thread typedefs = empty
+
   (* The three a struct's members are laid out by, each set afresh by the
    * struct being defined: the members so far, the offset the next one may
    * start at, and the widest alignment seen. A member's entry is the same
@@ -499,7 +561,31 @@ arg  = e:expression -> Arg(value: $e) .
    * pointer to a struct nobody ever defines; this subset does not, yet,
    * because the only program here that needs one is a list, and a list
    * names its own struct. *)
-  Base : layout  = lookup($layouts, $name, [0, 1, empty])
+  (* A typedef is its base and its stars, worked out once here and read by
+   * every declaration that names it. C11 6.7p3 lets a typedef be declared
+   * again **to the same type**, so a second one is refused only when it
+   * says something different. *)
+  Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
+          : typedefs = bind($typedefs, $name, $means)
+          ! defined($typedefs, $name)
+              and lookup($typedefs, $name, empty)
+                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
+              : "'{}' is a typedef twice, for two different types" of $name .
+
+  (* **A declaration's stars are its own and its typedef's**: `intp *q` with
+   * `typedef int *intp` is two. A base that is a keyword or a tag has none,
+   * and `ptrs` is the sum every declaration below reads in place of its
+   * `stars` field. *)
+  Named : means   = lookup($typedefs, $name, [4, 4, "", 0])
+        : basew   = at($means, 1)
+        : align   = at($means, 2)
+        : tagname = at($means, 3)
+        : ptrs    = at($means, 4) .
+
+  SizeOfType : ptrs = $stars + $base.ptrs .
+
+  Base : ptrs    = 0
+       : layout  = lookup($layouts, $name, [0, 1, empty])
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""]], $name, $name)
@@ -509,29 +595,31 @@ arg  = e:expression -> Arg(value: $e) .
   (* A member starts at the next offset its alignment allows. An element is
    * aligned as its base is, or to eight when it is a pointer, and an array as
    * its element is. *)
-  MemberScalar : basew  = $base.basew
-               : ebytes = lookup([[0, $basew]], $stars, 8)
-               : ealign = lookup([[0, $base.align]], $stars, 8)
+  MemberScalar : ptrs   = $stars + $base.ptrs
+               : basew  = $base.basew
+               : ebytes = lookup([[0, $basew]], $ptrs, 8)
+               : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $stars, 0, $basew, $base.tagname])
+               : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
                : moff   = $offset + $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars = 0 and $base.basew = 0
+               ! $stars + $base.ptrs = 0 and $base.basew = 0
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
                        of $base.name .
-  MemberArray  : basew  = $base.basew
-               : ebytes = lookup([[0, $basew]], $stars, 8)
-               : ealign = lookup([[0, $base.align]], $stars, 8)
+  MemberArray  : ptrs   = $stars + $base.ptrs
+               : basew  = $base.basew
+               : ebytes = lookup([[0, $basew]], $ptrs, 8)
+               : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $stars, $count, $basew, $base.tagname])
+               : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname])
                : moff   = $offset + $count * $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! $count < 1
                    : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                        of $name
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars = 0 and $base.basew = 0
+               ! $stars + $base.ptrs = 0 and $base.basew = 0
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
                        of $base.name .
 
@@ -556,15 +644,16 @@ arg  = e:expression -> Arg(value: $e) .
    * sixteen bytes in registers, packed, and a larger one by a hidden
    * pointer to a copy, and neither is a register holding a value, which is
    * all this subset's calls are. A pointer to a struct is a pointer. *)
-  Param : basew  = $base.basew
+  Param : ptrs   = $stars + $base.ptrs
+        : basew  = $base.basew
         : offset = $bytes + 8
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $stars, 0, $basew, $base.tagname])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + 8
         : pindex = $pindex + 1
         ! defined($scope, $name) : "'{}' is a parameter twice" of $name
-        ! $stars = 0 and $base.tagname <> ""
+        ! $stars + $base.ptrs = 0 and $base.tagname <> ""
             : "'{}' is a struct passed whole, and only a pointer to one is compiled" of $name .
 
   Call ! not defined($funcs, $name)
@@ -587,24 +676,32 @@ arg  = e:expression -> Arg(value: $e) .
    * four-byte `int` or an eight-byte pointer, and binds a count of zero,
    * which is what *not an array* is spelled as everywhere below. A struct is
    * its size rounded up to eight, the way an array is. *)
-  Local     : basew  = $base.basew
-            : takes  = ((lookup([[0, $basew]], $stars, 8) + 7) div 8) * 8
+  Local     : ptrs   = $stars + $base.ptrs
+            : basew  = $base.basew
+            : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $stars, 0, $basew, $base.tagname])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
-  (* A declaration with an initialiser is never an array: the subset has no
+  (* **The name is bound on the way out**, after its initialiser has been
+   * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
+   * starts the scope at the end of the declarator, before the `=`, and `cc`
+   * answers 4. A refusal and not a wrong answer, and so left; the parse gets
+   * this right for a typedef hidden by its own local, see `%names`.
+   *
+   * A declaration with an initialiser is never an array: the subset has no
    * way to write the initialiser one would want. Nor is it a struct, which
    * would be a copy of one, and a struct is not copied whole here: see
    * `Assign` in the `types` pass. *)
-  LocalInit : basew  = $base.basew
+  LocalInit : ptrs   = $stars + $base.ptrs
+            : basew  = $base.basew
             : offset = $bytes + 8
-            : env    = bind($env, $name, [$offset, $stars, 0, $basew, $base.tagname])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + 8
             ! defined($scope, $name) : "'{}' is declared twice" of $name
-            ! $stars = 0 and $base.tagname <> ""
+            ! $stars + $base.ptrs = 0 and $base.tagname <> ""
                 : "'{}' is a struct initialised from another, which copies it whole, and that is not compiled" of $name .
 
   (* An element is one byte, four or eight, or a struct's size, the whole
@@ -615,12 +712,13 @@ arg  = e:expression -> Arg(value: $e) .
    * below. C11 6.7.6.2 wants a size greater than zero; this `cc` takes
    * `int a[0]` as an extension and gives it a `sizeof` of 0, so without the
    * refusal it is a program both compile and answer differently. *)
-  LocalArray : basew  = $base.basew
-             : ebytes = lookup([[0, $basew]], $stars, 8)
+  LocalArray : ptrs   = $stars + $base.ptrs
+             : basew  = $base.basew
+             : ebytes = lookup([[0, $basew]], $ptrs, 8)
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $stars, $count, $basew, $base.tagname])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -801,9 +899,11 @@ arg  = e:expression -> Arg(value: $e) .
   Negate ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
 
   (* `sizeof` is worth an `int` here and a `size_t` in C. `size_t` is a
-   * **typedef**, and ROADMAP 6.1 stops before `typedef` on purpose, so this
-   * subset has no way to name the type the answer ought to have. The cost is
-   * one program: `sizeof(sizeof(int))` is 8 under `cc` and 4 here, and it is
+   * **typedef**, which this subset stopped before on purpose, and was to be
+   * revisited when `typedef` arrived. It has arrived and the answer stays an
+   * `int`: what `size_t` names on this machine is an `unsigned long`, and
+   * the subset has neither `unsigned` nor `long` to name, which is step four
+   * of the arc and not step three. The cost is still one program: `sizeof(sizeof(int))` is 8 under `cc` and 4 here, and it is
    * written down in `tests/divergent/` with a check that it still diverges,
    * rather than compiled around. Everything else about `sizeof` agrees,
    * because the answers themselves, 4 and 8, are the ones `cc` gives. *)
@@ -865,10 +965,11 @@ arg  = e:expression -> Arg(value: $e) .
    * **The difference of two pointers is an `int`**, which is the count of
    * elements between them. C11 6.5.6 makes it a `ptrdiff_t`, and that is a
    * typedef, so this is `sizeof`'s decision taken a second time and for the
-   * same reason: the subset stops before `typedef`, and an `int` is what the
-   * difference was in K&R's first edition, before ANSI C named a type for
-   * it. `tests/divergent/` pins the one program that shows it, and both are
-   * to be revisited when `typedef` arrives. The type is a difference of star
+   * same reason, and an `int` is what the difference was in K&R's first
+   * edition, before ANSI C named a type for it. `tests/divergent/` pins the
+   * one program that shows it. Revisited with `typedef`, as `sizeof` was, and
+   * kept for `sizeof`'s reason: a `ptrdiff_t` is a `long`, which waits for
+   * `long`. The type is a difference of star
    * counts, which is 0 for two pointers of one type and the pointer's own for
    * a pointer less an int; two pointers of **different** types are refused,
    * as 6.5.6 requires, and that is also what keeps the difference from

@@ -109,6 +109,15 @@ editor experience, not a compiler.**
 with attributes, generating recursive descent — but its actions are
 host-language fragments, which is the yacc bargain again.
 
+**Rats!** (Grimm, NYU, 2006) is the PEG that parses C, and the reason it can
+is the one idea here that Phoenix took from a parser generator rather than
+from a compiler-construction system: **stateful parsing**. A production may be
+marked as keeping state, the state is a transaction that a failed alternative
+aborts, and a semantic predicate can ask it whether an identifier names a
+type. `%names` is the same answer to the same question, C's `typedef`,
+written as a directive that names node types rather than as Java in the
+grammar ([1.8](COMPLETED.md#18-names-the-parse-keeps)).
+
 **Cocktail** (Grosch, GMD) is a fair answer to *what did a complete 1990s
 version look like*: Rex, Lalr, Ast, Ag, and **Puma** for pattern-matching tree
 transformation.
@@ -120,7 +129,7 @@ transformation.
 **Not novel in its ideas.** Every mechanism above has a name and a literature.
 What is distinctive is the combination:
 
-- **8,776 lines of C11 against the C standard library and nothing else.** The
+- **9,213 lines of C11 against the C standard library and nothing else.** The
   point is not the language — Eli is a C-based system too — it is the footprint:
   Eli and Spoofax are *systems*, with toolchains and generators and editors.
   Phoenix is one binary and a `lib/` directory. That buys much less and costs
@@ -137,6 +146,8 @@ What is distinctive is the combination:
 This section listed three candidates when the page was written and said *all
 are on the roadmap*. None of them is on it now, and that is the interesting
 part: **one was taken, and two were tested against a real language and lost.**
+A fourth, which the page had not listed, was taken on 2026-09-23 because a
+language asked for it first.
 A page about influences is worth little if it only records the borrowing that
 worked.
 
@@ -144,6 +155,7 @@ worked.
 | --- | --- |
 | **Stratego's strategies** → `%rewrite` | **Taken, unchanged.** `topdown`, `bottomup` and `innermost` are the words for the thing and there was no reason to invent others. What Phoenix added is nothing: the traversal puts a built node back where the matched one was, and that is all a `%rewrite` is. The customer was not term rewriting but an **optimisation** — an inlined block is a node that should not be there, and no clause *about* a node can say that ([2.2](COMPLETED.md#22-strategies--from-stratego)) |
 | **JastAdd's reference attributes** | **Refused on evidence.** The entry was narrowed to one case — a reference pointing *forward* — and awk was the language that needed it. Two passes and twenty lines did it, because a leaving clause on the root runs after the whole subtree. Reference attributes would have bought one walk instead of two and cost demand-driven evaluation and cycle detection ([2.1](COMPLETED.md#21-reference-attributes--from-jastadd)) |
+| **Rats!'s stateful parsing** → `%names` | **Taken, and narrowed.** Rats! keeps arbitrary state in Java and asks it with a predicate; Phoenix keeps one kind, a stack of names each declared or hidden, bound by the nodes the actions already build, and asked by one rule over one token. The transaction became a truncation: every failed match cuts the stack back to where it began. The customer was C's `typedef`, predicted to want it since 2026-09-06 ([1.8](COMPLETED.md#18-names-the-parse-keeps)) |
 | **Statix's scope graphs** | **Refused on evidence.** `languages/units/` was written *specifically* to test it — Turbo Pascal units have all three properties the entry asked for — and resolution stayed a list. A cycle between two implementations costs nothing, because visibility does not compose, so there is no traversal for a cycle to be a cycle in ([2.3](COMPLETED.md#23-scope-graphs--from-statix)) |
 
 > Two of three lost to *describe the language and see*. That is the method this

@@ -179,6 +179,8 @@ struct GNode {
     char   *label;   /* the name a factor was given: `e:expression`          */
     Expr   *action;  /* SEQ: what this alternative builds, or NULL           */
     size_t  pos;
+    int     bind;    /* %names: the table this factor's text goes in, from 1 */
+    bool    declares;/* %names: declared there, or hidden                   */
 };
 
 typedef struct {
@@ -191,7 +193,65 @@ typedef struct {
     bool    required;  /* %require: a hole, filled by whoever imports this   */
     bool    nullable;  /* can match nothing -- wanted by the checks         */
     size_t  pos;
+    bool    scope;     /* %names ... scope: what it binds ends with it      */
+    int     guard;     /* %names ... guard: the table asked, from 1; 0: none */
 } Rule;
+
+/* ------------------------------------------------------------------ */
+/* Names the parse keeps
+ *
+ *     %names typedef-names
+ *         declare Typedef.name
+ *         hide    Local.name Param.name
+ *         scope   block function
+ *         guard   typedef-name .
+ *
+ * **The one thing a parse remembers.** Everywhere else the matcher is a pure
+ * function of the tokens, and C is the language where that is not enough:
+ * `x * y;` is a declaration when `x` names a type and a product when it does
+ * not, and only the declarations read so far can say which. So a table of
+ * names is kept *while* matching, and one rule may ask it.
+ *
+ * A node an action builds **declares** the text of one of its fields, or
+ * **hides** it, which is how `int T;` in a block makes a typedef `T` an
+ * ordinary name again until the block ends. The binding is made when the
+ * **factor** that field names is matched, and not when the node is built:
+ * C11 6.2.1p7 starts a name's scope at the end of its declarator, so in
+ * `int T = sizeof(T);` the second `T` is the variable, and a binding made
+ * after the initialiser had been read would have made it the type. A **scope** rule drops what was
+ * bound inside it when it finishes. A **guard** rule matches only when the
+ * name it matched was last declared rather than hidden.
+ *
+ * Every binding is undone when the match that made it fails, so a choice
+ * that backtracks leaves the table as it found it: the table is a stack, and
+ * a failure truncates it to where it stood. That is what keeps ordered choice
+ * meaning what it meant before this existed.
+ */
+/* What `declare Typedef.name` said. The checks turn each into a mark on the
+ * factor that field is filled from, GNode.bind, which is what the matcher
+ * reads; this is kept for the checks and for `--grammar`. */
+typedef struct {
+    char   *type;      /* the node that binds                               */
+    char   *field;     /* the field whose text is bound                     */
+    bool    declares;  /* true for `declare`, false for `hide`              */
+    size_t  pos;
+} Binder;
+
+typedef struct {
+    char   *name;
+    size_t  pos;
+} Named;
+
+typedef struct {
+    char   *name;
+    Binder *binders;
+    int     nbinders;
+    Named  *scopes;    /* rules, resolved onto Rule.scope by the checks     */
+    int     nscopes;
+    Named  *guards;    /* rules, resolved onto Rule.guard by the checks     */
+    int     nguards;
+    size_t  pos;
+} Names;
 
 typedef struct Pass    Pass;   /* below -- the Grammar holds them */
 typedef struct Driver  Driver;
@@ -272,6 +332,11 @@ typedef struct {
     /* A module may name rules it does not define. Reading one on its own is
      * fine; using one to parse a file is not, and this is what says so. */
     bool    incomplete;
+
+    /* `%names` -- the tables the parse keeps. */
+    Names  *names;
+    int     nnames;
+    int     capnames;
 } Grammar;
 
 /* Reads a `.phx` file. Answers NULL when it could not, having said why. */

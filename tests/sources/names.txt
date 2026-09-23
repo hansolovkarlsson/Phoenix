@@ -1,0 +1,10 @@
+a * b;
+type t;
+t * x;
+{ t t; t * y; }
+t * z;
+maybe u;
+u * w;
+maybe v!
+v * w;
+{ let t = t; }

@@ -687,6 +687,106 @@ static Rule *rule_for(Reader *r, MToken *name, bool lexical)
     return add_rule(r, name->text, name->pos, lexical);
 }
 
+/* `%names typedef-names declare Typedef.name hide Local.name scope block
+ * guard typedef-name .` -- a table of names the parse keeps, and the four
+ * things said about it. phx.h has what each means.
+ *
+ * The four words are only words here, between `%names` and its `.`, so a
+ * list runs until the next of them. A rule that is itself called `scope`
+ * cannot be named in one, which is the price of not reserving them anywhere
+ * else. The `.` is required, where most directives take it or leave it: this
+ * one runs over several lines, and a line is what ends the others. */
+static bool names_word(const MToken *t)
+{
+    return t->kind == T_NAME
+        && (strcmp(t->text, "declare") == 0 || strcmp(t->text, "hide")  == 0
+         || strcmp(t->text, "scope")   == 0 || strcmp(t->text, "guard") == 0);
+}
+
+static void named_add(Reader *r, Named **list, int *n, MToken *t)
+{
+    Named *big = arena_alloc(r->a, (size_t)(*n + 1) * sizeof *big);
+    if (*n) memcpy(big, *list, (size_t)*n * sizeof *big);
+    big[*n] = (Named){ .name = t->text, .pos = t->pos };
+    *list = big;
+    (*n)++;
+}
+
+static bool read_names(Reader *r, MToken *d)
+{
+    Grammar *g = r->g;
+
+    if (!at(r, T_NAME) || names_word(peek(r))) {
+        diag_error(r->src, d->pos, "%%names wants the name of the table first");
+        return false;
+    }
+    MToken *name = advance(r);
+
+    for (int i = 0; i < g->nnames; i++)
+        if (strcmp(g->names[i].name, name->text) == 0) {
+            diag_error(r->src, name->pos, "%%names '%s' is already declared",
+                       name->text);
+            return false;
+        }
+
+    if (g->nnames == g->capnames) {
+        int    cap = g->capnames ? g->capnames * 2 : 4;
+        Names *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+        if (g->nnames) memcpy(big, g->names, (size_t)g->nnames * sizeof *big);
+        g->names    = big;
+        g->capnames = cap;
+    }
+    Names *t = &g->names[g->nnames++];
+    memset(t, 0, sizeof *t);
+    t->name = name->text;
+    t->pos  = name->pos;
+
+    while (names_word(peek(r))) {
+        MToken *w = advance(r);
+        int     got = 0;
+
+        if (strcmp(w->text, "declare") == 0 || strcmp(w->text, "hide") == 0) {
+            while (at(r, T_NAME) && !names_word(peek(r))) {
+                MToken *type = advance(r);
+                if (!at(r, T_ATTRIBUTE)) {
+                    diag_error(r->src, type->pos,
+                               "%%names %s wants a node and a field, as in "
+                               "'%s.name'", w->text, type->text);
+                    return false;
+                }
+                MToken *field = advance(r);
+                Binder *big = arena_alloc(r->a, (size_t)(t->nbinders + 1) * sizeof *big);
+                if (t->nbinders) memcpy(big, t->binders, (size_t)t->nbinders * sizeof *big);
+                big[t->nbinders++] = (Binder){ .type = type->text, .field = field->text,
+                                               .declares = w->text[0] == 'd',
+                                               .pos = type->pos };
+                t->binders = big;
+                got++;
+            }
+        } else {
+            bool scope = w->text[0] == 's';
+            while (at(r, T_NAME) && !names_word(peek(r))) {
+                if (scope) named_add(r, &t->scopes, &t->nscopes, advance(r));
+                else       named_add(r, &t->guards, &t->nguards, advance(r));
+                got++;
+            }
+        }
+        if (!got) {
+            diag_error(r->src, w->pos, "%%names %s names nothing", w->text);
+            return false;
+        }
+    }
+
+    if (!at(r, T_DOT)) {
+        diag_error(r->src, peek(r)->pos,
+                   "%%names '%s' wants declare, hide, scope or guard, or a '.' "
+                   "to end it", t->name);
+        return false;
+    }
+    advance(r);
+    return true;
+}
+
 /* `%include Include path` -- the node that stands for one of the *target*
  * language's includes, and the field of it that holds the name of the file.
  *
@@ -834,6 +934,10 @@ static bool read_file(Reader *r, const char *path)
             else if (strcmp(d->text, "embed")      == 0) {
                 if (!read_embed(r, d, path)) return false;
             }
+            else if (strcmp(d->text, "names")      == 0) {
+                if (!read_names(r, d)) return false;
+                continue;
+            }
             else if (strcmp(d->text, "rewrite")    == 0) {
                 if (!read_rewrite(r, d)) return false;
                 continue;
@@ -842,7 +946,7 @@ static bool read_file(Reader *r, const char *path)
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%rewrite "
-                          "%%import %%embed %%require %%driver %%include");
+                          "%%import %%embed %%require %%driver %%include %%names");
                 return false;
             }
 
@@ -1088,6 +1192,19 @@ void grammar_dump(FILE *out, const Grammar *g)
             if (g->include_type)
                 fprintf(out, "%%include %s %s\n", g->include_type,
                         g->include_field);
+            for (int k = 0; k < g->nnames; k++) {
+                const Names *t = &g->names[k];
+                fprintf(out, "%%names %s", t->name);
+                for (int m = 0; m < t->nbinders; m++)
+                    fprintf(out, "\n    %s %s.%s",
+                            t->binders[m].declares ? "declare" : "hide",
+                            t->binders[m].type, t->binders[m].field);
+                for (int m = 0; m < t->nscopes; m++)
+                    fprintf(out, "\n    scope %s", t->scopes[m].name);
+                for (int m = 0; m < t->nguards; m++)
+                    fprintf(out, "\n    guard %s", t->guards[m].name);
+                fputs(" .\n", out);
+            }
             fputc('\n', out);
             lexical = false;
         }

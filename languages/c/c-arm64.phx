@@ -224,7 +224,7 @@
    * straight into it rather than working out an address it already has. *)
   LocalInit : out = "{}\t{}, [x29, #-{}]\n"
                 of $value.out,
-                   lookup([[1, "strb w0"], [4, "str w0"]], lookup([[0, $basew]], $stars, 8), "str x0"),
+                   lookup([[1, "strb w0"], [4, "str w0"]], lookup([[0, $basew]], $ptrs, 8), "str x0"),
                    $offset .
   Local      : out = "" .
   LocalArray : out = "" .
@@ -261,7 +261,7 @@
    * are the same eight registers as `x0` to `x7`, so the convention did not
    * notice the width change. *)
   Param : out = "\t{}{}, [x29, #-{}]\n"
-            of lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $stars, 8), "str x"),
+            of lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
                $preg, $offset .
 
   (* **The operand is not evaluated**, which is C11 6.5.3.4 and the whole
@@ -275,7 +275,7 @@
    * pass read off the layouts for an `int`, a `char` and a struct alike, and
    * eight with any. *)
   SizeOfType : out = "\tldr w0, ={}\n"
-                   of lookup([[0, $base.basew]], $stars, 8) .
+                   of lookup([[0, $base.basew]], $ptrs, 8) .
   SizeOfExpr : out = "\tldr w0, ={}\n" of $value.size .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
@@ -350,8 +350,9 @@
    *
    * *The `mov` has no witness, and cannot yet*: it restores the upper half
    * nothing here reads, and is written for the day `ptrdiff_t` arrives with
-   * `typedef` and the answer is the whole of `x0`, when it becomes the one
-   * to delete.
+   * `long` and the answer is the whole of `x0`, when it becomes the one to
+   * delete. It was to be `typedef`, and `typedef` came without it: the type
+   * has a name now and still no width to be.
    *
    * *The division gained one with `struct`.* It is **signed** because a
    * difference can be negative. While every width was a power of two, `asr`
@@ -413,6 +414,7 @@
 
   Prototype : out = "" .
   StructDef : out = "" .
+  Typedef   : out = "" .
   Program   : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
 
 %driver arm64 = functions, locals, types, emit-arm64 -> out .

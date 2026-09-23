@@ -43,6 +43,15 @@ typedef struct {
     int     cap;
 } Slots;
 
+/* One name bound in one `%names` table. The tables share one stack, so that
+ * where a match began is one number and undoing it is one assignment. */
+typedef struct {
+    int         table;
+    const char *text;
+    size_t      len;
+    bool        declares;
+} Bound;
+
 typedef struct {
     Arena         *a;
     const Grammar *g;
@@ -54,6 +63,10 @@ typedef struct {
     const char   **wanted;        /* what was being asked for there         */
     int            nwanted;
     int            capwanted;
+
+    Bound         *bound;         /* %names: what the parse has read so far */
+    long           nbound;
+    long           capbound;
 } Parse;
 
 static long parse_match(Parse *p, const GNode *n, long at, Slots *out);
@@ -182,6 +195,34 @@ static Value *slot_value(Parse *p, const GNode *factor, Slots *s, size_t pos)
 }
 
 /* ------------------------------------------------------------------ */
+/* Names the parse keeps -- `%names`, which phx.h describes */
+
+static void names_bind(Parse *p, int table, const Value *v, bool declares)
+{
+    if (p->nbound == p->capbound) {
+        long   cap = p->capbound ? p->capbound * 2 : 32;
+        Bound *big = arena_alloc(p->a, (size_t)cap * sizeof *big);
+        if (p->nbound) memcpy(big, p->bound, (size_t)p->nbound * sizeof *big);
+        p->bound    = big;
+        p->capbound = cap;
+    }
+    p->bound[p->nbound++] = (Bound){ .table = table, .text = v->text,
+                                     .len = v->len, .declares = declares };
+}
+
+/* Whether a name was last declared in a table, rather than hidden or never
+ * seen. The newest binding is the one in force, which is all a scope is. */
+static bool names_declared(const Parse *p, int table, const Value *v)
+{
+    for (long i = p->nbound - 1; i >= 0; i--) {
+        const Bound *b = &p->bound[i];
+        if (b->table == table && parse_same(p, b->text, b->len, v->text, v->len))
+            return b->declares;
+    }
+    return false;
+}
+
+/* ------------------------------------------------------------------ */
 /* Evaluating an action
  *
  * The expression itself is evaluated by eval.c, which is the parse_same code a
@@ -269,6 +310,12 @@ static long match_action_seq(Parse *p, const GNode *n, long at, Slots *out)
         at = parse_match(p, n->kids[i], at, &slots[i]);
         if (at < 0) return -1;
         slots_add(p, &gathered, slot_value(p, n->kids[i], &slots[i], pos));
+
+        /* `%names`: the name is in force from here, before the rest of the
+         * sequence is read. If the rest fails, parse_match takes it back. */
+        const Value *v = gathered.items[gathered.n - 1];
+        if (n->kids[i]->bind && v->kind == V_TEXT)
+            names_bind(p, n->kids[i]->bind - 1, v, n->kids[i]->declares);
     }
 
     /* The last byte of the last token this sequence consumed. A sequence that
@@ -338,7 +385,11 @@ static long parse_match(Parse *p, const GNode *n, long at, Slots *out)
     }
     if (p->depth > phx_work.depth) phx_work.depth = p->depth;
 
+    /* A match that fails takes back every name it bound, so that the next
+     * alternative sees the table as the failed one found it. */
+    long mark   = p->nbound;
     long answer = parse_body(p, n, at, out);
+    if (answer < 0) p->nbound = mark;
     p->depth--;
     return answer;
 }
@@ -383,9 +434,21 @@ static long parse_body(Parse *p, const GNode *n, long at, Slots *out)
 
         Slots  inner = { 0 };
         size_t pos   = at < end ? toks[at].pos : p->src->size;
+        long   mark  = p->nbound;
 
         long got = parse_match(p, r->body, at, &inner);
         if (got < 0) return -1;
+
+        /* A scope's names end with it, whether it declared or hid them. */
+        if (r->scope) p->nbound = mark;
+
+        /* A guarded rule matched a token, and is that token only when the
+         * table says its spelling is declared. check.c has made sure there
+         * is exactly one token to ask about. */
+        if (r->guard && !names_declared(p, r->guard - 1, inner.items[0])) {
+            note_want(p, at, r->name);
+            return -1;
+        }
 
         Value *v = inner.n == 1 ? inner.items[0] : NULL;
         if (!v) {
