@@ -132,7 +132,22 @@ refused too. `printf` is not reachable yet: it is variadic, and Apple's arm64
 passes variadic arguments on the stack. Eight more oracle programs, 123 in
 all, and 31 refusals.
 
-**Tests:** 224 → 246, twenty-four in and two retired. The first thirteen were
+**Last: `struct`, which completes step one.** `struct point { int x; int y; };`
+at file scope, then `p.x`, `q->y`, arrays of structs, structs inside structs,
+member arrays, `sizeof(struct point)`, and a struct holding a pointer to its
+own kind, so a linked list compiles and walks. Members are laid out as `cc`
+lays them out, each at the next offset its alignment allows and the whole
+rounded to its widest member, so `sizeof` agrees for every struct the oracle
+tried. A step through a pointer to a struct counts in structs of any size.
+**A struct is never copied whole here**: assigning one, initialising one from
+another and passing one to a function are refused, and a pointer to one is
+the way to hand it around. A struct defined inside a function, one with no
+tag, one with no members and a pointer to one nobody defined are refused too;
+`cc` compiles all four. Twenty more oracle programs, 143 in all, and 49
+refusals. **Nothing in Phoenix itself changed through the whole subset**,
+which is what the C arc predicted when it began.
+
+**Tests:** 224 → 264, forty-two in and two retired. The first thirteen were
 all but one a refusal: the address of
 something that is not a place and an assignment to one, both from the grammar;
 a `*` on an `int` and on a name nothing declared; a `-` and a `*` on a
@@ -146,7 +161,10 @@ in: two pointers added, a pointer taken from a number, a subscript on an
 `int`, and two pointers to different types subtracted. And a second pin
 beside the first, on the size of a pointer difference, and a refusal of a
 `char *` less an `int *`, three of character constants outside the
-subset, and two of string literals.
+subset, and two of string literals. Then eighteen for `struct`: two from the
+grammar, seven about a definition, four about a member asked of the wrong
+thing, one about pointers to two different structs, and four about copying
+a struct whole.
 
 ---
 

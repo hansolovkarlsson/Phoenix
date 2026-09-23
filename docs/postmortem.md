@@ -916,6 +916,10 @@ borrows, and not a change to the tool; but it is the first construct whose
 meaning the description could not state in full, and a C compiler that
 someday has to write its own bytes will meet it again.
 
+*Scored the same evening:* `struct` arrived without a change either, and
+[§ 19](#19-prediction-one-held-and-the-node-went-somewhere-else) closes the
+prediction.
+
 Two, that the typedef predicate is the first change wanted: still neither
 confirmed nor threatened. The tool has spoken three times since, all at read
 time: twice about an attribute name defined by two passes in one driver, and
@@ -1011,3 +1015,67 @@ witness whose answer can exceed eight bits divides it before returning.
 Where a step is unobservable in truth, the reason is written at the
 instruction, so that the day it becomes observable the comment says which
 program will catch it.
+
+---
+
+## 19. Prediction one held, and the node went somewhere else
+
+[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+predicted on 2026-09-21 that the C subset would reach `struct` with **no
+change to the tool**: `%import`, the symbol pass, `thread` for frame offsets
+and one emit pass would be enough. `struct` went in on 2026-09-22 and
+`git diff e3c093d^ -- phoenix/`, the whole C arc, is empty. **Held**, at
+eleven constructs of eleven.
+
+It held more narrowly than the count suggests, and the ways it nearly did
+not are the useful half.
+
+*Member offsets were a thread, as frame offsets were.* The prediction named
+`thread` for the frame, and the same mechanism laid out a struct: three
+threads reset by the definition, the offset so far, the widest alignment and
+the members, with padding worked out as `((off + a - 1) div a) * a`. Nothing
+new. What the notation lacks, a fold over data, was not needed, because the
+members are nodes and a walk visits them.
+
+*The standup's expectation about where a type becomes a node was wrong in
+place.* It said, and the grammar's own comment said, that `struct` is where a
+type stops fitting in numbers and becomes a node. The expression side stayed
+numbers: stars, width and a tag, three where there had been two, because a
+member's type is looked up by the tag rather than carried. The node went to
+the **base** of a declaration, where five copies of a table keyed on the
+keyword became one `Base` node that looks up `int`, `char` and a tag in one
+table of layouts. That is the second time in a day that a comment predicting
+*this construct will need a node* was one step off (`char` was the first).
+
+> A prediction about what shape a data structure will need is worth writing
+> at the construct, not ahead of it. Twice today the shape was right and the
+> place was wrong, and the place is only visible from inside the change.
+
+*The tool spoke once, and was right.* A later pass cannot read a `thread`,
+so the `types` pass could not see the table of layouts. The fix was the
+description's: `locals` keeps the table at each `Member` node as an ordinary
+attribute. The first try gave that attribute the thread's own name, which
+updates the thread rather than keeping a value at the node, and the types
+pass still could not see it. Renamed, it worked. Both are the notation doing
+what [the manual](manual.md#three-kinds-of-attribute) says.
+
+*One instruction changed shape, and that is the emit pass's business rather
+than the tool's.* A step through a pointer was a shift, because every width
+was 1, 4 or 8, and a struct of three `int`s is twelve. The step became
+`smaddl`, a sign-extending multiply-add, and the pointer difference an `sdiv`.
+That also gave the division its first witness: `udiv` differs from `sdiv`
+in the bits an `int` keeps only when the divisor is not a power of two, so
+the breakage that came back green under
+[§ 18](#18-what-a-silent-breakage-means) is caught now.
+
+*The breakages, fifteen, with the harness asserting that each applied.*
+Thirteen went red. The two that stayed green were the load a struct's value
+leaves out, at a name and at a `*`. Per § 18 the observer was checked first:
+under both breakages the assembly for all 143 programs was **byte for byte
+the same**, so nothing asked. The only thing that can ask a struct for its
+value is a statement that discards it, and that is written at the
+instruction.
+
+Prediction two, the typedef predicate as the first change wanted, is now the
+next thing the arc tests, and nothing between here and `typedef` stands in
+the way.

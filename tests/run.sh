@@ -1561,11 +1561,14 @@ refuses "a ninth parameter, which is outside the subset" "only eight are compile
 # constraint at no cost. The rest are the `types` pass, which knows how many
 # stars a value has and nothing else about its type.
 #
-# The message for `&1` names `[`, and has moved twice. A subscript is the one
-# way a number becomes a place, `&1[a]` being `&(1[a])`, so the refusal is
-# only certain at the token after the `1`. `address-of-a-subscripted-number`
-# in the oracle is the program that makes the message true.
-refuses "the address of something that is not a place" 'expected [, and found ";"' \
+# The message for `&1` names what may follow the `1`, and has moved three
+# times. A subscript was the first way a number becomes the start of a place,
+# `&1[a]` being `&(1[a])`, and a member is the second, since `struct`: `&1.x`
+# is a place the `types` pass refuses rather than the grammar. So the refusal
+# is only certain at the token after the `1`, and names all three.
+# `address-of-a-subscripted-number` in the oracle is the program that makes
+# the message true.
+refuses "the address of something that is not a place" 'expected [, . or ->, and found ";"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
 refuses "and an assignment to one" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
@@ -1631,6 +1634,61 @@ refuses "an assignment to an array" "an array is not something a value can be pu
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-an-array.c"
 refuses "an array of no elements" "C11 6.7.6.2 forbids" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-no-elements.c"
+# `struct`. A tag is defined once, at file scope, with at least one member,
+# none of them twice and none of them the struct itself; `cc` refuses all of
+# those but the empty struct, which it takes as an extension with a size of
+# 0, and which is refused here as `int a[0]` is. A pointer to a struct nobody
+# defined is C, and `cc` compiles it; it is refused here as outside the
+# subset, because the only program that wanted one was a list, and a list
+# names its own struct.
+#
+# Two more are the grammar's, and both are C `cc` compiles: a struct defined
+# inside a function, and one with no tag. A tag is written after `struct`
+# every time here, and a definition is an item at file scope, so each is a
+# syntax error at its `{`.
+refuses "a struct defined inside a function" 'expected * or name, and found "{"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-in-a-function.c"
+refuses "and a struct with no tag" 'expected name, and found "{"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-with-no-tag.c"
+refuses "a struct nobody defined" "'struct nope' is not defined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-undefined.c"
+refuses "and a pointer to one" "'struct nope' is not defined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-pointer-to-undefined.c"
+refuses "a struct defined twice" "'struct t' is defined twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-twice.c"
+refuses "a member declared twice" "'a' is a member twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-twice.c"
+refuses "a struct with no members" "C11 6.7.2.1 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-no-members.c"
+refuses "a member array of no elements" "C11 6.7.6.2 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-array-of-no-elements.c"
+refuses "a struct that contains itself" "cannot be a member of itself" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-contains-itself.c"
+# A member asked of the wrong thing. `->` is built as `(*p).x`, so a `->` on
+# a struct is refused by the `*`, and on a pointer to a pointer by the `.`.
+refuses "a member the struct does not have" "'struct t' has no member 'b'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-no-such-member.c"
+refuses "a member of an int" "'a' is asked for as a member of something that is not a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/member-of-an-int.c"
+refuses "a '->' on a struct" "'*' wants a pointer, and this is a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/arrow-on-a-struct.c"
+refuses "and on a pointer to a pointer" "is asked for as a member of something that is not a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/arrow-on-a-pointer-to-a-pointer.c"
+refuses "a difference of pointers to two structs" "only when they point at the same type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-pointers-to-unlike-structs.c"
+# **A struct is never copied whole.** C assigns, passes and initialises one
+# by copying its bytes, which is not a store of a register, and each of these
+# is refused where it would otherwise have compiled into a copy of an
+# address. `cc` compiles three of the four; a struct handed to an `int`
+# parameter it refuses too.
+refuses "a struct assigned whole" "'struct t' is assigned whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-assigned-whole.c"
+refuses "a struct initialised from another" "initialised from another" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-initialised-from-another.c"
+refuses "a struct parameter" "'s' is a struct passed whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter.c"
+refuses "and a struct argument" "'struct t' is passed whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-argument.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

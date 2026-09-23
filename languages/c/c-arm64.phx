@@ -139,30 +139,64 @@
    * `[x29, #-offset]` is its first byte. `x29` is the frame pointer and the
    * saved pair sits at it, so the frame extends downward.
    *
-   * A `Variable` and a `Deref` each answer **two** attributes, because each
-   * is two things depending on who is asking: `out` is the value, which is
-   * what an expression wants, and `addr` is where that value lives, which is
-   * what an assignment and `&` want. Nothing else in the tree has an `addr`,
-   * and nothing else can reach a position that asks for one -- the `place`
-   * rule in `c.phx` sees to that, which is why no pass has to check it. *)
-  (* **An array is its own address.** A name that is an array decays to a
-   * pointer to its first element, and the address is what it already had, so
-   * the load a scalar needs is the thing an array does not do. `$count` picks
-   * between them, and the array's `load` is built and never used, which costs
-   * a string. The register for a scalar comes from its `size` rather than its
-   * stars, because `size` is now the thing that knows. *)
+   * A `Variable`, a `Deref` and a `Member` each answer **two** attributes,
+   * because each is two things depending on who is asking: `out` is the
+   * value, which is what an expression wants, and `addr` is where that value
+   * lives, which is what an assignment, `&` and a member want. Nothing else
+   * in the tree has an `addr`, and nothing else can reach a position that
+   * asks for one. For an assignment and `&` the `place` rule in `c.phx` sees
+   * to that. For a member it is the `types` pass: a member is asked of a
+   * struct, and only these three can have a struct's type, since nothing
+   * that computes a value gives it a tag without stars. *)
+  (* **An array is its own address, and so is a struct.** A name that is an
+   * array decays to a pointer to its first element, and the address is what
+   * it already had, so the load a scalar needs is the thing an array does not
+   * do. A struct is not loaded either, because no register holds one: what
+   * is done with a struct is to find a member of it, or its address, and
+   * both start from where it is. The `types` pass says which a name is, as
+   * `aggregate`, and the unused `load` costs a string.
+   *
+   * *For a struct this has no witness, and cannot have one.* A member and
+   * `&` ask for `addr`, so the only thing that asks a struct for its `out` is
+   * a statement that throws it away, `s;` or `*p;`. Leaving the load in was
+   * tried, here and at `Deref`, and changed no byte of any program in the
+   * oracle. It is kept because a load of eight bytes from a struct of two is
+   * a read past the object, which a program cannot see and should not do.
+   * An array's decay is the half that is observed. The register for a
+   * scalar comes from its `size` rather than its stars, because `size` is
+   * the thing that knows. *)
   Variable  : load = "\t{}, [x29, #-{}]\n"
                   of lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0"), $offset
             : addr = "\tsub x0, x29, #{}\n" of $offset
-            : out  = lookup([[0, $load]], $count, $addr) .
+            : out  = lookup([[true, $addr]], $aggregate, $load) .
 
   (* A dereference is a load from what the value came out as, and its address
    * is that value before the load, so `&*p` emits exactly what `p` emits and
    * the identity C11 6.5.3.2 states falls out of the pair rather than being
    * written anywhere. *)
-  Deref     : out  = "{}\t{}, [x0]\n"
-                  of $value.out, lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")
+  (* A dereference of a pointer to a struct is the struct, and so is its own
+   * address like any other: `p->x` is `(*p).x`, and the `*` there is where
+   * `p` points, with nothing loaded. *)
+  Deref     : out  = lookup([[true, $value.out]], $aggregate,
+                            "{}\t{}, [x0]\n"
+                              of $value.out,
+                                 lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0"))
             : addr = $value.out .
+
+  (* **A member is its struct's address plus its offset**, and then a load
+   * like any other scalar's, or no load when it is an array or a struct in
+   * its own right. The struct's address is its `addr`, which every node that
+   * can have a struct's type answers: a name, a `*` and another member.
+   * `s.a.b` is therefore two `add`s, and `p->next->v` a load between them,
+   * which is what the tree says it is and nobody had to arrange.
+   *
+   * The offset is an immediate, which `add` takes up to 4095. A member
+   * further in than that would not assemble, and no program here has one. *)
+  Member    : addr = "{}\tadd x0, x0, #{}\n" of $value.addr, at($entry, 1)
+            : out  = lookup([[true, $addr]], $aggregate,
+                            "{}\t{}, [x0]\n"
+                              of $addr,
+                                 lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")) .
 
   (* `&` is the address and nothing more. *)
   Addr      : out  = $place.addr .
@@ -237,11 +271,11 @@
    * the wrong arity are refused inside a `sizeof` exactly as outside one,
    * which is also C.
    *
-   * The size itself is the same table the register letter comes from, read
-   * for the other column: no stars is an `int` and four bytes, a star is a
-   * pointer and eight. *)
+   * The size of a type is its base's width with no stars, which the `locals`
+   * pass read off the layouts for an `int`, a `char` and a struct alike, and
+   * eight with any. *)
   SizeOfType : out = "\tldr w0, ={}\n"
-                   of lookup([[0, lookup([["char", 1]], $base, 4)]], $stars, 8) .
+                   of lookup([[0, $base.basew]], $stars, 8) .
   SizeOfExpr : out = "\tldr w0, ={}\n" of $value.size .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5
@@ -282,49 +316,63 @@
    * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
    * and 0 on this processor, and no program in the oracle asks.
    *
-   * **A pointer and an int is one instruction.** After the pop the left
-   * operand is in `x0` and the right in `x1`, and the `types` pass has said
-   * which of them is the pointer: `add x0, x{p}, w{i}, sxtw #s` takes the
-   * int's thirty-two bits, **sign-extends** them to sixty-four, shifts them
-   * left by the element's width and adds. All three steps are needed. The
-   * sign extension is where a 32-bit index meets a 64-bit pointer: an `int`
-   * sits in its register zero-extended, so `p[-1]` without it lands four
-   * gigabytes past `p` rather than four bytes before. The shift is C11 6.5.6
-   * counting in elements: 0 for a one-byte `char`, 2 for a four-byte `int`,
-   * 3 for an eight-byte pointer, read off the result's type, which has the
-   * one star the element does not. `-` takes the pointer on the left only,
-   * which is all C allows, so the same template serves.
+   * **A pointer and an int is a multiply and an add.** After the pop the
+   * left operand is in `x0` and the right in `x1`, and the `types` pass has
+   * said which of them is the pointer. `smaddl x0, w{i}, w2, x{p}` takes the
+   * int's thirty-two bits and the element's width, **sign-extends** both to
+   * sixty-four, multiplies them and adds the pointer, and `smsubl` is the
+   * same with a subtraction. The sign extension is where a 32-bit index
+   * meets a 64-bit pointer: an `int` sits in its register zero-extended, so
+   * `p[-1]` without it lands gigabytes past `p` rather than one element
+   * before. The multiply is C11 6.5.6 counting in elements, and the
+   * width is read off the result's type, which has the one star the element
+   * does not. `-` takes the pointer on the left only, which is all C
+   * allows, so the same template serves.
+   *
+   * *It was one instruction until `struct`*: `add x0, x{p}, w{i}, sxtw #s`,
+   * which sign-extends, shifts and adds, and a shift is a multiply by 1, 4
+   * or 8, which were the only widths an element had. A struct's width is
+   * whatever its members make it, twelve for three `int`s, and no shift
+   * multiplies by twelve. One template for every width was kept over a
+   * shift for three of them and a multiply for the rest, because two
+   * templates are a choice this pass would have to make correctly forever,
+   * and the multiply is right for all of them.
    *
    * **Two pointers is the other way round**: subtract the addresses, then
-   * shift right by the element's width. The answer is an `int`, so the last
-   * instruction writes `w0` to itself, which is what puts the header's
-   * promise back: `x0` holds the zero-extended `w0`. The two sides have the
-   * same width, because the `types` pass refuses two pointers that differ, so
-   * the shift reads the left one.
+   * divide by the element's width, which was a shift for the same reason
+   * and is an `sdiv` for the same reason. The division is exact, because two
+   * pointers into one array are a whole number of elements apart, so `sdiv`
+   * truncating toward zero never rounds anything. The answer is an `int`, so
+   * the last instruction writes `w0` to itself, which is what puts the
+   * header's promise back: `x0` holds the zero-extended `w0`. The two sides
+   * have the same width, because the `types` pass refuses two pointers that
+   * differ, so the divisor is read off the left one.
    *
-   * *Two of these three instructions have no witness, and cannot yet.* Each
-   * was left out on purpose and the oracle stayed green. The `mov` restores
-   * the upper half nothing here reads. The shift is `asr` because a
-   * difference can be negative, but `lsr` differs from it only in the top two
-   * or three of sixty-four bits, and an `int` keeps the bottom thirty-two, so
-   * no program can tell them apart while the difference is an `int`. Both are
-   * written for what they will be when `ptrdiff_t` arrives with `typedef` and
-   * the answer is the whole of `x0`: the `asr` becomes the one that matters,
-   * and the `mov` becomes the one to delete. `pointer-difference-negative.c`
-   * is the program that will catch an `lsr` then.
+   * *The `mov` has no witness, and cannot yet*: it restores the upper half
+   * nothing here reads, and is written for the day `ptrdiff_t` arrives with
+   * `typedef` and the answer is the whole of `x0`, when it becomes the one
+   * to delete.
+   *
+   * *The division gained one with `struct`.* It is **signed** because a
+   * difference can be negative. While every width was a power of two, `asr`
+   * and `lsr` differed only in bits an `int` does not keep, and that
+   * breakage came back green. A width of twelve is not a power of two, and
+   * `udiv` of -24 by 12 leaves `0x55555553` in the low half where `sdiv`
+   * leaves -2. `struct-pointer-difference-negative.c` is the program that
+   * sees it.
    *
    * Which of the three a node is, the `types` pass has already said: a
    * pointer on each side is a difference, a pointer answer is a step, and
    * anything else is two `int`s. *)
   Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
          : plain      = "\t{} w0, w0, w1\n" of $mnemonic
-         : scaled     = "\t{} x0, x{}, w{}, sxtw #{}\n"
-                          of $mnemonic,
-                             lookup([[0, 1]], $left.type, 0),
+         : scaled     = "\tldr w2, ={}\n\tsm{}l x0, w{}, w2, x{}\n"
+                          of lookup([[1, $width]], $type, 8),
+                             $mnemonic,
                              lookup([[0, 0]], $left.type, 1),
-                             lookup([[1, 0], [4, 2]], lookup([[1, $width]], $type, 8), 3)
-         : difference = "\tsub x0, x0, x1\n\tasr x0, x0, #{}\n\tmov w0, w0\n"
-                          of lookup([[1, 0], [4, 2]], lookup([[1, $left.width]], $left.type, 8), 3)
+                             lookup([[0, 1]], $left.type, 0)
+         : difference = "\tsub x0, x0, x1\n\tldr x1, ={}\n\tsdiv x0, x0, x1\n\tmov w0, w0\n"
+                          of lookup([[1, $left.width]], $left.type, 8)
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x0, [sp], #16\n{}"
              of $left.out, $right.out,
                 lookup([[true, $difference]], $left.type > 0 and $right.type > 0,
@@ -364,6 +412,7 @@
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .
+  StructDef : out = "" .
   Program   : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
 
 %driver arm64 = functions, locals, types, emit-arm64 -> out .

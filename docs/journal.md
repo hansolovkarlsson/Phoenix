@@ -5279,3 +5279,110 @@ rewrote an escape on the way to a file, and a `tail` that cut a `phx`
 warning off the output. [Postmortem 18](postmortem.md#18-what-a-silent-breakage-means)
 scores the belief behind the habit and what a silent breakage turns out to
 mean.
+
+## 2026-09-22: `struct`, and a type that stayed numbers
+
+The last construct of step one. `struct point { int x; int y; };` at file
+scope, `s.x` and `p->x` as places and as values, arrays of structs, structs in
+structs, member arrays, `sizeof(struct point)`, and `struct node *next`
+inside `struct node`, so a list can be built and walked. Twenty oracle
+programs, every one agreeing with `cc` on its first run, and eighteen
+refusals. Nothing in `phoenix/` was touched, which closes prediction one;
+[postmortem 19](postmortem.md#19-prediction-one-held-and-the-node-went-somewhere-else)
+scores it.
+
+**The node went to the base, not to the type.** The standup and the grammar
+both said a type would become a node here. It did not need to. An
+expression's type stayed numbers, with a third one added: the tag of the
+struct at the bottom of the stars, "" for none. A member's type is found by
+looking the tag up, so the expression never has to carry a member's type,
+only which struct it is in. What did become a node is the **base** of a
+declaration. `int` and `char` had been a keyword that five declarations each
+turned into a width with their own copy of a table; a struct's width is
+defined by the program, so the question moved to a `Base` node that asks one
+table of layouts. That table starts with `int` and `char` in it, as two
+structs with no members, so the keyword and the tag are the same question.
+
+**Member offsets are a thread, like frame offsets.** Three threads reset by
+the definition: the members so far, the next free offset, and the widest
+alignment seen. Each member is placed at `((off + a - 1) div a) * a` and the
+struct is rounded to its widest alignment, which is C11 6.7.2.1 with the ABI
+supplying the numbers. The frame keeps its multiple-of-eight rule, because
+the distance between two separate locals is invisible, and the members cannot
+use it, because the distance between two members of one struct is visible
+through `sizeof` and through `&`.
+
+*A struct points at itself through an inherited attribute, not a
+placeholder.* The first plan bound the tag on the way in, the way a function
+binds itself so its body can call it. But then the check for a second
+definition, which runs on the way out, would always see the placeholder. So
+`StructDef` hands down `defining`, and `Base` does not refuse an undefined tag
+when it is the one being defined. It answers a width of 0, which no complete
+type has, and a member of that type with no stars is refused as incomplete.
+A pointer needs no width, so `struct node *next` goes through.
+
+*A later pass cannot read a thread.* The `types` pass works out which struct
+an expression is, and needs the layouts to find a member, but the layouts are
+a `locals` thread. `locals` keeps the table at each `Member` as an ordinary
+attribute. The first attempt named that attribute `layouts`, after the
+thread, and it was still invisible: a clause named after a thread updates the
+thread. Renamed `known`, it worked. The tool said the same thing both times,
+with the line.
+
+**`->` builds `(*p).x`**, as a subscript builds `*((a)+(i))`, so there is one
+`Member` node and it is always asked of a struct. A `->` on a struct is then
+refused by the `*`, in its own words, which now names the struct: *'\*' wants
+a pointer, and this is a struct*. A member is a node, where a subscript is
+not, because it carries a name that only a layout can turn into an offset.
+The grammar's `indexed` and `subscript` became `suffixed` and `suffix`, one
+repetition for all three suffixes, since C mixes them freely.
+
+**A struct is never copied whole, and that is refused rather than built.** C
+assigns, initialises and passes a struct by copying its bytes. The stack
+machine holds a struct as its address, so without the refusal `u = s` would
+store `s`'s address into `u`'s first eight bytes. A copy is a loop, or a call
+to `memcpy`, and it is its own step, as it is in chibicc. So `Assign`,
+`LocalInit`, `Param` and `Arg` refuse a struct. The `Arg` one guards programs
+`cc` refuses anyway, since no parameter here can be a struct; it is kept
+because the alternative is a silent address where a value was meant, and
+this pass exists to refuse exactly that.
+
+**A pointer step became a multiply.** It had been `add x0, x{p}, w{i}, sxtw
+#s`, a shift by 0, 2 or 3, because every element was 1, 4 or 8 bytes. A
+struct of three `int`s is twelve. `smaddl x0, w{i}, w2, x{p}` sign-extends,
+multiplies by the width in `w2` and adds, and `smsubl` subtracts, and one
+template for every width was kept over a shift for three widths and a
+multiply for the rest. The pointer difference went from `asr` to `sdiv` for
+the same reason. *The first comment written for it was wrong*: it said `udiv`
+for `sdiv` was unobservable, carrying over what had been true of `lsr` for
+`asr`. Worked through before committing, `udiv` of -24 by 12 leaves
+`0x55555553` in the low half where `sdiv` leaves -2, so the division has a
+witness now, `struct-pointer-difference-negative.c`, and the breakage below
+confirmed it.
+
+*The oracle programs print, and the first `print` helper printed a space
+after every digit*, so 16 came out as `1 6` on both routes. It agreed with
+`cc`, which is exactly why it was not caught by the oracle. It was caught by
+reading the output before trusting a clean sweep. Rewritten as `digits` and
+`print`.
+
+*Fifteen breakages, each asserted to have applied*: offsets ignored,
+alignment ignored, the struct not rounded, the alignment never growing, a
+pointer member aligned as its base, a struct local given eight bytes, the
+step and the difference unsigned, the step at a pointer's width, a member's
+width, stars and array decay, `sizeof(struct)` as an `int`. Thirteen went
+red. The two green were the load a struct value leaves out, at a name and at
+a `*`. Following postmortem 18, the observer was checked first: with both
+breakages in, the assembly for all 143 programs was identical, so no program
+asks. Only a discarded `s;` or `*p;` can, and the comment at the instruction
+says so.
+
+*The types pass header's "every value here is eight bytes", false since the
+morning, was corrected with this step.* The `&1` refusal's message moved a
+third time, now `expected [, . or ->`, because a member is the second way a
+number can start a place; `&1.x` is refused by the `types` pass.
+
+*Twenty oracle programs, 143 in all; eighteen refusals, 49.* 246 checks to
+264. Step one of ROADMAP 6 is complete, with the copy of a struct the thing
+a C program is most likely to want next, and `typedef` the construct the
+arc was built to reach.

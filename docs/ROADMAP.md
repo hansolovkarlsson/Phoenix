@@ -635,8 +635,9 @@ is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-mo
 last; ninety-nine programs against `cc`, twenty-five refused and two
 divergences pinned)*; **`char` and string
 literals** *(done 2026-09-22; 123 programs against `cc`, and the oracle
-compares what they print as well as how they exit)*; **`struct`, which is
-next**. It stops before `typedef`
+compares what they print as well as how they exit)*; **`struct`** *(done
+2026-09-22, which completes the list; 143 programs against `cc`, 49
+refused)*. It stops before `typedef`
 on purpose — that is where the tool needs a change, and the change should
 arrive with the construct that wants it and not before.
 
@@ -694,6 +695,21 @@ shows it, 8 against 4. **Both are to be revisited when `typedef` arrives**,
 together: `size_t` and `ptrdiff_t` are the two typedefs this subset already
 owes an answer to.
 
+*`struct` closed the list, the same day.* Tagged, at file scope, with `.`
+and `->`, arrays of structs, structs in structs, and a pointer from a struct
+to its own kind, which is what a list is made of. Members are laid out by a
+thread in the `locals` pass, each at the next offset its alignment allows,
+and the struct rounded to its widest member, so `cc`'s `sizeof` is this
+subset's. A declaration's base became the node the standup expected a type to
+become: `int`, `char` and a tag are all looked up in one table of layouts. A
+type stayed numbers, three of them now, the tag being the third.
+
+What is **not** here, and each is a refusal or a syntax error rather than a
+wrong answer: a struct copied whole, by `=`, by an initialiser or as an
+argument, because a copy is a loop and not a store; a struct defined in a
+function, or with no tag; and a pointer to a struct nobody defines. The copy
+is the one a C program is most likely to want next.
+
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
 once through Phoenix's output through `cc` — and their standard output and
@@ -722,7 +738,9 @@ something the tree does not say. Each of these can be wrong in a way the
 journal would record.
 
 *The condition for the next step* is the first: a subset through `struct`
-whose oracle tests pass. Steps two to seven live in the workspace document and
+whose oracle tests pass. **Met on 2026-09-22**, and with prediction one
+holding: [postmortem 19](postmortem.md#19-prediction-one-held-and-the-node-went-somewhere-else)
+scores it. Steps two to seven live in the workspace document and
 are not repeated here; the one that comes back to this page is the predicate,
 which will be an entry under section 1 with the failure written down first, as
 this page requires.
