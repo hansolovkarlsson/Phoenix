@@ -75,6 +75,16 @@ pointer is refused by name, although `cc` compiles both, and so is a `main`
 that returns a struct, which `cc` only warns about. Ten more oracle
 programs, 185 in all, and 82 refusals.
 
+**The C subset has `long`**: signed, eight bytes, as a variable, a
+parameter, a member, a return type and behind a typedef. `int` and `long`
+mix as C says, the `int` converted first, so -1 stays -1 when it is widened.
+A decimal constant too big for an `int` is a `long`. `sizeof` and the
+difference of two pointers are `long`s now, as they are under `cc`, so the
+two programs that gave 4 where `cc` gives 8 agree, and nothing in the C
+subset diverges. A `long` passes to and from `cc`'s code in either
+direction. Not yet: `unsigned`, and a suffix such as `1L`. Nine more oracle
+programs and the two former divergences, 196 in all, and 85 refusals.
+
 **The notation changed again: a driver can run a pass until something
 settles.**
 
@@ -100,7 +110,7 @@ Every description in this repository reads as it did.
 **Phoenix has a license**: MIT, in [`LICENSE`](../LICENSE). There was none
 before.
 
-**Tests:** 264 → 316. Eight for `%names`, on a small grammar made to have
+**Tests:** 264 → 317. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
 itself. Nine for `typedef`: four refusals of what C refuses too, three of
@@ -114,7 +124,8 @@ subset adds. Then three for a bare name: the two ways of getting one wrong,
 and a grammar holding every kind that is right, so the check stays as
 generous as the lookup it guards. Then seven for `until`: four refusals,
 the program that needs a fourth walk and what one walk made of it, and a
-compiler written out with `-o` running the loop.
+compiler written out with `-o` running the loop. Then three refusals for
+`long`, less the two checks that pinned the divergences it closed.
 
 ---
 
@@ -342,7 +353,7 @@ error to this `cc` by default, so the oracle downgrades that one warning by
 name rather than lose the witness. Nothing in the directory has a
 hand-written expected result, which is the rule ROADMAP 6 set for the arc.
 
-**On the roadmap.** [6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+**On the roadmap.** [6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
 was written on 2026-09-06 and this is its first step taken; the entry itself is
 unchanged but for a marker at the construct that exists. Its three predictions
 are not yet scoreable: the first is about reaching `struct` with no change to

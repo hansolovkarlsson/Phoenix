@@ -11,3 +11,9 @@ struct p3 mkp3(int k) { struct p3 p; p.x = k; p.y = k * 2; p.z = k * 3; return p
 struct p4 mkp4(int k) { struct p4 p; p.w = k; p.x = k + 1; p.y = k + 2; p.z = k + 3; return p; }
 struct big base(int k) { struct big b; int i; for (i = 0; i < 6; i = i + 1) b.v[i] = k * (i + 1); b.t = 'a'; return b; }
 struct big mkbig(int k) { struct big b = base(k); struct big c = base(k + 1); b.t = c.t + k; return b; }
+struct pl { long a; int b; };
+long lmul(long a, int b) { return a * b; }
+int lnarrow(long x) { return x; }
+long lwiden(int x) { return x; }
+struct pl mkpl(long a, int b) { struct pl p; p.a = a; p.b = b; return p; }
+long sumpl(struct pl p) { return p.a + p.b; }

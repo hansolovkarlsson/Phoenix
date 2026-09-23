@@ -940,7 +940,7 @@ carried it forward unchanged under **held on purpose**.
 **Both halves were wrong, and differently.**
 
 *The place was wrong by two constructs.* `sizeof` comes before `char` in
-[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)'s
+[ROADMAP 6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)'s
 own list, and `sizeof(int)` is 4 under this `cc` where the description would
 answer 8. Finding it cost one command, aimed at the construct *after* the one
 being written rather than at the one in hand.
@@ -1020,7 +1020,7 @@ program will catch it.
 
 ## 19. Prediction one held, and the node went somewhere else
 
-[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+[ROADMAP 6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
 predicted on 2026-09-21 that the C subset would reach `struct` with **no
 change to the tool**: `%import`, the symbol pass, `thread` for frame offsets
 and one emit pass would be enough. `struct` went in on 2026-09-22 and

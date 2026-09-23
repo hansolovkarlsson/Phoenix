@@ -41,7 +41,7 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
 | [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
 | [`z80/`](../languages/z80/) | 396 lines, 19 node types | a Z80 subset, an assembler making raw bytes, and a listing backend. **The customer [2.5](#25-circular-attributes--from-jastadd) was waiting for**: `br` picks between a two-byte relative jump and a three-byte absolute one, which is a size that depends on a distance that depends on sizes. `layout` assumes every forward `br` long, and `relax`, the first walk **written out a second time**, decides both directions against the last walk's table; the driver runs it `until labels` settles, since 2026-09-23, so [`two-rounds.z80`](../languages/z80/tests/oracle/two-rounds.z80) reaches its minimum on the third walk and [`three-rounds.z80`](../languages/z80/tests/oracle/three-rounds.z80) on the fourth. Until then it ran once and the first missed by a byte. 10 programs agree with `z80asm` byte for byte, six through the listing, because `z80asm` has no `br` |
-| [`c/`](../languages/c/) | 1,762 lines, 35 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is copied whole since 2026-09-23, by `=`, by an initialiser and as an argument under AAPCS64, which `tests/abi/` holds against `cc`'s own code by linking each compiler's caller to the other's callee; a copy between two kinds of struct is refused, and so is a struct wherever C wants a number. A struct is returned whole the same day, in `x0` and `x1` or through the caller's `x8`, and `tests/abi/` holds that against `cc` in both directions too. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 185 programs exit with what `cc` makes them exit with, 82 are refused with a position, two are written-down divergences with both their answers pinned, and nothing in the directory has a hand-written expected result |
+| [`c/`](../languages/c/) | 1,855 lines, 35 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler), which is [complete](#61-step-one--a-subset-that-runs-and-cc-as-its-oracle): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is copied whole since 2026-09-23, by `=`, by an initialiser and as an argument under AAPCS64, which `tests/abi/` holds against `cc`'s own code by linking each compiler's caller to the other's callee; a copy between two kinds of struct is refused, and so is a struct wherever C wants a number. A struct is returned whole the same day, in `x0` and `x1` or through the caller's `x8`, and `tests/abi/` holds that against `cc` in both directions too. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. **Then signed `long`**, eight bytes, with the usual arithmetic conversions sign-extending an `int` wherever it meets one, and `sizeof` and a pointer difference `long`s as C has them. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 196 programs exit with what `cc` makes them exit with, 85 are refused with a position, none diverges, and nothing in the directory has a hand-written expected result |
 | [`phx/`](../languages/phx/) | 274 lines | the notation described in itself. It parses itself and every other description here |
 
 **Nine directories, eight rows.** [`languages/units/`](../languages/units/) —
@@ -341,6 +341,207 @@ in its comment and simulated before it was run. `languages/units/`'s two
 divergences, a three-unit cycle and initialisation order, are the other
 customer the entry named and are **not** converted: `fpc` already refuses
 the first, and nobody has asked for either.
+
+### 6.1 Step one — a subset that runs, and `cc` as its oracle
+
+`languages/c/`, in the shape [`languages/README.md`](../languages/README.md)
+prescribes: `c.phx` holds the grammar, the tree and the symbols and has no
+opinion about a target; `c-arm64.phx` imports it and adds one emit pass. The
+target is **arm64 assembly text**, assembled and linked by `cc`, because that
+is the machine under this repository and because borrowing the assembler and
+linker is what every C compiler except tcc does.
+
+**The emit pass is a stack machine.** Every expression leaves its value in
+`x0`, every operand is pushed and popped, every local lives in the frame at an
+offset the symbol pass assigned, and there is no register allocator. That is
+chibicc's and tcc's shape, it is what `examples/asm.mx` in Metaxis sketched for
+a smaller subset, and it is the route the workspace document names first. The
+output is slow and correct, and slow is not a divergence.
+
+**The subset grows in chibicc's order**, one construct at a time with the
+suite green at each: `int main(){return 42;}`; then `+ - * /` and
+parentheses; unary minus and comparison; a local `int`; `;`-separated
+statements and `return`; `if`, `while`, `for`; blocks; a function with
+parameters and a call under the arm64 calling convention *(prediction three
+is scored in [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given))*;
+`&` and `*`; arrays and
+`sizeof` *(done 2026-09-22, indexing and the difference of two pointers
+last; ninety-nine programs against `cc`, twenty-five refused and two
+divergences pinned)*; **`char` and string
+literals** *(done 2026-09-22; 123 programs against `cc`, and the oracle
+compares what they print as well as how they exit)*; **`struct`** *(done
+2026-09-22, which completes the list; 143 programs against `cc`, 49
+refused)*. It stopped before `typedef`
+on purpose, because that was where the tool was expected to need a change,
+and the change was to arrive with the construct that wanted it and not
+before. *It did, on 2026-09-23*: see step two below.
+
+**The width, decided 2026-09-22: `sizeof(int)` is 4, and `int` narrows to
+thirty-two bits.** Until that day the value was sixty-four bits wide in a
+register C calls a 32-bit `int`, left open on 2026-09-21 with the note that
+the oracle would settle it at `char`. It was settled two constructs earlier
+and by a program that had been available since the second construct:
+`int a = 2000000000; int b = a + a; return b / 1000000;` exits 218 under `cc`,
+which wraps at thirty-two bits, and 160 here, which does not. A 64-bit `int`
+would have been a **conforming** implementation, the standard asking only for
+sixteen bits, so this was a choice and not a defect; what it would have cost
+is `cc` as the oracle for everything size-shaped, which is `sizeof`, `struct`
+offsets and array layout, or in other words the rest of the arc.
+[postmortem 17](postmortem.md#17-left-to-the-oracle-is-not-a-decision-until-somebody-writes-the-program)
+scores the expectation and the journal has the reasoning.
+
+*Built the same day.* The emit pass picks `w` or `x` from the star count the
+`types` pass already had, which came to nine clauses and a table with one row
+in it. On this machine `w0` is the low half of `x0` and every write to a `w`
+register zeroes the upper half, so the stack machine, the calling convention
+and the frame were all unchanged; a scalar keeps its eight-byte slot and is
+stored into it with `str w0`. `tests/oracle/overflow.c` went from 160 to 218,
+and two programs were added that a **half-finished** narrowing fails, which
+was checked by half-finishing it on purpose.
+
+*`sizeof` came next, the same day, and wanted nothing.* A star count already
+says how many bytes a value takes while `int` is the only base type, so the
+two `sizeof` shapes read that table for its other column and the `types` pass
+did not grow. What `sizeof` did want was a decision: C11 6.5.3.4 makes it
+worth a `size_t`, `size_t` is a **typedef**, and this arc stops before
+`typedef` on purpose, so it is worth an `int` here and
+`tests/divergent/sizeof-of-sizeof.c` pins the one program that shows the
+difference, 8 against 4.
+
+*An array's declaration, size and decay went in the same day, and the frame
+moved with them.* `int a[10]` is forty bytes and no slot holds forty, so a
+local now lives at a **byte offset** rather than in a numbered slot, which is
+the first time a declaration's type reached the frame. A name that is an array
+decays to a pointer to its first element, C11 6.3.2.1, everywhere except under
+`sizeof`, which is why a node answers a `type` that decays and a `size` that
+does not.
+
+*Indexing closed the item, the same day.* A subscript is C11 6.5.2.1's
+`*((E1)+(E2))` built by the grammar action and no node of its own, and
+`sxtw` arrived where predicted, inside one `add` that sign-extends the index,
+scales it by the element and adds it to the pointer.
+
+*The difference of two pointers, decided the same day: an `int`.* C11 6.5.6
+makes it a `ptrdiff_t`, which is a typedef, so it was the `sizeof` question
+again and got the `sizeof` answer. It is also what K&R's first edition said
+the difference was, before ANSI C gave it a name.
+`tests/divergent/sizeof-a-pointer-difference.c` pins the one program that
+shows it, 8 against 4. **Both are to be revisited when `typedef` arrives**,
+together: `size_t` and `ptrdiff_t` are the two typedefs this subset already
+owes an answer to.
+
+*`struct` closed the list, the same day.* Tagged, at file scope, with `.`
+and `->`, arrays of structs, structs in structs, and a pointer from a struct
+to its own kind, which is what a list is made of. Members are laid out by a
+thread in the `locals` pass, each at the next offset its alignment allows,
+and the struct rounded to its widest member, so `cc`'s `sizeof` is this
+subset's. A declaration's base became the node the standup expected a type to
+become: `int`, `char` and a tag are all looked up in one table of layouts. A
+type stayed numbers, three of them now, the tag being the third.
+
+What is **not** here, and each is a refusal or a syntax error rather than a
+wrong answer: a struct defined in a function, or with no tag; and a pointer
+to a struct nobody defines.
+
+*A struct copied whole, done 2026-09-23*, by `=`, by an initialiser and as
+an argument. A copy is a byte loop in the emitted code rather than a store
+or a call to `memcpy`, and nothing in `phoenix/` changed for it. An argument
+follows AAPCS64: up to sixteen bytes in one register or two, and anything
+larger copied by the caller and passed by address. That is held against
+`cc`'s own code by `tests/abi/`, where a caller and a callee in two files
+are compiled by each compiler in turn, because the oracle can only ever see
+Phoenix agree with itself. A copy between two kinds of struct is refused,
+and so is a struct anywhere C wants a number: nine such programs, all of
+which `cc` refuses, **compiled** until that day into the struct's address,
+in a pass whose header says it refuses whatever it would otherwise
+mis-compile. 175 programs against `cc`, 73 refused.
+
+*A struct returned, done the same day*, and AAPCS64 again: up to sixteen
+bytes packed into `x0` and `x1`, and anything larger written by the callee
+where the caller's `x8` points, the caller giving it a place in its frame
+either way so that a call is worth the struct's address, as any struct is.
+A function that returns a large struct keeps `x8` from its prologue, since
+a call in its body may use `x8` for one of its own; that has one witness in
+the oracle and one in `tests/abi/`, which now links returns in both
+directions as well as arguments. A function's return type became a `base`,
+so a `char` or a pointer returned is refused by name, since nothing here
+narrows or widens what comes back, and so is `main` returning a struct. A
+member of a call is a value, as a member of an assignment is. 185 programs
+against `cc`, 82 refused.
+
+**The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
+awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and
+once through Phoenix's output through `cc` — and their standard output and
+exit status compared. Nothing in this arc has a hand-written expected result.
+`tests/refused/` holds what must not compile, with the message, once the
+subset has anything to refuse. There is no vendored grammar and no need of one:
+the subset is described directly, and the C11 grammar in Annex A is what to
+check the description's *shape* against when it is large enough to matter.
+
+**What it borrows, written down so the borrowing is visible**: `cc -E` for
+anything with a `#` in it, which the first dozen constructs do not need; `cc`
+to assemble and link, and the assembler to turn a string literal's escapes
+into bytes, which the notation cannot do; the system libc, reached through a
+`puts` or a `putchar` declared in the program rather than included, until the
+preprocessor exists. *Not `printf`, since 2026-09-22*: it is variadic, and
+Apple's arm64 passes variadic arguments on the stack rather than in
+registers, which is a calling convention this subset does not have.
+
+*The predictions, for [postmortem.md](postmortem.md) to score.* One: the
+subset reaches `struct` with **no change to the tool** — `%import`, the symbol
+pass, `thread` for frame offsets and one emit pass are enough. Two: the first
+change the tool needs is the typedef predicate, and it is wanted at `typedef`
+and not before. Three: the arm64 calling convention costs more than any
+construct before it, because it is the first place the emit pass has to know
+something the tree does not say. Each of these can be wrong in a way the
+journal would record.
+
+*The condition for the next step* is the first: a subset through `struct`
+whose oracle tests pass. **Met on 2026-09-22**, and with prediction one
+holding: [postmortem 19](postmortem.md#19-prediction-one-held-and-the-node-went-somewhere-else)
+scores it. Steps two to seven live in the workspace document and
+are not repeated here; the one that comes back to this page is the predicate,
+which will be an entry under section 1 with the failure written down first, as
+this page requires.
+
+**Step two, `typedef`, done 2026-09-23**, and with it the predicate:
+[1.8](COMPLETED.md#18-names-the-parse-keeps), whose failure was measured on a
+copy of `c.phx` before the tool was touched. Prediction two held, and
+[postmortem 20](postmortem.md#20-prediction-two-held-and-the-predicate-was-a-table)
+scores it. A typedef names a base and some stars, a struct's included, at
+file scope, and an ordinary name declared in a block or as a parameter hides
+it until that scope ends. 156 programs against `cc`, 58 refused.
+
+*`size_t` and `ptrdiff_t`, revisited as promised, stay `int`s.* `typedef`
+gives C a way to name them and gives this subset nothing to name them as:
+both are `long`s on this machine, and `long` is step four of the workspace
+document. The two divergent programs stay pinned.
+
+What is **not** here, each a refusal or a syntax error: a typedef in a block,
+as a struct is at file scope only; a typedef of an array, whose count belongs
+to a declaration here and not to a type; and a local named in its own initialiser,
+`int x = sizeof(x);`, because the `locals` pass binds a name at the end of its
+declaration and C at the end of its declarator. That last one was always so,
+and `typedef` gave it a second spelling. A typedef as a function's return
+type was a fourth until the same day, when a struct could be returned and a
+function's return type became a base.
+
+*It stayed open for one afternoon, and then `long` closed it.* Every
+construct step one listed was built by 2026-09-23, with `typedef`, a struct
+copied and a struct returned, and what kept the entry on the roadmap was the
+two divergences pinned in `tests/divergent/`: `sizeof` and the difference of
+two pointers were `int`s here and `long`s under `cc`. **`long` arrived the
+same day**, signed and eight bytes, with C11 6.3.1.8's usual arithmetic
+conversions: an `int` meeting a `long` is sign-extended into the whole
+register first, at an operand, a comparison, a store, an argument and a
+`return`, and a `long` put into an `int` keeps its low half. A decimal
+constant too big for an `int` is a `long`, and `1L` is a syntax error.
+`sizeof` and a pointer difference are `long`s, and both pinned programs
+agree with `cc` and moved into the oracle, which is the condition this
+entry set for itself. `tests/abi/` holds `long` arguments and returns
+against `cc` in both directions. 196 programs against `cc`, 85 refused, and
+no divergence left.
+
 
 ---
 

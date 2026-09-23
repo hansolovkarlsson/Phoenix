@@ -4668,7 +4668,7 @@ why the note survived the morning unchanged. What did not survive was the
 description as it stands would answer 8 to the first. So the width is settled
 at `sizeof`, two constructs earlier than the last entry expected, by a
 program the oracle cannot help seeing;
-[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+[ROADMAP 6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
 states the choice and does not take it. The general form of that is the
 cheaper lesson: **the construct after the one being written is a free place
 to look for what will be expensive**, because its oracle programs can be run
@@ -4933,7 +4933,7 @@ checks to 237. What is worth carrying out of the day is none of the
 constructs.
 
 **Nothing cost what it was supposed to.** `&` and `*` were the construct
-[ROADMAP 6.1](ROADMAP.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
+[ROADMAP 6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle)
 said would change the assignment rule, and they changed one line; the thinking
 went into deciding that a place is a *rule* rather than a pass. Narrowing
 `int` to thirty-two bits sounded like a rewrite of the emit pass and was one
@@ -5775,3 +5775,67 @@ runs again on what it produced.
 
 The tool is 9,466 lines. 309 checks to 316, and 311 with the three optional
 oracles absent, both measured.
+
+## 2026-09-23: `long`, and 6.1 closed
+
+The next construct by the workspace document's order was step four, the
+type system in full, and within it `long` came first for a reason this
+repository had already written down: ROADMAP 6.1 stayed open only for two
+pinned divergences, `sizeof` and a pointer difference, which C makes
+`long`s and this subset had made `int`s. So signed `long`, and nothing
+else of step four: no `unsigned`, no suffix.
+
+**A `long` is a base like `int` and `char`**, eight bytes in the table of
+layouts, and the `types` pass gained one attribute, `wide`: no stars, no
+tag, eight bytes. That was enough for every question C asks. C11 6.3.1.8's
+usual arithmetic conversions make `int` op `long` a `long`, so an operator's
+width is 8 when either side is wide. `sizeof` and a pointer difference are
+wide, and a decimal constant over 2147483647 is, which the notation's
+64-bit integers could say directly.
+
+**The emit pass had been choosing a register by star count**, a `w` for no
+stars, and a `long` is the first scalar with no stars that lives in an
+`x`. The larger part of the work was where an `int` meets a `long`: `x0`
+holds an `int` zero-extended, so -1 becomes 4294967295 unless it is
+sign-extended first. That happens at an operand, a comparison, a store, an
+initialiser, an argument and a `return`, and each is a `sxtw` placed where
+C says the conversion happens. The argument case needed the callee's
+parameter types at the call, which travel the way the struct tags already
+did, bound on the way out and handed down at the root; a prototype and a
+definition disagreeing about one is refused, as `cc` refuses it. The other
+direction, a `long` into an `int`, keeps the low half, and where the value
+goes on being used a `mov w0, w0` restores the zero extension.
+
+*The prediction in a comment held.* The pointer difference had ended in a
+`mov w0, w0` since 2026-09-22, with a comment saying it had no witness and
+was written for the day `ptrdiff_t` arrived with `long`, when it would be
+the one to delete. It was deleted today. Every other existing program's
+assembly changed only where `sizeof` or a difference now widens the
+arithmetic around it, and all 185 still agree with `cc`.
+
+**The breakage run went wrong twice, both times in the harness.** The first
+version of each conversion's breakage flipped `true` to `false` in the
+lookup, which does not remove a conversion but moves it everywhere else,
+pointers included, and 53 programs went red for the wrong reason. Rerun
+with the conversion removed, each of the six goes red on one to three
+programs. Then the narrowing breakage never finished: the witness written
+for it had `while (n = l) l = l + 1;`, which loops forever when the
+assignment is not narrowed, and the harness had no timeout. It ran for two
+hours and forty minutes before Hans asked why the background processes
+were still going. The loop is gone; the `if` beside it catches the same
+breakage by printing 11 where `cc` prints 1, and a witness that hangs would
+have made `make test` hang rather than fail.
+
+*One step has no witness and says so.* A `long` index is a `madd` over the
+whole register where an `int` index is a `smaddl` that sign-extends. They
+differ only past 2^31 elements, and the program that shows it, a 2 GB
+`malloc` indexed near its end, cannot be written here: no function may
+return a pointer, and `cc` refuses the `long` it would otherwise be. The
+comment at the instruction names that program for the day it can be.
+
+**6.1 is complete.** Its closing condition, written this afternoon, was
+that `long` arrive and the two pinned programs agree. Both give 8 on both
+routes and are oracle programs, `tests/divergent/` is gone, and the entry
+moved to COMPLETED with a paragraph saying so. 196 programs against `cc`,
+85 refused, none diverging. 316 checks to 317: three refusals, less the two
+that pinned the divergences.

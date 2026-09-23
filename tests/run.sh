@@ -1896,6 +1896,17 @@ refuses "a function returning a pointer" "'f' returns a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returns-a-pointer.c"
 refuses "main returning a struct" "'main' returns an int" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/main-returns-a-struct.c"
+# **`long`**, since 2026-09-23. A caller widens an `int` it passes to a `long`
+# parameter, so a prototype and a definition have to agree about which
+# parameters are `long`s, and about what is returned; `cc` refuses both as
+# conflicting types. A suffix is outside the subset: `1L` is a syntax error,
+# and a constant too big for an `int` is a `long` without one.
+refuses "a long parameter declared as an int" "a parameter that is a long in one is not in the other" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-parameter-declared-two-ways.c"
+refuses "a long return declared as an int" "returning a different type each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-return-declared-two-ways.c"
+refuses "a constant with a suffix" 'and found "L"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-constant-with-a-suffix.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
@@ -1914,37 +1925,13 @@ if [ "$(uname -m)" = "arm64" ]; then
         report fail "structs pass between Phoenix's code and cc's, both ways"
         printf '%s\n' "$ab" | grep FAIL | sed 's/^/        /' | head -4
     fi
-    # **Programs where the two disagree, pinned rather than fixed**, the way
-    # `languages/awk/tests/divergent/` pins the lexical seam. Both come from
-    # a type C names with a typedef: `sizeof` is worth a `size_t` and the
-    # difference of two pointers a `ptrdiff_t`, eight bytes each under `cc`,
-    # and both are an `int` here, since the typedef names a `long` and the
-    # subset has none. Both answers
-    # are asserted, so closing either gap fails with the old numbers in it.
-    dt="$root/build/c-divergent"; rm -rf "$dt"; mkdir -p "$dt"
-    diverges() { # what, program, cc's answer, ours
-        dv="$root/languages/c/tests/divergent/$2.c"
-        if cc -w -o "$dt/want" "$dv" 2>/dev/null \
-           && "$phx" --driver arm64 "$root/languages/c/c-arm64.phx" "$dv" \
-                  > "$dt/got.s" 2>/dev/null \
-           && cc -o "$dt/got" "$dt/got.s" 2>/dev/null; then
-            "$dt/want"; want=$?
-            "$dt/got";  got=$?
-            if [ "$want" = "$3" ] && [ "$got" = "$4" ]; then
-                report pass "$1 is $3 to cc and $4 here, as written down"
-            else
-                report fail "the $2 divergence is the one written down" \
-                       "cc says $want and phoenix says $got; divergent/ says $3 and $4"
-            fi
-        else
-            report fail "the $2 divergence compiles on both routes"
-        fi
-    }
-    diverges "sizeof(sizeof(int))" sizeof-of-sizeof 8 4
-    diverges "sizeof of a pointer difference" sizeof-a-pointer-difference 8 4
-    rm -rf "$dt"
+    # **The two divergences are oracle programs now.** `sizeof(sizeof(int))`
+    # and `sizeof` of a pointer difference were 8 under `cc` and 4 here, pinned
+    # with both answers from 2026-09-22, because C makes both a `long` and the
+    # subset had none. `long` arrived on 2026-09-23 and both moved into
+    # `tests/oracle/`, where the count above includes them.
 else
-    skip 3 "the C oracle and the two divergences need an arm64 cc, and this machine is not arm64"
+    skip 2 "the C oracle and the calling-convention test need an arm64 cc, and this machine is not arm64"
 fi
 
 echo
