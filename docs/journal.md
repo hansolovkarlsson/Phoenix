@@ -5575,3 +5575,65 @@ sighting.
 
 Nineteen oracle programs, 175 in all. Eighteen new refusals, three old ones
 moved to the oracle, 73 in all. 281 checks to 297, all passing.
+
+## 2026-09-23: a struct returned, and a register the callee has to keep
+
+The standup's nearest gap: a function returned an `int` and nothing else.
+Nothing in `phoenix/` changed for it.
+
+**The return type became a `base`.** The header said `int` as a keyword, and
+the one node that already answers what a struct is, its tag, width and
+alignment, is the base a declaration starts with. Taking that node whole
+lets `char f()` and a typedef of a pointer parse as well, and both are
+refused by name in the `locals` pass rather than left as syntax errors:
+what comes back in `x0` is an `int` or a struct's bytes, and nothing here
+narrows a `char` or keeps a pointer's upper half on the way out. A typedef
+of `int` as a return type came free, which the morning's changelog had
+listed as not yet.
+
+**The convention is AAPCS64 read backwards from the arguments.** Up to
+sixteen bytes come back packed in `x0` and `x1`; anything larger is written
+by the callee into memory the caller provides, whose address it passes in
+`x8`. The caller gives the struct a place in its frame either way, one of
+the `temps` a large argument's copy already uses, so a call is worth the
+struct's address, as a name, a `*` and an assignment of a struct already
+are. That is what makes `f().x` work with no change to `Member`: its `addr`
+is asked of the call, and a call's `addr` is its `out`. The callee packs a
+small struct the way an argument is packed, copied into sixteen zeroed bytes
+and read out with one `ldp`, because an `ldp` straight from a three-byte
+struct reads past its end.
+
+*The first framing of the table was wrong.* What each function returns was
+to be bound on the way in, with a `down`, as `funcs` is, so that a
+recursive function's own calls would know it. `phx` refused it at read
+time: a `down` clause runs before the node's children, and the return type
+is a child, so its tag does not exist yet. That is exactly the reason
+`sigs` is bound on the way out and handed to the `types` pass whole at the
+root, and the same answer works here for the same reason: a call above its
+callee's declaration is refused anyway. The two tables now travel the same
+way.
+
+**`x8` has to be kept.** It is a scratch register to the callee, so a
+function returning a large struct that makes a call of its own before
+returning may have lost it. The prologue stores it in sixteen bytes held
+back at the start of the `temps`. The program written to see it,
+`struct-return-large.c`, did not: its inner call returned an `int`, and
+nothing touches `x8` for those. Of five breakages made on purpose, `x8`
+not kept was caught by one oracle program, `struct-return-recursive.c`,
+whose large struct is returned after a recursive call that returned one
+too. `tests/abi/` was then extended so that a callee returning a large
+struct calls another first, and the same breakage printed garbage there.
+The other four each went red at once: the caller storing only `x0`, the
+callee loading only `x0`, a call taking no temporary, and `x8` not set.
+The zeroing before the `ldp` is the fifth and has no witness, as the
+argument's has none.
+
+*A wrong claim, caught before it was written down.* The `locals` pass's
+comment first said `cc` refuses a `main` that returns a struct. It compiles
+it, with a warning, and the program exits with whatever the struct left in
+`w0`. It is still refused here, now for that reason: there is no exit status
+for the oracle to compare.
+
+The assembly of all 177 programs that were here before was compared with
+the committed description's and did not move by a byte. Ten oracle programs,
+185 in all; nine refusals, 82 in all. 297 checks to 306, all passing.

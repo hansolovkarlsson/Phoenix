@@ -16,7 +16,7 @@ entry below that changes it says so.
 
 ---
 
-## 2026-09-23: `typedef`, a struct copied whole, and the first thing a parse remembers
+## 2026-09-23: `typedef`, a struct copied and returned whole, and the first thing a parse remembers
 
 **The notation changed.** `%names` is a new directive: a table of names the
 parse keeps while it matches, and one rule that may ask it.
@@ -46,8 +46,7 @@ member's and a `sizeof`'s. `x * y;` is a declaration when `x` is a typedef
 and a multiplication when it is not, and a variable declared with a
 typedef's name hides it until its block or function ends, as C says. A
 typedef declared twice for two different types is refused. Not yet: a
-typedef inside a function, a typedef of an array, and a typedef as a
-function's return type. `sizeof` and the difference of two pointers are
+typedef inside a function and a typedef of an array. `sizeof` and the difference of two pointers are
 still `int`s, because what C makes them is a `long`, which the subset does
 not have. Thirteen more oracle programs, 156 in all, and 58 refusals.
 
@@ -57,12 +56,26 @@ machine's calling convention, so a struct goes between code Phoenix compiled
 and code `cc` compiled, in either direction, and a new test links the two to
 make sure. A struct of one kind copied into another is refused, as `cc`
 refuses it. So is a struct used where C wants a number: in arithmetic, a
-comparison, a condition, a `return`, or put into an `int` or a pointer.
+comparison, a condition, a `return` from a function that returns an `int`,
+or put into an `int` or a pointer.
 **Those compiled before today**, into the struct's address used as a
 number, and `cc` refuses every one. Nothing in Phoenix itself changed for
 any of this. Nineteen more oracle programs, 175 in all, and 73 refusals.
 
-**Tests:** 264 → 297. Eight for `%names`, on a small grammar made to have
+**A function can return a struct**: `struct point make(int x, int y)`, and
+a typedef of a struct or of `int` as the return type. It follows the
+machine's calling convention, so a struct comes back from `cc`'s code to
+Phoenix's and the other way, and the same test that links the two for
+arguments now does it for returns. A call that returns a struct can be
+copied, passed on, or have a member read, `make(1, 2).y`, but not have one
+assigned or its address taken, which `cc` refuses too. So is returning one
+kind of struct from a function declared to return another, or declaring a
+function twice with two return types. A function returning a `char` or a
+pointer is refused by name, although `cc` compiles both, and so is a `main`
+that returns a struct, which `cc` only warns about. Ten more oracle
+programs, 185 in all, and 82 refusals.
+
+**Tests:** 264 → 306. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
 itself. Nine for `typedef`: four refusals of what C refuses too, three of
@@ -70,7 +83,9 @@ what this subset leaves out, and two of a local named in its own
 initialiser, which were refused before today and are written down now.
 Then sixteen for the copy: the calling convention against `cc`'s, and
 eighteen new refusals, nine of them of programs that compiled into an
-address, less the three refusals that became oracle programs.
+address, less the three refusals that became oracle programs. Then nine
+refusals for a struct returned, six that `cc` makes too and three this
+subset adds.
 
 ---
 

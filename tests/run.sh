@@ -1771,7 +1771,7 @@ refuses "a struct compared" "'==' compares numbers and pointers" \
 # member of one can be read and not written or pointed at. The `place` rule
 # took `(x = y).a` as a place all along, and nothing could reach it until a
 # struct could be the value of an expression.
-refuses "a member of an assignment, assigned" "a member of an assignment is a member of a value" \
+refuses "a member of an assignment, assigned" "a member of an assignment or a call is a member of a value" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-an-assignment-assigned.c"
 refuses "and its address taken" "'&' wants somewhere a value is kept" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-an-assignment-addressed.c"
@@ -1811,6 +1811,33 @@ refuses "a typedef of an array" 'expected ;, and found "["' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-array.c"
 refuses "a typedef of a struct nobody defines" "'struct nope' is not defined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-undefined-struct.c"
+# **A struct returned**, since 2026-09-23. A `return` is a copy into what the
+# function returns, so it takes the assignment's rule: its own kind of struct,
+# and no struct where the function returns an `int`. A struct a call gives back
+# is a value, C11 6.5.2.2, so a member of it is read and never assigned or
+# pointed at, as a member of an assignment is. All of these `cc` refuses too.
+refuses "a struct returned where another is" "'struct u' is returned, and this function returns 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-returned-of-another-kind.c"
+refuses "a number returned where a struct is" "a function that returns 'struct t' returns something that is not a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-function-returns-a-number.c"
+refuses "a function declared to return two types" "'f' is declared twice, returning a different type each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-return-declared-two-ways.c"
+refuses "a struct a call returned, put in an int" "'struct t' is put where a number or a pointer goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-call-put-in-an-int.c"
+refuses "a member of a call, assigned" "a member of an assignment or a call is a member of a value" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-a-call-assigned.c"
+refuses "and its address taken" "'&' wants somewhere a value is kept" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-a-call-addressed.c"
+# Three that `cc` compiles and this subset declines by name. A `char` or a
+# pointer would come back in a register nothing here narrows or widens, and
+# `main` returning a struct, which `cc` only warns about, exits with whatever
+# the struct left in `w0`: there is no answer for the oracle to compare.
+refuses "a function returning a char" "'f' returns a char" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-returns-a-char.c"
+refuses "a function returning a pointer" "'f' returns a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-returns-a-pointer.c"
+refuses "main returning a struct" "'main' returns an int" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/main-returns-a-struct.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

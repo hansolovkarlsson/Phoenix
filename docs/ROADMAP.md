@@ -754,8 +754,20 @@ Phoenix agree with itself. A copy between two kinds of struct is refused,
 and so is a struct anywhere C wants a number: nine such programs, all of
 which `cc` refuses, **compiled** until that day into the struct's address,
 in a pass whose header says it refuses whatever it would otherwise
-mis-compile. 175 programs against `cc`, 73 refused. A struct **returned**
-from a function is still not here, since a function returns an `int`.
+mis-compile. 175 programs against `cc`, 73 refused.
+
+*A struct returned, done the same day*, and AAPCS64 again: up to sixteen
+bytes packed into `x0` and `x1`, and anything larger written by the callee
+where the caller's `x8` points, the caller giving it a place in its frame
+either way so that a call is worth the struct's address, as any struct is.
+A function that returns a large struct keeps `x8` from its prologue, since
+a call in its body may use `x8` for one of its own; that has one witness in
+the oracle and one in `tests/abi/`, which now links returns in both
+directions as well as arguments. A function's return type became a `base`,
+so a `char` or a pointer returned is refused by name, since nothing here
+narrows or widens what comes back, and so is `main` returning a struct. A
+member of a call is a value, as a member of an assignment is. 185 programs
+against `cc`, 82 refused.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and

@@ -21,7 +21,8 @@
  * saved frame pointer.
  *
  * **The calling convention** is the machine's, AAPCS64 as Apple applies it:
- * the first eight integer arguments in `x0` to `x7`, the result in `x0`, and
+ * the first eight integer arguments in `x0` to `x7`, the result in `x0`, or
+ * for a struct in `x0` and `x1` or wherever the caller's `x8` says, and
  * `sp` sixteen-aligned at the call. A caller evaluates its arguments left to
  * right, pushing each, then loads the registers from the stack and drops it,
  * so an argument that is itself a call finds the ones before it safe. A
@@ -142,12 +143,12 @@
    * A `Variable`, a `Deref` and a `Member` each answer **two** attributes,
    * because each is two things depending on who is asking: `out` is the
    * value, which is what an expression wants, and `addr` is where that value
-   * lives, which is what an assignment, `&` and a member want. Nothing else
-   * in the tree has an `addr`, and nothing else can reach a position that
-   * asks for one. For an assignment and `&` the `place` rule in `c.phx` sees
-   * to that. For a member it is the `types` pass: a member is asked of a
-   * struct, and only these three can have a struct's type, since nothing
-   * that computes a value gives it a tag without stars. *)
+   * lives, which is what an assignment, `&` and a member want. For an
+   * assignment and `&` the `place` rule in `c.phx` sees that nothing else is
+   * asked. A member is asked of anything that is a struct, which is these
+   * three and two that compute one: an assignment of a struct, and a call
+   * that returns one, since 2026-09-23. Each of those two leaves the
+   * struct's address in `x0`, so its `addr` is its `out`. *)
   (* **An array is its own address, and so is a struct.** A name that is an
    * array decays to a pointer to its first element, and the address is what
    * it already had, so the load a scalar needs is the thing an array does not
@@ -338,6 +339,19 @@
                          $words,
                          "\tldr x{}, [sp, #{}]\n" of $reg, 16 * ($nargs - 1 - $index)) .
 
+  (* **A struct returned** is AAPCS64's rule B.5 and C.8 read backwards,
+   * since 2026-09-23. One of up to sixteen bytes comes back packed in `x0`
+   * and `x1`, the way it would have gone out as an argument; a larger one is
+   * written by the callee into memory the caller provides, whose address the
+   * caller passes in `x8`. Either way the caller ends up with the struct in
+   * a place of its own in its frame, one of the `temps` an argument's copy
+   * uses, and the call is worth its address, as any struct is. A small one
+   * is stored there from the two registers after the call: both are stored,
+   * which may write past the struct's own bytes and never past the sixteen
+   * the temporary has.
+   *
+   * `x8` is set last, after the argument registers are loaded, because it is
+   * not one of them and nothing between it and the `bl` touches it. *)
   Call : down held    = $argn
        : down heldreg = $argreg
        : down argn    = 0
@@ -345,8 +359,18 @@
        : down nargs   = size($args)
        : argn   = $held
        : argreg = $heldreg
-       : out = "{}{}\tadd sp, sp, #{}\n\tbl _{}\n"
-           of join($args.out), join($args.load), 16 * size($args), $name .
+       : small  = $tag <> "" and $width <= 16
+       : large  = $tag <> "" and $width > 16
+       : room   = (($width + 15) div 16) * 16
+       : tpos   = $framebase + $temps + $room
+       : temps  = $temps + lookup([[true, $room]], $tag <> "", 0)
+       : out = "{}{}\tadd sp, sp, #{}\n{}\tbl _{}\n{}"
+           of join($args.out), join($args.load), 16 * size($args),
+              lookup([[true, "\tsub x8, x29, #{}\n" of $tpos]], $large, ""),
+              $name,
+              lookup([[true, "\tsub x9, x29, #{}\n\tstp x0, x1, [x9]\n\tmov x0, x9\n" of $tpos]], $small,
+                     lookup([[true, "\tsub x0, x29, #{}\n" of $tpos]], $large, ""))
+       : addr = $out .
 
   (* A parameter's register is counted by the `locals` pass, which gives a
    * struct of nine to sixteen bytes two of them, and its half is its own
@@ -500,8 +524,33 @@
                          [">", "gt"], [">=", "ge"]], $op, "?") .
 
   (* The value is already in `x0`, so returning is a jump to the epilogue.
-   * The epilogue's label is the enclosing function's, handed down. *)
-  Return : out = "{}\tb L{}.ret\n" of $value.out, $fname .
+   * The epilogue's label is the enclosing function's, handed down.
+   *
+   * **A struct is copied on its way out**, from its address in `x0`. One of
+   * up to sixteen bytes is copied into sixteen zeroed bytes below `sp` and
+   * loaded from there into `x0` and `x1` with one `ldp`, which is the
+   * argument's packing again, and for the same reason: an `ldp` straight
+   * from the struct would read past its end. A larger one is copied to the
+   * address the caller passed in `x8`, which the prologue kept, since a call
+   * in the body may have used `x8` for a struct of its own. The epilogue puts
+   * `sp` back from `x29`, so nothing lowered here has to be raised.
+   *
+   * *The zeroing has no witness*, as an argument's has none, and for the
+   * same reason: the bytes past a small struct's end are read by nobody, and
+   * taking it out left the oracle green. It is kept so that what comes back
+   * in the registers does not depend on what ran before. *Keeping `x8`* has
+   * two: `struct-return-recursive.c`, whose large struct is returned after
+   * a call that returned one of its own, and `tests/abi/`, where a callee
+   * `cc` compiled does the same. *)
+  Return : n     = $label : label = $label + lookup([[0, 0]], $retsize, 1)
+         : small = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}\tldp x0, x1, [sp]\n"
+                     of $value.out, ($copy of $retsize, $n, "x0", "x1", $n)
+         : large = "{}\tldr x1, [x29, #-{}]\n{}"
+                     of $value.out, $x8slot, ($copy of $retsize, $n, "x0", "x1", $n)
+         : out   = "{}\tb L{}.ret\n"
+                     of lookup([[0, $value.out]], $retsize,
+                               lookup([[true, $small]], $retsize <= 16, $large)),
+                        $fname .
 
   Block  : out = join($body.out) .
 
@@ -513,12 +562,20 @@
    * them, the body -- and before the epilogue's label, on the path that falls
    * off the end of the body, a zero. C11 5.1.2.2.3 says reaching the `}` of
    * `main` returns 0, and for any other function it says nothing, of which 0
-   * is one instance. *)
+   * is one instance.
+   *
+   * *A function returning a large struct keeps `x8`* in the first of its
+   * `temps`, sixteen bytes held back from the start for it, and stores it
+   * there before anything else in the prologue can disturb it. `retsize` is
+   * 0 for an `int`, which is what every `Return` asks first. *)
   Function : down fname     = $name
            : down framebase = $frame
-           : down temps     = 0
-           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
+           : down retsize   = lookup([[true, $ret.basew]], $ret.tagname <> "", 0)
+           : down x8slot    = $frame + 8
+           : down temps     = lookup([[true, 16]], $retsize > 16, 0)
+           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
                of $name, $name, (($frame + $temps + 15) div 16) * 16,
+                  lookup([[true, "\tstr x8, [x29, #-{}]\n" of $x8slot]], $retsize > 16, ""),
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .

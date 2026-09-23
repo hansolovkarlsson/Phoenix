@@ -51,6 +51,11 @@
  * and anything else, is refused, and so is a struct anywhere C wants a
  * number, which compiled until then into the struct's address.
  *
+ * **Then a struct returned**, under AAPCS64 again, in `x0` and `x1` or
+ * through the address the caller passes in `x8`. A function returns an `int`
+ * or a struct: a `char` or a pointer returned is refused by name, and so is
+ * a `main` that returns a struct.
+ *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
  * reads `#` as a line comment, which C does not, and every rule it carries
@@ -166,11 +171,21 @@ item = function
 
 (* A function is a rule of its own because it is a **scope**: see `%names`
  * above. Its parameters hide a typedef of the same name from the `(` to the
- * end of the body, or to the `;` of a prototype, and no further. *)
-function = "int" n:name "(" p:params ")" ";"
-             -> Prototype(name: $n, params: $p)
-         | "int" n:name "(" p:params ")" "{" s:{ statement } "}"
-             -> Function(name: $n, params: $p, body: $s) .
+ * end of the body, or to the `;` of a prototype, and no further.
+ *
+ * **What it returns is a `base`**, since 2026-09-23, and was the keyword
+ * `int` before: a struct returned whole is the reason, and a base is the one
+ * node that already answers what a struct is. That lets `char f()` and a
+ * typedef of a pointer parse too, and the `locals` pass refuses both by name,
+ * because a function here returns an `int` or a struct and nothing else.
+ * No stars are written, so `int *f()` is still a syntax error.
+ *
+ * `item` tries this alternative first, and a struct's definition fails it at
+ * the `{` after the tag, where a function's name was wanted, and moves on. *)
+function = r:base n:name "(" p:params ")" ";"
+             -> Prototype(name: $n, ret: $r, params: $p)
+         | r:base n:name "(" p:params ")" "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, params: $p, body: $s) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
@@ -203,9 +218,8 @@ param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
  * `Base` has no stars to give. The `locals` pass has each answer how many,
  * and a declaration adds its own.
  *
- * A function still returns an `int` and nothing else: the item's header says
- * `int`, and a struct returned whole is a calling convention of its own. A
- * typedef of `int` is not taken there either, which C would. *)
+ * A function's return type is one too, since a struct can be returned whole:
+ * see `function` above. *)
 base   = "int"             -> Base(name: "int")
        | "char"            -> Base(name: "char")
        | "struct" t:name   -> Base(name: $t)
@@ -520,6 +534,13 @@ arg  = e:expression -> Arg(value: $e) .
    * arguments with. A call above its callee's declaration is refused anyway. *)
   thread sigs = empty
 
+  (* **What each function returns**, name to the tag of the struct and its
+   * size, or "" and 4 for an `int`. Bound on the way out, as `sigs` is and
+   * for its reason: the return type is a child, worked out after a `down`
+   * clause runs. So the `types` pass is handed the whole table at the root,
+   * which is also what lets a function's own body call it. *)
+  thread rets = empty
+
   (* **The struct layouts defined so far**, tag to size, alignment and a
    * table of members. It starts with `int` and `char` in it, as two structs
    * with no members, and that is what lets `Base` answer a width with one
@@ -549,7 +570,8 @@ arg  = e:expression -> Arg(value: $e) .
    * own definition has no size and cannot be a member; a **pointer** to one
    * needs no size, and a linked list is made of exactly that. *)
   Program : down defining = ""
-          : allsigs = $sigs .
+          : allsigs = $sigs
+          : allrets = $rets .
 
   (* A struct's layout is bound on the way out, when every member has been
    * placed. The check for a second definition runs before that, and so sees
@@ -637,15 +659,35 @@ arg  = e:expression -> Arg(value: $e) .
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
                        of $base.name .
 
+  (* **A function returns an `int` or a struct.** A struct is returned whole,
+   * since 2026-09-23; a `char` and a pointer are refused by name, because
+   * what the emit pass leaves in `x0` is an `int` or a struct's bytes and
+   * nothing narrows or widens it on the way out. Each is C, and `cc`
+   * compiles it. `main` returning a struct is refused as well, although C11
+   * 5.1.2.2.1 leaves room for it and `cc` compiles it with a warning: what
+   * the shell then sees is whatever the struct left in `w0`, which is an
+   * exit status neither compiler means and the oracle could not compare.
+   *
+   * A second declaration has to say the same thing as the first, which is
+   * C11 6.7p4. *)
   Prototype : down env    = empty
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
             : funcs = bind($funcs, $name, size($params))
             : sigs  = bind($sigs, $name, $params.passes)
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew])
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
-                    of $name .
+                    of $name
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew]
+                : "'{}' is declared twice, returning a different type each time" of $name
+            ! $ret.ptrs > 0
+                : "'{}' returns a pointer, and a function here returns an int or a struct" of $name
+            ! $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
+                : "'{}' returns a char, and a function here returns an int or a struct" of $name
+            ! $name = "main" and $ret.ptrs = 0 and $ret.tagname <> ""
+                : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
 
   Function  : down env    = empty
             : down scope  = empty
@@ -653,10 +695,19 @@ arg  = e:expression -> Arg(value: $e) .
             : down pindex = 0
             : down funcs  = bind($funcs, $name, size($params))
             : sigs  = bind($sigs, $name, $params.passes)
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew])
             : frame = $bytes
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
-                    of $name .
+                    of $name
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew]
+                : "'{}' is declared twice, returning a different type each time" of $name
+            ! $ret.ptrs > 0
+                : "'{}' returns a pointer, and a function here returns an int or a struct" of $name
+            ! $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
+                : "'{}' returns a char, and a function here returns an int or a struct" of $name
+            ! $name = "main" and $ret.ptrs = 0 and $ret.tagname <> ""
+                : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
 
   (* A parameter is never an array, because the subset has no declarator for
    * one and C would have rewritten it to a pointer if it had. A scalar or a
@@ -850,8 +901,9 @@ arg  = e:expression -> Arg(value: $e) .
   (* **Whether the value is a struct**, as opposed to a pointer to one or a
    * number. C11 takes a struct in exactly five places: `.`, `&`, `sizeof`,
    * a copy into a struct of the same type, and a statement that throws it
-   * away. Everywhere else, arithmetic, a comparison, a condition, a
-   * `return` and a copy into anything else, `cc` refuses it, and this
+   * away. Everywhere else, arithmetic, a comparison, a condition and a copy
+   * into anything else, a `return` from an `int` function included, `cc`
+   * refuses it, and this
    * subset compiled it until 2026-09-23 into the struct's **address** used
    * as a number. So each of those places asks this, and refuses. *)
   otherwise record = $type = 0 and $tag <> ""
@@ -887,7 +939,7 @@ arg  = e:expression -> Arg(value: $e) .
            : width = $place.width
            : tag   = $place.tag
            ! not $place.lvalue
-               : "'&' wants somewhere a value is kept, and a member of an assignment is a member of a value" .
+               : "'&' wants somewhere a value is kept, and a member of an assignment or a call is a member of a value" .
   (* An array is not an lvalue, C11 6.3.2.1 again: it decays before anything
    * can be assigned to it, so there is nothing to assign to. Without this the
    * emit pass would store through the array's address and write element
@@ -910,7 +962,7 @@ arg  = e:expression -> Arg(value: $e) .
            ! $place.aggregate and $place.type > 0
                : "an array is not something a value can be put in"
            ! not $place.lvalue
-               : "a member of an assignment is a member of a value, and a value is not something another can be put in"
+               : "a member of an assignment or a call is a member of a value, and a value is not something another can be put in"
            ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
                : "'struct {}' is assigned {}, and a struct takes only its own kind"
                    of $place.tag,
@@ -937,13 +989,34 @@ arg  = e:expression -> Arg(value: $e) .
    * "". The lists are compared whole, which is position by position. *)
   Arg      : type = $value.type
            : carries = lookup([[true, $value.tag]], $value.record, "") .
-  Program  : down callees = $allsigs .
-  Call     ! $args.carries <> lookup($callees, $name, $args.carries)
+  Program  : down callees = $allsigs
+           : down results = $allrets .
+  (* **A call is worth what its function returns**, an `int` or a struct.
+   * A struct that comes back from a call is a value and not somewhere one
+   * is kept, C11 6.5.2.2, so `f().x` can be read and not assigned or
+   * pointed at: `lvalue` stays false, as it is for an assignment. The emit
+   * pass puts it in the caller's frame, so, like any struct, it is its own
+   * address. *)
+  Call     : returns   = lookup($results, $name, ["", 4])
+           : tag       = at($returns, 1)
+           : width     = at($returns, 2)
+           : aggregate = $tag <> ""
+           ! $args.carries <> lookup($callees, $name, $args.carries)
                : "'{}' is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
                    of $name .
 
+  (* **A `return` is a copy into what the function returns**, so it is the
+   * assignment's rule once more: a struct takes only its own kind, and an
+   * `int` no struct. What the function returns is handed down from it. *)
+  Function : down gives = $ret.tagname .
+  Return ! $value.record and $gives = ""
+             : "'struct {}' is returned, and this function returns an int" of $value.tag
+         ! $value.record and $gives <> "" and $value.tag <> $gives
+             : "'struct {}' is returned, and this function returns 'struct {}'" of $value.tag, $gives
+         ! not $value.record and $gives <> ""
+             : "a function that returns 'struct {}' returns something that is not a struct" of $gives .
+
   (* The places a number is wanted and a struct is not one. *)
-  Return ! $value.record : "'struct {}' is returned, and a function here returns an int" of $value.tag .
   If     ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
   IfElse ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
   While  ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
