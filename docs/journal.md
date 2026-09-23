@@ -5245,3 +5245,37 @@ standard error captured on its own.
 *Eight oracle programs, 123 in all, every one agreeing on its first green
 run; two refusals, thirty-one.* Nothing in `phoenix/` was touched, and ROADMAP
 6.1 has one construct left before `typedef`: `struct`.
+
+## 2026-09-22: the afternoon read back, and the day closed a third time
+
+Six commits after the day was first read back at midday, and the suite from
+237 checks to 246. ROADMAP 6.1 has one construct left before `typedef`:
+indexing closed *arrays and `sizeof`*, `char`, character constants and string
+literals closed the next item, and `struct` is what remains. Prediction one
+stands at ten constructs of eleven with nothing in `phoenix/` touched.
+
+**Two decisions were taken for the same reason, and are to be revisited
+together.** The difference of two pointers is an `int`, as `sizeof` is,
+because C names both types with a typedef and the subset stops before
+`typedef`; K&R's first edition gave the difference an `int` before ANSI named
+`ptrdiff_t`. Each has a program in `tests/divergent/` with both answers
+pinned, so the day `typedef` arrives, the two go red together and say which
+numbers they held.
+
+**The notation met a thing it cannot say, and a borrowed tool said it.** A
+string literal's bytes cannot be computed without walking its text, which
+nothing here can do, so the assembler writes them. Asked before being relied
+on, the assembler disagreed with C about `\'`, and the description rewrites
+that one escape. It is the first construct whose meaning the description
+does not state in full, which [postmortem 16](postmortem.md#16-the-calling-convention-cost-the-most-and-not-for-the-reason-given)
+now records as the nearest prediction one has come to failing.
+
+**The code was right more often than the checks on it.** The habit from the
+morning, leaving each step out on purpose, was applied to every construct in
+the afternoon, and its one failure was in the apparatus: a `sed` that matched
+nothing, and a witness whose answer the shell truncated before comparing.
+Two more faults of the same kind turned up beside it, an `echo` that
+rewrote an escape on the way to a file, and a `tail` that cut a `phx`
+warning off the output. [Postmortem 18](postmortem.md#18-what-a-silent-breakage-means)
+scores the belief behind the habit and what a silent breakage turns out to
+mean.

@@ -901,15 +901,26 @@ by giving the tree two more node kinds.
 > the oracle, not a rule of the machine.
 
 **What the first two predictions look like from here.** One, no change to the
-tool through `struct`: **nine constructs in** as of 2026-09-22 and nothing in
-`phoenix/` has been touched. That day is the strongest evidence it has,
-because two of its changes were the ones most likely to have broken it: the
-value narrowed from sixty-four bits to thirty-two, and the frame stopped
-counting slots and started counting bytes. Neither wanted anything the
-notation did not have. Two, that the typedef predicate is the first change
-wanted: still neither confirmed nor threatened. The tool has spoken twice
-since, both at read time and both about an attribute name defined by two
-passes in one driver, which is a warning about this description and not a
+tool through `struct`: **ten constructs in** by the end of 2026-09-22, every
+item of ROADMAP 6.1 but `struct` itself, and nothing in `phoenix/` has been
+touched. That day is the strongest evidence it has, because two of its
+changes were the ones most likely to have broken it: the value narrowed from
+sixty-four bits to thirty-two, and the frame stopped counting slots and
+started counting bytes. Neither wanted anything the notation did not have.
+
+*It came nearest to failing at string literals, and did not fail.* The
+bytes of a literal cannot be computed in the notation, which has no iteration
+over data ([ROADMAP 5](ROADMAP.md#5-known-warts)), so the assembler writes
+them. That is a borrowing, recorded in ROADMAP 6.1's list of what the arc
+borrows, and not a change to the tool; but it is the first construct whose
+meaning the description could not state in full, and a C compiler that
+someday has to write its own bytes will meet it again.
+
+Two, that the typedef predicate is the first change wanted: still neither
+confirmed nor threatened. The tool has spoken three times since, all at read
+time: twice about an attribute name defined by two passes in one driver, and
+once about an attribute given a field's name, which it named with the line
+and the reason. All three were warnings about this description and not a
 need for a different tool.
 
 ---
@@ -959,3 +970,44 @@ than a defect to fix. It went the way it did because the other answer costs
 `cc` as the oracle for every size-shaped construct left in the arc.
 [journal.md](journal.md) under that date has the reasoning and what the
 machine makes it cost.
+
+---
+
+## 18. What a silent breakage means
+
+Since 2026-09-22 each construct in the C arc has been checked by leaving its
+steps out on purpose, one at a time, to see which oracle program goes red. It
+started with the narrowing of `int` and became the habit for everything
+after it. The belief it rests on was never written as one, so it is written
+here: **a step that can be left out with the oracle still green is a step no
+program can observe.**
+
+That afternoon it was put to nineteen breakages across five steps, indexing,
+the pointer difference, `char`, character constants and string literals, and
+four came back green. **One of the four was the apparatus, twice over.**
+
+| silent breakage | what the silence meant |
+| --- | --- |
+| no `sxtb` after a store to a `char` | **the apparatus, in two layers.** The `sed` that was to remove it matched nothing, so the green was the unbroken file. And had it matched, the witness could not have seen the difference: `char-assignment-value.c` returned 300 as its exit status, the shell keeps eight bits, and both routes reached 44 because the shell did the narrowing the program was checking for |
+| `lsr` for `asr` in a pointer difference | **unobservable, and truly.** The two shifts differ only in bits an `int` does not keep. It becomes observable when the difference is a 64-bit `ptrdiff_t` |
+| no `mov w0, w0` after a pointer difference | **unobservable, as the comment written with it said** |
+| a `char` array sized as `int`s | **unobservable.** It only makes the frame larger, which no program can see |
+
+Two more faults of the same kind turned up without a breakage to find them.
+A refusal written with zsh's `echo` held a valid `'A'` where `'\x41'` was
+meant. And a `phx` warning about an attribute named like a field was cut off
+by a `| tail` on the output, so a description that the tool had flagged
+looked clean. Neither the code nor the tool was wrong in any of the four.
+What was wrong each time was the route by which a result reached the person
+reading it.
+
+**So the belief held three times out of four, and the one failure was two
+faults of one kind.** A silent breakage is a question: either the step is
+unobservable, or the thing doing the observing cannot see it. The second is
+checked first, because it is cheaper, by confirming that the breakage
+applied and that the witness can carry the value it is testing. The harness
+now asserts that each replacement applied before it runs anything, and a
+witness whose answer can exceed eight bits divides it before returning.
+Where a step is unobservable in truth, the reason is written at the
+instruction, so that the day it becomes observable the comment says which
+program will catch it.
