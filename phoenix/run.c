@@ -803,6 +803,60 @@ bool rewrite_run(Arena *a, const Grammar *g, const Source *src,
 
 /* ------------------------------------------------------------------ */
 
+/* A driver, run: each stage once, in order, and a stage marked `until` again
+ * and again until the root attribute it names comes out of a round equal to
+ * what went in. **The first round's "before" is what an earlier stage left**,
+ * which `check.c` insists one did, so a stage that changes nothing the first
+ * time runs exactly once.
+ *
+ * The test is structural equality, `value_equal`, the same `=` a clause has.
+ * A stage settles when its answer moves one way **and has somewhere to
+ * stop**: `relax` in `languages/z80/` only ever shrinks a `br`, and a `br`
+ * can shrink once. One that oscillates does not settle, and neither does one
+ * that grows without end, which is `tests/grammars/until-never-settles.phx`;
+ * the bound is what says so rather than running forever. It is a bound and
+ * not a tuning knob: a relaxation that has not settled in this many rounds
+ * is not converging, it is a mistake, and the message names the stage and
+ * the attribute that were still moving. */
+enum { DRIVER_ROUNDS = 256 };
+
+bool driver_run(Arena *a, const Grammar *g, const Source *src,
+                const Driver *d, Value **root)
+{
+    for (int i = 0; i < d->npasses; i++) {
+        const char *until = d->until ? d->until[i] : NULL;
+
+        if (!until) {
+            if (!driver_stage(a, g, src, d->passes[i], root)) return false;
+            continue;
+        }
+
+        for (int round = 1; ; round++) {
+            Value *before = pass_attr(*root, until);
+            if (!driver_stage(a, g, src, d->passes[i], root)) return false;
+            Value *after = pass_attr(*root, until);
+
+            if (!after) {
+                diag_error(&g->src, d->pass_pos[i],
+                           "'%s' is run until '%s' settles, and left no '%s' "
+                           "on the root", d->passes[i], until, until);
+                return false;
+            }
+            if (before && value_equal(before, after)) break;
+
+            if (round == DRIVER_ROUNDS) {
+                diag_error(&g->src, d->pass_pos[i],
+                           "'%s' ran %d times and '%s' on the root was still "
+                           "changing -- a stage run until something settles "
+                           "has to move it one way, towards somewhere it stops",
+                           d->passes[i], round, until);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool driver_stage(Arena *a, const Grammar *g, const Source *src,
                   const char *name, Value **root)
 {

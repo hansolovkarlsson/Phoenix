@@ -4060,7 +4060,7 @@ More descriptions do not add mechanisms; they produce the evidence that earns
 one. The roadmap already says so in both open entries — *one is a workaround;
 two is a mechanism* for [1.7](ROADMAP.md#17-a-repetition-that-counts), and a
 customer *a person would notice* for
-[2.5](ROADMAP.md#25-circular-attributes--from-jastadd). So the question is not
+[2.5](COMPLETED.md#25-circular-attributes--from-jastadd). So the question is not
 which language would be pleasant to write but which one would fail at
 something.
 
@@ -5716,3 +5716,62 @@ says to check the observer first, and that is what the second look did.
 
 The tool is 9,312 lines, and the records that quote its size say so. 306
 checks to 309, all passing, and 304 with the three optional oracles absent.
+
+## 2026-09-23: a driver that runs a pass until it settles
+
+ROADMAP 2.5 had been one decision away since 2026-09-06: `relax`, the Z80
+layout written out a second time, was the fixpoint's step, and what was
+left was where *again* is written. Hans chose the driver, as the roadmap and
+the 09-05 standup both leaned, and the reason held up on contact: a driver
+is already the claim about what runs in what order, and a pass that looped
+would be the interpreter 3.1 refuses.
+
+**The shape came out of `relax` before any code did.** To be run again, the
+pass has to read its own previous answer, so it defines `labels`, the name
+`layout` uses, and hands down the table it is about to replace:
+`layout`'s on the first round, its own after that. The driver says
+`relax until labels`. That one decision made the rest mechanical, and it
+also showed what the roadmap's own list had wrong. It said the test was
+*did any size change*; the step's input is the label table, so the table is
+what has to stop moving, and a `br` after the last label can change a size
+without changing anything the next round reads.
+
+**The tool learned it in four places and one of them was not the tool.**
+The parser takes `until` as the second of three names in a stage, not
+reserved anywhere. `driver_run` in `run.c`, which is in the runtime, holds
+the loop, so `phx` and a compiler written out with `-o` share one
+implementation; the generated compiler's driver table gained a column. Two
+checks in `check.c` had been right about one walk and were wrong about
+several, a `down` clause reading its own rule's work and two passes
+defining one attribute, and each now waives exactly the attribute a driver
+names after `until`. Four refusals say what `until` cannot mean. The fourth
+place was `languages/phx/phoenix.phx`, the notation in its own terms, and
+the suite found it: it parses every description here, and the new
+`z80.phx` did not parse. `until` is a name there too, for the reason the
+`%names` words are.
+
+*A message that was wrong about its own witness.* The bound's first message
+said a stage run until something settles "has to move it one way only".
+The test written for the bound is a pass that adds one every round, which
+moves one way only and never settles. It says *one way, towards somewhere
+it stops* now, and the comment above it says why `relax` does.
+
+*The witnesses.* `two-rounds.z80`, a divergence pinned at 130 bytes since
+09-05, came out at 129 and moved into the oracle. A fixed three walks would
+also pass it, so a deeper one was needed. A random search over programs
+found one that needs four walks and was unreadable; the one kept,
+`three-rounds.z80`, was worked out by hand as `two-rounds` one level deeper,
+three nested `br`s, and simulated round by round against `relax`'s own rule
+before the tool ran it. 134, 133, 132, 131, 131, and the tool agrees at the
+end, from `phx` and from a compiler it wrote. `z80asm` agrees with all ten
+programs byte for byte.
+
+**What was not done.** 2.5's other customer, `languages/units/`, keeps its
+two divergences: a pass adding one step of reachability, run until the
+table settles, would refuse the three-unit cycle, but `fpc` already refuses
+that program and no one has asked for the diagnostic. ROADMAP 5's wart about
+iteration over data is narrowed rather than closed: nothing inside a pass
+runs again on what it produced.
+
+The tool is 9,466 lines. 309 checks to 316, and 311 with the three optional
+oracles absent, both measured.

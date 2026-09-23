@@ -1,0 +1,15 @@
+(* `other` is run until `n` settles, and `other` does not define `n`, so
+ * nothing it does can settle it. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass start
+  Number : n = 0 .
+%pass other
+  Number : m = 1 .
+%driver d = start, other until n -> n .

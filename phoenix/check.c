@@ -557,6 +557,22 @@ static bool pass_declares_thread(const Pass *p, const char *name)
     return false;
 }
 
+/* Whether some driver runs this pass `until` this attribute settles. Then a
+ * `down` clause reading the attribute its own rule computes is reading the
+ * **last round's** answer, which is the point of running it again: `relax`
+ * in `languages/z80/` hands down the table it will replace. */
+static bool pass_settles_on(const Grammar *g, const char *pass, const char *attr)
+{
+    for (int d = 0; d < g->ndrivers; d++) {
+        const Driver *driver = &g->drivers[d];
+        if (!driver->until) continue;
+        for (int i = 0; i < driver->npasses; i++)
+            if (driver->until[i] && strcmp(driver->passes[i], pass) == 0
+                && strcmp(driver->until[i], attr) == 0) return true;
+    }
+    return false;
+}
+
 static void check_clause_order(Check *c)
 {
     Grammar *g = c->g;
@@ -655,6 +671,12 @@ static void check_clause_order(Check *c)
                     /* Unless the name means something else here. */
                     if (pattern_binds(rule->pattern, def->attr)) continue;
                     if (type_has_field(type, def->attr)) continue;
+
+                    /* Or unless it is last round's, in a pass that runs until
+                     * this attribute settles. `check_drivers` sees that an
+                     * earlier stage left one for the first round to read. */
+                    if (use->kind == C_DOWN
+                        && pass_settles_on(g, pass->name, def->attr)) continue;
 
                     diag_error(&g->src, use->pos,
                                "this reads '%s', which this rule computes on "
@@ -918,8 +940,17 @@ static void check_drivers(Check *c)
             /* A stage is a pass or a rewrite. A rewrite defines no attribute
              * and so cannot be what a later stage was waiting for; it is
              * checked where it is declared instead. */
-            if (rewrite_find(g, driver->passes[i]) && !pass_find(g, driver->passes[i]))
+            if (rewrite_find(g, driver->passes[i]) && !pass_find(g, driver->passes[i])) {
+                if (driver->until && driver->until[i]) {
+                    diag_error(&g->src, driver->pass_pos[i],
+                               "'%s' is a rewrite, and a rewrite defines no "
+                               "attribute to settle -- `innermost` is how a "
+                               "rewrite runs until nothing changes",
+                               driver->passes[i]);
+                    c->ok = false;
+                }
                 continue;
+            }
 
             const Pass *pass = pass_find(g, driver->passes[i]);
             if (!pass) {
@@ -929,6 +960,33 @@ static void check_drivers(Check *c)
                            driver->name, driver->passes[i]);
                 c->ok = false;
                 continue;
+            }
+
+            /* **`until`: the step defines the attribute, and something before
+             * it defines the start.** Without the first, the round that is
+             * compared has nothing to compare; without the second, the first
+             * round has nothing to read and nothing to be compared with. */
+            const char *until = driver->until ? driver->until[i] : NULL;
+            if (until && !pass_leaves_on_node(pass, until)) {
+                diag_error(&g->src, driver->pass_pos[i],
+                           "driver '%s' runs '%s' until '%s' settles, and '%s' "
+                           "does not define '%s' on a node",
+                           driver->name, pass->name, until, pass->name, until);
+                c->ok = false;
+            } else if (until) {
+                bool start = false;
+                for (int j = 0; j < i && !start; j++) {
+                    const Pass *before = pass_find(g, driver->passes[j]);
+                    if (before && pass_leaves_on_node(before, until)) start = true;
+                }
+                if (!start) {
+                    diag_error(&g->src, driver->pass_pos[i],
+                               "driver '%s' runs '%s' until '%s' settles, and "
+                               "nothing before it defines '%s' for the first "
+                               "round to start from",
+                               driver->name, pass->name, until, until);
+                    c->ok = false;
+                }
             }
 
             const char *reads[MAX_ATTRS];
@@ -1006,6 +1064,10 @@ static void check_drivers(Check *c)
                         if (cl->kind != C_SYNTH) continue;
                         if (!cl->attr) continue;
                         if (!attr_on_node(before, cl->attr)) continue;
+                        /* Meant, when the later pass settles on it: the
+                         * earlier one's is the first round's start. */
+                        if (driver->until && driver->until[i]
+                            && strcmp(driver->until[i], cl->attr) == 0) continue;
 
                         diag_warn(&g->src, driver->pass_pos[i],
                                   "in driver '%s', both '%s' and '%s' define "

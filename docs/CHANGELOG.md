@@ -75,6 +75,21 @@ pointer is refused by name, although `cc` compiles both, and so is a `main`
 that returns a struct, which `cc` only warns about. Ten more oracle
 programs, 185 in all, and 82 refusals.
 
+**The notation changed again: a driver can run a pass until something
+settles.**
+
+```
+%driver code = layout, relax until labels, reach, code -> out .
+```
+
+`relax until labels` runs `relax` again and again until the root's `labels`
+is what the round before left, and then goes on. A stage that never settles
+stops after 256 rounds with a message naming it. `until` is not a reserved
+word. The Z80 assembler uses it: `br` now always picks the shortest
+encoding, where it used to leave some programs a byte or two long, and
+`two-rounds.z80`, which was pinned as a divergence at 130 bytes, is 129.
+Compilers written out with `-o` do the same.
+
 **`phx` refuses a name in a pass that nothing could answer**, when the
 description is read. `$sig` with no binding, field, attribute or embed of
 that name was accepted and then reported once for every node that reached
@@ -85,7 +100,7 @@ Every description in this repository reads as it did.
 **Phoenix has a license**: MIT, in [`LICENSE`](../LICENSE). There was none
 before.
 
-**Tests:** 264 → 309. Eight for `%names`, on a small grammar made to have
+**Tests:** 264 → 316. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
 itself. Nine for `typedef`: four refusals of what C refuses too, three of
@@ -97,7 +112,9 @@ address, less the three refusals that became oracle programs. Then nine
 refusals for a struct returned, six that `cc` makes too and three this
 subset adds. Then three for a bare name: the two ways of getting one wrong,
 and a grammar holding every kind that is right, so the check stays as
-generous as the lookup it guards.
+generous as the lookup it guards. Then seven for `until`: four refusals,
+the program that needs a fourth walk and what one walk made of it, and a
+compiler written out with `-o` running the loop.
 
 ---
 
@@ -406,10 +423,10 @@ which over-state and therefore only shrink.
 
 That reaches the minimum on a program one round deep — `tests/oracle/chain.z80`
 goes 131 to 129 — and misses by a byte on
-[`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80), where
+[`divergent/two-rounds.z80`](../languages/z80/tests/oracle/two-rounds.z80), where
 the second `br` shrinking is what brings the first into range on a **third**
 walk nobody makes. No fixed number of walks is the answer, which is
-[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) — now with the
+[ROADMAP 2.5](COMPLETED.md#25-circular-attributes--from-jastadd) — now with the
 customer, the witness, and a working prototype of the mechanism in front of
 it.
 

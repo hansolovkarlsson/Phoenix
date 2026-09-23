@@ -1,0 +1,17 @@
+(* `grow` hands down the `n` it is about to replace and adds one to it, so
+ * `n` never settles. The driver stops at its bound and says which stage and
+ * which attribute were still moving, rather than running forever. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass start
+  Number : n = 0 .
+%pass grow
+  Number : down was = $n
+         : n = $was + 1 .
+%driver d = start, grow until n -> n .

@@ -67,6 +67,7 @@ A description has, in this order:
 %pass name  ...clauses...      (* walks over the tree *)
 %rewrite name strategy ...
 %driver name = a, b -> attr .  (* what to run, in what order *)
+%driver name = a, b until x, c -> attr .   (* b again, until x settles *)
 ```
 
 Nothing else. Every mechanism below fits one of those lines.

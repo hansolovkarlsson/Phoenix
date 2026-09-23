@@ -145,7 +145,7 @@ clause of every pass.
 | `%include Type field .` | which node an include is built as, and which field holds the file |
 | `%pass name` | clauses, until the next directive |
 | `%rewrite name strategy` | rewrite rules, until the next directive |
-| `%driver name = a, b -> attr .` | stages in order, and which attribute of the root is the answer |
+| `%driver name = a, b -> attr .` | stages in order, and which attribute of the root is the answer. `b until x` runs a pass until the root's `x` settles |
 
 An unknown directive is refused and the message lists the ones there are.
 
@@ -714,6 +714,23 @@ worth having: `typecheck` can render the expression it is complaining about
 using `show`, a pass that came from a library module and knows nothing about the
 language importing it.
 
+### A stage run until something settles
+
+```
+%driver code = layout, relax until labels, reach, code -> out .
+```
+
+`relax until labels` runs `relax` again and again until the root's `labels`
+comes out of a round `=` to what went in, then goes on to `reach`. The first
+round's *what went in* is what an earlier stage left, so one stage before it
+has to define the attribute, and the pass itself has to define it on a node.
+A `down` clause in that pass may read the attribute its own rule computes,
+which is otherwise refused: here it is last round's answer, which is the
+point. A pass that has not settled after 256 rounds stops with the stage and
+the attribute named. `until` is not reserved; it means this only as the
+second of three names in a stage. A rewrite takes no `until`: `innermost` is
+how a rewrite runs until nothing changes.
+
 ### A driver is a claim about order, and it is checked
 
 If a pass reads `$left.type` and the driver forgot to run `typecheck`, the
@@ -1027,6 +1044,10 @@ correct file reported as broken, at a place that is not the mistake.
 | a driver naming no such stage | |
 | a driver answering with nothing | none of its passes defines that attribute |
 | two drivers of one name | |
+| `until` on a rewrite | a rewrite defines no attribute to settle |
+| `until` on something the stage does not define | nothing it does could settle it |
+| `until` with nothing before it to start from | the first round has nothing to read or be compared with |
+| a stage that never settles | stopped after 256 rounds, with the stage and the attribute named, when it runs |
 
 ### About `%include` and `%embed`
 
@@ -1058,9 +1079,11 @@ cost anything, including awk, whose grammar is famously not LL(1) — both hard
 cases were describable by putting the specific alternative first, and two
 descriptions now rely on it rather than merely surviving it.
 
-**There is no iteration over data.** `%rewrite innermost` reaches a fixpoint
-over the shape of a tree; nothing does that over a table. The cost is
-transitive closure — see [ROADMAP.md § 5](ROADMAP.md#5-known-warts).
+**There is no iteration over data inside a pass.** `%rewrite innermost`
+reaches a fixpoint over the shape of a tree, and a driver can run a whole pass
+[until an attribute settles](#a-stage-run-until-something-settles); nothing
+inside one walk runs again on what it produced. See
+[ROADMAP.md § 5](ROADMAP.md#5-known-warts).
 
 **A field can shadow an attribute handed down**, so a `down` clause may hand a
 value to its children that the node itself cannot read back. A warning; the

@@ -500,6 +500,20 @@ refuses "a bare name that is another pass's thread" "lives only in that pass's w
         "$root/tests/grammars/bare-name-another-pass-thread.phx"
 accepts "and every kind of bare name that can answer" \
         "$root/tests/grammars/bare-name-every-kind.phx"
+# **A stage run `until` an attribute settles**, since 2026-09-23: ROADMAP
+# 2.5's fixpoint, written in the driver. `languages/z80/` is the customer, and
+# its sizes are pinned under Z80 below. These are what is refused: a rewrite,
+# which has nothing to settle; a start nobody left for the first round; a
+# stage that does not define what it is waiting on; and one that never
+# settles, which stops at the bound rather than running forever.
+refuses "until, on a rewrite" "a rewrite defines no attribute to settle" \
+        "$root/tests/grammars/until-a-rewrite.phx"
+refuses "until, with nothing to start from" "nothing before it defines 'n' for the first round" \
+        "$root/tests/grammars/until-no-start.phx"
+refuses "until, on something the stage does not define" "'other' does not define 'n' on a node" \
+        "$root/tests/grammars/until-not-defined.phx"
+refuses "until, when it never settles" "'grow' ran 256 times and 'n' on the root was still changing" \
+        "$root/tests/grammars/until-never-settles.phx" "$root/tests/sources/zero.txt"
 
 # The default driver is the first declared, and it compiles.
 if "$phx" --quiet "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
@@ -999,6 +1013,26 @@ else
     report fail "a generated compiler runs a rewrite" "it did not build"
 fi
 
+# And a stage run `until` something settles: the loop is in the runtime, so a
+# generated compiler has it, and the program that needs a fourth walk is the
+# one that shows it. 131 bytes is the minimum, and 134 is one walk's answer.
+if "$phx" "$root/languages/z80/z80.phx" -o "$tmp0/z80.c" 2>/dev/null \
+   && cc -o "$tmp0/z80c" "$tmp0/z80.c" 2>/dev/null; then
+    three="$root/languages/z80/tests/oracle/three-rounds.z80"
+    "$phx" --raw --driver code "$root/languages/z80/z80.phx" "$three" \
+           > "$tmp0/z80-phx" 2>/dev/null
+    "$tmp0/z80c" --raw --driver code "$three" > "$tmp0/z80-cc" 2>/dev/null
+    if cmp -s "$tmp0/z80-phx" "$tmp0/z80-cc" \
+       && [ "$(wc -c < "$tmp0/z80-cc" | tr -d ' ')" = "131" ]; then
+        report pass "a generated compiler runs a stage until it settles"
+    else
+        report fail "a generated compiler runs a stage until it settles" \
+                    "$(wc -c < "$tmp0/z80-cc" | tr -d ' ') bytes"
+    fi
+else
+    report fail "a generated compiler runs a stage until it settles" "it did not build"
+fi
+
 # An embedded file has to survive the freezing like anything else -- and it is
 # the one thing here most likely to hold a byte that does not survive being
 # written as a C literal.
@@ -1452,32 +1486,37 @@ refuses "an immediate that does not fit its byte" "at most 255, and this is 300"
 refuses "a jr the programmer wrote that does not reach" "'far' is 130 away" \
         "$root/languages/z80/z80.phx" "$z/unreachable.z80"
 
-# **`br` picks its own encoding, and the two walks are pinned separately.**
-# `layout` has met no forward label and assumes three bytes; `relax` has
-# `layout`'s table and decides both directions against an over-estimate, which
-# is the only safe direction -- shrinking one `br` only pulls later addresses
-# down, so a `br` that fits against the estimate still fits when everything
-# settles. `size` is the first walk's answer and `size2` is the second's.
+# **`br` picks its own encoding, and the first walk is pinned apart from the
+# rest.** `layout` has met no forward label and assumes three bytes; `relax`
+# has a table with every label and decides both directions against an
+# over-estimate, which is the only safe direction -- shrinking one `br` only
+# pulls later addresses down, so a `br` that fits against the estimate still
+# fits when everything settles. The driver runs it `until labels` settles.
+# `size` is the first walk's answer and `size2` the settled one.
 o="$root/languages/z80/tests/oracle"
 prints "a forward br is three bytes in the first walk" "5" \
        --driver code --show size "$root/languages/z80/z80.phx" "$o/short-forward.z80"
-prints "and two in the second" "4" \
+prints "and two once it settles" "4" \
        --driver code --show size2 "$root/languages/z80/z80.phx" "$o/short-forward.z80"
 # The forward jump's size is what decides whether the backward one fits, and
 # one extra walk gets both. The arithmetic is in the file, countable by hand.
 prints "a chain settles two bytes above the minimum in one walk" "131" \
        --driver code --show size "$root/languages/z80/z80.phx" "$o/chain.z80"
-prints "and reaches it in two" "129" \
+prints "and reaches it" "129" \
        --driver code --show size2 "$root/languages/z80/z80.phx" "$o/chain.z80"
 
-# **And the divergence that is left, which is the whole of ROADMAP 2.5.** Two
-# forward `br`s, where the second one shrinking in walk two is what brings the
-# first into range in walk *three* -- a walk this description does not make.
-# One round of one is not a fixpoint, and no fixed number is: every round makes
-# the next round's estimate better. 130 here, and 129 is reachable.
-prints "a program that needs a third walk does not get one" "130" \
-       --driver code --show size2 "$root/languages/z80/z80.phx" \
-       "$root/languages/z80/divergent/two-rounds.z80"
+# **ROADMAP 2.5, which is why the driver says `until`.** Two forward `br`s,
+# where the second one shrinking in walk two is what brings the first into
+# range in walk *three*. Until 2026-09-23 this was a divergence, pinned at 130,
+# because `relax` ran once. Three nested `br`s want walk *four*, and get it:
+# no fixed number of walks is right for every program, and the driver's
+# stopping rule is the one that is.
+prints "a program that needs a third walk gets one" "129" \
+       --driver code --show size2 "$root/languages/z80/z80.phx" "$o/two-rounds.z80"
+prints "and one that needs a fourth" "131" \
+       --driver code --show size2 "$root/languages/z80/z80.phx" "$o/three-rounds.z80"
+prints "which the first walk left three bytes long" "134" \
+       --driver code --show size "$root/languages/z80/z80.phx" "$o/three-rounds.z80"
 if command -v z80asm >/dev/null 2>&1; then
     if za=$("$root/languages/z80/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$za" | grep -c '^  ok')

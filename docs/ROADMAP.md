@@ -14,7 +14,7 @@ Three languages are described and compiled: Pascal against `fpc`, Solveig
 against `solas`, awk against `/usr/bin/awk`, and a fourth description targets
 SolVM's bytecode.
 
-**Two entries are open, and both arrived the way this page requires.** Section
+**Two entries were opened this way, and one is still open.** Section
 1 and section 2 stood empty from 2026-09-03, every stage and every borrowed
 idea having left with a verdict and three of them settled *against* building.
 What re-opened them was not a survey of what other tools have — that survey was
@@ -26,7 +26,7 @@ notation cannot say:
 | | |
 | --- | --- |
 | [1.7](#17-a-repetition-that-counts) | `languages/solvm/` **emits `.sob` and cannot read it** |
-| [2.5](#25-circular-attributes--from-jastadd) | `languages/units/` cannot refuse `A -> B -> C -> A`, and cannot order initialisation |
+| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | *built 2026-09-23, for `languages/z80/`, as a driver stage run `until` an attribute settles.* `languages/units/` cannot refuse `A -> B -> C -> A`, and cannot order initialisation |
 
 Neither is new. Both have been true for days and were recorded as costs rather
 than as work; what changed is [lineage.md](lineage.md) naming the prior art, so
@@ -95,8 +95,7 @@ value the parse has just produced.
 ## 2. Borrowed, and worth borrowing
 
 Each of these is somebody else's solved problem. [lineage.md](lineage.md) says
-whose. **Four are settled** — two built and two tested and refused — and one is
-open.
+whose. **All five are settled**: three built, and two tested and refused.
 
 | | |
 | --- | --- |
@@ -104,123 +103,7 @@ open.
 | [2.2](COMPLETED.md#22-strategies--from-stratego) | strategies, from Stratego — `%rewrite` |
 | [2.3](COMPLETED.md#23-scope-graphs--from-statix) | scope graphs, from Statix — settled **against**: Pascal units were described to test it, and resolution stayed a list |
 | [2.4](COMPLETED.md#24-inlining-a-block--from-solas) | inlining a block, from `solas` |
-
-### 2.5 Circular attributes — from JastAdd
-
-An attribute here is computed **once per node in one walk**, which is what
-makes the walk cheap and what [3.1](#31-an-interpreter-that-can-loop) refuses a
-looping interpreter over. A **circular** attribute is defined by a fixpoint
-instead: it starts at a bottom value and is re-evaluated until it stops
-changing. Magnusson and Hedin added them to JastAdd for exactly the analyses
-one walk cannot do.
-
-**Two failures in this repository are the same missing thing.** Both are in
-[`languages/units/divergent/`](../languages/units/divergent/), written down
-rather than hidden, with the suite checking they are still the divergences they
-claim to be:
-
-| | |
-| --- | --- |
-| a circular `uses` three units deep | refusing `A -> B -> C -> A` is **reachability**, and this description manages two units only. [`three-cycle.pas`](../languages/units/divergent/three-cycle.pas) is the witness |
-| initialisation order | a **topological sort** over the same graph |
-
-[5](#5-known-warts) already names the general form — *there is no iteration
-over data.* `%rewrite innermost` reaches a fixpoint over the **shape of a
-tree**, rewriting until nothing matches; nothing does the same over a **table**.
-Every list operation in the library answers in one step. So the mechanism is
-half-present: the fixpoint is there, and it is over the wrong thing.
-
-*Why this is not [2.3](COMPLETED.md#23-scope-graphs--from-statix) again.* Scope graphs were
-refused because **resolution** did not need a graph — visibility does not
-compose, so a `uses` is one lookup in a table and there is no traversal for a
-cycle to be a cycle in. That finding stands and this entry does not disturb it.
-What is graph-shaped here is not resolution but the two things above, and the
-2.3 entry says so itself.
-
-*The condition for building it* is a language that needs a fixpoint for
-something a person would notice. Refusing a three-unit cycle is a diagnostic
-nobody has asked for, and `fpc` is the arbiter that already catches it. **A
-dataflow analysis would be the real customer** — liveness, reaching
-definitions, constant propagation — and no description here has one, because
-none of them optimises. That is the thing to watch for rather than a bigger
-`units/`.
-
-*And a cheaper customer than a dataflow analysis may exist.* An assembler for
-an ISA with **span-dependent instructions** — Z80's `JR e` at two bytes against
-`JP nn` at three — has to iterate: choosing the short form shrinks the code,
-every label after it moves, and a branch that was out of range comes into it.
-That is a fixpoint over a table, getting it wrong is a silently bad offset
-rather than a diagnostic nobody asked for, and
-[`languages/solvm/`](../languages/solvm/) has already paid for everything an
-assembler costs here *except* that. `z80asm` assembles the same source for a
-byte-for-byte oracle, in the class of `fpc` and `solas` — present, or the test
-skips.
-
-**The customer arrived on 2026-09-05**, and this entry is no longer waiting for
-one. [`languages/z80/`](../languages/z80/) assembles a Z80 subset, and `br` is
-the pseudo-instruction that picks its own encoding: two bytes relative when the
-target is in reach, three absolute when it is not.
-
-*What one walk can do, and where it stops.* `layout` threads the labels it has
-**already met**, so a backward `br` is decided exactly — the address is known.
-A forward one is not, and guessing short and being wrong emits a jump to
-somewhere else, so it is assumed long. Correct, and not minimal.
-
-*So the walk is written out a second time.* `relax` is `layout` again, with
-`layout`'s table in hand, deciding both directions. **Shrinking is the only
-safe direction and that is what makes it terminate**: every address in the
-table came from a layout in which nothing was shorter than it will be, so a
-distance computed against it can only over-state the final one, and a `br` that
-fits against the estimate still fits when everything settles. Nothing ever has
-to grow back.
-
-| | | |
-| --- | --- | --- |
-| [`tests/oracle/short-forward.z80`](../languages/z80/tests/oracle/short-forward.z80) | 5 → **4** | one walk assumes long, two gets it |
-| [`tests/oracle/chain.z80`](../languages/z80/tests/oracle/chain.z80) | 131 → **129** | the forward `br` shrinking is what brings the backward one into range. One round deep, and the second walk reaches the minimum |
-| [`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80) | 131 → 130, and **129 is reachable** | two forward `br`s: the second shrinking in walk two is what brings the first into range in walk **three**, which nobody makes |
-
-**`two-rounds.z80` is the entry, and it is what a second walk cannot answer.**
-Every round makes the next round's estimate better, so no fixed number of
-rounds is right for every program — three works here and a longer program wants
-four. The stopping rule that is right is *until nothing moves*, which is
-[5](#5-known-warts)'s **there is no iteration over data** met by something a
-person notices: one wasted byte, countable by hand, in a program the suite
-pins.
-
-*What is missing is now only the word for it.* The mechanism has a working
-prototype — `relax` **is** the step function, and the parts are settled by
-having built it:
-
-| | |
-| --- | --- |
-| the step | one pass, exactly as written |
-| the bottom | every forward `br` long, which `layout` already produces |
-| the direction | shrink only, which is why it terminates and why every intermediate state is a valid program |
-| the test | did any size change since the last round |
-| the guard | a bound, and a diagnosis naming what was still moving when it ran out |
-
-*The open question is where the repetition is written*, and it is a notation
-question rather than an implementation one. A pass could declare it — `%pass
-relax` with a marker — or a **driver** could, since a driver is already the
-claim about what runs in what order and this is a claim about running one thing
-until it settles. The second reads better against
-[3.1](#31-an-interpreter-that-can-loop): a pass that iterates is not an
-interpreter that loops, because the thing being repeated is a whole walk with a
-termination test the tool owns, not a construct in the meta-language.
-
-*And the half the notation already does.* A `jr` the programmer wrote is
-checked against the label table in the pass that has every address —
-`refused/unreachable.z80` is 130 bytes away and says so. **The notation can
-check a relative jump and cannot choose one** — and it can be made to choose
-one by writing the walk out per round, which is the workaround this entry now
-has instead of an absence.
-
-It does nothing for [1.7](#17-a-repetition-that-counts), and that is worth
-writing down so it is not looked for twice: a Z80 instruction's length comes
-from its **opcode**, not from a count read out of the stream. The second
-length-prefixed format 1.7 wants is still unfound.
-
+| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | circular attributes, from JastAdd: a driver runs a pass `until` an attribute of the root settles |
 
 ## 3. What is deliberately not here
 
@@ -502,19 +385,24 @@ on `push` and falls through; `languages/units/` tries `slots 2` before
 `slots self, n`. Ordered choice asked for the specific alternative first in
 both, and in both that is also the clearer way to read the rule.
 
-**There is no iteration over data.** A `%rewrite innermost` reaches a fixpoint
-over the **shape of a tree** — it rewrites until nothing matches — and there is
-nothing that does the same over a *table*. Every list operation in the library
-answers in one step: `each` applies a template once per element, `flatten` opens
-one level, and none of them can be asked to run again on what it produced.
+**There is no iteration over data inside a pass.** A `%rewrite innermost`
+reaches a fixpoint over the **shape of a tree**, and since 2026-09-23 a driver
+can run a whole pass `until` an attribute of the root settles, which is a
+fixpoint over a *table* at the granularity of a walk:
+[2.5](COMPLETED.md#25-circular-attributes--from-jastadd). What is still true is
+the narrower thing: every list operation in the library answers in one step.
+`each` applies a template once per element, `flatten` opens one level, and none
+of them can be asked to run again on what it produced.
 
-The cost is transitive closure, and
+The cost was transitive closure, and
 [`languages/units/`](../languages/units/) is the first thing to want one. It
 refuses a circular interface `uses` two units deep — *does the unit I use use me
 back* — and cannot refuse `A -> B -> C -> A`, because catching that means
 closing the uses graph over itself.
 [`divergent/three-cycle.pas`](../languages/units/divergent/three-cycle.pas) is
-that, written down. It is a different absence from
+that, written down. A pass that adds one step of reachability, run `until` the
+table settles, would now say it; nobody has written that pass, because `fpc`
+already refuses the program and no one has asked for the diagnostic. It is a different absence from
 [3.5](#35-conditionals-in-the-meta-language): a conditional is a thing the
 notation says *no* to on purpose, and this is a thing nothing has yet made a
 case for.

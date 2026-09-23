@@ -441,6 +441,13 @@ static void emit_drivers(Emit *e)
         fprintf(e->out, "static size_t dw%d[] = {", i);
         for (int k = 0; k < d->npasses; k++) fprintf(e->out, "%zu,", d->pass_pos[k]);
         fputs("};\n", e->out);
+
+        fprintf(e->out, "static char *du%d[] = {", i);
+        for (int k = 0; k < d->npasses; k++) {
+            emit_string(e, d->until ? d->until[k] : NULL);
+            fputc(',', e->out);
+        }
+        fputs("};\n", e->out);
     }
 
     fputs("\nstatic Driver phx_drivers[] = {\n", e->out);
@@ -450,7 +457,7 @@ static void emit_drivers(Emit *e)
         emit_string(e, d->name);
         fprintf(e->out, ",dp%d,%d,", i, d->npasses);
         emit_string(e, d->answer);
-        fprintf(e->out, ",%zu,dw%d},\n", d->pos, i);
+        fprintf(e->out, ",%zu,dw%d,du%d},\n", d->pos, i, i);
     }
     fputs("};\n", e->out);
 }
@@ -612,9 +619,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "    }\n"
         "    if (!driver) { tree_dump(stdout, tree); return 0; }\n"
         "\n"
-        "    for (int i = 0; i < driver->npasses; i++)\n"
-        "        if (!driver_stage(a, &phx_grammar, &src, driver->passes[i],\n"
-        "                          &tree)) return 1;\n"
+        "    if (!driver_run(a, &phx_grammar, &src, driver, &tree)) return 1;\n"
         "    if (!driver->answer) return 0;\n"
         "\n"
         "    Value *answer = pass_attr(tree, driver->answer);\n"

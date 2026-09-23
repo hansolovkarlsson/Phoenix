@@ -1,0 +1,13 @@
+(* `grow` is run until `n` settles, and nothing before it leaves an `n` for
+ * the first round to read or be compared with. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass grow
+  Number : n = 1 .
+%driver d = grow until n -> n .

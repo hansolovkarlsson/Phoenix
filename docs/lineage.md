@@ -129,7 +129,7 @@ transformation.
 **Not novel in its ideas.** Every mechanism above has a name and a literature.
 What is distinctive is the combination:
 
-- **9,312 lines of C11 against the C standard library and nothing else.** The
+- **9,466 lines of C11 against the C standard library and nothing else.** The
   point is not the language — Eli is a C-based system too — it is the footprint:
   Eli and Spoofax are *systems*, with toolchains and generators and editors.
   Phoenix is one binary and a `lib/` directory. That buys much less and costs
@@ -171,7 +171,7 @@ here has run into them and the failure is written down.
 it is a repetition whose count is a value the parse has just produced, and the
 notation has no way to say one.
 
-**JastAdd's circular attributes** — [2.5](ROADMAP.md#25-circular-attributes--from-jastadd).
+**JastAdd's circular attributes** — [2.5](COMPLETED.md#25-circular-attributes--from-jastadd), *built 2026-09-23 as a driver stage run `until` an attribute settles.*
 An attribute defined by a fixpoint rather than in one walk.
 [`languages/units/`](../languages/units/) cannot refuse `A -> B -> C -> A` and
 cannot order initialisation, and both are in its `divergent/` directory with a

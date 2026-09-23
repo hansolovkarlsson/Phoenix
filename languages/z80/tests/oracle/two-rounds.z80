@@ -1,24 +1,27 @@
-; The forward jump's size decides whether the backward one fits, and the
-; second walk gets both. 123 bytes of filler, and arithmetic countable by hand:
+; A program that needs a **third** walk, which is why the answer is a fixpoint
+; and not a fixed number of passes.
 ;
-;   top:    nop            1 byte, at 0
-;           br far         at 1, two bytes or three
-;           123 nops
-;           br top         at A = 1 + (that size) + 123
-;   far:    halt
+; Two forward `br`s. The second one shrinks in the second walk, which pulls
+; `far` one byte closer -- and only then does the first one come into range.
 ;
-; Walk one assumes the forward `br` is long, A is 127, and the backward
-; displacement is -129 -- one out of range, so that one is long too: 131 bytes.
+;   walk 1   everything forward is assumed long
+;              br far at 0 (3), 123 nops, br mid at 126 (3), mid 129, far 130
+;   walk 2   using walk 1's table
+;              br far: 130 - 2 = 128, one out of reach, stays long
+;              br mid: 129 - 128 = 1, fits, shrinks to two bytes
+;              far is now 129, and the program is 130 bytes
+;   walk 3   using walk 2's table
+;              br far: 129 - 2 = 127, fits. Both short, and the program is 129
+;   walk 4   nothing moves, so the driver stops
 ;
-; Walk two has walk one's table. The forward `br` fits in two, which puts A at
-; 126, and the backward displacement is exactly -128, which fits. **129**, and
-; that is the minimum.
+; So the second walk is not a fix, it is one round of one. Every round makes
+; the next round's estimate better, and the only stopping rule that is right
+; for every program is **until nothing moves**, which is what the driver says.
+; Until 2026-09-23 this file was in `divergent/`, at 130: the description
+; stopped after walk 2.
 ;
-; So one extra walk is enough *here*. `two-rounds.z80` is the same shape one
-; round deeper and was not enough there, which is the difference between
-; another pass and a fixpoint; the driver runs `relax` until the labels settle,
-; so both reach their minimum.
-top:    nop
+; `chain.z80` is the same shape one round shallower, and `three-rounds.z80`
+; one round deeper.
         br far
         nop
         nop
@@ -143,5 +146,6 @@ top:    nop
         nop
         nop
         nop
-        br top
+        br mid
+mid:    nop
 far:    halt

@@ -6,7 +6,7 @@
  * ---------------------------------------------------------------------------
  * What this is for
  *
- * [ROADMAP 2.5](../../docs/ROADMAP.md#25-circular-attributes--from-jastadd)
+ * [ROADMAP 2.5](../../docs/COMPLETED.md#25-circular-attributes--from-jastadd)
  * has wanted a customer since it opened: an analysis that needs a **fixpoint
  * over a table** rather than over the shape of a tree. A Z80 assembler is the
  * cheapest one, because `jr e` is two bytes and reaches 127 in either
@@ -18,15 +18,16 @@
  * **`jr` is here, and `br` is what it costs.** A relative jump is two bytes
  * and an absolute one is three, so an assembler that picks between them for
  * you has a size that depends on a distance that depends on sizes. `br` is
- * that pseudo-instruction, and this description **cannot decide it**: `layout`
- * makes one walk, so a *backward* target's address is known and a forward
- * one's is not. What it does instead is written under the pass, and the
- * witnesses are in [`divergent/`](divergent/).
+ * that pseudo-instruction. `layout` makes one walk, so a *backward* target's
+ * address is known and a forward one's is not; `relax` decides both against
+ * the last walk's table, and **the driver runs it until the table stops
+ * changing**, which is the fixpoint 2.5 asked for.
  *
- * The finding, in one line: **the notation can check a relative jump and
- * cannot choose one.** `jr` written by hand is verified against the label
- * table in the second walk, where every address is known; `br` has to have its
- * size settled in the first, where they are not.
+ * The finding, in one line, as it stood until 2026-09-23: **the notation can
+ * check a relative jump and cannot choose one.** It can choose one now, and
+ * the choice is minimal: `tests/oracle/two-rounds.z80` and
+ * `three-rounds.z80` are programs that one or two extra walks leave a byte
+ * or two long.
  *
  * ---------------------------------------------------------------------------
  * The subset, and what is outside it
@@ -170,12 +171,10 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
    * exactly, and a forward `br` is assumed long, because assuming short and
    * being wrong emits a jump that goes somewhere else.
    *
-   * **That is correct and it is not minimal**, and the gap is the roadmap
-   * entry. `divergent/short-forward.z80` is three bytes where two would do;
-   * `divergent/chain.z80` is the case a second walk would not fix either,
-   * because shrinking one `br` is what brings the next into range. The answer
-   * is to iterate until the sizes stop changing, and there is nothing in this
-   * notation that iterates over a table.
+   * **That is correct and it is not minimal**, and `relax` below is what
+   * makes it minimal. `tests/oracle/short-forward.z80` is three bytes here
+   * where two would do; `chain.z80` is the case where shrinking one `br` is
+   * what brings the next into range.
    *)
   Br : addr  = $pc
      : known = defined($seen, $target)
@@ -203,12 +202,13 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
               : "the assembly is {} bytes, and an address is two" of $pc .
 
 (* ------------------------------------------------------------------ *)
-(* Pass two: the same walk again, with the first one's answers.       *)
+(* Pass two: the same walk again, with the last one's answers, until   *)
+(* they stop changing.                                                 *)
 (*                                                                     *)
-(* **This pass is `layout` written a second time**, and that is the     *)
-(* entry. The first walk had to assume every forward `br` was long,     *)
-(* because it had not met the target. This one has `layout`'s table, so *)
-(* it can decide a forward `br` too -- against an address that is an    *)
+(* **This pass is `layout` written a second time.** The first walk had  *)
+(* to assume every forward `br` was long, because it had not met the    *)
+(* target. This one has a table with every label in it, so it can       *)
+(* decide a forward `br` too -- against an address that is an           *)
 (* over-estimate, which is the only direction that is safe.             *)
 (*                                                                     *)
 (* *Why shrinking is monotone, and so why this terminates.* Every       *)
@@ -218,12 +218,15 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
 (* a `br` that fits here still fits when everything settles. The walk   *)
 (* can be run again and will never have to grow one back.               *)
 (*                                                                     *)
-(* *And that is why one round is not the answer.* Round two shrinks     *)
-(* what round one's estimate allowed; round three shrinks what round    *)
-(* two's shrinking allowed. `divergent/two-rounds.z80` is a program     *)
-(* that needs the third, and this description stops after the second.   *)
-(* The mechanism 2.5 wants is this pass with *until nothing moves* in    *)
-(* front of it, instead of a copy of it per round.                       *)
+(* *And that is why one round is not the answer, and no fixed number     *)
+(* is.* Round two shrinks what round one's estimate allowed; round      *)
+(* three shrinks what round two's shrinking allowed. So the drivers run  *)
+(* this pass `until labels`: it hands down the table it is about to     *)
+(* replace, `layout`'s on the first round and its own after that, and   *)
+(* the tool runs it again until the table it leaves is the one it was   *)
+(* handed. `tests/oracle/two-rounds.z80` settles on the third walk and  *)
+(* `three-rounds.z80` on the fourth, each the program's minimum. Until  *)
+(* 2026-09-23 this pass ran once and left the first a byte long.        *)
 
 %pass relax
 
@@ -259,7 +262,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   otherwise entry2 = []
 
   Program : down table = $labels
-          : labels2 = flatten($items.entry2)
+          : labels  = flatten($items.entry2)
           : size2   = $pc2 .
 
 (* ------------------------------------------------------------------ *)
@@ -274,7 +277,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
 
 %pass reach
 
-  Program : down table = $labels2 .
+  Program : down table = $labels .
 
   Jr     : disp = lookup($table, $target, $addr2 + 2) - ($addr2 + 2) .
   JrCond : disp = lookup($table, $target, $addr2 + 2) - ($addr2 + 2) .
@@ -285,7 +288,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
 
 %pass code
 
-  Program : down table = $labels2
+  Program : down table = $labels
           : out = join($items.out) .
 
   Nop  : out = bytes(0, 1) .
@@ -389,5 +392,5 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   Br : out = lookup([[true, "        jr {}" of $target]], $short,
                     "        jp {}" of $target) .
 
-%driver code    = layout, relax, reach, code -> out .
-%driver listing = layout, relax, listing -> out .
+%driver code    = layout, relax until labels, reach, code -> out .
+%driver listing = layout, relax until labels, listing -> out .

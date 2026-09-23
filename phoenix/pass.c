@@ -502,13 +502,33 @@ bool read_driver(Reader *r, MToken *directive)
 
         char  **names = arena_alloc(r->a, (size_t)(d->npasses + 1) * sizeof *names);
         size_t *where = arena_alloc(r->a, (size_t)(d->npasses + 1) * sizeof *where);
+        char  **until = arena_alloc(r->a, (size_t)(d->npasses + 1) * sizeof *until);
         memcpy(names, d->passes,   (size_t)d->npasses * sizeof *names);
         memcpy(where, d->pass_pos, (size_t)d->npasses * sizeof *where);
+        if (d->npasses) memcpy(until, d->until, (size_t)d->npasses * sizeof *until);
 
         names[d->npasses] = pass->text;
         where[d->npasses] = pass->pos;
+        until[d->npasses] = NULL;
+
+        /* `relax until labels`: run the stage again until the root's `labels`
+         * is what the round before left. `until` is not reserved anywhere
+         * else, and here it cannot be a pass: two names in a row are
+         * nothing else a driver can say. */
+        if (at(r, T_NAME) && strcmp(peek(r)->text, "until") == 0) {
+            advance(r);
+            if (!at(r, T_NAME)) {
+                diag_error(r->src, peek(r)->pos,
+                           "expected the attribute '%s' is run until it settles",
+                           pass->text);
+                return false;
+            }
+            until[d->npasses] = advance(r)->text;
+        }
+
         d->passes   = names;
         d->pass_pos = where;
+        d->until    = until;
         d->npasses++;
 
         if (at(r, T_COMMA)) { advance(r); continue; }

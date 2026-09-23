@@ -9,13 +9,13 @@ this is what was **believed** about it.*
 *Revised after awk, which is the first language described here that was not
 chosen to suit the tool.*
 
-Phoenix is 9,312 hand-written lines of C11 with no dependencies (~13,700 if
+Phoenix is 9,466 hand-written lines of C11 with no dependencies (~13,900 if
 the generated `runtime.h` is counted; [COMPLETED.md](COMPLETED.md#the-tool)
 says why both are true). The descriptions written
 against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and
 two backends), Solveig in 1,129 (15 node types) with a bytecode backend, awk in
 993 with a 682-line C runtime it embeds, calc in 494 across three backends, and
-Phoenix's own notation in 266.
+Phoenix's own notation in 274.
 
 ---
 
@@ -687,7 +687,7 @@ two days before this, and it named a risk:
 
 **That happened, and it took two days.** The roadmap is not empty any more:
 [1.7](ROADMAP.md#17-a-repetition-that-counts) and
-[2.5](ROADMAP.md#25-circular-attributes--from-jastadd) are open. Neither is new
+[2.5](COMPLETED.md#25-circular-attributes--from-jastadd) are open. Neither is new
 work discovered by having a good idea. Both are failures that were **already
 written down somewhere else**:
 
@@ -805,7 +805,7 @@ comfortable, because the walk after `layout` has every address.
 
 What creates the problem is not the instruction but the **choice**: `br`,
 which is `jr` when the target is in reach and `jp` when it is not.
-[ROADMAP 2.5](ROADMAP.md#25-circular-attributes--from-jastadd) had said so in
+[ROADMAP 2.5](COMPLETED.md#25-circular-attributes--from-jastadd) had said so in
 the sentence that opened it — *choosing the short form shrinks the code* — and
 the plan compressed that to the mnemonic and lost the verb.
 
@@ -1155,3 +1155,50 @@ programs stay pinned with both answers.
 What prediction three said about the calling convention is scored in § 16.
 The arc has now used all three, and the next change to the tool is not
 predicted by anything written down.
+
+## 21. "What is missing is now only the word for it"
+
+[ROADMAP 2.5](COMPLETED.md#25-circular-attributes--from-jastadd) said so on
+2026-09-06, after `relax` had been written out once by hand, and set down
+five parts as settled by that prototype: the step is one pass exactly as
+written, the bottom is `layout`'s table, the direction is shrink only, the
+test is *did any size change since the last round*, and the guard is a bound
+with a diagnosis. It also leaned one way on the open question, where the
+repetition is written: the driver, because a pass that iterates would be the
+interpreter [3.1](ROADMAP.md#31-an-interpreter-that-can-loop) refuses. The
+driver was chosen on 2026-09-23 and built the same day. **Held**, on four of
+the five parts and on the lean, and the fifth was wrong in a useful way.
+
+*The step, the bottom, the direction and the guard went in as written.*
+`relax` changed by one line: it defines `labels` rather than `labels2`, so
+that the round can be compared under one name, and the two passes after it
+read `labels` too. The runtime
+is one loop in `run.c` around a stage it already ran.
+
+*The test was the wrong thing to compare.* "Did any size change" is a
+question about the output, and what a round depends on is its input, the
+label table it is handed. A `br` after the last label can shrink without
+moving a label, and the next round makes the same decisions from the same
+table, so the table is the fixpoint and the sizes are a consequence of it.
+The driver compares `labels`, with the structural `=` a clause has.
+
+*"Only the word" was nearly true, and the rest was in the checks.* Nothing
+about how a pass runs changed. What changed was two read-time checks that
+were right about one walk and wrong about several: a `down` clause reading
+what its own rule computes, which in an iterated pass is last round's answer,
+and two passes defining one attribute, which here is the start and the step.
+Each now waives exactly the attribute a driver names after `until`, and four
+new refusals say what `until` cannot mean. Then the notation's own
+description, `languages/phx/phoenix.phx`, had to learn the word, and it was
+the suite that said so, by failing to parse the new `z80.phx`.
+
+*The witness needed deepening before it could witness.* `two-rounds.z80`
+needs three walks, and a fixed three would pass it. `three-rounds.z80` needs
+four and was worked out by hand, three nested `br`s each brought into range
+by the shrinking of the one inside it, then simulated round by round against
+`relax`'s own rule before the tool ran it, and the two agreed at every walk:
+134, 133, 132, 131, 131.
+
+> A prototype that is the mechanism run once settles what the mechanism
+> computes. It does not settle what the checks around it believe about one
+> walk, and that is where the surprises were.

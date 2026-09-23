@@ -515,6 +515,14 @@ struct Rewrite {
  * Attributes stay on the nodes between passes, which is what makes a sequence
  * worth having -- `typecheck` leaves `type` behind and `emit-c` reads it,
  * without either knowing the other exists.
+ *
+ *     %driver code = layout, relax until labels, code -> out .
+ *
+ * **A stage may be run until an attribute of the root settles**: again and
+ * again, until a round leaves it equal to what the round before left, which
+ * is ROADMAP 2.5's fixpoint with the repetition written where the order is.
+ * The pass is one walk as ever; the tool owns the loop, the test and the
+ * bound.
  */
 
 struct Driver {
@@ -524,6 +532,8 @@ struct Driver {
     char   *answer;      /* the root attribute to print, or NULL */
     size_t  pos;
     size_t *pass_pos;    /* where each was named, for messages */
+    char  **until;       /* per stage: the root attribute it runs until it
+                          * settles, or NULL for a stage run once */
 };
 
 /* ------------------------------------------------------------------ */
@@ -736,6 +746,8 @@ bool rewrite_run(Arena *a, const Grammar *g, const Source *src,
 
 /* One stage of a driver, whichever kind it is. Answers false having reported;
  * `*root` is what the next stage should walk. */
+bool driver_run(Arena *a, const Grammar *g, const Source *src,
+                const Driver *d, Value **root);
 bool driver_stage(Arena *a, const Grammar *g, const Source *src,
                   const char *name, Value **root);
 

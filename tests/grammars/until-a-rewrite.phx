@@ -1,0 +1,15 @@
+(* A rewrite runs until nothing matches already, `innermost`, and defines no
+ * attribute a driver could wait on. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+space  = " " { " " } .
+%skip space .
+%syntax .
+%start line .
+line = number -> Number(text: $1) .
+%pass show
+  Number : out = "{}" of $text .
+%rewrite r bottomup
+  Number(text: "0") => Number(text: "1") .
+%driver d = show, r until out -> out .

@@ -1,7 +1,7 @@
 #!/bin/sh
 # languages/z80/tests/oracle/run.sh -- the same assembly, assembled twice.
 #
-# Every program here and in `../../divergent/` is assembled by `z80asm` and by
+# Every program here is assembled by `z80asm` and by
 # Phoenix, and the two binaries are compared **byte for byte**. `z80asm` is the
 # oracle: where they differ, Phoenix is wrong until somebody shows otherwise.
 #
@@ -10,7 +10,7 @@
 # what the oracle assembles is Phoenix's own *listing*, with the choice already
 # made, and the bytes from the two routes have to agree. That checks the
 # displacement and the opcode. It cannot check that the choice was the smallest
-# one, which is why the divergences are pinned separately in tests/run.sh.
+# one, which is why the sizes are pinned separately in tests/run.sh.
 #
 # This is a better oracle than the ones the other languages have, and the
 # reason is worth writing down. Pascal and Solveig are compared on what a
@@ -47,7 +47,7 @@ pass=0
 fail=0
 only=${1:-}
 
-for src in "$here"/*.z80 "$here"/../../divergent/*.z80; do
+for src in "$here"/*.z80; do
     name=$(basename "$src" .z80)
     [ -n "$only" ] && [ "$only" != "$name" ] && continue
 

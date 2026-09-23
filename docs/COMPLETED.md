@@ -13,10 +13,10 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **9,312 lines** hand-written.
+C11, no dependencies, **9,466 lines** hand-written.
 
-The figure usually quoted is ~13,700, and both are right about different
-things: `phoenix/` also holds `runtime.h`, 4,359 generated lines which are the
+The figure usually quoted is ~13,900, and both are right about different
+things: `phoenix/` also holds `runtime.h`, 4,425 generated lines which are the
 seven runtime files re-emitted as a C string literal so that a compiler `phx`
 writes is one file. Counting it measures what is in the directory; not counting
 it measures what anybody wrote. The runtime is in both numbers, once or twice.
@@ -40,9 +40,9 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`awk/`](../languages/awk/) | 993 lines + a 682-line C runtime, 51 node types | POSIX awk: grammar, a call check, and a compiler to C. 6 programs that e2fsprogs, ncurses and vim ship compile and print what `/usr/bin/awk` prints |
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
 | [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
-| [`z80/`](../languages/z80/) | 393 lines, 19 node types | a Z80 subset, an assembler making raw bytes, and a listing backend. **The customer [2.5](#25-circular-attributes--from-jastadd) was waiting for**: `br` picks between a two-byte relative jump and a three-byte absolute one, which is a size that depends on a distance that depends on sizes. Two walks, because the notation cannot say *again* — the second is the first one **written out a second time**, and it reaches the minimum on programs one round deep and misses by a byte on [`divergent/two-rounds.z80`](../languages/z80/divergent/two-rounds.z80), which needs a third. 9 programs agree with `z80asm` byte for byte, four through the listing, because `z80asm` has no `br` |
+| [`z80/`](../languages/z80/) | 396 lines, 19 node types | a Z80 subset, an assembler making raw bytes, and a listing backend. **The customer [2.5](#25-circular-attributes--from-jastadd) was waiting for**: `br` picks between a two-byte relative jump and a three-byte absolute one, which is a size that depends on a distance that depends on sizes. `layout` assumes every forward `br` long, and `relax`, the first walk **written out a second time**, decides both directions against the last walk's table; the driver runs it `until labels` settles, since 2026-09-23, so [`two-rounds.z80`](../languages/z80/tests/oracle/two-rounds.z80) reaches its minimum on the third walk and [`three-rounds.z80`](../languages/z80/tests/oracle/three-rounds.z80) on the fourth. Until then it ran once and the first missed by a byte. 10 programs agree with `z80asm` byte for byte, six through the listing, because `z80asm` has no `br` |
 | [`c/`](../languages/c/) | 1,762 lines, 35 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is copied whole since 2026-09-23, by `=`, by an initialiser and as an argument under AAPCS64, which `tests/abi/` holds against `cc`'s own code by linking each compiler's caller to the other's callee; a copy between two kinds of struct is refused, and so is a struct wherever C wants a number. A struct is returned whole the same day, in `x0` and `x1` or through the caller's `x8`, and `tests/abi/` holds that against `cc` in both directions too. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 185 programs exit with what `cc` makes them exit with, 82 are refused with a position, two are written-down divergences with both their answers pinned, and nothing in the directory has a hand-written expected result |
-| [`phx/`](../languages/phx/) | 266 lines | the notation described in itself. It parses itself and every other description here |
+| [`phx/`](../languages/phx/) | 274 lines | the notation described in itself. It parses itself and every other description here |
 
 **Nine directories, eight rows.** [`languages/units/`](../languages/units/) —
 229 lines, 11 node types, and two checks in the suite — is deliberately not
@@ -297,6 +297,50 @@ fixup.
 
 Fixed the format's nesting limit, the call depth, and every extra frame in a
 traceback.
+
+### 2.5 Circular attributes — from JastAdd
+
+*Built 2026-09-23*, as a driver stage rather than an attribute:
+
+    %driver code = layout, relax until labels, reach, code -> out .
+
+A stage marked `until` is run again and again until the attribute of the root
+it names comes out of a round equal to what went in. The pass is one walk, as
+every pass is; the tool owns the loop, the test, which is the structural `=`
+a clause already has, and a bound of 256 rounds with a message naming the
+stage and the attribute that were still moving. JastAdd puts the fixpoint on
+the attribute. Here it went in the **driver**, because a driver is already
+the claim about what runs in what order, and running one thing until it
+settles is a claim of that kind; and because a pass that iterated would be
+an interpreter that loops, which [3.1](ROADMAP.md#31-an-interpreter-that-can-loop)
+refuses, where this repeats a whole walk with a termination test the tool
+owns.
+
+*The customer was `languages/z80/`'s `br`*, which picks a two-byte relative
+jump when the target is in reach and a three-byte absolute one when it is
+not. `relax` had been written out once by hand since 2026-09-05, and that
+workaround settled everything but the word: the step is the pass as written,
+the bottom is `layout`'s table with every forward `br` long, the direction is
+shrink only, which is why it terminates. The pass hands down the table it is
+about to replace, `layout`'s on the first round and its own after, and
+defines `labels` under the same name so that the round can be compared.
+
+**Two checks had to learn the shape**, and each waives exactly the attribute
+the driver names: a `down` clause reading what its own rule computes is
+reading last round's answer, and two passes defining one attribute is the
+start and the step. Four things are refused when the description is read: a
+rewrite given `until`, a stage that does not define the attribute, an
+attribute nothing before the stage defines for the first round, and, when
+it runs, a stage that has not settled by the bound. A compiler written out
+with `-o` runs the loop, because it lives in the runtime.
+
+`two-rounds.z80`, pinned at 130 bytes in `divergent/` since 2026-09-05, is
+129 and an oracle program. `three-rounds.z80` is three nested `br`s that need
+a fourth walk, 134 bytes after one and 131 after four, worked round by round
+in its comment and simulated before it was run. `languages/units/`'s two
+divergences, a three-unit cycle and initialisation order, are the other
+customer the entry named and are **not** converted: `fpc` already refuses
+the first, and nobody has asked for either.
 
 ---
 

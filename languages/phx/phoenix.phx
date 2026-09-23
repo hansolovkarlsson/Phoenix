@@ -138,8 +138,16 @@ directive-item = "%tokens" "."     -> Tokens
                | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)
                | "%rewrite" n:name h:name r:{ rewrite-rule }
                    -> RewriteBlock(name: $n, how: $h, rules: $r)
-               | "%driver" n:name "=" p:name { "," q:name -> $q }
+               | "%driver" n:name "=" p:stage { "," q:stage -> $q }
                    a:answer "." -> Driver(name: $n, passes: [$p, ...$5], answer: $a) .
+
+(* A driver's stage is a pass or a rewrite, by name, and a pass may be run
+ * **until** an attribute of the root settles: `relax until labels`. `until`
+ * is a name here for the reason the `%names` words below are: a literal would
+ * reserve it in every description, and the reader knows it only by where it
+ * stands, the second of three names in a row, which is all this can say. *)
+stage  = s:name w:name a:name -> Stage(pass: $s, word: $w, until: $a)
+       | name .
 
 names  = n:name { m:name -> $m } -> [$n, ...$2] .
 
