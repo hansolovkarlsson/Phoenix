@@ -5326,8 +5326,9 @@ an expression is, and needs the layouts to find a member, but the layouts are
 a `locals` thread. `locals` keeps the table at each `Member` as an ordinary
 attribute. The first attempt named that attribute `layouts`, after the
 thread, and it was still invisible: a clause named after a thread updates the
-thread. Renamed `known`, it worked. The tool said the same thing both times,
-with the line.
+thread. Renamed `known`, it worked. The tool named the line both times, and
+printed it once per member in the program, which is a wart of its own:
+see the closeout below.
 
 **`->` builds `(*p).x`**, as a subscript builds `*((a)+(i))`, so there is one
 `Member` node and it is always asked of a struct. A `->` on a struct is then
@@ -5386,3 +5387,20 @@ number can start a place; `&1.x` is refused by the `types` pass.
 264. Step one of ROADMAP 6 is complete, with the copy of a struct the thing
 a C program is most likely to want next, and `typedef` the construct the
 arc was built to reach.
+
+## 2026-09-22: the day closed a fourth time, and one wart written down
+
+One commit since the third closeout, `8ece027`, which was `struct` and
+wrote its own records: the journal entry above, [postmortem 19](postmortem.md#19-prediction-one-held-and-the-node-went-somewhere-else),
+the changelog, and step one of ROADMAP 6 marked done. The suite is 264
+checks, all passing, from 246 at the third closeout.
+
+**One thing the session saw was in no record, and is now.** While writing
+`struct`, a check that named a thread from another pass printed the same
+error six times over a program with six members. Reproduced on a copy of the
+description before being believed: a bare `$name` that resolves to nothing
+reads cleanly, and is reported once per node that reaches it when a program
+runs, while `$child.nosuch` is refused once, when the description is read.
+It is in [ROADMAP 5](ROADMAP.md#5-known-warts) as a known wart, with what was
+measured and what was not.
+
