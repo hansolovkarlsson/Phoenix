@@ -5495,3 +5495,83 @@ byte for byte what the committed tool produced.
 
 Thirteen oracle programs, 156 in all; nine refusals, 58. 264 checks to 281,
 all passing.
+
+## 2026-09-23: a struct copied whole, and nine programs that compiled into an address
+
+The standup's likeliest next construct: `=`, an initialiser and an argument,
+all three refused since `struct` on the grounds that a copy is a loop and
+not a store. Nothing in `phoenix/` changed for it.
+
+**The failure first, and it was a different one.** Before writing the copy,
+every place a struct *value* can go was tried against the committed
+description: arithmetic, a comparison, `-`, a condition, a `return`, and a
+struct put into an `int` or a pointer. `cc` refuses all of them. Phoenix
+compiled all of them, into the struct's address used as a number, because a
+struct is worth its address in the emit pass and nothing asked. The `types`
+pass's header says it refuses what it would otherwise mis-compile, and that
+was not true of structs from the day they arrived. It went unseen because
+nothing moved a struct value anywhere; a copy is the first thing that does,
+so the holes were closed first. `record` is an `otherwise` in the `types`
+pass, a struct with no stars, and each place C wants a number refuses one.
+
+**The copy is a byte loop**, counting down from the size, in `x9` and
+`w10`. Not `memcpy`, which would need declaring in every program and make
+every copy a call with registers to save around it. Counting down makes
+`s = s` harmless. The registers are AAPCS64's temporaries and carry no
+argument, so a copy can run in a prologue between two parameters. The loop
+is written once, as a `down` attribute on `Program`, because a pass has no
+constants. A node takes a label number only when it copies, so no scalar
+program's labels moved, and the assembly of all 158 programs that were here
+was compared and did not move.
+
+**The argument is AAPCS64, not a convention of this subset's own.** A
+struct of up to eight bytes goes in one register, up to sixteen in two, and
+anything larger is copied by the caller and its address passed. The
+tempting shortcut was the callee copying from the caller's own struct,
+which is invisible when both ends are compiled here. It is not what the
+machine's convention says, and a `cc`-compiled callee writes straight into
+the memory it is handed. So registers are counted rather than parameters:
+`argreg` beside `argn` at the call, and `pindex` stepping by one or two at
+the parameter, which moves the ninth-parameter refusal to a ninth register.
+Every argument still pushes sixteen bytes, so the stack offsets did not
+change; a small struct is packed into its slot, zeroed first, and read out
+with `ldr` or `ldp`. A large one's copy lives below the caller's locals,
+where the emit pass's `temps` thread says, and `Function` grows its frame by
+that much.
+
+*Why the signature went to the root.* A call has to check that a struct
+goes to a parameter of the same struct, since a copy of the wrong size has
+no right answer. The table is bound on a function's way out, once its
+parameters are worked out, which a `down` clause cannot wait for, so the
+`types` pass is handed the whole file's table from `Program`. That is safe
+because a call above its callee's declaration is already refused. A
+prototype and a definition that disagree about a struct parameter are
+refused where the second is read.
+
+**The oracle cannot see the convention.** It compiles each program whole,
+one way or the other, so it asks whether Phoenix agrees with itself about
+how a struct is passed, and it always will. `tests/abi/` is a caller and a
+callee in two files, linked cc with Phoenix and Phoenix with cc, against cc
+with cc. Of fifteen breakages, twelve went red on the oracle. Of the three
+green, one was the caller's copy, and it goes red on `tests/abi/`: without
+it a `cc` callee zeroed the caller's struct. The other two have no witness
+and cannot have one, and say so at the instruction: an assignment worth its
+source rather than its destination, which have the same bytes, and the
+zeroing of a small struct's slot, whose padding no callee reads. A callee
+storing a register pair as one register was red on both.
+
+*A member of an assignment.* Writing a program for which struct `(a = b)`
+is worth, `(x = y).a = 5` was the first try, and `cc` refused it: C11
+6.5.16 makes an assignment a value, so it has no members to put anything
+in. Phoenix compiled it into a write to `x`. The `place` rule has taken a
+member of a parenthesised expression all along, and nothing could reach it
+until an expression could be a struct. `lvalue` is another `otherwise`,
+true of a name and a `*` and inherited by a member, and an assignment to
+one or `&` of one is refused when it is false.
+
+*The bare-name wart, again.* The `Call` check read `$sig` before anything
+defined it, and the description read cleanly. ROADMAP 5 has the second
+sighting.
+
+Nineteen oracle programs, 175 in all. Eighteen new refusals, three old ones
+moved to the oracle, 73 in all. 281 checks to 297, all passing.

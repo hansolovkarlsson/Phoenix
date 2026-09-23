@@ -215,17 +215,56 @@
    * 44 and not 300 when `c` is a `char`. The `strb` kept one byte in memory
    * and nothing in `w0`, so a `sxtb` narrows the register the same way, and
    * is emitted only for a one-byte place, where the two can differ. *)
-  Assign    : out = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
-                of $place.addr, $value.out,
-                   lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0"),
-                   lookup([[1, "\tsxtb w0, w0\n"]], $place.size, "") .
+  (* **A struct is copied a byte at a time**, from the address in one
+   * register to the address in another, counting down from its size to
+   * zero. The count and the byte are in `x9` and `w10`, which AAPCS64 leaves
+   * to whoever is running and which no argument travels in, so a copy can
+   * run in a prologue between two parameters without disturbing either.
+   * A struct is never empty here, so the loop runs at least once.
+   *
+   * Slow, and the stack machine's shape: one loop in every place a struct is
+   * copied rather than a call to `memcpy`, which would need declaring and
+   * would make every copy a call with registers to save around it. Counting
+   * down makes `s = s` harmless, which C11 6.5.16.1 allows, and copying the
+   * bytes rather than the members copies the padding too, which C11 6.2.6.1
+   * leaves unspecified and `cc` also copies. The label is the one thing a
+   * copy needs from the rest of the program, and a node takes a number only
+   * when it copies, so no scalar program's labels moved.
+   *
+   * The loop is written once, as `copy` on `Program` at the foot of this
+   * pass, and handed down: a pass has no constants, and everything under the
+   * root can read what the root hands down. *)
+
+  (* An assignment of a struct copies it, and is worth the destination, whose
+   * address is what a struct is worth anywhere: `a = b = c` copies twice.
+   * *Which of the two it is worth has no witness*: after the copy their
+   * bytes are the same, and the one thing that would tell them apart is the
+   * address of an assignment, which C has no way to take and the `types`
+   * pass refuses. C11 6.5.16 says the left operand, and that is kept. *)
+  Assign    : n     = $label : label = $label + lookup([[true, 1]], $aggregate, 0)
+            : store = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
+                        of $place.addr, $value.out,
+                           lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0"),
+                           lookup([[1, "\tsxtb w0, w0\n"]], $place.size, "")
+            : copied = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n{}\tmov x0, x1\n"
+                        of $place.addr, $value.out,
+                           ($copy of $place.size, $n, "x0", "x1", $n)
+            : out   = lookup([[true, $copied]], $aggregate, $store)
+            : addr  = $out .
 
   (* A declaration with an initialiser knows its own slot, so it stores
    * straight into it rather than working out an address it already has. *)
-  LocalInit : out = "{}\t{}, [x29, #-{}]\n"
-                of $value.out,
-                   lookup([[1, "strb w0"], [4, "str w0"]], lookup([[0, $basew]], $ptrs, 8), "str x0"),
-                   $offset .
+  LocalInit : copies = $ptrs = 0 and $base.tagname <> ""
+            : n     = $label : label = $label + lookup([[true, 1]], $copies, 0)
+            : out   = lookup([[true, "{}\tsub x1, x29, #{}\n{}"
+                                       of $value.out, $offset,
+                                          ($copy of $basew, $n, "x0", "x1", $n)]],
+                             $copies,
+                             "{}\t{}, [x29, #-{}]\n"
+                               of $value.out,
+                                  lookup([[1, "strb w0"], [4, "str w0"]],
+                                         lookup([[0, $basew]], $ptrs, 8), "str x0"),
+                                  $offset) .
   Local      : out = "" .
   LocalArray : out = "" .
   Discard   : out = $value.out .
@@ -245,24 +284,92 @@
    * which is where AAPCS64 says a 32-bit argument goes. *)
   thread argn = 0
 
-  Arg  : index = $argn : argn = $argn + 1
-       : out  = "{}\tstr x0, [sp, #-16]!\n" of $value.out
-       : load = "\tldr x{}, [sp, #{}]\n" of $index, 16 * ($nargs - 1 - $index) .
+  (* **A struct passed whole**, since 2026-09-23, is AAPCS64's rule B.3 and
+   * C.10 to C.12 as this machine applies them. One of up to eight bytes goes
+   * in a register and one of up to sixteen in two, its bytes packed in order
+   * as they lie in memory; a larger one is **copied by the caller** and the
+   * copy's address goes in one register, so the callee may do what it likes
+   * with it and the caller's struct is untouched. Nothing here is a float,
+   * so the homogeneous aggregates of rule B.2 do not arise.
+   *
+   * So an argument is no longer one register, and which register it starts
+   * at is counted on a second thread, `argreg`, beside the position that
+   * finds its slot on the stack. The slot is still sixteen bytes for every
+   * argument: a small struct is copied into its slot, zeroed first so that
+   * a struct of three bytes leaves no stale bytes in the register, and read
+   * back out with one `ldr` or an `ldp`; a large one's slot holds the
+   * address of its copy, like any pointer.
+   *
+   * *The zeroing has no witness, and cannot have one*: without it the bytes
+   * past a small struct's end are whatever was on the stack, and neither a
+   * callee here nor one `cc` compiled reads them. It was taken out, and the
+   * oracle and `tests/abi/` both stayed green. It is kept so that what a
+   * register holds does not depend on what ran before.
+   *
+   * *Nor has the caller's copy, in the oracle*: a callee compiled here
+   * copies a large struct again, so it would never notice a caller that did
+   * not. A callee `cc` compiled writes into the memory it is handed, and
+   * `tests/abi/` is the program that sees it.
+   *
+   * The copies of large structs live at the bottom of the caller's frame,
+   * below its locals, each where the thread `temps` says, and `Function`
+   * lowers `sp` by that much more. A copy is made when its argument is
+   * evaluated and lasts to the end of the function, which is longer than
+   * it needs and never shorter. *)
+  thread argreg = 0
+  thread temps  = 0
 
-  Call : down held  = $argn
-       : down argn  = 0
-       : down nargs = size($args)
-       : argn = $held
+  Arg  : index  = $argn : argn = $argn + 1
+       : small  = $value.record and $value.size <= 16
+       : large  = $value.record and $value.size > 16
+       : words  = lookup([[true, 2]], $small and $value.size > 8, 1)
+       : reg    = $argreg : argreg = $argreg + $words
+       : room   = (($value.size + 15) div 16) * 16
+       : tpos   = $framebase + $temps + $room
+       : temps  = $temps + lookup([[true, $room]], $large, 0)
+       : n      = $label : label = $label + lookup([[true, 1]], $value.record, 0)
+       : scalar = "{}\tstr x0, [sp, #-16]!\n" of $value.out
+       : packed = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}"
+                    of $value.out, ($copy of $value.size, $n, "x0", "x1", $n)
+       : copied = "{}\tsub x1, x29, #{}\n{}\tstr x1, [sp, #-16]!\n"
+                    of $value.out, $tpos, ($copy of $value.size, $n, "x0", "x1", $n)
+       : out    = lookup([[true, $packed]], $small, lookup([[true, $copied]], $large, $scalar))
+       : load   = lookup([[2, "\tldp x{}, x{}, [sp, #{}]\n" of $reg, $reg + 1, 16 * ($nargs - 1 - $index)]],
+                         $words,
+                         "\tldr x{}, [sp, #{}]\n" of $reg, 16 * ($nargs - 1 - $index)) .
+
+  Call : down held    = $argn
+       : down heldreg = $argreg
+       : down argn    = 0
+       : down argreg  = 0
+       : down nargs   = size($args)
+       : argn   = $held
+       : argreg = $heldreg
        : out = "{}{}\tadd sp, sp, #{}\n\tbl _{}\n"
            of join($args.out), join($args.load), 16 * size($args), $name .
 
-  (* Parameter k is slot k, so its register is k - 1, and its half is its
-   * own declaration's. AAPCS64 passes a 32-bit `int` in `w0` to `w7`, which
-   * are the same eight registers as `x0` to `x7`, so the convention did not
-   * notice the width change. *)
-  Param : out = "\t{}{}, [x29, #-{}]\n"
-            of lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
-               $preg, $offset .
+  (* A parameter's register is counted by the `locals` pass, which gives a
+   * struct of nine to sixteen bytes two of them, and its half is its own
+   * declaration's. AAPCS64 passes a 32-bit `int` in `w0` to `w7`, which are
+   * the same eight registers as `x0` to `x7`, so the convention did not
+   * notice the width change.
+   *
+   * A struct arrives the way `Arg` sent it: in one register, stored whole
+   * into a slot of eight; in two, stored with an `stp` into a slot of
+   * sixteen; or as the address of the caller's copy, copied from there into
+   * the slot. The copy uses `x9` to `x11`, so the parameters after it are
+   * still in their registers when their turn comes. *)
+  Param : n      = $label : label = $label + lookup([[true, 1]], $whole and $basew > 16, 0)
+        : scalar = "\t{}{}, [x29, #-{}]\n"
+                     of lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
+                        $preg, $offset
+        : pair   = "\tstp x{}, x{}, [x29, #-{}]\n" of $preg, $preg + 1, $offset
+        : one    = "\tstr x{}, [x29, #-{}]\n" of $preg, $offset
+        : copied = "\tsub x11, x29, #{}\n{}"
+                     of $offset, ($copy of $basew, $n, ("x{}" of $preg), "x11", $n)
+        : out    = lookup([[true, lookup([[2, $pair]], $regs,
+                                         lookup([[true, $copied]], $basew > 16, $one))]],
+                          $whole, $scalar) .
 
   (* **The operand is not evaluated**, which is C11 6.5.3.4 and the whole
    * reason these two clauses do not mention `$value.out`: `sizeof bump(&x)`
@@ -407,15 +514,18 @@
    * off the end of the body, a zero. C11 5.1.2.2.3 says reaching the `}` of
    * `main` returns 0, and for any other function it says nothing, of which 0
    * is one instance. *)
-  Function : down fname = $name
+  Function : down fname     = $name
+           : down framebase = $frame
+           : down temps     = 0
            : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
-               of $name, $name, (($frame + 15) div 16) * 16,
+               of $name, $name, (($frame + $temps + 15) div 16) * 16,
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .
   StructDef : out = "" .
   Typedef   : out = "" .
-  Program   : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
+  Program   : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
+            : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
 
 %driver arm64 = functions, locals, types, emit-arm64 -> out .
 %driver check = functions, locals, types .

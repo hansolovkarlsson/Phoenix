@@ -609,6 +609,12 @@ the `.attr` check reads; whether that is enough to judge a bare name, which
 may also be a binding, a field, a thread or an inherited attribute, has not
 been looked at.
 
+*Met a second time on 2026-09-23*, and this time before any program ran: a
+`Call` check in the `types` pass read `$sig` while nothing defined it yet,
+and `phx` read the description without a word. It would have been reported
+once per call. Two sightings in two days, both while a pass was being
+written, which is when a read-time check pays.
+
 ---
 
 ## 6. A C compiler
@@ -734,10 +740,22 @@ become: `int`, `char` and a tag are all looked up in one table of layouts. A
 type stayed numbers, three of them now, the tag being the third.
 
 What is **not** here, and each is a refusal or a syntax error rather than a
-wrong answer: a struct copied whole, by `=`, by an initialiser or as an
-argument, because a copy is a loop and not a store; a struct defined in a
-function, or with no tag; and a pointer to a struct nobody defines. The copy
-is the one a C program is most likely to want next.
+wrong answer: a struct defined in a function, or with no tag; and a pointer
+to a struct nobody defines.
+
+*A struct copied whole, done 2026-09-23*, by `=`, by an initialiser and as
+an argument. A copy is a byte loop in the emitted code rather than a store
+or a call to `memcpy`, and nothing in `phoenix/` changed for it. An argument
+follows AAPCS64: up to sixteen bytes in one register or two, and anything
+larger copied by the caller and passed by address. That is held against
+`cc`'s own code by `tests/abi/`, where a caller and a callee in two files
+are compiled by each compiler in turn, because the oracle can only ever see
+Phoenix agree with itself. A copy between two kinds of struct is refused,
+and so is a struct anywhere C wants a number: nine such programs, all of
+which `cc` refuses, **compiled** until that day into the struct's address,
+in a pass whose header says it refuses whatever it would otherwise
+mis-compile. 175 programs against `cc`, 73 refused. A struct **returned**
+from a function is still not here, since a function returns an `int`.
 
 **The oracle is `cc` itself**, the way `fpc` is Pascal's and `/usr/bin/awk` is
 awk's. `tests/oracle/` holds programs compiled twice — once through `cc` and

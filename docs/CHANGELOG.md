@@ -16,7 +16,7 @@ entry below that changes it says so.
 
 ---
 
-## 2026-09-23: `typedef`, and the first thing a parse remembers
+## 2026-09-23: `typedef`, a struct copied whole, and the first thing a parse remembers
 
 **The notation changed.** `%names` is a new directive: a table of names the
 parse keeps while it matches, and one rule that may ask it.
@@ -51,12 +51,26 @@ function's return type. `sizeof` and the difference of two pointers are
 still `int`s, because what C makes them is a `long`, which the subset does
 not have. Thirteen more oracle programs, 156 in all, and 58 refusals.
 
-**Tests:** 264 → 281. Eight for `%names`, on a small grammar made to have
+**A struct is copied whole**: `a = b`, `struct t u = s;`, and a struct
+passed to a function, all of which were refused. Passing follows the
+machine's calling convention, so a struct goes between code Phoenix compiled
+and code `cc` compiled, in either direction, and a new test links the two to
+make sure. A struct of one kind copied into another is refused, as `cc`
+refuses it. So is a struct used where C wants a number: in arithmetic, a
+comparison, a condition, a `return`, or put into an `int` or a pointer.
+**Those compiled before today**, into the struct's address used as a
+number, and `cc` refuses every one. Nothing in Phoenix itself changed for
+any of this. Nineteen more oracle programs, 175 in all, and 73 refusals.
+
+**Tests:** 264 → 297. Eight for `%names`, on a small grammar made to have
 C's problem and nothing else: what it parses, the same through a compiler
 written out with `-o`, and five refusals and a warning about the directive
 itself. Nine for `typedef`: four refusals of what C refuses too, three of
 what this subset leaves out, and two of a local named in its own
 initialiser, which were refused before today and are written down now.
+Then sixteen for the copy: the calling convention against `cc`'s, and
+eighteen new refusals, nine of them of programs that compiled into an
+address, less the three refusals that became oracle programs.
 
 ---
 

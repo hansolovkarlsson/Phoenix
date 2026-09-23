@@ -1723,19 +1723,60 @@ refuses "and on a pointer to a pointer" "is asked for as a member of something t
         --driver check "$root/languages/c/c-arm64.phx" "$r/arrow-on-a-pointer-to-a-pointer.c"
 refuses "a difference of pointers to two structs" "only when they point at the same type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-pointers-to-unlike-structs.c"
-# **A struct is never copied whole.** C assigns, passes and initialises one
-# by copying its bytes, which is not a store of a register, and each of these
-# is refused where it would otherwise have compiled into a copy of an
-# address. `cc` compiles three of the four; a struct handed to an `int`
-# parameter it refuses too.
-refuses "a struct assigned whole" "'struct t' is assigned whole" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-assigned-whole.c"
-refuses "a struct initialised from another" "initialised from another" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-initialised-from-another.c"
-refuses "a struct parameter" "'s' is a struct passed whole" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter.c"
-refuses "and a struct argument" "'struct t' is passed whole" \
+# **A struct is copied whole**, since 2026-09-23, by `=`, by an initialiser
+# and as an argument, and the three programs that were refused for it are
+# oracle programs now. What C still refuses is a copy between two kinds of
+# struct, or between a struct and anything else, because no length is right
+# for it; each is refused here with the pair it was given.
+refuses "a struct assigned another kind" "'struct t' is assigned 'struct u'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-assigned-another-kind.c"
+refuses "a struct assigned a number" "is assigned something that is not a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-assigned-a-number.c"
+refuses "a struct initialised from another kind" "initialised from a 'struct u'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-initialised-from-another-kind.c"
+refuses "a struct passed to an int parameter" "'f' is given a struct where its parameter is not that struct" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-argument.c"
+refuses "to a parameter of another kind" "'f' is given a struct where its parameter is not that struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-argument-of-another-kind.c"
+refuses "a number passed to a struct parameter" "something else where its parameter is a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter-given-a-number.c"
+refuses "a parameter declared as two structs" "a parameter that is a struct in one is not the same struct in the other" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter-declared-two-ways.c"
+# A struct of nine to sixteen bytes takes two registers, so seven `int`s and
+# one of those is nine, and the ninth is the stack, which nothing here writes.
+# `cc` compiles it; this is outside the subset, as a ninth `int` is.
+refuses "a struct parameter that needs a ninth register" "needs a ninth register" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-parameter-needs-a-ninth-register.c"
+# **A struct where C wants a number.** Each of these compiled, until
+# 2026-09-23, into the struct's address used as a number, which is what a
+# struct is worth in the emit pass; `cc` refuses every one. Found while
+# writing the copy, which is the first thing to move struct values around.
+refuses "a struct put in an int" "'struct t' is put where a number or a pointer goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-put-in-an-int.c"
+refuses "a struct initialising a pointer" "'struct t' is put where a number or a pointer goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-initialises-a-pointer.c"
+refuses "a struct returned" "'struct t' is returned" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-returned.c"
+refuses "a struct as a condition" "'struct t' is a condition" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-as-a-condition.c"
+refuses "and as a for's condition" "a struct is a condition" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-as-a-for-condition.c"
+refuses "a struct added" "'+' wants numbers or pointers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-added.c"
+refuses "a struct multiplied" "'*' wants numbers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-multiplied.c"
+refuses "a struct compared" "'==' compares numbers and pointers" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-compared.c"
+# C11 6.5.16: an assignment is a value and not somewhere a value is kept, so a
+# member of one can be read and not written or pointed at. The `place` rule
+# took `(x = y).a` as a place all along, and nothing could reach it until a
+# struct could be the value of an expression.
+refuses "a member of an assignment, assigned" "a member of an assignment is a member of a value" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-an-assignment-assigned.c"
+refuses "and its address taken" "'&' wants somewhere a value is kept" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-an-assignment-addressed.c"
+refuses "a struct negated" "'-' wants a number, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-negated.c"
 # `typedef`, which is what `%names` is for. A name the parse has hidden is not
 # a type again until its scope ends, so `T x` after `int T` is two names in a
 # row, which is a syntax error here as it is under `cc`; and the hiding ends
@@ -1778,11 +1819,22 @@ if [ "$(uname -m)" = "arm64" ]; then
         report fail "C programs agree with cc"
         printf '%s\n' "$co" | grep -A3 FAIL | sed 's/^/        /' | head -12
     fi
+    # The calling convention, held against cc's rather than against itself:
+    # a caller and a callee in two files, each compiled by each. The oracle
+    # cannot see a struct passed wrongly when both ends are Phoenix's, and
+    # this is the only witness for the caller's copy of a large one.
+    if ab=$("$root/languages/c/tests/abi/run.sh" 2>&1); then
+        report pass "structs pass between Phoenix's code and cc's, both ways"
+    else
+        report fail "structs pass between Phoenix's code and cc's, both ways"
+        printf '%s\n' "$ab" | grep FAIL | sed 's/^/        /' | head -4
+    fi
     # **Programs where the two disagree, pinned rather than fixed**, the way
     # `languages/awk/tests/divergent/` pins the lexical seam. Both come from
-    # a type C names with a typedef, which ROADMAP 6.1 stops before: `sizeof`
-    # is worth a `size_t` and the difference of two pointers a `ptrdiff_t`,
-    # eight bytes each under `cc`, and both are an `int` here. Both answers
+    # a type C names with a typedef: `sizeof` is worth a `size_t` and the
+    # difference of two pointers a `ptrdiff_t`, eight bytes each under `cc`,
+    # and both are an `int` here, since the typedef names a `long` and the
+    # subset has none. Both answers
     # are asserted, so closing either gap fails with the old numbers in it.
     dt="$root/build/c-divergent"; rm -rf "$dt"; mkdir -p "$dt"
     diverges() { # what, program, cc's answer, ours

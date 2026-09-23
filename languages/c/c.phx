@@ -38,13 +38,18 @@
  * scope, one used outside its block, a call before a declaration or with the
  * wrong number of arguments, a function defined twice or declared with two
  * arities, a ninth parameter, a `*` on what is not a pointer, and arithmetic
- * on one, are refused, and so is a struct copied whole, by assignment, by
- * initialisation or as an argument.
+ * on one, are refused.
  *
  * **Then `typedef`**, at file scope, of a base and any number of stars, a
  * struct included, and hidden by an ordinary name declared in a block or as
  * a parameter until that scope ends. A typedef declared twice for two types
  * is refused.
+ *
+ * **Then a struct copied whole**, by `=`, by an initialiser and as an
+ * argument, the last under AAPCS64 so that a struct passes between this
+ * code and `cc`'s. A copy between two kinds of struct, or between a struct
+ * and anything else, is refused, and so is a struct anywhere C wants a
+ * number, which compiled until then into the struct's address.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -507,6 +512,14 @@ arg  = e:expression -> Arg(value: $e) .
    * out, which for a node with no body is the same moment. *)
   thread funcs = empty
 
+  (* **What each function takes**, name to a list with one entry per
+   * parameter: the tag of a struct passed whole, or "". Bound on the way out,
+   * when the parameters have been worked out, which a `down` clause cannot
+   * wait for; so this is not what a call checks its arity against, and the
+   * `types` pass is handed the whole of it, at the root, to check a call's
+   * arguments with. A call above its callee's declaration is refused anyway. *)
+  thread sigs = empty
+
   (* **The struct layouts defined so far**, tag to size, alignment and a
    * table of members. It starts with `int` and `char` in it, as two structs
    * with no members, and that is what lets `Base` answer a width with one
@@ -535,7 +548,8 @@ arg  = e:expression -> Arg(value: $e) .
    * is not complete until its `}`, C11 6.7.2.1, so `struct node` inside its
    * own definition has no size and cannot be a member; a **pointer** to one
    * needs no size, and a linked list is made of exactly that. *)
-  Program : down defining = "" .
+  Program : down defining = ""
+          : allsigs = $sigs .
 
   (* A struct's layout is bound on the way out, when every member has been
    * placed. The check for a second definition runs before that, and so sees
@@ -627,34 +641,51 @@ arg  = e:expression -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : funcs = bind($funcs, $name, size($params)) .
+            : funcs = bind($funcs, $name, size($params))
+            : sigs  = bind($sigs, $name, $params.passes)
+            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+                : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
+                    of $name .
 
   Function  : down env    = empty
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
             : down funcs  = bind($funcs, $name, size($params))
-            : frame = $bytes .
+            : sigs  = bind($sigs, $name, $params.passes)
+            : frame = $bytes
+            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+                : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
+                    of $name .
 
-  (* A parameter is a scalar or a pointer and never an array, because the
-   * subset has no declarator for one and C would have rewritten it to a
-   * pointer if it had. So it takes eight bytes like any scalar.
+  (* A parameter is never an array, because the subset has no declarator for
+   * one and C would have rewritten it to a pointer if it had. A scalar or a
+   * pointer takes eight bytes and one register.
    *
-   * **A struct passed whole is refused.** AAPCS64 passes one of up to
-   * sixteen bytes in registers, packed, and a larger one by a hidden
-   * pointer to a copy, and neither is a register holding a value, which is
-   * all this subset's calls are. A pointer to a struct is a pointer. *)
+   * **A struct takes its own size, rounded to eight, and one register or
+   * two.** AAPCS64 passes a struct of up to sixteen bytes in registers, its
+   * bytes packed, so one of nine to sixteen takes two; a larger one arrives
+   * as the address of the caller's copy, in one, and the emit pass copies it
+   * into the frame. So a register is counted here rather than a parameter,
+   * and the ninth is refused as the ninth parameter is: it would be on the
+   * stack, and nothing puts it there. *)
   Param : ptrs   = $stars + $base.ptrs
         : basew  = $base.basew
-        : offset = $bytes + 8
+        : whole  = $ptrs = 0 and $base.tagname <> ""
+        : passes = lookup([[true, $base.tagname]], $whole, "")
+        : regs   = lookup([[true, 2]], $whole and $basew > 8 and $basew <= 16, 1)
+        : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
+        : offset = $bytes + $takes
         : preg   = $pindex
         : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
         : scope  = bind($scope, $name, true)
-        : bytes  = $bytes + 8
-        : pindex = $pindex + 1
+        : bytes  = $bytes + $takes
+        : pindex = $pindex + $regs
         ! defined($scope, $name) : "'{}' is a parameter twice" of $name
-        ! $stars + $base.ptrs = 0 and $base.tagname <> ""
-            : "'{}' is a struct passed whole, and only a pointer to one is compiled" of $name .
+        ! $pindex + lookup([[true, 2]], $stars + $base.ptrs = 0 and $base.tagname <> ""
+                                        and $base.basew > 8 and $base.basew <= 16, 1) > 8
+            : "'{}' needs a ninth register, and only eight are compiled: the rest go on the stack, and nothing here puts them there"
+                of $name .
 
   Call ! not defined($funcs, $name)
            : "'{}' is called before it is declared" of $name
@@ -691,18 +722,17 @@ arg  = e:expression -> Arg(value: $e) .
    * this right for a typedef hidden by its own local, see `%names`.
    *
    * A declaration with an initialiser is never an array: the subset has no
-   * way to write the initialiser one would want. Nor is it a struct, which
-   * would be a copy of one, and a struct is not copied whole here: see
-   * `Assign` in the `types` pass. *)
+   * way to write the initialiser one would want. It may be a struct, since
+   * 2026-09-23, which is copied into the frame, so it takes what a `Local`
+   * takes; the `types` pass checks the two are the same kind. *)
   LocalInit : ptrs   = $stars + $base.ptrs
             : basew  = $base.basew
-            : offset = $bytes + 8
+            : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
+            : offset = $bytes + $takes
             : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
             : scope  = bind($scope, $name, true)
-            : bytes  = $bytes + 8
-            ! defined($scope, $name) : "'{}' is declared twice" of $name
-            ! $stars + $base.ptrs = 0 and $base.tagname <> ""
-                : "'{}' is a struct initialised from another, which copies it whole, and that is not compiled" of $name .
+            : bytes  = $bytes + $takes
+            ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   (* An element is one byte, four or eight, or a struct's size, the whole
    * thing is `count` of them, and what the frame gives it is that rounded up to eight.
@@ -761,9 +791,10 @@ arg  = e:expression -> Arg(value: $e) .
 (* into a load from whatever the int happened to be.                   *)
 (*                                                                     *)
 (* **A struct is the third.** A member is found by which struct it is   *)
-(* in, so an expression carries that as `tag`, and a struct is a thing  *)
-(* in memory that no register holds, so the places that would copy one  *)
-(* whole are refused rather than compiled into a copy of its address.   *)
+(* in, so an expression carries that as `tag`. A struct is a thing in   *)
+(* memory that no register holds, and the emit pass copies it where C   *)
+(* copies it; what this pass refuses is a copy between two kinds, and a *)
+(* struct anywhere C wants a number, where its address would be used.   *)
 (*                                                                     *)
 (* What this pass deliberately does **not** do is check that what is    *)
 (* assigned, or passed, has the type it is given. C11 6.5.16.1 has a    *)
@@ -816,6 +847,24 @@ arg  = e:expression -> Arg(value: $e) .
    * the load a scalar would have, and `Assign` to refuse both. *)
   otherwise aggregate = false
 
+  (* **Whether the value is a struct**, as opposed to a pointer to one or a
+   * number. C11 takes a struct in exactly five places: `.`, `&`, `sizeof`,
+   * a copy into a struct of the same type, and a statement that throws it
+   * away. Everywhere else, arithmetic, a comparison, a condition, a
+   * `return` and a copy into anything else, `cc` refuses it, and this
+   * subset compiled it until 2026-09-23 into the struct's **address** used
+   * as a number. So each of those places asks this, and refuses. *)
+  otherwise record = $type = 0 and $tag <> ""
+
+  (* **Whether it is somewhere a value can be put**, C11 6.3.2.1's lvalue.
+   * The `place` rule settled this in the grammar while the only places were
+   * names and `*`s. A member is a place when what it is a member of is one,
+   * and since structs are copied that need not be so: `(x = y).a` is a
+   * member of a value, which C11 6.5.16 says an assignment is, and a program
+   * that assigns to it or takes its address is refused by `cc` and was
+   * compiled here into a write to `x`. *)
+  otherwise lvalue = false
+
   (* And a size falls out of the type for everything except a name, because a
    * name is the only thing that can be an array: no operator here answers
    * one. `Variable` therefore says its own and this covers the rest. *)
@@ -832,39 +881,82 @@ arg  = e:expression -> Arg(value: $e) .
            : elem  = lookup([[0, $width]], $stars, 8)
            : type  = lookup([[0, $stars]], $count, $stars + 1)
            : size  = lookup([[0, $elem]], $count, $count * $elem)
-           : aggregate = $count > 0 or ($stars = 0 and $tag <> "") .
+           : aggregate = $count > 0 or ($stars = 0 and $tag <> "")
+           : lvalue = true .
   Addr     : type  = $place.type + 1
            : width = $place.width
-           : tag   = $place.tag .
+           : tag   = $place.tag
+           ! not $place.lvalue
+               : "'&' wants somewhere a value is kept, and a member of an assignment is a member of a value" .
   (* An array is not an lvalue, C11 6.3.2.1 again: it decays before anything
    * can be assigned to it, so there is nothing to assign to. Without this the
    * emit pass would store through the array's address and write element
    * zero, which is a wrong answer rather than a refusal.
    *
    * **A struct is an lvalue and C assigns it whole**, 6.5.16.1, which is a
-   * copy of its bytes. That is a loop, or a call to `memcpy`, and not a
-   * store, so it is refused here rather than compiled into a store of the
-   * source's address into the destination's first eight bytes. The two
+   * copy of its bytes, and the emit pass copies them. What C asks is that
+   * both sides be the **same** struct, and that is what is checked: a copy
+   * between two sizes has no right length, and a struct put in a number, or
+   * a number in a struct, would be an address stored as a value. The two
    * cases are told apart by the decay: an array's `type` has a star its
-   * declaration did not, and a struct's has none. *)
+   * declaration did not, and a struct's has none.
+   *
+   * The assignment is worth the struct, as any assignment is worth what it
+   * put, so `a = b = c` copies twice and `(a = b).x` is a member of `a`. *)
   Assign   : type  = $place.type
            : width = $place.width
            : tag   = $place.tag
+           : aggregate = $place.aggregate and $place.type = 0
            ! $place.aggregate and $place.type > 0
                : "an array is not something a value can be put in"
-           ! $place.aggregate and $place.type = 0
-               : "'struct {}' is assigned whole, which copies it, and that is not compiled"
-                   of $place.tag .
-  (* A struct as an argument is the parameter's refusal seen from the call:
-   * AAPCS64 passes one in a way that is not a register holding a value. *)
+           ! not $place.lvalue
+               : "a member of an assignment is a member of a value, and a value is not something another can be put in"
+           ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
+               : "'struct {}' is assigned {}, and a struct takes only its own kind"
+                   of $place.tag,
+                      lookup([[true, "'struct {}'" of $value.tag]], $value.record,
+                             "something that is not a struct")
+           ! $value.record and not $place.record
+               : "'struct {}' is put where a number or a pointer goes" of $value.tag .
+
+  (* The same rule for a declaration's initialiser, which is an assignment to
+   * a place the declaration names. `ptrs` and the base are the `locals`
+   * pass's. *)
+  LocalInit ! $ptrs = 0 and $base.tagname <> ""
+                and ($value.type <> 0 or $value.tag <> $base.tagname)
+                : "'{}' is a 'struct {}' initialised from {}, and a struct takes only its own kind"
+                    of $name, $base.tagname,
+                       lookup([[true, "a 'struct {}'" of $value.tag]], $value.record,
+                              "something that is not a struct")
+            ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
+                : "'struct {}' is put where a number or a pointer goes" of $value.tag .
+
+  (* An argument is a copy into the parameter, so the same rule again, asked
+   * at the call where both sides are known: `$sig` is the callee's parameters
+   * as the `locals` pass had them, each the tag of a struct passed whole or
+   * "". The lists are compared whole, which is position by position. *)
   Arg      : type = $value.type
-           ! $value.aggregate and $value.type = 0
-               : "'struct {}' is passed whole, and only a pointer to one is compiled"
-                   of $value.tag .
+           : carries = lookup([[true, $value.tag]], $value.record, "") .
+  Program  : down callees = $allsigs .
+  Call     ! $args.carries <> lookup($callees, $name, $args.carries)
+               : "'{}' is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
+                   of $name .
+
+  (* The places a number is wanted and a struct is not one. *)
+  Return ! $value.record : "'struct {}' is returned, and a function here returns an int" of $value.tag .
+  If     ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+  IfElse ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+  While  ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+  For    ! $cond.record = [true]
+             : "a struct is a condition, and C tests only numbers and pointers" .
+  Compare ! $left.record or $right.record
+              : "'{}' compares numbers and pointers, and this is 'struct {}'"
+                  of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
   Deref    : type  = $value.type - 1
            : width = $value.width
            : tag   = $value.tag
            : aggregate = $type = 0 and $tag <> ""
+           : lvalue = true
            ! $value.type < 1
                : "'*' wants a pointer, and this is {}"
                    of lookup([["", "an int"]], $value.tag, "a struct") .
@@ -890,13 +982,15 @@ arg  = e:expression -> Arg(value: $e) .
          : type  = lookup([[0, at($entry, 2)]], at($entry, 3), at($entry, 2) + 1)
          : size  = lookup([[0, $elem]], at($entry, 3), at($entry, 3) * $elem)
          : aggregate = at($entry, 3) > 0 or (at($entry, 2) = 0 and $tag <> "")
+         : lvalue = $value.lvalue
          ! $value.type <> 0 or $value.tag = ""
              : "'{}' is asked for as a member of something that is not a struct" of $name
          ! $value.type = 0 and $value.tag <> ""
                and not defined(at(lookup($known, $value.tag, [0, 1, empty]), 3), $name)
              : "'struct {}' has no member '{}'" of $value.tag, $name .
 
-  Negate ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
+  Negate ! $value.record : "'-' wants a number, and this is 'struct {}'" of $value.tag
+         ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
 
   (* `sizeof` is worth an `int` here and a `size_t` in C. `size_t` is a
    * **typedef**, which this subset stopped before on purpose, and was to be
@@ -981,11 +1075,17 @@ arg  = e:expression -> Arg(value: $e) .
                                    lookup([[0, $right.width]], $left.type, $left.width))
                   : tag   = lookup([[0, ""]], $type,
                                    lookup([[0, $right.tag]], $left.type, $left.tag))
+      ! $left.record or $right.record
+          : "'{}' wants numbers or pointers, and this is 'struct {}'"
+              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
       ! $left.type > 0 and $right.type > 0
           : "'+' does not add two pointers" .
   Binary(op: "-") : type  = $left.type - $right.type
                   : width = lookup([[0, 4]], $type, $left.width)
                   : tag   = lookup([[0, ""]], $type, $left.tag)
+      ! $left.record or $right.record
+          : "'{}' wants numbers or pointers, and this is 'struct {}'"
+              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
       ! $left.type = 0 and $right.type > 0
           : "'-' does not take a pointer from a number"
       ! $left.type > 0 and $right.type > 0
@@ -994,5 +1094,8 @@ arg  = e:expression -> Arg(value: $e) .
           : "'-' takes two pointers only when they point at the same type" .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
    * either is C's own refusal rather than this subset's. *)
-  Binary ! $left.type > 0 or $right.type > 0
+  Binary ! $left.record or $right.record
+      : "'{}' wants numbers, and this is 'struct {}'"
+          of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+         ! $left.type > 0 or $right.type > 0
       : "'{}' does not take a pointer" of $op .
