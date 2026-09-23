@@ -831,16 +831,16 @@ make test       # 306 checks, covering 35 Pascal programs against fpc
 ```
 
 C11 and no dependencies. **The suite passes with nothing outside this
-repository**: 300 of the 306 need only what is vendored here, and it is worth
+repository**: 301 of the 306 need only what is vendored here, and it is worth
 being exact about the other five, because they surface as **three** skipped
 lines rather than five. One drives `fpc`. Three drive `solas` and `solvm` over a
 checkout of [Solveig](https://github.com/hansolovkarlsson/Solveig) and are
 guarded together, so a machine without it prints one line for all three. One
 assembles the Z80 fixtures with `z80asm` and compares the bytes. Each reports
 itself skipped rather than failing, and a run with none of the three present is
-292 passed, 0 failed and 5 skipped. The C oracle needs `cc` on arm64, which is
+301 passed, 0 failed and 5 skipped. The C oracle needs `cc` on arm64, which is
 what this repository is built on, and is skipped elsewhere. The SolVM assembler
-is in the 292: its programs are held against the bytes they assembled to last
+is in the 301: its programs are held against the bytes they assembled to last
 time, so it is tested without SolVM and held *against* SolVM when there is one.
 
 *The Solveig figures above are deliberately not numbers.* What that leg counts

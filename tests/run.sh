@@ -9,6 +9,10 @@ phx="$root/bin/phx"
 pass=0
 fail=0
 skipped=0
+# How many of the three optional oracles, fpc, Solveig and z80asm, are
+# missing. The README quotes what a run with none of them does, and that
+# number can only be judged by such a run: see the foot of this file.
+absent=0
 
 report() {
     if [ "$1" = pass ]; then
@@ -1329,6 +1333,7 @@ if command -v fpc >/dev/null 2>&1; then
         printf '%s\n' "$oracle" | grep -A6 'FAIL' | sed 's/^/        /' | head -14
     fi
 else
+    absent=$((absent + 1))
     skip 1 "the oracle needs fpc, which is not on this machine"
 fi
 
@@ -1365,6 +1370,7 @@ if [ -x "$sol/bin/solas" ]; then
         printf '%s\n' "$bc" | sed 's/^/        /' | head -14
     fi
 else
+    absent=$((absent + 1))
     skip 3 "the conformance suite needs Solveig, which is not here"
 fi
 
@@ -1469,6 +1475,7 @@ if command -v z80asm >/dev/null 2>&1; then
         printf '%s\n' "$za" | grep -A3 FAIL | sed 's/^/        /' | head -12
     fi
 else
+    absent=$((absent + 1))
     skip 1 "the oracle needs z80asm, which is not on this machine"
 fi
 
@@ -1905,14 +1912,38 @@ fi
 # everything it needs is present, and a machine without `fpc` or Solveig is
 # right to report a smaller number -- failing there would make the check a
 # claim about the machine rather than about the records.
+#
+# **The README's Building paragraph makes three more claims**: how many of
+# the checks need only what is vendored here, out of how many, and what a
+# run with none of the three optional oracles prints. They went stale
+# together for two days, 291 and 283 where the tree said otherwise, because
+# nothing judged them. A full run holds the three against each other; a run
+# with exactly those oracles missing holds the last against itself.
+bare=$(grep -oE '[0-9]+ passed, 0 failed and [0-9]+ skipped' "$root/README.md" \
+       | head -1 | sed 's/ passed, 0 failed and / /; s/ skipped//')
+bare_pass=${bare% *}; bare_skip=${bare#* }
+need=$(grep -oE '[0-9]+ of the [0-9]+ need only' "$root/README.md" \
+       | head -1 | sed 's/ of the / /; s/ need only//')
+need_n=${need% *}; need_of=${need#* }
 if [ "$skipped" -ne 0 ]; then
-    printf '  --    %d skipped, so the records'"'"' own count is not judged here\n' \
-           "$skipped"
+    if [ "$absent" -eq 3 ] && [ "$skipped" = "$bare_skip" ]; then
+        if [ "$pass" != "$bare_pass" ]; then
+            printf '  FAIL  with fpc, Solveig and z80asm absent this is %d passed and %d skipped, and README.md says %s and %s\n' \
+                   "$pass" "$skipped" "$bare_pass" "$bare_skip"
+            fail=$((fail + 1))
+        fi
+    else
+        printf '  --    %d skipped, so the records'"'"' own count is not judged here\n' \
+               "$skipped"
+    fi
 else
     stale=""
     readme=$(sed -n 's/^make test .*# \([0-9]*\) checks.*/\1/p' \
                  "$root/README.md" | head -1)
     [ "$readme" = "$pass" ] || stale="$stale README.md says $readme."
+    [ "$need_of" = "$pass" ] || stale="$stale README.md's Building paragraph says $need_n of $need_of."
+    [ "$need_n" = "$bare_pass" ] && [ $((bare_pass + bare_skip)) = "$pass" ] \
+        || stale="$stale README.md's Building paragraph says $need_n need only what is here, and that a bare run is $bare_pass passed and $bare_skip skipped."
 
     chg=$(grep -m1 '^\*\*Tests:\*\*' "$root/docs/CHANGELOG.md" \
           | sed -n 's/.*→ \([0-9]*\).*/\1/p')

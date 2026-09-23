@@ -5637,3 +5637,33 @@ for the oracle to compare.
 The assembly of all 177 programs that were here before was compared with
 the committed description's and did not move by a byte. Ten oracle programs,
 185 in all; nine refusals, 82 in all. 297 checks to 306, all passing.
+
+## 2026-09-23: the README's other three numbers, measured and then held
+
+The standup had carried it for two closeouts: the Building paragraph in the
+README said "291 of the 297 … the other five", which is six, and that a run
+without `fpc`, Solveig and `z80asm` is "283 passed, 0 failed and 5
+skipped", which is 288 and not 297 less five. Each edit since had added to
+every number, which kept the paragraph growing and never made it true.
+
+**It was measured, not reasoned about.** All three are found by the suite
+at run time, `fpc` and `z80asm` on `PATH` and Solveig through `$SOLVEIG`, so
+one run with the two directories left out of `PATH` and `SOLVEIG` pointed at
+nothing is the machine the paragraph describes, with nothing uninstalled.
+It printed 301 passed, 0 failed, 5 skipped. The five and the three skipped
+lines were right all along; both counts of what passes were wrong, by
+different amounts, and the paragraph's own arithmetic, 301 and five making
+306, is the thing that would have said so.
+
+**Then the suite was made to say so.** `tests/counts.sh` exists because a
+number in the records rots by standing still, and the full-run count was
+already judged at the foot of `tests/run.sh`. These three were not, which
+is the whole of why they drifted. A full run now holds them against each
+other: the "of the" figure is the total, and the vendored count plus the
+skipped ones makes it. A run with exactly the three oracles missing, and
+nothing else skipped, holds its own passed count against the README's, so
+the measurement above is one a machine without those tools repeats every
+time. Both were run against the stale paragraph first and both went red,
+the full run on the arithmetic and the bare run on 292 against 301; the
+first version of the extraction did not see a number at the start of a
+line, and the red message printed two blanks, which is how that was found.
