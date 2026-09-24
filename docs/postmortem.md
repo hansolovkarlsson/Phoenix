@@ -1202,3 +1202,52 @@ by the shrinking of the one inside it, then simulated round by round against
 > A prototype that is the mechanism run once settles what the mechanism
 > computes. It does not settle what the checks around it believe about one
 > walk, and that is where the surprises were.
+
+---
+
+## 22. "A per-program limit that reports *did not finish*"
+
+The shape of the fix for a suite with no timeout was written down on
+2026-09-23, in that day's standup, after a breakage witness had run for two
+hours and forty minutes: a limit on each program the harnesses run, and "did
+not finish" reported as a failure. The [journal](journal.md) of the same day
+added the claim behind it, that a witness which hangs makes `make test` hang
+rather than fail. Built on 2026-09-24. **Held as a shape, and it was half of
+the fix.**
+
+*The claim held, and understated.* A C `while` made endless hung the oracle
+as predicted; under a limit it failed in four seconds with the program
+named. But calc's `while` made endless did something the prediction had no
+word for. The loop was around a print, and the shell capturing it ran out
+of memory within the twenty seconds and ended the run with no report, which
+is worse than a hang. **"Did not finish" has two ways to be true, running
+too long and writing too much**, and a loop in a language whose programs
+print will usually be the second. The limit counts output too.
+
+*"Reports it as a failure" was the part that needed the most, because a
+stop can look like a pass.* A check that expects a refusal and discards
+standard error takes a stopped program for the refusal it wanted, and an
+oracle whose two programs are both stopped at the same point sees them
+agree. Neither is visible from inside the check. Every stop is now logged,
+and one check at the end of the run fails if the log has anything in it.
+Its first run found the second case in earnest: the two sides of a 49 MB
+`solvm --trace` comparison had been cut at 16 MB and matched.
+
+*And the limit was an instrument, so it was wrong first.* The suite went
+from 287 seconds to 533 with every check still passing, and the first two
+explanations, a 50 ms wait and then a busy machine, were wrong. A program
+could be reaped in the same pass as its pipes closed, and the pass then
+slept until the deadline before reporting it finished. It was found by
+timing every line of the old suite and the new side by side, and seeing
+gaps of exactly the limit before lines reading `ok`.
+
+**So § 18's rule held three more times in one day**: when a result looks
+wrong, the observer is checked before the subject. Each of the three faults
+here was in the observer, and none was found by a check, because a check
+that cannot finish, or a harness that finishes late, is the thing that
+cannot report itself. What found them was a breakage run, a timing, and a
+log.
+
+> A harness that can only pass or hang has two answers, and one of them
+> looks like a slow machine. Give it a third, and then check that the third
+> is not being mistaken for the first.

@@ -686,6 +686,7 @@ widen what *outside it* has meant, and the entries after the table say how.
 | **a syntax error named a token that was legal** | `parse_run` reported a leftover-input failure at the first token left over while keeping the *expected* list recorded wherever the match had really got stuck. `print a +;` blamed the `print`. A start rule that is a repetition never fails outright, so **every** syntax error in every language here took that path. Found by [reference.md](reference.md) disagreeing with the program |
 | **a `thread` declared below its updates was not a thread** | clauses are classified as they are read, so a rule above the declaration got an ordinary synthesised attribute and one below it got the thread — two attributes of one name, and the thread reached every node with the value it started at. **No diagnostic.** Found by [`languages/z80/`](../languages/z80/)'s *second backend*: the listing printed `jp` for a backward jump that `jr` reaches |
 | **a bare `$name` nothing could answer was read without a word** | `$x.attr` was checked when a description was read and a bare `$name` only as the pass ran, node by node, so it was reported once per node that reached it, or never if no program in hand did. Found **twice in two days by the C description while its passes were being written**: a `types` check naming a `locals` thread, printed six times over a struct of six members, and a `$sig` nothing defined, which read cleanly. Refused at read time since 2026-09-23, generously: only a name no binding, field, pass or embed could ever answer |
+| **the suite could not say that a program did not finish** | `tests/run.sh` and every harness ran what they had just compiled with no limit, so a program that looped hung `make test`, and one that looped around a print ran the capturing shell out of memory and ended the run with no report. Found by a breakage harness that ran for two hours and forty minutes on 2026-09-23, until Hans asked why the background jobs were still going. Fixed 2026-09-24 by [`tests/limit.c`](../tests/limit.c), a time and output limit every harness runs its programs under, and a log of every stop that fails the run |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.
@@ -728,6 +729,17 @@ the one clause it is in. The tool had the answer all along, since it
 already knew every attribute each pass defines for the `.attr` check. What
 it lacked was the question, and the roadmap entry that asked it is the
 [ROADMAP](ROADMAP.md) § 5 paragraph this row replaces.
+
+**The suite row is the benchmark row a second time, and a seventh kind of
+finder: a person asking why something was still running.** No check could
+have found it, because what was missing was the check's ability to finish.
+The fix had two faults of its own on its first day, and neither was found
+by a test either. A reaping order that let a finished program sit until its
+deadline, so that checks passed late at random, was found by timestamping
+every line of an old run and a new one. And a 16 MB cap that cut both sides
+of a 49 MB `solvm --trace` comparison to a match was found by the log of
+stops, the day it was added. An instrument is checked by measuring the
+instrument, which is [postmortem.md](postmortem.md) § 18 again.
 
 **A test was holding the defect in place**, and that is worth its own line
 because it looked like the opposite. `languages/awk/tests/divergent/spaced-regex.awk`

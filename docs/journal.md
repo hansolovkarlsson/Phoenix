@@ -5839,3 +5839,74 @@ routes and are oracle programs, `tests/divergent/` is gone, and the entry
 moved to COMPLETED with a paragraph saying so. 196 programs against `cc`,
 85 refused, none diverging. 316 checks to 317: three refusals, less the two
 that pinned the divergences.
+
+## 2026-09-24: a test that never finishes fails instead of hanging
+
+Yesterday's breakage harness ran for two hours and forty minutes on a
+witness with a `while` in it, and nothing in the suite could have said
+anything else: `tests/run.sh` and the oracles ran what they compiled with
+no limit, so a regression that loops makes `make test` hang rather than
+fail. The standup set the shape of the fix as a per-program limit that
+reports "did not finish" as a failure. That shape held. It was half the
+fix, and the other half was found only by the first attempt breaking.
+
+**The limit is a program here, `tests/limit.c`, and not a command from
+elsewhere.** macOS has no `timeout(1)`, and nothing outside this
+repository may be needed to run its tests; the one harness that had a
+limit already, `languages/solveig/tests/bytecode.sh`, borrowed it from
+`perl -e 'alarm 30; exec @ARGV'`, which said nothing when it fired. The
+program runs in a process group of its own and the group is stopped,
+SIGTERM and then SIGKILL, because the program may be a harness whose
+children are what loops, and a second `limit` inside it has to be able to
+pass the stop on. It exits 124 with a sentence beginning `did not finish`.
+The number is GNU's; **the sentence is the part that cannot collide**,
+because the C oracle compares exit statuses as data and a program there
+may return 124 of its own accord.
+
+**The first breakage took the suite down instead of hanging it.** With
+calc's `while` made endless, the program under test was a loop around a
+print, and in twenty seconds it wrote so much that the shell capturing it
+in `$(...)` failed to allocate and the run died with no report at all,
+which is worse than a hang. Time alone does not catch the likelier
+regression, since most programs here print. So `limit` also counts what a
+program writes, through a pipe of its own, and stops it after 16 MB. When
+standard output and standard error lead to the same place, as under
+`2>&1`, they share one pipe, so the order of lines between them is what it
+would have been.
+
+**Then the limit slowed the suite from 287 seconds to 418, and then 533,
+and the first reading of that was wrong.** A wait of 50 ms, taken whenever
+a program's pipes closed before it was reaped, looked like the cause and
+was replaced by a wake-up on SIGCHLD. The next run was slower still, and
+the conclusion drawn was a busy machine. A comparison of the old suite and
+the new, timestamping every line, said otherwise: gaps of exactly 20.01
+and 600.03 seconds, each before a line reading `ok`. A program had
+finished, `limit` had reaped it, and in the same pass gone on to a `poll`
+whose wake-up byte had already been read, so it slept until the deadline
+and then reported the program as finished. How often depended on timing,
+which is why every run was slow by a different amount. **Reaping before
+the test for being done** fixed it, and the suite takes 299 seconds, as
+it did. The comment at the loop says why the order is the order.
+
+**Every harness then got the same treatment, and a log so that a stop
+cannot be quiet.** `tests/limit.sh` holds `bounded` for all fifteen, and
+each runs `phx`, what it builds, and `awk` or `solvm` over what `phx`
+wrote through it; the oracle compilers stay outside, under the 600 seconds
+`tests/run.sh` gives each harness. A stop can still look like a pass: a
+check that expects a failure and discards standard error takes it for the
+failure it wanted, and an oracle whose two programs are both stopped sees
+them agree. So `limit` appends each stop to `PHX_LIMIT_LOG`, and the last
+check in `run.sh` fails, naming each, if anything was stopped anywhere.
+
+*Its first run found exactly the second kind.* The bytecode oracle
+compares `solvm --trace` output, and `sola.sol`'s is 49 MB, so both sides
+had been cut at 16 MB and matched. It is legitimate, and all of it should
+be compared: `PHX_LIMIT_MB` now sets the cap, and that oracle's traces get
+256 MB. The same oracle compiles `sola.sol` in 8.3 seconds, which a
+2-second run exposed and which leaves 20 too little room, so that compile
+gets 60. Everything else the suite runs finishes in under two.
+
+A Pascal `while` broken on purpose now fails the suite in 190 seconds
+with `control` and `semicolons` named, and a run with `fpc`, Solveig and
+`z80asm` hidden is 316 passed and 5 skipped, measured, as the README says.
+317 checks to 321: three for the limit itself and one for the whole run.
