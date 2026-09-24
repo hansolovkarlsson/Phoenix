@@ -6,6 +6,29 @@ set -u
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 phx="$root/bin/phx"
+
+# Everything this file runs, it runs under a limit: phx itself, every program
+# phx or cc has just made, and each of the harnesses below it. A regression
+# that makes one of them loop forever, or print forever, then fails the check
+# that ran it, with `did not finish` in the reason, instead of hanging the
+# suite, or taking it down with a shell out of memory. A program gets PHX_LIMIT seconds and a harness,
+# which runs a directory of them, PHX_HARNESS_LIMIT. Both defaults are
+# several times what the slowest one takes today. See tests/limit.c.
+limit="$root/bin/limit"
+if [ ! -x "$limit" ]; then
+    echo "no $limit: run make first"
+    exit 1
+fi
+bounded() { "$limit" "${PHX_LIMIT:-20}" "$@"; }
+# A harness that ran out says so in a FAIL line of its own, because what is
+# shown of a failed harness below is mostly its FAIL lines. No harness exits
+# 124 of itself, so here the number is enough.
+harness() {
+    "$limit" "${PHX_HARNESS_LIMIT:-600}" "$@"; _st=$?
+    [ "$_st" = 124 ] && printf '  FAIL  %s did not finish\n' "${1#"$root"/}"
+    return "$_st"
+}
+
 pass=0
 fail=0
 skipped=0
@@ -37,7 +60,7 @@ skip() {
 # accepts <what> <args...>
 accepts() {
     what=$1; shift
-    if out=$("$phx" --quiet "$@" 2>&1); then
+    if out=$(bounded "$phx" --quiet "$@" 2>&1); then
         report pass "$what"
     else
         report fail "$what" "$(printf '%s' "$out" | head -2 | tr '\n' ' ')"
@@ -47,7 +70,7 @@ accepts() {
 # refuses <what> <expected text> <args...>
 refuses() {
     what=$1; _want=$2; shift 2
-    if out=$("$phx" --quiet "$@" 2>&1); then
+    if out=$(bounded "$phx" --quiet "$@" 2>&1); then
         report fail "$what" "it was accepted"
     elif printf '%s' "$out" | grep -qF -- "$_want"; then
         report pass "$what"
@@ -59,7 +82,7 @@ refuses() {
 # prints <what> <expected> <args...> -- what phx writes, exactly.
 prints() {
     what=$1; _want=$2; shift 2
-    got=$("$phx" "$@" 2>&1)
+    got=$(bounded "$phx" "$@" 2>&1)
     if [ "$got" = "$_want" ]; then
         report pass "$what"
     else
@@ -70,13 +93,39 @@ prints() {
 # warns <what> <expected text> <args...>
 warns() {
     what=$1; _want=$2; shift 2
-    out=$("$phx" --quiet "$@" 2>&1)
+    out=$(bounded "$phx" --quiet "$@" 2>&1)
     if printf '%s' "$out" | grep -qF -- "$_want"; then
         report pass "$what"
     else
         report fail "$what" "no warning matching '$_want'"
     fi
 }
+
+# The instrument first, because everything below is run through it. A limit
+# that swallowed exit statuses would pass every refusal, and one that never
+# fired would bring back the hang it is here to end.
+echo "the time limit"
+"$limit" 5 sh -c 'exit 3' 2>/dev/null
+if [ $? = 3 ]; then
+    report pass "a program that finishes keeps its exit status"
+else
+    report fail "a program that finishes keeps its exit status"
+fi
+out=$("$limit" 1 sh -c 'while :; do :; done' 2>&1)
+if [ $? = 124 ] && printf '%s' "$out" | grep -q 'did not finish in 1 s'; then
+    report pass "a program that never finishes is stopped, and says so"
+else
+    report fail "a program that never finishes is stopped, and says so" "got: $out"
+fi
+# The version of the same regression that is likelier, since most programs
+# here print: a loop around the print. Time alone does not catch it, because
+# `$(...)` runs the shell out of memory first.
+out=$("$limit" 20 yes 2>&1 >/dev/null)
+if [ $? = 124 ] && printf '%s' "$out" | grep -q 'did not finish, and was stopped after writing'; then
+    report pass "a program that never stops printing is stopped, and says so"
+else
+    report fail "a program that never stops printing is stopped, and says so" "got: $out"
+fi
 
 echo "grammars it should accept"
 accepts "calc.phx"                  "$root/languages/calc/calc-c.phx"
@@ -118,7 +167,7 @@ refuses "a fold with nothing to fold onto" "nothing to fold onto" \
 # `sizes`, `each` and `bytes` over a list complained about it instead, so a
 # correct diagnosis about the user's program was followed by one naming a line
 # of the description.
-if out=$("$phx" --quiet "$root/tests/grammars/one-complaint.phx" \
+if out=$(bounded "$phx" --quiet "$root/tests/grammars/one-complaint.phx" \
             "$root/tests/sources/has-a-zero.txt" 2>&1); then
     report fail "a failed check is reported once" "it was accepted"
 elif [ "$(printf '%s' "$out" | grep -c 'error:')" = 1 ]; then
@@ -147,7 +196,7 @@ refuses "a module used with its hole open" "holes in it" \
 # Precedence and associativity come from the module, and nothing that imports
 # it restates them. This is the whole reason it exists, so it is checked
 # exactly rather than approximately.
-shown=$("$phx" --run show --show show \
+shown=$(bounded "$phx" --run show --show show \
         "$root/tests/grammars/expression-only.phx" \
         "$root/tests/sources/an-expression.txt" 2>/dev/null)
 if [ "$shown" = "(((a + (2 * -b)) < 10) and not c)" ]; then
@@ -158,10 +207,10 @@ fi
 
 # calc's own grammar defines neither boolean operators nor unary minus; all of
 # it arrives with the module, and calc only answers for the nodes.
-if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/logic.calc" \
+if bounded "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/logic.calc" \
         > "$tmp0/logic.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp0/logic" "$tmp0/logic.c" 2>/dev/null; then
-    got=$("$tmp0/logic")
+    got=$(bounded "$tmp0/logic")
     if [ "$got" = "21" ]; then
         report pass "operators the language never defined"
     else
@@ -179,7 +228,7 @@ refuses "an import that is not there" "cannot read" \
 
 # A file named twice is read once, so the joined text holds one copy.
 # calc-c imports calc, which imports lexical and expression: four, each once.
-listed=$("$phx" --imports "$root/languages/calc/calc-c.phx" 2>/dev/null)
+listed=$(bounded "$phx" --imports "$root/languages/calc/calc-c.phx" 2>/dev/null)
 seen=$(printf '%s\n' "$listed" | wc -l | tr -d ' ')
 uniq=$(printf '%s\n' "$listed" | sort -u | wc -l | tr -d ' ')
 if [ "$seen" = "4" ] && [ "$uniq" = "4" ]; then
@@ -190,7 +239,7 @@ fi
 
 # A message about an imported file has to name *that* file and its own line
 # numbers, not a position in a buffer nobody wrote.
-out=$("$phx" --quiet "$root/tests/grammars/duplicate-rule.phx" 2>&1)
+out=$(bounded "$phx" --quiet "$root/tests/grammars/duplicate-rule.phx" 2>&1)
 if printf '%s' "$out" | grep -q "lexical.phx:"; then
     report pass "a diagnostic names the file it came from"
 else
@@ -208,7 +257,7 @@ warns   "one node type, two shapes"  "elsewhere with" \
         "$root/tests/grammars/inconsistent-node.phx"
 
 # The vocabulary a pass will be written against.
-nodes=$("$phx" --nodes "$root/languages/calc/calc-c.phx" 2>/dev/null)
+nodes=$(bounded "$phx" --nodes "$root/languages/calc/calc-c.phx" 2>/dev/null)
 if printf '%s' "$nodes" | grep -q "^Binary(op, left, right)$"; then
     report pass "--nodes lists the vocabulary"
 else
@@ -224,7 +273,7 @@ accepts "a spread over a file" "$root/tests/grammars/spread.phx" "$root/tests/so
 # The whole point of stage 1: `width * height - 1` must come out left-leaning,
 # with precedence from the grammar and associativity from the fold. A `-` whose
 # left is a `Binary` and whose right is a `Number` is that shape and no other.
-tree=$("$phx" --tree "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" 2>/dev/null)
+tree=$(bounded "$phx" --tree "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" 2>/dev/null)
 if printf '%s' "$tree" | grep -q "op: \"-\"" \
    && printf '%s' "$tree" | grep -q "left: Binary" \
    && ! printf '%s' "$tree" | grep -q "expression"; then
@@ -251,7 +300,7 @@ echo "a file a description embeds"
 # library still holds.
 # Compared as bytes rather than as a shell string, because the file's own
 # trailing newline is part of what was embedded.
-"$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
+bounded "$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
        > "$tmp0/embedded.out" 2>/dev/null
 { cat "$root/tests/grammars/embedded.c"; printf 'int main(void) { return 0; }\n'; } \
        > "$tmp0/embedded.want"
@@ -268,7 +317,7 @@ refuses "two files under one name" "is already embedded" \
 
 # The embedded file is a file the description was assembled from, so a Makefile
 # that rebuilds on a change wants it listed.
-if "$phx" --imports "$root/languages/awk/awk-c.phx" 2>/dev/null \
+if bounded "$phx" --imports "$root/languages/awk/awk-c.phx" 2>/dev/null \
    | grep -q 'awk-runtime\.c'; then
     report pass "--imports names it"
 else
@@ -333,7 +382,7 @@ refuses "%include declared twice" "already declared" \
 
 # A message from inside an included file has to name *that* file and its own
 # line, which is the whole reason the text is joined rather than parsed apart.
-out=$("$phx" --quiet "$inc" "$src/uses-broken.inc" 2>&1)
+out=$(bounded "$phx" --quiet "$inc" "$src/uses-broken.inc" 2>&1)
 if printf '%s' "$out" | grep -q "broken.inc:2:"; then
     report pass "a fault in an included file names it"
 else
@@ -349,7 +398,7 @@ echo "names the parse keeps"
 # it, no guard made every `a * b` a declaration, and binding when the node was
 # built rather than when its name was read made `let t = t;` end in `IsType`.
 want="Program Product Type Var Block Var Product Var Maybe Product Type Var Block Let IsName"
-got=$("$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" 2>&1 \
+got=$(bounded "$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" 2>&1 \
       | grep -oE '[A-Z][a-zA-Z]+$' | tr '\n' ' ' | sed 's/ $//')
 if [ "$got" = "$want" ]; then
     report pass "a guard asks what the parse declared, a scope ends, a failure undoes"
@@ -384,7 +433,7 @@ prints "and its column" "1 1 1 1 " --driver columns "$inc" "$src/main.inc"
 # column of numbers as fixed-width bytes. Both exist because a table in a
 # binary format is a column, and the alternative was the same line of notation
 # written once per node type that could be a row.
-widths=$("$phx" --raw --driver widths "$inc" "$src/main.inc" 2>/dev/null \
+widths=$(bounded "$phx" --raw --driver widths "$inc" "$src/main.inc" 2>/dev/null \
          | od -An -tu1 | tr '\n' ' ' | tr -s ' ' | sed 's/^ //;s/ $//')
 if [ "$widths" = "3 0 3 0 3 0 3 0" ]; then
     report pass "sizes, and bytes over a list"
@@ -440,9 +489,9 @@ prints "a node's span is the syntax that built it" \
 # the fold is what the folded node has to claim after it. A literal here would
 # have been a snapshot of the rule above, and the two would have had to be kept
 # in step by hand.
-before=$("$phx" --driver spans "$fold" "$arith" 2>/dev/null)
+before=$(bounded "$phx" --driver spans "$fold" "$arith" 2>/dev/null)
 rootspan=${before##*@}
-after=$("$phx" --driver folded-spans "$fold" "$arith" 2>/dev/null)
+after=$(bounded "$phx" --driver folded-spans "$fold" "$arith" 2>/dev/null)
 if [ -n "$rootspan" ] && [ "$after" = "15@$rootspan" ]; then
     report pass "and a rewritten node keeps the one it replaced"
 else
@@ -516,7 +565,7 @@ refuses "until, when it never settles" "'grow' ran 256 times and 'n' on the root
         "$root/tests/grammars/until-never-settles.phx" "$root/tests/sources/zero.txt"
 
 # The default driver is the first declared, and it compiles.
-if "$phx" --quiet "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
+if bounded "$phx" --quiet "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
         > /dev/null 2>&1; then
     report pass "the default driver runs"
 else
@@ -525,7 +574,7 @@ fi
 
 # A driver with no `->` is a validation run: it says nothing and answers with
 # its status.
-out=$("$phx" --driver check "$root/languages/calc/calc-c.phx" \
+out=$(bounded "$phx" --driver check "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/programs/fizz.calc" 2>&1)
 if [ -z "$out" ]; then
     report pass "a check driver says nothing"
@@ -536,7 +585,7 @@ fi
 # The whole reason stage 3 exists: typecheck's message renders the offending
 # expression with lib/expression.phx's `show`, which is only readable because
 # the driver runs `show` first.
-msg=$("$phx" --quiet "$root/languages/calc/calc-c.phx" \
+msg=$(bounded "$phx" --quiet "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/tests/print-a-bool.calc" 2>&1)
 if printf '%s' "$msg" | grep -qF "(n < 2) is bool"; then
     report pass "a pass reading another pass's work"
@@ -560,7 +609,7 @@ refuses "division by zero"   "division by zero" \
 # One mistake should produce one message. The cascade this guards against --
 # a check firing, then the arithmetic above it complaining about the nil it
 # left, then every node above that -- is what `checks are guards` is for.
-n=$("$phx" --run eval "$root/languages/calc/calc-c.phx" \
+n=$(bounded "$phx" --run eval "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/tests/undefined.calc" 2>&1 | grep -c "error:")
 if [ "$n" -eq 1 ]; then
     report pass "one mistake, one message"
@@ -589,7 +638,7 @@ accepts "$claims claims from docs/semantics.md hold" \
 # two backends drift apart in, because an implicit conversion one of them makes
 # and the other does not is exactly the silent disagreement that page is for.
 refusals="$root/tests/grammars/semantics-refused.phx"
-out=$("$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>&1)
+out=$(bounded "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>&1)
 missing=""
 for want in "there is no conversion" \
             "does not join text" \
@@ -605,7 +654,7 @@ for want in "there is no conversion" \
 done
 if [ -n "$missing" ]; then
     report fail "and every refusal it names" "no message matching$missing"
-elif "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+elif bounded "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
     report fail "and every refusal it names" "the description was accepted"
 else
     report pass "and every refusal it names"
@@ -622,7 +671,7 @@ accepts "$lclaims claims from docs/reference.md section 11 hold" \
         "$root/tests/grammars/library.phx" "$root/tests/sources/one-node.txt"
 
 lrefusals="$root/tests/grammars/library-refused.phx"
-lout=$("$phx" --quiet "$lrefusals" "$root/tests/sources/one-node.txt" 2>&1)
+lout=$(bounded "$phx" --quiet "$lrefusals" "$root/tests/sources/one-node.txt" 2>&1)
 lmissing=""
 for want in "does not narrow a float" \
             "cannot split on nothing" \
@@ -641,7 +690,7 @@ fi
 # counts on 2026-09-05 -- four drifted over three days, two of them two hours
 # old. The prose in these documents is executed a dozen ways above; the numbers
 # were executed by nobody. tests/counts.sh has the reasoning.
-if cnt=$("$root/tests/counts.sh" 2>&1); then
+if cnt=$(harness "$root/tests/counts.sh" 2>&1); then
     n=$(printf '%s' "$cnt" | grep -c '^  ok')
     report pass "$n counts in the records match the tree"
 else
@@ -652,28 +701,28 @@ fi
 # The conformance rule, applied to the page the rule is *about*: the same
 # claims, and the same complaints about breaking them, from `phx` and from a
 # compiler `phx` wrote.
-if "$phx" "$root/tests/grammars/semantics.phx" -o "$tmp0/sem.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/semantics.phx" -o "$tmp0/sem.c" 2>/dev/null \
    && cc -o "$tmp0/semc" "$tmp0/sem.c" 2>/dev/null \
-   && "$phx" "$refusals" -o "$tmp0/semr.c" 2>/dev/null \
+   && bounded "$phx" "$refusals" -o "$tmp0/semr.c" 2>/dev/null \
    && cc -o "$tmp0/semrc" "$tmp0/semr.c" 2>/dev/null; then
 
-    if "$tmp0/semc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+    if bounded "$tmp0/semc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
         report pass "and hold in a compiler phx wrote"
     else
         report fail "and hold in a compiler phx wrote"
     fi
 
     # The library's claims through the same two implementations.
-    if "$phx" "$root/tests/grammars/library.phx" -o "$tmp0/lib.c" 2>/dev/null \
+    if bounded "$phx" "$root/tests/grammars/library.phx" -o "$tmp0/lib.c" 2>/dev/null \
        && cc -o "$tmp0/libc" "$tmp0/lib.c" 2>/dev/null \
-       && "$tmp0/libc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+       && bounded "$tmp0/libc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
         report pass "and the library's do too"
     else
         report fail "and the library's do too"
     fi
 
-    "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-phx" >/dev/null
-    "$tmp0/semrc" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-cc" >/dev/null
+    bounded "$phx" --quiet "$refusals" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-phx" >/dev/null
+    bounded "$tmp0/semrc" "$root/tests/sources/one-node.txt" 2>"$tmp0/sem-cc" >/dev/null
     if cmp -s "$tmp0/sem-phx" "$tmp0/sem-cc"; then
         report pass "with the same complaints, byte for byte"
     else
@@ -688,7 +737,7 @@ fi
 # The conformance rule from docs/semantics.md, made a test rather than a hope:
 # one .phx, interpreted and through both backends, must give the same answer.
 
-want=$("$phx" --run eval "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" 2>/dev/null)
+want=$(bounded "$phx" --run eval "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" 2>/dev/null)
 if [ "$want" = "97" ]; then
     report pass "interpreted"
 else
@@ -700,7 +749,7 @@ tmp="$root/build/suite-2"; rm -rf "$tmp"; mkdir -p "$tmp"
 # `{ statement }` matched exactly once must still be a list. The `.phx` author
 # cannot know how many statements a block will hold, so the grammar decides the
 # shape and not the input.
-if "$phx" --quiet --run emit-c "$root/languages/calc/calc-c.phx" \
+if bounded "$phx" --quiet --run emit-c "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/tests/one-statement-block.calc" >/dev/null 2>&1; then
     report pass "a block of exactly one statement"
 else
@@ -710,12 +759,12 @@ fi
 # docs/semantics.md's headline, as a test: Phoenix's division is floored and
 # C's truncates, so a language that does not say which it means gets two
 # answers from the same program. calc says truncating, in both passes.
-neg_i=$("$phx" --run eval "$root/languages/calc/calc-c.phx" \
+neg_i=$(bounded "$phx" --run eval "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/tests/negative-division.calc" 2>/dev/null)
-if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" \
+if bounded "$phx" --run emit-c "$root/languages/calc/calc-c.phx" \
         "$root/languages/calc/tests/negative-division.calc" > "$tmp/neg.c" 2>/dev/null \
    && cc -o "$tmp/neg" "$tmp/neg.c" 2>/dev/null; then
-    neg_c=$("$tmp/neg")
+    neg_c=$(bounded "$tmp/neg")
     if [ "$neg_i" = "-3" ] && [ "$neg_c" = "-3" ]; then
         report pass "negative division agrees, and truncates"
     else
@@ -727,10 +776,10 @@ else
 fi
 
 # Control flow: the compiled program has to actually run and be right.
-if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/fizz.calc" \
+if bounded "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/fizz.calc" \
         > "$tmp/fizz.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp/fizz" "$tmp/fizz.c" 2>/dev/null; then
-    if ! got=$("$tmp/fizz" 2>&1); then
+    if ! got=$(bounded "$tmp/fizz" 2>&1); then
         report fail "a loop and a branch, compiled and run" \
                     "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
         got=
@@ -750,10 +799,10 @@ fi
 refuses "a loop refuses to be interpreted" "cannot be interpreted" \
         --run eval "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/fizz.calc"
 
-if "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
+if bounded "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/sum.calc" \
         > "$tmp/out.c" 2>/dev/null \
    && cc -o "$tmp/out" "$tmp/out.c" 2>/dev/null; then
-    if ! got=$("$tmp/out" 2>&1); then
+    if ! got=$(bounded "$tmp/out" 2>&1); then
         report fail "through the C backend, same answer" \
                     "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
         got=
@@ -785,9 +834,9 @@ fi
 
 accepts "the awk backend reads" "$root/languages/calc/calc-awk.phx"
 
-if "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
+if bounded "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
         "$root/languages/calc/programs/sum.calc" > "$tmp/sum.awk" 2>/dev/null; then
-    got=$(awk -f "$tmp/sum.awk" 2>&1)
+    got=$(bounded awk -f "$tmp/sum.awk" 2>&1)
     if [ "$got" = "$want" ]; then
         report pass "through the awk backend, same answer"
     else
@@ -801,9 +850,9 @@ fi
 # truncates and happens to agree with calc; awk's is floating division and does
 # not, so this backend has to write the model out as `int(a / b)`. The same
 # program, the same -3.
-if "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
+if bounded "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" \
         "$root/languages/calc/tests/negative-division.calc" > "$tmp/neg.awk" 2>/dev/null; then
-    got=$(awk -f "$tmp/neg.awk" 2>&1)
+    got=$(bounded awk -f "$tmp/neg.awk" 2>&1)
     if [ "$got" = "-3" ]; then
         report pass "and truncates in a host whose / does not"
     else
@@ -819,12 +868,12 @@ fi
 # conformance rule with the interpreter's leg replaced rather than dropped.
 backends_agree() {
     _what=$1; _prog=$2
-    if ! "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" "$_prog" \
+    if ! bounded "$phx" --run emit-awk "$root/languages/calc/calc-awk.phx" "$_prog" \
             > "$tmp/two.awk" 2>/dev/null; then
         report fail "$_what" "the awk backend did not emit"
         return
     fi
-    if ! "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$_prog" \
+    if ! bounded "$phx" --run emit-c "$root/languages/calc/calc-c.phx" "$_prog" \
             > "$tmp/two.c" 2>/dev/null \
        || ! cc -Wall -Werror -o "$tmp/two" "$tmp/two.c" 2>/dev/null; then
         report fail "$_what" "the C backend did not compile cleanly"
@@ -834,11 +883,11 @@ backends_agree() {
     # half of that is optional: a program that dies prints nothing, and two
     # programs that both die print the same nothing. COMPLETED.md already has
     # a row for the version of this mistake that reached bench/run.sh.
-    if ! _a=$(awk -f "$tmp/two.awk" 2>&1); then
+    if ! _a=$(bounded awk -f "$tmp/two.awk" 2>&1); then
         report fail "$_what" "awk exited nonzero: $(printf '%s' "$_a" | tr '\n' ' ')"
         return
     fi
-    if ! _c=$("$tmp/two" 2>&1); then
+    if ! _c=$(bounded "$tmp/two" 2>&1); then
         report fail "$_what" "the compiled C exited nonzero: $(printf '%s' "$_c" | tr '\n' ' ')"
         return
     fi
@@ -876,10 +925,10 @@ accepts "the parked Solveig example" "$root/languages/calc/calc-solveig.phx"
 if [ -n "${PHX_TEST_SOLVEIG:-}" ]; then
     SOL=${SOLVEIG:-$root/../Solveig}
     if [ -x "$SOL/bin/solas" ]; then
-        if "$phx" --run emit-sol "$root/languages/calc/calc-solveig.phx" \
+        if bounded "$phx" --run emit-sol "$root/languages/calc/calc-solveig.phx" \
                 "$root/languages/calc/programs/sum.calc" > "$tmp/out.sol" 2>/dev/null \
            && "$SOL/bin/solas" "$tmp/out.sol" -o "$tmp/out.sob" >/dev/null 2>&1; then
-            got=$("$SOL/bin/solvm" "$tmp/out.sob")
+            got=$(bounded "$SOL/bin/solvm" "$tmp/out.sob")
             if [ "$got" = "$want" ]; then
                 report pass "through the Solveig backend, same answer"
             else
@@ -902,7 +951,7 @@ fi
 
 echo "generated compilers"
 
-if "$phx" "$root/languages/calc/calc-c.phx" -o "$tmp0/calc.c" 2>/dev/null; then
+if bounded "$phx" "$root/languages/calc/calc-c.phx" -o "$tmp0/calc.c" 2>/dev/null; then
     report pass "calc writes out as C"
 else
     report fail "calc writes out as C"
@@ -912,9 +961,9 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
     report pass "one file, no flags, no headers"
 
     for f in sum fizz logic; do
-        "$phx" "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/$f.calc" \
+        bounded "$phx" "$root/languages/calc/calc-c.phx" "$root/languages/calc/programs/$f.calc" \
             > "$tmp0/by-phx" 2>/dev/null
-        "$tmp0/calcc" "$root/languages/calc/programs/$f.calc" > "$tmp0/by-cc" 2>/dev/null
+        bounded "$tmp0/calcc" "$root/languages/calc/programs/$f.calc" > "$tmp0/by-cc" 2>/dev/null
         if cmp -s "$tmp0/by-phx" "$tmp0/by-cc"; then
             report pass "$f.calc: identical to phx, byte for byte"
         else
@@ -923,9 +972,9 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
     done
 
     # The generated program is a compiler, so what it writes has to compile.
-    if "$tmp0/calcc" "$root/languages/calc/programs/fizz.calc" > "$tmp0/fizz.c" 2>/dev/null \
+    if bounded "$tmp0/calcc" "$root/languages/calc/programs/fizz.calc" > "$tmp0/fizz.c" 2>/dev/null \
        && cc -Wall -Werror -o "$tmp0/fizz" "$tmp0/fizz.c" 2>/dev/null; then
-        if ! got=$("$tmp0/fizz" 2>&1); then
+        if ! got=$(bounded "$tmp0/fizz" 2>&1); then
             report fail "and what it writes runs" \
                         "it exited nonzero: $(printf '%s' "$got" | tr '\n' ' ')"
             got=
@@ -942,7 +991,7 @@ if cc -o "$tmp0/calcc" "$tmp0/calc.c" 2>/dev/null; then
 
     # Diagnostics still point into the description, from a program the
     # description is no longer beside.
-    msg=$("$tmp0/calcc" "$root/languages/calc/tests/print-a-bool.calc" 2>&1)
+    msg=$(bounded "$tmp0/calcc" "$root/languages/calc/tests/print-a-bool.calc" 2>&1)
     if printf '%s' "$msg" | grep -qF "(n < 2) is bool"; then
         report pass "its diagnostics survive the freezing"
     else
@@ -959,11 +1008,11 @@ fi
 # so it read past the end of a string `phx` never had. A description emitting a
 # binary format is full of these, and this is the shape of the one failure `-o`
 # exists not to have.
-if "$phx" "$root/tests/grammars/nul-literal.phx" -o "$tmp0/nul.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/nul-literal.phx" -o "$tmp0/nul.c" 2>/dev/null \
    && cc -o "$tmp0/nulc" "$tmp0/nul.c" 2>/dev/null; then
-    "$phx" --raw "$root/tests/grammars/nul-literal.phx" \
+    bounded "$phx" --raw "$root/tests/grammars/nul-literal.phx" \
            "$root/tests/sources/with-a-nul.txt" > "$tmp0/nul-phx" 2>/dev/null
-    "$tmp0/nulc" --raw "$root/tests/sources/with-a-nul.txt" > "$tmp0/nul-cc" 2>/dev/null
+    bounded "$tmp0/nulc" --raw "$root/tests/sources/with-a-nul.txt" > "$tmp0/nul-cc" 2>/dev/null
     if cmp -s "$tmp0/nul-phx" "$tmp0/nul-cc" \
        && [ "$(wc -c < "$tmp0/nul-phx" | tr -d ' ')" = "11" ]; then
         report pass "a literal holding a NUL survives the freezing"
@@ -979,13 +1028,13 @@ fi
 # above compares text a person could read; a `.sob` is a binary format, so this
 # is where a single wrong byte has nowhere to hide -- and it needs `--raw`,
 # which a generated compiler has for the same reason `phx` does.
-if "$phx" "$root/languages/solveig/solveig-sob.phx" -o "$tmp0/sob.c" 2>/dev/null \
+if bounded "$phx" "$root/languages/solveig/solveig-sob.phx" -o "$tmp0/sob.c" 2>/dev/null \
    && cc -o "$tmp0/sobc" "$tmp0/sob.c" 2>/dev/null; then
     same=0; differ=0
     for f in "$root"/languages/solveig/tests/conformance/*.sol; do
-        "$phx" --raw --driver sob "$root/languages/solveig/solveig-sob.phx" "$f" \
+        bounded "$phx" --raw --driver sob "$root/languages/solveig/solveig-sob.phx" "$f" \
                > "$tmp0/by-phx.sob" 2>/dev/null
-        "$tmp0/sobc" --raw --driver sob "$f" > "$tmp0/by-cc.sob" 2>/dev/null
+        bounded "$tmp0/sobc" --raw --driver sob "$f" > "$tmp0/by-cc.sob" 2>/dev/null
         if cmp -s "$tmp0/by-phx.sob" "$tmp0/by-cc.sob"; then same=$((same+1))
         else differ=$((differ+1)); echo "  differs: $(basename "$f")"; fi
     done
@@ -1000,10 +1049,10 @@ fi
 
 # A rewrite is frozen into a generated compiler like everything else, and a
 # driver names its stages without caring which kind each one is.
-if "$phx" "$root/tests/grammars/fold.phx" -o "$tmp0/fold.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/fold.phx" -o "$tmp0/fold.c" 2>/dev/null \
    && cc -o "$tmp0/foldc" "$tmp0/fold.c" 2>/dev/null; then
-    a=$("$phx" --driver folded "$root/tests/grammars/fold.phx" "$arith" 2>/dev/null)
-    b=$("$tmp0/foldc" --driver folded "$arith" 2>/dev/null)
+    a=$(bounded "$phx" --driver folded "$root/tests/grammars/fold.phx" "$arith" 2>/dev/null)
+    b=$(bounded "$tmp0/foldc" --driver folded "$arith" 2>/dev/null)
     if [ "$a" = "$b" ] && [ "$a" = "15" ]; then
         report pass "a generated compiler runs a rewrite"
     else
@@ -1016,10 +1065,10 @@ fi
 # And a stage run `until` something settles: the loop is in the runtime, so a
 # generated compiler has it, and the program that needs a fourth walk is the
 # one that shows it. 131 bytes is the minimum, and 134 is one walk's answer.
-if "$phx" "$root/languages/z80/z80.phx" -o "$tmp0/z80.c" 2>/dev/null \
+if bounded "$phx" "$root/languages/z80/z80.phx" -o "$tmp0/z80.c" 2>/dev/null \
    && cc -o "$tmp0/z80c" "$tmp0/z80.c" 2>/dev/null; then
     three="$root/languages/z80/tests/oracle/three-rounds.z80"
-    "$phx" --raw --driver code "$root/languages/z80/z80.phx" "$three" \
+    bounded "$phx" --raw --driver code "$root/languages/z80/z80.phx" "$three" \
            > "$tmp0/z80-phx" 2>/dev/null
     "$tmp0/z80c" --raw --driver code "$three" > "$tmp0/z80-cc" 2>/dev/null
     if cmp -s "$tmp0/z80-phx" "$tmp0/z80-cc" \
@@ -1036,9 +1085,9 @@ fi
 # An embedded file has to survive the freezing like anything else -- and it is
 # the one thing here most likely to hold a byte that does not survive being
 # written as a C literal.
-if "$phx" "$root/tests/grammars/embed.phx" -o "$tmp0/emb.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/embed.phx" -o "$tmp0/emb.c" 2>/dev/null \
    && cc -o "$tmp0/embc" "$tmp0/emb.c" 2>/dev/null; then
-    "$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
+    bounded "$phx" --raw "$root/tests/grammars/embed.phx" "$root/tests/sources/zero.txt" \
            > "$tmp0/emb-phx" 2>/dev/null
     "$tmp0/embc" --raw "$root/tests/sources/zero.txt" > "$tmp0/emb-cc" 2>/dev/null
     if cmp -s "$tmp0/emb-phx" "$tmp0/emb-cc"; then
@@ -1053,9 +1102,9 @@ fi
 # The table is kept by the matcher, which a generated compiler carries, and
 # which rules scope and guard are flags on its rules: all three have to be
 # written out, or the compiler parses `t * x;` the way it would without them.
-if "$phx" "$root/tests/grammars/names.phx" -o "$tmp0/names.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/names.phx" -o "$tmp0/names.c" 2>/dev/null \
    && cc -o "$tmp0/namesc" "$tmp0/names.c" 2>/dev/null; then
-    "$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" \
+    bounded "$phx" "$root/tests/grammars/names.phx" "$root/tests/sources/names.txt" \
            > "$tmp0/names-phx" 2>/dev/null
     "$tmp0/namesc" "$root/tests/sources/names.txt" > "$tmp0/names-cc" 2>/dev/null
     if cmp -s "$tmp0/names-phx" "$tmp0/names-cc"; then
@@ -1071,11 +1120,11 @@ fi
 # names another is a property of the language, not of who is compiling it. So
 # it takes `-I` for the same reason `phx` does, and the two must agree about
 # what the spliced tree is.
-if "$phx" "$root/tests/grammars/includes.phx" -o "$tmp0/inc.c" 2>/dev/null \
+if bounded "$phx" "$root/tests/grammars/includes.phx" -o "$tmp0/inc.c" 2>/dev/null \
    && cc -o "$tmp0/incc" "$tmp0/inc.c" 2>/dev/null; then
-    a=$("$phx" -I "$src/elsewhere" "$root/tests/grammars/includes.phx" \
+    a=$(bounded "$phx" -I "$src/elsewhere" "$root/tests/grammars/includes.phx" \
         "$src/needs-path.inc" 2>/dev/null)
-    b=$("$tmp0/incc" -I "$src/elsewhere" "$src/needs-path.inc" 2>/dev/null)
+    b=$(bounded "$tmp0/incc" -I "$src/elsewhere" "$src/needs-path.inc" 2>/dev/null)
     if [ "$a" = "$b" ] && [ "$a" = "y=8 z=9" ]; then
         report pass "a generated compiler follows an include"
     else
@@ -1084,16 +1133,16 @@ if "$phx" "$root/tests/grammars/includes.phx" -o "$tmp0/inc.c" 2>/dev/null \
 
     # And it says where a node came from, which is the target file's position
     # rather than anything frozen into the tables.
-    a=$("$phx" -I "$src/elsewhere" --driver where "$root/tests/grammars/includes.phx" \
+    a=$(bounded "$phx" -I "$src/elsewhere" --driver where "$root/tests/grammars/includes.phx" \
         "$src/needs-path.inc" 2>/dev/null)
-    b=$("$tmp0/incc" -I "$src/elsewhere" --driver where "$src/needs-path.inc" 2>/dev/null)
+    b=$(bounded "$tmp0/incc" -I "$src/elsewhere" --driver where "$src/needs-path.inc" 2>/dev/null)
     if [ "$a" = "$b" ] && [ "$a" = "$src/elsewhere/far.inc:1 $src/needs-path.inc:2 " ]; then
         report pass "and agrees about where each node came from"
     else
         report fail "and agrees about where each node came from" "phx '$a', it '$b'"
     fi
 
-    missing=$("$tmp0/incc" "$src/absent.inc" 2>&1)
+    missing=$(bounded "$tmp0/incc" "$src/absent.inc" 2>&1)
     if printf '%s' "$missing" | grep -qF "cannot read the included file"; then
         report pass "and says so when the file is not there"
     else
@@ -1104,17 +1153,17 @@ else
 fi
 
 # Pascal, the same way round.
-if "$phx" "$root/languages/pascal/pascal-outline.phx" -o "$tmp0/pascal.c" 2>/dev/null \
+if bounded "$phx" "$root/languages/pascal/pascal-outline.phx" -o "$tmp0/pascal.c" 2>/dev/null \
    && cc -o "$tmp0/pas" "$tmp0/pascal.c" 2>/dev/null; then
-    a=$("$phx" "$root/languages/pascal/pascal-outline.phx" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
-    b=$("$tmp0/pas" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
+    a=$(bounded "$phx" "$root/languages/pascal/pascal-outline.phx" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
+    b=$(bounded "$tmp0/pas" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
     if [ "$a" = "$b" ] && printf '%s' "$b" | grep -qF "packed array [1..80] of char"; then
         report pass "a Pascal compiler, and it agrees with phx"
     else
         report fail "a Pascal compiler, and it agrees with phx"
     fi
 
-    if "$tmp0/pas" "$root/languages/pascal/tests/grammar/unclosed.pas" >/dev/null 2>&1; then
+    if bounded "$tmp0/pas" "$root/languages/pascal/tests/grammar/unclosed.pas" >/dev/null 2>&1; then
         report fail "and it still refuses a broken program"
     else
         report pass "and it still refuses a broken program"
@@ -1130,14 +1179,14 @@ fi
 
 echo "Pascal to C"
 
-if "$phx" "$root/languages/pascal/pascal-c.phx" "$root/languages/pascal/programs/primes.pas" \
+if bounded "$phx" "$root/languages/pascal/pascal-c.phx" "$root/languages/pascal/programs/primes.pas" \
         > "$tmp0/primes.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp0/primes" "$tmp0/primes.c" 2>/dev/null; then
     report pass "primes.pas compiles to C that cc -Werror accepts"
     # What `fpc -Miso` prints for this program, taken from fpc and kept
     # beside it. The oracle checks the two agree; this checks nothing has
     # drifted since.
-    "$tmp0/primes" > "$tmp0/primes.got"
+    bounded "$tmp0/primes" > "$tmp0/primes.got"
     if cmp -s "$tmp0/primes.got" "$root/languages/pascal/programs/primes.expected"; then
         report pass "and the program is right"
     else
@@ -1150,11 +1199,11 @@ fi
 # gcd.pas is the fixture that has been in this repository since the first
 # commit, written for another tool years before Phoenix existed. Compiling it
 # is the strongest thing the Pascal description can be asked to do.
-if "$phx" "$root/languages/pascal/pascal-c.phx" "$root/languages/pascal/tests/grammar/gcd.pas" \
+if bounded "$phx" "$root/languages/pascal/pascal-c.phx" "$root/languages/pascal/tests/grammar/gcd.pas" \
         > "$tmp0/gcd.c" 2>/dev/null \
    && cc -Wall -Werror -o "$tmp0/gcd" "$tmp0/gcd.c" 2>/dev/null; then
     report pass "gcd.pas compiles to C that cc -Werror accepts"
-    "$tmp0/gcd" > "$tmp0/gcd.got"
+    bounded "$tmp0/gcd" > "$tmp0/gcd.got"
     if cmp -s "$tmp0/gcd.got" "$root/languages/pascal/tests/grammar/gcd.expected"; then
         report pass "and every line of it is right"
     else
@@ -1165,9 +1214,9 @@ else
     report fail "gcd.pas compiles to C that cc -Werror accepts"
 fi
 
-if "$phx" "$root/languages/pascal/pascal-c.phx" -o "$tmp0/pasc.c" 2>/dev/null \
+if bounded "$phx" "$root/languages/pascal/pascal-c.phx" -o "$tmp0/pasc.c" 2>/dev/null \
    && cc -o "$tmp0/pasc" "$tmp0/pasc.c" 2>/dev/null; then
-    "$tmp0/pasc" "$root/languages/pascal/programs/primes.pas" > "$tmp0/again.c" 2>/dev/null
+    bounded "$tmp0/pasc" "$root/languages/pascal/programs/primes.pas" > "$tmp0/again.c" 2>/dev/null
     if cmp -s "$tmp0/again.c" "$tmp0/primes.c"; then
         report pass "a standalone Pascal-to-C compiler, agreeing with phx"
     else
@@ -1189,7 +1238,7 @@ for f in gcd features; do
 done
 
 # And one that is wrong in four ways, each of which has to be found.
-errs=$("$phx" --driver check "$root/languages/pascal/pascal-outline.phx" \
+errs=$(bounded "$phx" --driver check "$root/languages/pascal/pascal-outline.phx" \
         "$root/languages/pascal/tests/grammar/type-errors.pas" 2>&1)
 found=0
 printf '%s' "$errs" | grep -qF "cannot assign integer to boolean" && found=$((found+1))
@@ -1206,7 +1255,7 @@ fi
 # following `origin` to its type, that type to its declaration, and that to its
 # fields -- three hops through nodes the walk has already finished with. The
 # test is that a real field passes and an invented one does not.
-errs=$("$phx" --driver check "$root/languages/pascal/pascal.phx" \
+errs=$(bounded "$phx" --driver check "$root/languages/pascal/pascal.phx" \
         "$root/languages/pascal/tests/grammar/with-fields.pas" 2>&1)
 if printf '%s' "$errs" | grep -qF "'zzz' is not declared" \
    && ! printf '%s' "$errs" | grep -qE "'[xy]' is not declared"; then
@@ -1220,7 +1269,7 @@ fi
 # declaration it repeats, which is earlier in the same list.
 sed 's/Area := Pi \* r \* r/Area := Pi * rr * r/' \
     "$root/languages/pascal/tests/grammar/features.pas" > "$tmp0/fwd.pas"
-errs=$("$phx" --driver check "$root/languages/pascal/pascal.phx" "$tmp0/fwd.pas" 2>&1)
+errs=$(bounded "$phx" --driver check "$root/languages/pascal/pascal.phx" "$tmp0/fwd.pas" 2>&1)
 if printf '%s' "$errs" | grep -qF "'rr' is not declared" \
    && ! printf '%s' "$errs" | grep -qF "'r' is not declared"; then
     report pass "a forward heading's parameters"
@@ -1239,7 +1288,7 @@ done
 
 # The tree has to be abstract, not a parse tree wearing node names: no
 # punctuation, and no wrapper node holding nothing.
-tree=$("$phx" --tree "$root/languages/pascal/pascal.phx" "$root/languages/pascal/tests/grammar/gcd.pas" 2>/dev/null)
+tree=$(bounded "$phx" --tree "$root/languages/pascal/pascal.phx" "$root/languages/pascal/tests/grammar/gcd.pas" 2>/dev/null)
 if printf '%s' "$tree" | grep -qE '"[,;()]"'; then
     report fail "the Pascal tree drops its punctuation" \
                 "$(printf '%s' "$tree" | grep -oE '"[,;()]"' | head -1) is in it"
@@ -1248,7 +1297,7 @@ else
 fi
 
 # A pass over the whole of it, reading something from most of it.
-out=$("$phx" "$root/languages/pascal/pascal-outline.phx" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
+out=$(bounded "$phx" "$root/languages/pascal/pascal-outline.phx" "$root/languages/pascal/tests/grammar/features.pas" 2>/dev/null)
 if printf '%s' "$out" | grep -qF "type      Str = packed array [1..80] of char" \
    && printf '%s' "$out" | grep -qF "procedure Walk(t : Tree; var count : integer)"; then
     report pass "the outline pass reads the whole tree"
@@ -1280,7 +1329,7 @@ if [ -d "$S" ]; then
 # An attribute is a token: `.val` is one and `. ` cannot be one. That settles
 # the terminator, and it settles a case the old adjacency rule did not quite --
 # `at(xs, 2).show` is an attribute of a call, with no reference before the dot.
-got=$("$phx" "$root/tests/grammars/attributes.phx" \
+got=$(bounded "$phx" "$root/tests/grammars/attributes.phx" \
         "$root/tests/sources/two-numbers.txt" 2>/dev/null)
 if [ "$got" = "3 4" ]; then
     report pass "an attribute of a reference, of a call, and a terminator"
@@ -1292,7 +1341,7 @@ fi
 # Recursive descent makes the stack proportional to how deeply the *input*
 # nests, and input is not a thing a compiler gets to trust.
 awk -v n=5000 -v shape=nest -f "$root/bench/generate.awk" > "$tmp0/deep.pas"
-out=$("$phx" --quiet --tree "$root/languages/pascal/pascal.phx" "$tmp0/deep.pas" 2>&1)
+out=$(bounded "$phx" --quiet --tree "$root/languages/pascal/pascal.phx" "$tmp0/deep.pas" 2>&1)
 code=$?
 if [ "$code" -ge 128 ]; then
     report fail "deep nesting is refused, not fatal" "died with signal $((code - 128))"
@@ -1305,7 +1354,7 @@ fi
 echo "the notation, in itself"
 accepts "phoenix.phx reads" "$root/languages/phx/phoenix.phx"
 
-if "$phx" --quiet --tree "$root/languages/phx/phoenix.phx" \
+if bounded "$phx" --quiet --tree "$root/languages/phx/phoenix.phx" \
         "$root/languages/phx/phoenix.phx" >/dev/null 2>&1; then
     report pass "and parses itself"
 else
@@ -1315,7 +1364,7 @@ fi
 # Every description in the repository, read by the description of them.
 bad=0
 for d in "$root"/lib/*.phx "$root"/languages/*/*.phx; do
-    "$phx" --quiet --tree "$root/languages/phx/phoenix.phx" "$d" >/dev/null 2>&1 \
+    bounded "$phx" --quiet --tree "$root/languages/phx/phoenix.phx" "$d" >/dev/null 2>&1 \
         || bad=$((bad + 1))
 done
 if [ "$bad" -eq 0 ]; then
@@ -1334,7 +1383,7 @@ echo "Wirth's Pascal"
     refuses "lexical.pas"           "nothing here matches" "$S/pascal.bnf" "$S/lexical.pas"
 
     # Both stray characters, not just the first.
-    n=$("$phx" --quiet "$S/pascal.bnf" "$S/lexical.pas" 2>&1 | grep -c "nothing here matches")
+    n=$(bounded "$phx" --quiet "$S/pascal.bnf" "$S/lexical.pas" 2>&1 | grep -c "nothing here matches")
     if [ "$n" -eq 2 ]; then
         report pass "both stray characters reported"
     else
@@ -1355,7 +1404,7 @@ fi
 echo "outside the subset"
 for src in "$root"/languages/pascal/tests/refused/*.pas; do
     name=$(basename "$src" .pas)
-    out=$("$phx" --driver c "$root/languages/pascal/pascal-c.phx" "$src" 2>&1 >/dev/null)
+    out=$(bounded "$phx" --driver c "$root/languages/pascal/pascal-c.phx" "$src" 2>&1 >/dev/null)
     code=$?
     if [ "$code" -eq 0 ]; then
         report fail "$name is refused" "it compiled"
@@ -1371,7 +1420,7 @@ done
 
 echo "the oracle"
 if command -v fpc >/dev/null 2>&1; then
-    if oracle=$("$root/languages/pascal/tests/oracle/run.sh" 2>&1); then
+    if oracle=$(harness "$root/languages/pascal/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$oracle" | grep -c '^  ok')
         report pass "$n Pascal programs agree with fpc -Miso"
     else
@@ -1388,7 +1437,7 @@ fi
 # implementation of it -- see languages/solveig/README.md.
 echo "Solveig"
 accepts "the description reads" "$root/languages/solveig/solveig.phx"
-if rt=$("$root/languages/solveig/tests/roundtrip.sh" 2>&1); then
+if rt=$(harness "$root/languages/solveig/tests/roundtrip.sh" 2>&1); then
     n=$(printf '%s' "$rt" | awk '/round-trip to an identical tree/{print $1}')
     report pass "$n Solveig files parse, render, and parse to the same tree"
 else
@@ -1398,14 +1447,14 @@ fi
 echo "Solveig conformance"
 sol=${SOLVEIG:-$root/../Solveig}
 if [ -x "$sol/bin/solas" ]; then
-    if conf=$("$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
+    if conf=$(harness "$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
         n=$(printf '%s' "$conf" | grep -c '^  ok')
         report pass "$n Solveig programs conform"
     else
         report fail "Solveig programs conform"
         printf '%s\n' "$conf" | grep -A6 FAIL | sed 's/^/        /' | head -12
     fi
-    if bc=$("$root/languages/solveig/tests/bytecode.sh" 2>&1); then
+    if bc=$(harness "$root/languages/solveig/tests/bytecode.sh" 2>&1); then
         printf '%s\n' "$bc" | grep -E '^[0-9]+ programs|^  and [0-9]+ trace' \
             | while IFS= read -r line; do
                   printf '  ok    %s\n' "$(printf '%s' "$line" | sed 's/^  and /and /')"
@@ -1426,7 +1475,7 @@ fi
 # them. languages/units/README.md has the answer.
 echo "Pascal units"
 accepts "the description reads" "$root/languages/units/units.phx"
-if un=$("$root/languages/units/tests/run.sh" 2>&1); then
+if un=$(harness "$root/languages/units/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$un" | grep -c '^  ok')
     report pass "$n checks, and the two divergences are still the ones written down"
 else
@@ -1439,7 +1488,7 @@ fi
 # back appears verbatim in the page -- so a pasted output that drifts fails
 # here. Reading them did not find what running them did.
 echo "Tutorials"
-if tut=$("$root/tests/tutorials.sh" 2>&1); then
+if tut=$(harness "$root/tests/tutorials.sh" 2>&1); then
     n=$(printf '%s' "$tut" | grep -c '^  ok')
     report pass "$n steps of docs/tutorial-picture.md and docs/tutorial-assembler.md"
 else
@@ -1455,7 +1504,7 @@ fi
 echo "SolVM assembly"
 accepts "the language reads"  "$root/languages/solvm/solvm.phx"
 accepts "and the assembler"   "$root/languages/solvm/solvm-sob.phx"
-if sa=$("$root/languages/solvm/tests/run.sh" 2>&1); then
+if sa=$(harness "$root/languages/solvm/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$sa" | grep -c '^  ok')
     report pass "$n checks: the bytes, the round trip, the refusals$(printf '%s' "$sa" | grep -q 'solas' && printf ', solas, and the tutorial')"
 else
@@ -1518,7 +1567,7 @@ prints "and one that needs a fourth" "131" \
 prints "which the first walk left three bytes long" "134" \
        --driver code --show size "$root/languages/z80/z80.phx" "$o/three-rounds.z80"
 if command -v z80asm >/dev/null 2>&1; then
-    if za=$("$root/languages/z80/tests/oracle/run.sh" 2>&1); then
+    if za=$(harness "$root/languages/z80/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$za" | grep -c '^  ok')
         report pass "$n Z80 programs assemble to the bytes z80asm makes, exactly"
     else
@@ -1536,7 +1585,7 @@ fi
 # `corpus/` is awk that e2fsprogs, ncurses and vim ship.
 echo "awk"
 accepts "the description reads" "$root/languages/awk/awk.phx"
-if rt=$("$root/languages/awk/tests/roundtrip.sh" 2>&1); then
+if rt=$(harness "$root/languages/awk/tests/roundtrip.sh" 2>&1); then
     report pass "$(printf '%s' "$rt" | tail -1)"
 else
     report fail "awk programs round-trip"
@@ -1571,10 +1620,10 @@ a="$root/languages/awk/awk.phx"
 accepted=0; rejected=0
 for f in "$root"/languages/awk/tests/corpus/*.awk \
          "$root"/languages/awk/tests/conformance/*.awk; do
-    if "$phx" --quiet --driver check "$a" "$f" >/dev/null 2>&1
+    if bounded "$phx" --quiet --driver check "$a" "$f" >/dev/null 2>&1
     then accepted=$((accepted+1))
     else rejected=$((rejected+1)); echo "  check refuses $(basename "$f")"
-         "$phx" --quiet --driver check "$a" "$f" 2>&1 | head -2 | sed 's/^/      /'
+         bounded "$phx" --quiet --driver check "$a" "$f" 2>&1 | head -2 | sed 's/^/      /'
     fi
 done
 if [ "$rejected" -eq 0 ]; then
@@ -1591,7 +1640,7 @@ refuses "a call with more arguments than parameters" "and this gives 2" \
 accepts "a function called above where it is defined" \
         --driver check "$a" "$root/languages/awk/tests/conformance/functions.awk"
 
-if orc=$("$root/languages/awk/tests/oracle.sh" 2>&1); then
+if orc=$(harness "$root/languages/awk/tests/oracle.sh" 2>&1); then
     report pass "$(printf '%s' "$orc" | tail -1)"
 else
     report fail "rendered awk does the same thing"
@@ -1600,7 +1649,7 @@ fi
 
 # The conformance rule with a third language under it: awk compiled to C, run,
 # and compared with what `/usr/bin/awk` prints on the same input.
-if be=$("$root/languages/awk/tests/backend/run.sh" 2>&1); then
+if be=$(harness "$root/languages/awk/tests/backend/run.sh" 2>&1); then
     report pass "$(printf '%s' "$be" | tail -1)"
 else
     report fail "awk compiled to C prints what awk prints"
@@ -1908,7 +1957,7 @@ refuses "a long return declared as an int" "returning a different type each time
 refuses "a constant with a suffix" 'and found "L"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-constant-with-a-suffix.c"
 if [ "$(uname -m)" = "arm64" ]; then
-    if co=$("$root/languages/c/tests/oracle/run.sh" 2>&1); then
+    if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
         report pass "$n C programs exit with what cc makes them exit with"
     else
@@ -1919,7 +1968,7 @@ if [ "$(uname -m)" = "arm64" ]; then
     # a caller and a callee in two files, each compiled by each. The oracle
     # cannot see a struct passed wrongly when both ends are Phoenix's, and
     # this is the only witness for the caller's copy of a large one.
-    if ab=$("$root/languages/c/tests/abi/run.sh" 2>&1); then
+    if ab=$(harness "$root/languages/c/tests/abi/run.sh" 2>&1); then
         report pass "structs pass between Phoenix's code and cc's, both ways"
     else
         report fail "structs pass between Phoenix's code and cc's, both ways"

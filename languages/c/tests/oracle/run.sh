@@ -36,6 +36,29 @@ fi
 tmp="$root/build/c-oracle"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
+# Every program is run under a limit, both compiles of it and both runs, so
+# that one which never finishes, by looping or by printing without end, is a
+# failure with its name on it and not a suite that hangs. `limit` exits 124
+# and says `did not finish` when it stops one; 124 alone is not enough,
+# because a program here may *return* 124 and the exit status is the thing
+# being compared. See tests/limit.c.
+limit="$root/bin/limit"
+secs=${PHX_LIMIT:-20}
+if [ ! -x "$limit" ]; then
+    echo "no $limit: run make first"
+    exit 1
+fi
+
+# ran_out <status> <stderr file> -- whether that run was stopped.
+ran_out() {
+    [ "$1" = 124 ] && grep -q 'did not finish' "$2"
+}
+
+# why <stderr file> -- how it did not finish, in limit's words.
+why() {
+    grep -o 'did not finish.*' "$1" | tail -1
+}
+
 pass=0
 fail=0
 only=${1:-}
@@ -54,10 +77,16 @@ for src in "$here"/*.c; do
         sed 's/^/          /' "$tmp/$name.cc.log" | grep -i 'error' | head -2
         continue
     fi
-    want=$("$tmp/$name.want" 2>/dev/null); want_status=$?
+    want=$("$limit" "$secs" "$tmp/$name.want" 2>"$tmp/$name.want.err"); want_status=$?
+    if ran_out "$want_status" "$tmp/$name.want.err"; then
+        printf '  FAIL  %-14s the program cc made %s\n' "$name" "$(why "$tmp/$name.want.err")"
+        fail=$((fail + 1))
+        continue
+    fi
 
     # Phoenix.
-    if ! "$phx" --driver arm64 "$desc" "$src" >"$tmp/$name.s" 2>"$tmp/$name.phx.log"; then
+    if ! "$limit" "$secs" "$phx" --driver arm64 "$desc" "$src" \
+            >"$tmp/$name.s" 2>"$tmp/$name.phx.log"; then
         printf '  FAIL  %-14s phoenix would not compile it\n' "$name"
         sed 's/^/          /' "$tmp/$name.phx.log" | head -3
         fail=$((fail + 1))
@@ -69,7 +98,12 @@ for src in "$here"/*.c; do
         fail=$((fail + 1))
         continue
     fi
-    got=$("$tmp/$name.got" 2>/dev/null); got_status=$?
+    got=$("$limit" "$secs" "$tmp/$name.got" 2>"$tmp/$name.got.err"); got_status=$?
+    if ran_out "$got_status" "$tmp/$name.got.err"; then
+        printf '  FAIL  %-14s the program phoenix made %s\n' "$name" "$(why "$tmp/$name.got.err")"
+        fail=$((fail + 1))
+        continue
+    fi
 
     if [ "$want" = "$got" ] && [ "$want_status" = "$got_status" ]; then
         pass=$((pass + 1))

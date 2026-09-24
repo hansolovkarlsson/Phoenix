@@ -1,6 +1,6 @@
 # Phoenix -- a compiler-compiler.
 #
-#   make           build bin/phx
+#   make           build bin/phx, and bin/limit, which the tests run programs under
 #   make test      build and run the tests
 #   make clean
 
@@ -25,7 +25,7 @@ FRONT   = phoenix/grammar.c phoenix/check.c phoenix/expr.c phoenix/pass.c \
 SRC = $(RUNTIME) $(FRONT)
 HDR = phoenix/phx.h phoenix/reader.h
 
-all: bin/phx
+all: bin/phx bin/limit
 
 # The runtime, as a C string literal, so that phx carries its own runtime and a
 # generated compiler is one file. `#include "phx.h"` is dropped because the
@@ -51,7 +51,13 @@ bin/phx: $(SRC) $(HDR) phoenix/runtime.h
 	@mkdir -p bin
 	$(CC) $(CFLAGS) $(WARN) -o $@ $(SRC)
 
-test: bin/phx
+# What the suite runs every program under, so that one which never finishes
+# fails instead of hanging. See tests/limit.c.
+bin/limit: tests/limit.c
+	@mkdir -p bin
+	$(CC) $(CFLAGS) $(WARN) -o $@ tests/limit.c
+
+test: bin/phx bin/limit
 	@tests/run.sh
 
 clean:

@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-24: a test that never finishes fails instead of hanging
+
+**`make test` can no longer hang.** Every program the suite runs, `phx`
+itself and everything `phx` or `cc` has just made, runs under a limit of
+20 seconds, and each of the harnesses the suite calls under one of 600. A
+program that loops forever is stopped and its check fails with `did not
+finish` in the reason. So is one that **prints** forever, which is the
+likelier regression and which time alone did not catch: it wrote so much
+that the shell capturing it ran out of memory and took the suite down with
+it. A program is stopped after 16 MB of output as well. The limit is
+[`tests/limit.c`](../tests/limit.c), built by `make` as `bin/limit`,
+because macOS has no `timeout`. `PHX_LIMIT` and `PHX_HARNESS_LIMIT` change
+the two numbers. The suite takes as long as it did.
+
+**Tests:** 317 → 320. Three for the limit itself, which everything else now
+runs through: a program that finishes keeps its exit status, one that never
+finishes is stopped and says so, and so is one that never stops printing.
+
+---
+
 ## 2026-09-23: `typedef`, a struct copied and returned whole, and the first thing a parse remembers
 
 **The notation changed.** `%names` is a new directive: a table of names the
