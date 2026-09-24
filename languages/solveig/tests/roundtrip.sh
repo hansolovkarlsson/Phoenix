@@ -25,6 +25,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/solveig/solveig.phx"
 sol=${SOLVEIG:-$root/../Solveig}
 
@@ -37,9 +38,9 @@ files="$here/conformance/*.sol"
 same=0; differ=0
 for f in $files; do
     [ -f "$f" ] || continue
-    "$phx" --no-includes --tree "$desc" "$f" > "$tmp/a" 2>/dev/null || { differ=$((differ+1)); echo "  will not parse: $f"; continue; }
-    "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
-    "$phx" --no-includes --tree "$desc" "$tmp/rt.sol" > "$tmp/b" 2>/dev/null
+    bounded "$phx" --no-includes --tree "$desc" "$f" > "$tmp/a" 2>/dev/null || { differ=$((differ+1)); echo "  will not parse: $f"; continue; }
+    bounded "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
+    bounded "$phx" --no-includes --tree "$desc" "$tmp/rt.sol" > "$tmp/b" 2>/dev/null
     if cmp -s "$tmp/a" "$tmp/b"; then same=$((same+1))
     else differ=$((differ+1)); echo "  tree differs: $f"; fi
 done
@@ -50,9 +51,9 @@ ran=0; wrong=0
 if [ -x "$sol/bin/solas" ]; then
     for f in "$here"/conformance/*.sol; do
         n=$(basename "$f" .sol)
-        "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
+        bounded "$phx" --no-includes "$desc" "$f" > "$tmp/rt.sol" 2>/dev/null
         "$sol/bin/solas" "$tmp/rt.sol" -o "$tmp/rt.sob" >/dev/null 2>&1 \
-            && "$sol/bin/solvm" "$tmp/rt.sob" > "$tmp/out" 2>&1
+            && bounded "$sol/bin/solvm" "$tmp/rt.sob" > "$tmp/out" 2>&1
         if cmp -s "$tmp/out" "$here/conformance/$n.expected"; then ran=$((ran+1))
         else wrong=$((wrong+1)); echo "  behaves differently after a round trip: $n"; fi
     done

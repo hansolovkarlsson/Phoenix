@@ -33,6 +33,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/z80/z80.phx"
 
 if ! command -v z80asm >/dev/null 2>&1; then
@@ -56,7 +57,7 @@ for src in "$here"/*.z80; do
     via=""
     feed="$src"
     if grep -q '^[[:space:]]*br[[:space:]]' "$src"; then
-        if ! "$phx" --driver listing "$desc" "$src" >"$tmp/$name.lst" 2>&1; then
+        if ! bounded "$phx" --driver listing "$desc" "$src" >"$tmp/$name.lst" 2>&1; then
             printf '  FAIL  %-14s phoenix would not list it\n' "$name"
             sed 's/^/          /' "$tmp/$name.lst" | head -3
             fail=$((fail + 1))
@@ -74,7 +75,7 @@ for src in "$here"/*.z80; do
     fi
 
     # Phoenix.
-    if ! "$phx" --driver code --raw "$desc" "$src" \
+    if ! bounded "$phx" --driver code --raw "$desc" "$src" \
              >"$tmp/$name.got" 2>"$tmp/$name.phx.log"; then
         printf '  FAIL  %-14s phoenix would not assemble it\n' "$name"
         sed 's/^/          /' "$tmp/$name.phx.log" | head -3

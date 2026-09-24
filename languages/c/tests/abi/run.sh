@@ -14,6 +14,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/c/c-arm64.phx"
 
 if [ "$(uname -m)" != "arm64" ]; then
@@ -24,16 +25,16 @@ fi
 tmp="$root/build/c-abi"; rm -rf "$tmp"; mkdir -p "$tmp"
 trap 'rm -rf "$tmp"' EXIT
 
-"$phx" --driver arm64 "$desc" "$here/caller.c" > "$tmp/caller.s" || exit 1
-"$phx" --driver arm64 "$desc" "$here/callee.c" > "$tmp/callee.s" || exit 1
+bounded "$phx" --driver arm64 "$desc" "$here/caller.c" > "$tmp/caller.s" || exit 1
+bounded "$phx" --driver arm64 "$desc" "$here/callee.c" > "$tmp/callee.s" || exit 1
 cc -w -o "$tmp/cc-cc"  "$here/caller.c" "$here/callee.c" || exit 1
 cc -w -o "$tmp/phx-cc" "$tmp/caller.s"  "$here/callee.c" || exit 1
 cc -w -o "$tmp/cc-phx" "$here/caller.c" "$tmp/callee.s"  || exit 1
 
-want=$("$tmp/cc-cc")
+want=$(bounded "$tmp/cc-cc")
 fail=0
 for pair in phx-cc cc-phx; do
-    got=$("$tmp/$pair")
+    got=$(bounded "$tmp/$pair")
     if [ "$got" = "$want" ]; then
         printf '  ok    %s\n' "$pair"
     else

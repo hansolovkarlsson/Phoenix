@@ -26,6 +26,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/awk/awk.phx"
 
 command -v awk >/dev/null 2>&1 || { echo "  --    needs awk, which is not here"; exit 0; }
@@ -35,7 +36,7 @@ trap 'rm -rf "$out"' EXIT
 
 # What awk prints for a program, run in a directory of its own.
 run() {
-    ( cd "$out/run" && awk -f "$1" "$2" 2>&1 ) \
+    ( cd "$out/run" && bounded awk -f "$1" "$2" 2>&1 ) \
         | sed 's/source line number [0-9]*/source line number N/
                s#source file [^ ]*#source file F#'
 }
@@ -54,7 +55,7 @@ for f in "$here"/conformance/*.awk; do
     fi
 
     # And the rendering against the same.
-    "$phx" "$desc" "$f" > "$out/rt.awk" 2>/dev/null
+    bounded "$phx" "$desc" "$f" > "$out/rt.awk" 2>/dev/null
     run "$out/rt.awk" "$in" > "$out/mine"
     if cmp -s "$out/want" "$out/mine"; then same=$((same+1))
     else
@@ -65,7 +66,7 @@ done
 
 corpus=0
 for f in "$here"/corpus/*.awk; do
-    "$phx" "$desc" "$f" > "$out/rt.awk" 2>/dev/null
+    bounded "$phx" "$desc" "$f" > "$out/rt.awk" 2>/dev/null
     run "$f" /dev/null > "$out/want"
     run "$out/rt.awk" /dev/null > "$out/mine"
     if cmp -s "$out/want" "$out/mine"; then corpus=$((corpus+1))

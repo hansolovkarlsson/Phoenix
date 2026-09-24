@@ -24,6 +24,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/awk/awk.phx"
 
 tmp="$root/build/awk-roundtrip"; rm -rf "$tmp"; mkdir -p "$tmp"
@@ -33,11 +34,11 @@ same=0; differ=0
 for f in "$here"/corpus/*.awk "$here"/outside/*.awk "$here"/conformance/*.awk \
          "$here"/backend/*.awk "$here"/not-yet/*.awk; do
     [ -f "$f" ] || continue
-    if ! "$phx" --tree "$desc" "$f" > "$tmp/a" 2>/dev/null; then
+    if ! bounded "$phx" --tree "$desc" "$f" > "$tmp/a" 2>/dev/null; then
         differ=$((differ+1)); echo "  will not parse: $f"; continue
     fi
-    "$phx" "$desc" "$f" > "$tmp/rt.awk" 2>/dev/null
-    if ! "$phx" --tree "$desc" "$tmp/rt.awk" > "$tmp/b" 2>/dev/null; then
+    bounded "$phx" "$desc" "$f" > "$tmp/rt.awk" 2>/dev/null
+    if ! bounded "$phx" --tree "$desc" "$tmp/rt.awk" > "$tmp/b" 2>/dev/null; then
         differ=$((differ+1)); echo "  what it wrote will not parse: $f"; continue
     fi
     if cmp -s "$tmp/a" "$tmp/b"; then same=$((same+1))

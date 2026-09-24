@@ -43,6 +43,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/solveig/solveig-sob.phx"
 sol=${SOLVEIG:-$root/../Solveig}
 
@@ -57,7 +58,7 @@ tmp="$out/tmp"; mkdir -p "$tmp"
 run() {
     sandbox="$out/run/$2"
     mkdir -p "$sandbox"
-    ( cd "$sandbox" && perl -e 'alarm 30; exec @ARGV' "$sol/bin/solvm" "$1" 2>&1 </dev/null )
+    ( cd "$sandbox" && "$limit" 30 "$sol/bin/solvm" "$1" 2>&1 </dev/null )
 }
 
 # And what it printed under `--trace`, which is where the **slot names** show:
@@ -69,11 +70,14 @@ run() {
 # The `[file:line]` prefix comes off because `--trace` writes the path it was
 # given, and the two compilers are given different ones. Everything after it is
 # compared as it stands.
+#
+# A trace is the one thing in the suite allowed past tests/limit.c's 16 MB:
+# `sola.sol`'s is 49 MB, and all of it is compared.
 trace() {
     sandbox="$out/run/$2"
     mkdir -p "$sandbox"
     ( cd "$sandbox" \
-      && LC_ALL=C perl -e 'alarm 30; exec @ARGV' "$sol/bin/solvm" --trace "$1" 2>&1 </dev/null ) \
+      && LC_ALL=C PHX_LIMIT_MB=256 "$limit" 30 "$sol/bin/solvm" --trace "$1" 2>&1 </dev/null ) \
     | LC_ALL=C sed -E 's/\[[^]]*\] //'
 }
 
@@ -87,7 +91,9 @@ for f in "$sol"/examples/*.sol "$sol"/programs/*.sol "$sol"/lib/*.sol "$here"/co
     name=$(basename "$f" .sol)
     want=$(run "$tmp/oracle.sob" "$name.oracle")
 
-    if ! "$phx" --raw --driver sob "$desc" -I "$sol/lib" "$f" > "$tmp/mine.sob" 2>"$tmp/err"; then
+    # 60 seconds and not the suite's 20: `sola.sol` is the largest program
+    # anything here compiles, and takes 8.
+    if ! "$limit" 60 "$phx" --raw --driver sob "$desc" -I "$sol/lib" "$f" > "$tmp/mine.sob" 2>"$tmp/err"; then
         differ=$((differ+1)); echo "  refused: $f"
         sed 's/^/      /' "$tmp/err" | head -2; continue
     fi

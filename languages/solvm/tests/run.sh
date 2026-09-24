@@ -21,6 +21,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$root" || exit 1
 
 phx=$root/bin/phx
+. "$root/tests/limit.sh"
 lang=languages/solvm
 asm=$lang/solvm-sob.phx
 tmp=${TMPDIR:-/tmp}/solvm-tests.$$
@@ -36,7 +37,7 @@ no() { printf '  FAIL  %s\n' "$1"; fail=$((fail + 1)); }
 for f in $lang/programs/*.sasm; do
     n=$(basename "$f" .sasm)
     gold=$lang/tests/golden/$n.sob
-    if ! "$phx" --raw "$asm" "$f" > "$tmp/$n.sob" 2>"$tmp/$n.err"; then
+    if ! bounded "$phx" --raw "$asm" "$f" > "$tmp/$n.sob" 2>"$tmp/$n.err"; then
         no "$n assembles"; sed 's/^/        /' "$tmp/$n.err" | head -3; continue
     fi
     if [ -n "${REGOLD:-}" ]; then cp "$tmp/$n.sob" "$gold"; fi
@@ -54,11 +55,11 @@ done
 
 for f in $lang/programs/*.sasm; do
     n=$(basename "$f" .sasm)
-    if ! "$phx" --driver render "$lang/solvm.phx" "$f" > "$tmp/$n.rt" 2>&1; then
+    if ! bounded "$phx" --driver render "$lang/solvm.phx" "$f" > "$tmp/$n.rt" 2>&1; then
         no "$n renders"; continue
     fi
-    "$phx" --tree "$lang/solvm.phx" "$f"       > "$tmp/$n.t1" 2>&1
-    "$phx" --tree "$lang/solvm.phx" "$tmp/$n.rt" > "$tmp/$n.t2" 2>&1
+    bounded "$phx" --tree "$lang/solvm.phx" "$f"       > "$tmp/$n.t1" 2>&1
+    bounded "$phx" --tree "$lang/solvm.phx" "$tmp/$n.rt" > "$tmp/$n.t2" 2>&1
     if cmp -s "$tmp/$n.t1" "$tmp/$n.t2"; then
         ok "$n.sasm renders and re-parses to the same tree"
     else
@@ -73,7 +74,7 @@ done
 
 refuse() {
     what=$1; want=$2
-    if out=$("$phx" --quiet --driver check "$asm" "$lang/tests/$what" 2>&1); then
+    if out=$(bounded "$phx" --quiet --driver check "$asm" "$lang/tests/$what" 2>&1); then
         no "$what is refused"; return
     fi
     if printf '%s' "$out" | grep -qF -- "$want"; then
@@ -108,9 +109,9 @@ refuse depth-zero.sasm          "a depth counts from one"
 # rather than compared where they live.
 
 cp $lang/programs/adder.sasm "$tmp/one.sasm"
-"$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-number.sob" 2>/dev/null
+bounded "$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-number.sob" 2>/dev/null
 cp $lang/programs/adder-named.sasm "$tmp/one.sasm"
-"$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-name.sob" 2>/dev/null
+bounded "$phx" --raw "$asm" "$tmp/one.sasm" > "$tmp/by-name.sob" 2>/dev/null
 if cmp -s "$tmp/by-number.sob" "$tmp/by-name.sob"; then
     ok "adder assembles the same written with names as with numbers"
 else
@@ -141,7 +142,7 @@ fi
 # name taken out: those are the two things two producers of one program are
 # entitled to disagree about.
 normalise() {
-    "$sol/bin/solvm" --dump "$1" 2>/dev/null \
+    bounded "$sol/bin/solvm" --dump "$1" 2>/dev/null \
       | sed -E -e 's/^== .* ==$/== chunk ==/' \
                -e 's/^([0-9]{4})[[:space:]]+([0-9]+|\|)[[:space:]]/\1 /'
 }
@@ -155,8 +156,8 @@ for s in $lang/oracle/*.sol; do
         no "solas compiles $n.sol"; sed 's/^/        /' "$tmp/$n.solas.err" | head -3; continue
     fi
 
-    a=$("$sol/bin/solvm" "$tmp/$n-solas.sob" 2>&1)
-    b=$("$sol/bin/solvm" "$tmp/$n.sob" 2>&1)
+    a=$(bounded "$sol/bin/solvm" "$tmp/$n-solas.sob" 2>&1)
+    b=$(bounded "$sol/bin/solvm" "$tmp/$n.sob" 2>&1)
     if [ "$a" = "$b" ]; then
         ok "$n prints what solas's does"
     else
@@ -178,8 +179,8 @@ for s in $lang/oracle/*.sol; do
     # `value(n: #2)` rather than `value(#2)`. The `[file:line]` prefix is the
     # one thing two producers of one program are entitled to differ on.
     strip() { sed -E 's/\[[^]]*\] //' ; }
-    "$sol/bin/solvm" --trace "$tmp/$n-solas.sob" 2>&1 | strip > "$tmp/$n.tr.a"
-    "$sol/bin/solvm" --trace "$tmp/$n.sob"       2>&1 | strip > "$tmp/$n.tr.b"
+    bounded "$sol/bin/solvm" --trace "$tmp/$n-solas.sob" 2>&1 | strip > "$tmp/$n.tr.a"
+    bounded "$sol/bin/solvm" --trace "$tmp/$n.sob"       2>&1 | strip > "$tmp/$n.tr.b"
     if cmp -s "$tmp/$n.tr.a" "$tmp/$n.tr.b"; then
         ok "$n traces the same, argument names included"
     else

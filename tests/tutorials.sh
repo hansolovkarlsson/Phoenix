@@ -17,6 +17,7 @@ set -u
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 phx=$root/bin/phx
+. "$root/tests/limit.sh"
 
 fail=0
 tmp=${TMPDIR:-/tmp}/phx-tutorials.$$
@@ -61,10 +62,10 @@ symbol  = "," | ";" .
 %skip space comment .
 X
 says "picture 1  the forgotten %fragment" \
-     "$("$phx" picture.phx 2>&1 | head -4)"
+     "$(bounded "$phx" picture.phx 2>&1 | head -4)"
 
 printf '%%fragment digit .\n\n' | cat - picture.phx > t && mv t picture.phx
-if "$phx" picture.phx >/dev/null 2>"$tmp/e" && [ ! -s "$tmp/e" ]; then
+if bounded "$phx" picture.phx >/dev/null 2>"$tmp/e" && [ ! -s "$tmp/e" ]; then
     printf '  ok    picture 1b and then no complaint, as the page says\n'
 else
     printf '  FAIL  picture 1b the page says there is no complaint\n'; fail=1
@@ -82,7 +83,7 @@ shape = "circle" number "," number "," number ";"
       | "line" number "," number "," number "," number ";" .
 X
 says "picture 2  a literal nothing spells" \
-     "$("$phx" picture.phx face.pic 2>&1 | head -3)"
+     "$(bounded "$phx" picture.phx face.pic 2>&1 | head -3)"
 
 python3 - <<'PY'
 s = open('picture.phx').read()
@@ -98,8 +99,8 @@ word    = letter { letter } .
 number  = digit { digit } .''')
 open('picture.phx', 'w').write(s)
 PY
-says "picture 2b the tokens"        "$("$phx" --tokens picture.phx face.pic | head -8)"
-says "picture 2c the concrete tree" "$("$phx" picture.phx face.pic | head -10)"
+says "picture 2b the tokens"        "$(bounded "$phx" --tokens picture.phx face.pic | head -8)"
+says "picture 2c the concrete tree" "$(bounded "$phx" picture.phx face.pic | head -10)"
 
 # ---- 3. what a production builds
 python3 - <<'PY'
@@ -116,8 +117,8 @@ shape = "circle" x:number "," y:number "," r:number ";"
           -> Line(x1: $x1, y1: $y1, x2: $x2, y2: $y2) .''')
 open('picture.phx', 'w').write(s)
 PY
-says "picture 3  the tree"       "$("$phx" --tree picture.phx face.pic)"
-says "picture 3b the vocabulary" "$("$phx" --nodes picture.phx)"
+says "picture 3  the tree"       "$(bounded "$phx" --tree picture.phx face.pic)"
+says "picture 3b the vocabulary" "$(bounded "$phx" --nodes picture.phx)"
 
 # ---- 4. a pass and a driver
 cat >> picture.phx <<'X'
@@ -135,7 +136,7 @@ cat >> picture.phx <<'X'
 
 %driver svg = emit-svg -> out .
 X
-says "picture 4  the svg" "$("$phx" picture.phx face.pic)"
+says "picture 4  the svg" "$(bounded "$phx" picture.phx face.pic)"
 
 # ---- 5. a check
 python3 - <<'PY'
@@ -150,17 +151,17 @@ s = s.replace("%driver svg = emit-svg -> out .",
 open('picture.phx', 'w').write(s)
 PY
 printf 'circle 10, 10, 0;\n' > flat.pic
-says "picture 5  the check fires" "$("$phx" picture.phx flat.pic 2>&1)"
-if "$phx" --driver check picture.phx face.pic >/dev/null 2>&1; then
+says "picture 5  the check fires" "$(bounded "$phx" picture.phx flat.pic 2>&1)"
+if bounded "$phx" --driver check picture.phx face.pic >/dev/null 2>&1; then
     printf '  ok    picture 5b a validation driver says nothing and exits 0\n'
 else
     printf '  FAIL  picture 5b a validation driver should exit 0\n'; fail=1
 fi
 
 # ---- 6. writing the compiler out
-if "$phx" picture.phx -o picc.c >/dev/null 2>&1 && cc picc.c -o picc 2>/dev/null; then
-    says "picture 6  the standalone compiler" "$(./picc face.pic | head -6)"
-    says "picture 6b and it still refuses"    "$(./picc flat.pic 2>&1)"
+if bounded "$phx" picture.phx -o picc.c >/dev/null 2>&1 && cc picc.c -o picc 2>/dev/null; then
+    says "picture 6  the standalone compiler" "$(bounded ./picc face.pic | head -6)"
+    says "picture 6b and it still refuses"    "$(bounded ./picc flat.pic 2>&1)"
 else
     printf '  FAIL  picture 6 the compiler did not build\n'; fail=1
 fi
@@ -182,9 +183,9 @@ cat > picture-text.phx <<'X'
 
 %driver text = sane, emit-text -> out .
 X
-says "picture 7  a second target"    "$("$phx" picture-text.phx face.pic)"
-says "picture 7b what it came from"  "$("$phx" --imports picture-text.phx)"
-if "$phx" picture-svg.phx face.pic >/dev/null 2>&1; then
+says "picture 7  a second target"    "$(bounded "$phx" picture-text.phx face.pic)"
+says "picture 7b what it came from"  "$(bounded "$phx" --imports picture-text.phx)"
+if bounded "$phx" picture-svg.phx face.pic >/dev/null 2>&1; then
     printf '  ok    picture 7c and the first one still works\n'
 else
     printf '  FAIL  picture 7c the split broke the svg target\n'; fail=1
@@ -234,7 +235,7 @@ item = n:word ":"       -> Label(name: $n)
      | "print"          -> Print
      | "halt"           -> Halt .
 X
-says "assembler 1  the tree" "$("$phx" --tree asm.phx sum.asm)"
+says "assembler 1  the tree" "$(bounded "$phx" --tree asm.phx sum.asm)"
 
 # ---- 2. the attempt that cannot work
 cp asm.phx grammar.phx
@@ -255,7 +256,7 @@ cat >> asm.phx <<'X'
           : down table = $labels
           : out = join($items.out, "\n") .
 X
-says "assembler 2  one pass is refused" "$("$phx" asm.phx sum.asm 2>&1 | head -4)"
+says "assembler 2  one pass is refused" "$(bounded "$phx" asm.phx sum.asm 2>&1 | head -4)"
 
 # ---- 3 and 4. two passes
 cp grammar.phx asm.phx
@@ -292,17 +293,17 @@ cat >> asm.phx <<'X'
 %driver listing = layout, listing -> out .
 X
 says "assembler 3  the label table" \
-     "$("$phx" --run layout --show labels asm.phx sum.asm 2>&1)"
-says "assembler 4  the listing" "$("$phx" asm.phx sum.asm)"
+     "$(bounded "$phx" --run layout --show labels asm.phx sum.asm 2>&1)"
+says "assembler 4  the listing" "$(bounded "$phx" asm.phx sum.asm)"
 
 printf '    jz nowhere\n    halt\n' > bad.asm
-says "assembler 4b an unknown label" "$("$phx" asm.phx bad.asm 2>&1)"
+says "assembler 4b an unknown label" "$(bounded "$phx" asm.phx bad.asm 2>&1)"
 
 sed 's/^%driver listing = layout, listing -> out ./%driver listing = listing -> out ./' \
     asm.phx > nolayout.phx
 says "assembler 4c a driver in the wrong order" \
      "$(sed 's/^nolayout\.phx/asm.phx/' <<EOF
-$("$phx" nolayout.phx sum.asm 2>&1 | head -3)
+$(bounded "$phx" nolayout.phx sum.asm 2>&1 | head -3)
 EOF
 )"
 
@@ -331,17 +332,17 @@ cat >> asm.phx <<'X'
 
 %driver lt = linetable -> lines .
 X
-"$phx" --driver code --raw asm.phx sum.asm > sum.bin
+bounded "$phx" --driver code --raw asm.phx sum.asm > sum.bin
 if command -v xxd >/dev/null 2>&1; then
     says "assembler 5  the bytes"      "$(xxd sum.bin)"
-    says "assembler 5b the line table" "$("$phx" --driver lt --raw asm.phx sum.asm | xxd)"
+    says "assembler 5b the line table" "$(bounded "$phx" --driver lt --raw asm.phx sum.asm | xxd)"
 else
     printf '  --    assembler 5 needs xxd, which is not here\n'
 fi
 
 # ---- 6. and a compiler it wrote agrees
-if "$phx" asm.phx -o asmc.c >/dev/null 2>&1 && cc asmc.c -o asmc 2>/dev/null; then
-    ./asmc --driver code --raw sum.asm > sum2.bin
+if bounded "$phx" asm.phx -o asmc.c >/dev/null 2>&1 && cc asmc.c -o asmc 2>/dev/null; then
+    bounded ./asmc --driver code --raw sum.asm > sum2.bin
     if cmp -s sum.bin sum2.bin; then
         printf '  ok    assembler 6  byte for byte identical, as the page claims\n'
     else

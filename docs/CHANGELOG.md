@@ -19,20 +19,34 @@ entry below that changes it says so.
 ## 2026-09-24: a test that never finishes fails instead of hanging
 
 **`make test` can no longer hang.** Every program the suite runs, `phx`
-itself and everything `phx` or `cc` has just made, runs under a limit of
-20 seconds, and each of the harnesses the suite calls under one of 600. A
+itself, everything `phx` or `cc` has just made, and `awk` and `solvm`
+running what `phx` wrote, runs under a limit of 20 seconds, in every one of
+the fifteen harnesses as well as in `tests/run.sh`, and each harness runs
+under a limit of 600. A
 program that loops forever is stopped and its check fails with `did not
 finish` in the reason. So is one that **prints** forever, which is the
 likelier regression and which time alone did not catch: it wrote so much
 that the shell capturing it ran out of memory and took the suite down with
 it. A program is stopped after 16 MB of output as well. The limit is
 [`tests/limit.c`](../tests/limit.c), built by `make` as `bin/limit`,
-because macOS has no `timeout`. `PHX_LIMIT` and `PHX_HARNESS_LIMIT` change
-the two numbers. The suite takes as long as it did.
+because macOS has no `timeout`. `PHX_LIMIT`, `PHX_HARNESS_LIMIT` and
+`PHX_LIMIT_MB` change the three numbers. The suite takes as long as it did.
 
-**Tests:** 317 → 320. Three for the limit itself, which everything else now
+**A stop fails the run even where the check around it would not notice.**
+Every stop is logged, and the last check fails, naming each program and its
+arguments, if anything was stopped anywhere. A check that expects a failure
+and discards what the program said would take a stop for the failure it
+wanted, and an oracle whose two programs are both stopped sees them agree.
+The first run with the log found one of those: the Solveig bytecode oracle
+compares `solvm --trace` output, and `sola.sol`'s is 49 MB, so both sides
+were cut at 16 MB and matched. That oracle now allows its traces 256 MB,
+and its compiles 60 seconds, since `sola.sol` takes 8 to compile. It used to
+run `solvm` under a `perl` alarm, which reported nothing when it fired.
+
+**Tests:** 317 → 321. Three for the limit itself, which everything else now
 runs through: a program that finishes keeps its exit status, one that never
 finishes is stopped and says so, and so is one that never stops printing.
+And one for the whole run: every program the suite ran finished.
 
 ---
 

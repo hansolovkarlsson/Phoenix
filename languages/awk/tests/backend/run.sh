@@ -14,6 +14,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/awk/awk-c.phx"
 
 command -v awk >/dev/null 2>&1 || { echo "  --    needs awk, which is not here"; exit 0; }
@@ -26,7 +27,7 @@ for f in "$here"/*.awk; do
     n=$(basename "$f" .awk)
     in=/dev/null; [ -f "$here/$n.in" ] && in="$here/$n.in"
 
-    if ! "$phx" --driver c "$desc" "$f" > "$out/$n.c" 2>"$out/err"; then
+    if ! bounded "$phx" --driver c "$desc" "$f" > "$out/$n.c" 2>"$out/err"; then
         differ=$((differ+1)); echo "  will not compile: $n.awk"
         sed 's/^/      /' "$out/err" | head -3; continue
     fi
@@ -38,8 +39,8 @@ for f in "$here"/*.awk; do
     # The compiled program is given the file the way awk is given it, rather
     # than fed on stdin -- which is the same test and also tests that a
     # compiled program takes its input where awk takes it.
-    ( cd "$out/run" && awk -f "$f" "$in" ) > "$out/want" 2>&1
-    ( cd "$out/run" && "$out/$n" "$in" )   > "$out/mine" 2>&1
+    ( cd "$out/run" && bounded awk -f "$f" "$in" ) > "$out/want" 2>&1
+    ( cd "$out/run" && bounded "$out/$n" "$in" )   > "$out/mine" 2>&1
 
     if cmp -s "$out/want" "$out/mine"; then same=$((same+1))
     else
@@ -61,16 +62,16 @@ for n in mve generate mk-test ct_c et_c et_h; do
       *)              in="$here/corpus-in/plain.in" ;;
     esac
 
-    if ! "$phx" --driver c "$desc" "$f" > "$out/$n.c" 2>"$out/err" \
+    if ! bounded "$phx" --driver c "$desc" "$f" > "$out/$n.c" 2>"$out/err" \
        || ! cc -o "$out/$n" "$out/$n.c" 2>"$out/cc-err"; then
         differ=$((differ+1)); echo "  will not compile: $n.awk"
         sed 's/^/      /' "$out/err" "$out/cc-err" 2>/dev/null | head -3; continue
     fi
 
     # shellcheck disable=SC2086
-    ( cd "$out/run" && awk $opts -f "$f" "$in" ) > "$out/want" 2>&1
+    ( cd "$out/run" && bounded awk $opts -f "$f" "$in" ) > "$out/want" 2>&1
     # shellcheck disable=SC2086
-    ( cd "$out/run" && "$out/$n" $opts "$in" )  > "$out/mine" 2>&1
+    ( cd "$out/run" && bounded "$out/$n" $opts "$in" )  > "$out/mine" 2>&1
 
     if cmp -s "$out/want" "$out/mine"; then corpus=$((corpus+1))
     else

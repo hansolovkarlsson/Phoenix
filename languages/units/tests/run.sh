@@ -15,6 +15,7 @@ set -u
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$root" || exit 1
 phx=$root/bin/phx
+. "$root/tests/limit.sh"
 desc=languages/units/units.phx
 lang=languages/units
 
@@ -38,7 +39,7 @@ split_units() {
 
 for f in $lang/programs/*.pas; do
     n=$(basename "$f" .pas)
-    if ! "$phx" "$desc" "$f" > "$tmp/$n.out" 2>&1; then
+    if ! bounded "$phx" "$desc" "$f" > "$tmp/$n.out" 2>&1; then
         no "$n resolves"; sed 's/^/        /' "$tmp/$n.out" | head -3; continue
     fi
     if cmp -s "$tmp/$n.out" "$lang/programs/$n.expected"; then
@@ -52,7 +53,7 @@ done
 for f in $lang/tests/*.pas; do
     n=$(basename "$f" .pas)
     want=$(sed -n 's/^{ fpc -Mtp: \(.*\) }$/\1/p' "$f" | head -1)
-    if out=$("$phx" --quiet "$desc" "$f" 2>&1); then
+    if out=$(bounded "$phx" --quiet "$desc" "$f" 2>&1); then
         no "$n is refused"
     elif printf '%s' "$out" | grep -qiF -- "$want"; then
         ok "$n: $want"
@@ -80,7 +81,7 @@ for f in $lang/programs/*.pas; do
         ( cd "$d" && fpc -Mtp "$main.pas" 2>&1 | grep -E 'Error|Fatal' | head -2 | sed 's/^/        /' )
         continue
     fi
-    ( cd "$d" && "./$main" ) > "$tmp/$n.fpc" 2>&1
+    ( cd "$d" && bounded "./$main" ) > "$tmp/$n.fpc" 2>&1
     if cmp -s "$tmp/$n.fpc" "$lang/programs/$n.expected"; then
         ok "$n: fpc -Mtp prints the same"
     else
@@ -99,10 +100,10 @@ for f in $lang/divergent/*.pas; do
     split_units "$f" "$d"
     main=$(sed -n 's/^program \([a-z_0-9]*\);.*/\1/p' "$f" | head -1)
 
-    mine=$("$phx" "$desc" "$f" 2>&1); mine_ok=$?
+    mine=$(bounded "$phx" "$desc" "$f" 2>&1); mine_ok=$?
     theirs=""
     if ( cd "$d" && fpc -Mtp "$main.pas" >/dev/null 2>&1 ); then
-        theirs=$( cd "$d" && "./$main" 2>&1 ); their_ok=0
+        theirs=$( cd "$d" && bounded "./$main" 2>&1 ); their_ok=0
     else
         their_ok=1
     fi

@@ -27,6 +27,7 @@ set -u
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root" || exit 1
 phx=$root/bin/phx
+. "$root/tests/limit.sh"
 
 fail=0
 ok() { printf '  ok    %s\n' "$1"; }
@@ -46,7 +47,7 @@ lines_of() { cat languages/"$1"/*.phx | wc -l | tr -d ' '; }
 nodes_of() {
     f=languages/$1/$1.phx
     [ -f "$f" ] || f=$(ls languages/"$1"/*.phx | head -1)
-    "$phx" --nodes "$f" 2>/dev/null | grep -vc '^Position('
+    bounded "$phx" --nodes "$f" 2>/dev/null | grep -vc '^Position('
 }
 
 # ---------------------------------------------------------------------------

@@ -42,12 +42,7 @@ trap 'rm -rf "$tmp"' EXIT
 # and says `did not finish` when it stops one; 124 alone is not enough,
 # because a program here may *return* 124 and the exit status is the thing
 # being compared. See tests/limit.c.
-limit="$root/bin/limit"
-secs=${PHX_LIMIT:-20}
-if [ ! -x "$limit" ]; then
-    echo "no $limit: run make first"
-    exit 1
-fi
+. "$root/tests/limit.sh"
 
 # ran_out <status> <stderr file> -- whether that run was stopped.
 ran_out() {
@@ -77,7 +72,7 @@ for src in "$here"/*.c; do
         sed 's/^/          /' "$tmp/$name.cc.log" | grep -i 'error' | head -2
         continue
     fi
-    want=$("$limit" "$secs" "$tmp/$name.want" 2>"$tmp/$name.want.err"); want_status=$?
+    want=$(bounded "$tmp/$name.want" 2>"$tmp/$name.want.err"); want_status=$?
     if ran_out "$want_status" "$tmp/$name.want.err"; then
         printf '  FAIL  %-14s the program cc made %s\n' "$name" "$(why "$tmp/$name.want.err")"
         fail=$((fail + 1))
@@ -85,7 +80,7 @@ for src in "$here"/*.c; do
     fi
 
     # Phoenix.
-    if ! "$limit" "$secs" "$phx" --driver arm64 "$desc" "$src" \
+    if ! bounded "$phx" --driver arm64 "$desc" "$src" \
             >"$tmp/$name.s" 2>"$tmp/$name.phx.log"; then
         printf '  FAIL  %-14s phoenix would not compile it\n' "$name"
         sed 's/^/          /' "$tmp/$name.phx.log" | head -3
@@ -98,7 +93,7 @@ for src in "$here"/*.c; do
         fail=$((fail + 1))
         continue
     fi
-    got=$("$limit" "$secs" "$tmp/$name.got" 2>"$tmp/$name.got.err"); got_status=$?
+    got=$(bounded "$tmp/$name.got" 2>"$tmp/$name.got.err"); got_status=$?
     if ran_out "$got_status" "$tmp/$name.got.err"; then
         printf '  FAIL  %-14s the program phoenix made %s\n' "$name" "$(why "$tmp/$name.got.err")"
         fail=$((fail + 1))

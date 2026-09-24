@@ -20,8 +20,11 @@
  * gigabytes in twenty seconds, and the shell capturing it in `$(...)` runs out
  * of memory and dies before the time is up, which took the whole suite down
  * with it the first time this was tried. So a program is stopped when it has
- * run for SECONDS **or** has written more than LIMIT_BYTES, whichever comes
- * first. No program in the tree writes a thousandth of that.
+ * run for SECONDS **or** has written more than PHX_LIMIT_MB megabytes,
+ * whichever comes first. The default is 16, which is a thousand times what a
+ * program built here prints. The one caller that needs more is the Solveig
+ * bytecode oracle: `solvm --trace` over `sola.sol` writes 49 MB, all of it
+ * compared, so languages/solveig/tests/bytecode.sh raises it for its traces.
  *
  * Counting what it writes means the program writes into a pipe of this
  * program's and this copies it on. Standard output and standard error get a
@@ -43,6 +46,13 @@
  * is not unique: a program may exit 124 of its own accord, and a harness that
  * reads exit statuses as data, as the C oracle does, has to look for the
  * sentence as well as the number. The sentence is what cannot collide.
+ *
+ * When PHX_LIMIT_LOG names a file, the sentence is appended to it as well,
+ * with the program's arguments. A check that throws standard error away and
+ * expects a failure would take a stopped program for the failure it wanted,
+ * and two stopped programs agree with each other; the log is how tests/run.sh
+ * sees every stop, whichever harness it happened in and whatever that
+ * harness made of it.
  *
  * ---------------------------------------------------------------------------
  * Stopping it
@@ -76,7 +86,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LIMIT_BYTES (16L * 1024 * 1024)
+enum { DEFAULT_MB = 16 };
 
 enum { GRACE = 2, EXPIRED = 124, UNUSABLE = 125, UNRUNNABLE = 127 };
 
@@ -86,6 +96,9 @@ struct stream {
     int from;
     int to;
 };
+
+/* The output limit in megabytes; see the head of this file. */
+static long limit_mb = DEFAULT_MB;
 
 static volatile sig_atomic_t passed_on;
 
@@ -146,6 +159,24 @@ static long copy(struct stream *s)
     return (long)n;
 }
 
+/* The sentence, and in the log the whole command line after it, since a
+ * log line has no check around it to say which run it was. */
+static void report(FILE *f, char **argv, long secs, int overflowed, int whole)
+{
+    if (overflowed)
+        fprintf(f, "%s: did not finish, and was stopped after writing %ld MB",
+                argv[2], limit_mb);
+    else
+        fprintf(f, "%s: did not finish in %ld s", argv[2], secs);
+    if (whole) {
+        char **a;
+        fputs(":", f);
+        for (a = argv + 3; *a; a++)
+            fprintf(f, " %s", *a);
+    }
+    fputc('\n', f);
+}
+
 int main(int argc, char **argv)
 {
     char *end;
@@ -167,6 +198,16 @@ int main(int argc, char **argv)
     if (errno || *end || end == argv[1] || secs <= 0 || secs > 86400) {
         fprintf(stderr, "limit: '%s' is not a number of seconds\n", argv[1]);
         return UNUSABLE;
+    }
+    if ((end = getenv("PHX_LIMIT_MB")) != NULL && *end) {
+        char *mb_end;
+        errno = 0;
+        limit_mb = strtol(end, &mb_end, 10);
+        if (errno || *mb_end || limit_mb <= 0 || limit_mb > 65536) {
+            fprintf(stderr, "limit: PHX_LIMIT_MB '%s' is not a number of "
+                    "megabytes\n", end);
+            return UNUSABLE;
+        }
     }
 
     shared = same_place();
@@ -298,7 +339,7 @@ int main(int argc, char **argv)
                 if (streams[i].from == fds[j].fd && fds[j].revents)
                     written += copy(&streams[i]);
         }
-        if (written > LIMIT_BYTES)
+        if (written > limit_mb * 1024 * 1024)
             overflowed = 1;
     }
     if (!reaped)
@@ -311,11 +352,15 @@ int main(int argc, char **argv)
     /* However it then ended: a shell that is sent SIGTERM may run its exit
      * trap and exit 143 rather than die of the signal. */
     if (stage > 0) {
-        if (overflowed)
-            fprintf(stderr, "%s: did not finish, and was stopped after "
-                    "writing %ld MB\n", argv[2], LIMIT_BYTES / (1024 * 1024));
-        else
-            fprintf(stderr, "%s: did not finish in %ld s\n", argv[2], secs);
+        const char *log = getenv("PHX_LIMIT_LOG");
+        report(stderr, argv, secs, overflowed, 0);
+        if (log && *log) {
+            FILE *f = fopen(log, "a");
+            if (f) {
+                report(f, argv, secs, overflowed, 1);
+                fclose(f);
+            }
+        }
         return EXPIRED;
     }
     if (WIFEXITED(status))

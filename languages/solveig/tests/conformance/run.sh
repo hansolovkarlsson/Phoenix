@@ -22,6 +22,7 @@
 set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
+. "$root/tests/limit.sh"
 sol=${SOLVEIG:-$here/../../../../../Solveig}
 
 if [ ! -x "$sol/bin/solas" ] || [ ! -x "$sol/bin/solvm" ]; then
@@ -55,7 +56,7 @@ for src in "$here"/*.sol; do
         continue
     fi
 
-    "$sol/bin/solvm" "$tmp/$name.sob" > "$tmp/$name.out" 2>&1
+    bounded "$sol/bin/solvm" "$tmp/$name.sob" > "$tmp/$name.out" 2>&1
 
     if [ "$accept" = yes ]; then
         cp "$tmp/$name.out" "$here/$name.expected"

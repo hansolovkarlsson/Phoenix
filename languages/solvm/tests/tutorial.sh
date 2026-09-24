@@ -22,6 +22,7 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 doc=$root/languages/solvm/tutorial.md
 asm=$root/languages/solvm/solvm-sob.phx
 phx=$root/bin/phx
+. "$root/tests/limit.sh"
 sol=${SOLVEIG:-$root/../Solveig}
 
 fail=0
@@ -59,8 +60,8 @@ cat > sum.sasm <<'X'
         pop
         halt
 X
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "1  a send answers 42" "$("$solvm" sum.sob 2>&1)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "1  a send answers 42" "$(bounded "$solvm" sum.sob 2>&1)"
 
 # ---- 1b. and the same with an argument missing --------------------------
 cat > sum.sasm <<'X'
@@ -71,8 +72,8 @@ cat > sum.sasm <<'X'
         pop
         halt
 X
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "1b a missing argument" "$("$solvm" sum.sob 2>&1)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "1b a missing argument" "$(bounded "$solvm" sum.sob 2>&1)"
 
 # ---- 2. the argument back, the pop gone ---------------------------------
 cat > sum.sasm <<'X'
@@ -83,8 +84,8 @@ cat > sum.sasm <<'X'
         send    display, 0
         halt
 X
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "2  a missing pop at halt is accepted" "$("$solvm" sum.sob 2>&1)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "2  a missing pop at halt is accepted" "$(bounded "$solvm" sum.sob 2>&1)"
 
 # ---- 4. the loop --------------------------------------------------------
 cat > sum.sasm <<'X'
@@ -120,12 +121,12 @@ done:
         halt
 X
 cp sum.sasm loop.sasm
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "4  the loop sums to 15" "$("$solvm" sum.sob 2>&1)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "4  the loop sums to 15" "$(bounded "$solvm" sum.sob 2>&1)"
 
 # ---- 4b. written as a forward jump --------------------------------------
 sed 's/^        loop    top$/        jump    top/' loop.sasm > sum.sasm
-says "4b a backward jump is named" "$("$phx" --driver check "$asm" sum.sasm 2>&1)"
+says "4b a backward jump is named" "$(bounded "$phx" --driver check "$asm" sum.sasm 2>&1)"
 cp loop.sasm sum.sasm
 
 # ---- 5. arms that do not balance ----------------------------------------
@@ -139,8 +140,8 @@ otherwise:
         pop
         halt
 X
-"$phx" --raw "$asm" t.sasm > t.sob
-says "5  unbalanced arms are refused" "$("$solvm" t.sob 2>&1)"
+bounded "$phx" --raw "$asm" t.sasm > t.sob
+says "5  unbalanced arms are refused" "$(bounded "$solvm" t.sob 2>&1)"
 
 cat > t.sasm <<'X'
 .slots 1
@@ -155,8 +156,8 @@ endif:
         pop
         halt
 X
-"$phx" --raw "$asm" t.sasm > t.sob
-says "5b and balanced ones run" "$("$solvm" t.sob 2>&1)"
+bounded "$phx" --raw "$asm" t.sasm > t.sob
+says "5b and balanced ones run" "$(bounded "$solvm" t.sob 2>&1)"
 
 # ---- 6. a block ---------------------------------------------------------
 cat > sum.sasm <<'X'
@@ -200,9 +201,9 @@ done:
         return
 .end
 X
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "6  the block doubles it" "$("$solvm" sum.sob 2>&1)"
-says "6b the tail of the dump" "$("$solvm" --dump sum.sob 2>&1 | tail -6)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "6  the block doubles it" "$(bounded "$solvm" sum.sob 2>&1)"
+says "6b the tail of the dump" "$(bounded "$solvm" --dump sum.sob 2>&1 | tail -6)"
 
 # ---- 6c. the same block, with its frame named ---------------------------
 #
@@ -218,12 +219,12 @@ sed -e 's/^\.block twice arity 1 slots 2$/.block twice arity 1 slots self, n/' \
     -e 's/^        local   1$/        local   n/' sum.sasm > named.sasm
 mv named.sasm sum.sasm
 
-"$phx" --raw "$asm" sum.sasm > sum.sob
-says "6c named, and it still doubles it" "$("$solvm" sum.sob 2>&1)"
+bounded "$phx" --raw "$asm" sum.sasm > sum.sob
+says "6c named, and it still doubles it" "$(bounded "$solvm" sum.sob 2>&1)"
 says "6d the same dump, because it is the same byte" \
-     "$("$solvm" --dump sum.sob 2>&1 | tail -6)"
+     "$(bounded "$solvm" --dump sum.sob 2>&1 | tail -6)"
 says "6e and --trace names the argument" \
-     "$("$solvm" --trace sum.sob 2>&1 | tail -3)"
+     "$(bounded "$solvm" --trace sum.sob 2>&1 | tail -3)"
 
 # ---- 7. and it is what solas emits --------------------------------------
 cat > sum.sol <<'X'
@@ -236,10 +237,10 @@ i := #1.
 { n | n:add(n) }:value(total):display.
 X
 "$solas" sum.sol -o solas.sob >/dev/null 2>&1
-says "7  solas prints the same" "$("$solvm" solas.sob 2>&1)"
+says "7  solas prints the same" "$(bounded "$solvm" solas.sob 2>&1)"
 
 norm() {
-    "$solvm" --dump "$1" 2>/dev/null \
+    bounded "$solvm" --dump "$1" 2>/dev/null \
       | sed -E -e 's/^== .* ==$/== chunk ==/' \
                -e 's/^([0-9]{4})[[:space:]]+([0-9]+|\|)[[:space:]]/\1 /'
 }

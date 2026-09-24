@@ -25,6 +25,7 @@ set -u
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
+. "$root/tests/limit.sh"
 desc="$root/languages/pascal/pascal-c.phx"
 
 if ! command -v fpc >/dev/null 2>&1; then
@@ -53,10 +54,10 @@ for src in "$here"/*.pas; do
     fi
     # stdout only: fpc's runtime errors carry an address that changes every
     # run, so what is compared is what the program *wrote*.
-    want=$("$tmp/$name" 2>/dev/null)
+    want=$(bounded "$tmp/$name" 2>/dev/null)
 
     # Phoenix.
-    if ! "$phx" --driver c "$desc" "$src" > "$tmp/$name.c" 2>"$tmp/$name.phx.log"; then
+    if ! bounded "$phx" --driver c "$desc" "$src" > "$tmp/$name.c" 2>"$tmp/$name.phx.log"; then
         printf '  FAIL  %-12s phoenix would not compile it\n' "$name"
         sed 's/^/          /' "$tmp/$name.phx.log" | head -3
         fail=$((fail + 1))
@@ -68,7 +69,7 @@ for src in "$here"/*.pas; do
         fail=$((fail + 1))
         continue
     fi
-    got=$("$tmp/$name.bin" 2>/dev/null)
+    got=$(bounded "$tmp/$name.bin" 2>/dev/null)
 
     if [ "$want" = "$got" ]; then
         pass=$((pass + 1))

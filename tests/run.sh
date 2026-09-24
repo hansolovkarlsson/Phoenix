@@ -8,18 +8,23 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 phx="$root/bin/phx"
 
 # Everything this file runs, it runs under a limit: phx itself, every program
-# phx or cc has just made, and each of the harnesses below it. A regression
-# that makes one of them loop forever, or print forever, then fails the check
-# that ran it, with `did not finish` in the reason, instead of hanging the
-# suite, or taking it down with a shell out of memory. A program gets PHX_LIMIT seconds and a harness,
-# which runs a directory of them, PHX_HARNESS_LIMIT. Both defaults are
-# several times what the slowest one takes today. See tests/limit.c.
-limit="$root/bin/limit"
-if [ ! -x "$limit" ]; then
-    echo "no $limit: run make first"
-    exit 1
-fi
-bounded() { "$limit" "${PHX_LIMIT:-20}" "$@"; }
+# phx or cc has just made, and each of the harnesses below it, which run their
+# own programs the same way. A regression that makes one of them loop forever,
+# or print forever, then fails the check that ran it, with `did not finish`
+# in the reason, instead of hanging the suite, or taking it down with a shell
+# out of memory. A program gets PHX_LIMIT seconds and a harness, which runs a
+# directory of them, PHX_HARNESS_LIMIT. Both defaults are several times what
+# the slowest one takes today. See tests/limit.sh and tests/limit.c.
+. "$root/tests/limit.sh"
+
+# Every stop, in any harness, is written here as well, and the last check
+# before the summary fails if anything is. A check can be fooled by a stop:
+# one that expects a failure and throws standard error away takes it for the
+# failure it wanted, and an oracle whose two programs were both stopped sees
+# two empty answers agree. The log is not fooled.
+mkdir -p "$root/build"
+PHX_LIMIT_LOG="$root/build/stopped.log"; rm -f "$PHX_LIMIT_LOG"
+export PHX_LIMIT_LOG
 # A harness that ran out says so in a FAIL line of its own, because what is
 # shown of a failed harness below is mostly its FAIL lines. No harness exits
 # 124 of itself, so here the number is enough.
@@ -111,7 +116,7 @@ if [ $? = 3 ]; then
 else
     report fail "a program that finishes keeps its exit status"
 fi
-out=$("$limit" 1 sh -c 'while :; do :; done' 2>&1)
+out=$(PHX_LIMIT_LOG= "$limit" 1 sh -c 'while :; do :; done' 2>&1)
 if [ $? = 124 ] && printf '%s' "$out" | grep -q 'did not finish in 1 s'; then
     report pass "a program that never finishes is stopped, and says so"
 else
@@ -120,7 +125,7 @@ fi
 # The version of the same regression that is likelier, since most programs
 # here print: a loop around the print. Time alone does not catch it, because
 # `$(...)` runs the shell out of memory first.
-out=$("$limit" 20 yes 2>&1 >/dev/null)
+out=$(PHX_LIMIT_LOG= "$limit" 20 yes 2>&1 >/dev/null)
 if [ $? = 124 ] && printf '%s' "$out" | grep -q 'did not finish, and was stopped after writing'; then
     report pass "a program that never stops printing is stopped, and says so"
 else
@@ -1981,6 +1986,17 @@ if [ "$(uname -m)" = "arm64" ]; then
     # `tests/oracle/`, where the count above includes them.
 else
     skip 2 "the C oracle and the calling-convention test need an arm64 cc, and this machine is not arm64"
+fi
+
+# The log of every program stopped anywhere above. The two the limit's own
+# checks stop on purpose are not in it.
+echo "the whole run"
+if [ ! -s "$PHX_LIMIT_LOG" ]; then
+    report pass "every program the suite ran finished"
+else
+    report fail "every program the suite ran finished" \
+                "$(wc -l < "$PHX_LIMIT_LOG" | tr -d ' ') did not, in $PHX_LIMIT_LOG"
+    sed "s#$root/##g; s/^/        /" "$PHX_LIMIT_LOG" | head -10
 fi
 
 echo
