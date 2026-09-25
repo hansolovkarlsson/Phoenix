@@ -369,7 +369,17 @@
    * the temporary has.
    *
    * `x8` is set last, after the argument registers are loaded, because it is
-   * not one of them and nothing between it and the `bl` touches it. *)
+   * not one of them and nothing between it and the `bl` touches it.
+   *
+   * **An `int` that comes back is zero-extended here**, since 2026-09-25,
+   * because AAPCS64 leaves the upper half of `x0` unspecified for a 32-bit
+   * result and the header above promises that it is zero. Every condition,
+   * `!`, `&&` and `||` test all of `x0`. A callee this file compiled writes
+   * its `int` through a `w` register and keeps the promise anyway, and one
+   * `cc` compiled need not: `int lnarrow(long x) { return x; }` hands back
+   * the whole `long`, even at `-O0`, and `if (lnarrow(4294967296))` was taken
+   * here and not under `cc`. `tests/abi/` is where it is seen, since only a
+   * callee from the other compiler can show it. *)
   Call : down wantwide = $argwide
        : down held    = $argn
        : down heldreg = $argreg
@@ -388,7 +398,8 @@
               lookup([[true, "\tsub x8, x29, #{}\n" of $tpos]], $large, ""),
               $name,
               lookup([[true, "\tsub x9, x29, #{}\n\tstp x0, x1, [x9]\n\tmov x0, x9\n" of $tpos]], $small,
-                     lookup([[true, "\tsub x0, x29, #{}\n" of $tpos]], $large, ""))
+                     lookup([[true, "\tsub x0, x29, #{}\n" of $tpos]], $large,
+                            lookup([[true, "\tmov w0, w0\n"]], $type = 0 and not $wide, "")))
        : addr = $out .
 
   (* A parameter's register is counted by the `locals` pass, which gives a

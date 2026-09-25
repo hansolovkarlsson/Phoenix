@@ -33,5 +33,8 @@ int main() {
     lprint(lmul(-3, 4)); lprint(lmul(3000000000, -2)); print(lnarrow(4294967298)); print(lnarrow(-1));
     lprint(lwiden(-9)); lprint(mkpl(-5000000000, 3).a); print(mkpl(1, -7).b);
     lprint(sumpl(mkpl(-5000000000, 3))); putchar(10);
+    if (lnarrow(4294967296)) putchar('?'); else putchar('.');
+    print(!lnarrow(4294967296)); print(lnarrow(4294967296) || 0); print(lnarrow(4294967297) && 1);
+    for (i = 0; i < 3 && lnarrow(4294967296 + i); i = i + 1) putchar('!'); print(i); putchar(10);
     return 0;
 }

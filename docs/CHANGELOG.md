@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: an `int` from a function `cc` compiled is read correctly
+
+**Fixed: a C program compiled by Phoenix could misread an `int` returned by
+code another compiler built.** The calling convention leaves the upper half
+of the register unspecified when a function returns an `int`, and Phoenix
+tested the whole register in every `if`, loop condition, `!`, `&&` and `||`.
+A library function that returned a narrowed `long`, as
+`int f(long x) { return x; }` does, could make a condition true that was
+false. Phoenix now clears the upper half after every call that returns an
+`int`. Functions Phoenix compiled were never affected, which is why the C
+oracle, which compiles each program with one compiler, could not see it;
+`tests/abi/`, which links the two, now does.
+
+**Tests:** 325 → 325. None added: the calling-convention check asks more
+of the same pairing.
+
+---
+
 ## 2026-09-25: `!`, `&&` and `||` in C
 
 **The C subset has C's logical operators**, the second part of
