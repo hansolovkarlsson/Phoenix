@@ -1811,6 +1811,15 @@ refuses "a 'continue' outside a loop" "'continue' is not inside a loop" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/continue-outside-a-loop.c"
 refuses "a 'break' after a loop has ended" "'break' is not inside a loop" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/break-after-a-loop.c"
+# A label belongs to its function, anywhere in it: a `goto` to a label no
+# statement has, or one another function has, is refused, and so is one label
+# twice. `cc` refuses all three.
+refuses "a 'goto' to no label" "there is no label 'nowhere' in this function to go to" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/goto-nowhere.c"
+refuses "a 'goto' to another function's label" "there is no label 'here' in this function to go to" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/goto-another-functions-label.c"
+refuses "a label twice" "the label 'here' is in this function twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/label-twice.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

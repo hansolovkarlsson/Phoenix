@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `goto` and labels in C
+
+**The C subset has `goto` and labels**, the second part of
+[ROADMAP 6.4](ROADMAP.md#64-the-statements). A label belongs to the whole
+function, so a `goto` can jump forwards or backwards, out of loops and into
+blocks, and two functions can each have a label of the same name. Labels
+are a name space of their own, as C says, so a label and a variable may
+share a name. A `goto` to a label its function does not have, and a label
+defined twice, are refused, as `cc` refuses them.
+
+**Tests:** 347 → 350, for the three refusals. Two programs join the C
+oracle: 230 agree with `cc`, 114 are refused, none diverges.
+
+---
+
 ## 2026-09-25: `break`, `continue`, `do` and the empty statement in C
 
 **The C subset has `break`, `continue`, `do … while` and the empty

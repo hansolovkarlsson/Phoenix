@@ -255,6 +255,13 @@ block = "{" { statement } "}" -> Block(body: $2) .
  * second number. `struct` was the day it was to need a node, and gave one
  * to the base instead: see `base` above and the `types` pass. *)
 statement = "return" e:expression ";"              -> Return(value: $e)
+          (* **A label is a name and a `:` before a statement**, and a
+           * `goto` names one, since 2026-09-25, ROADMAP 6.4. The label is
+           * tried before an expression statement, which would read the name
+           * and fail at the `:`, and before a declaration, whose base is a
+           * reserved word or a typedef's name and so never a label's. *)
+          | "goto" n:name ";"                        -> Goto(name: $n)
+          | n:name ":" b:statement                   -> Labelled(name: $n, body: $b)
           (* An array first, because the three declaration forms are told
            * apart by the token after the name and this one's is `[`. The
            * count is a constant in the source and so is a field rather than a
@@ -616,6 +623,14 @@ arg  = e:assignment -> Arg(value: $e) .
    * arguments with. A call above its callee's declaration is refused anyway. *)
   thread sigs = empty
 
+  (* **Every label in the program**, as the function's name and the label's
+   * together, since 2026-09-25. A label belongs to its function, C11 6.2.1,
+   * and to a name space of its own, 6.2.3, so it is never in `env` and
+   * `x: x++;` names two different things. It is gathered on the way out and
+   * handed to the `types` pass from the root, as `sigs` is, which is what
+   * lets a `goto` name a label further down. *)
+  thread labels = empty
+
   (* **What each function returns**, name to three things: the tag of the
    * struct at the bottom, or ""; its width, 4 for an `int`; and how many
    * stars are on top, since 2026-09-25. They are the three an expression's
@@ -663,6 +678,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * needs no size, and a linked list is made of exactly that. *)
   Program : down defining = ""
           : allsigs = $sigs
+          : alllabels = $labels
           : allrets = $rets
           : allpwidths = $pwidths .
 
@@ -788,6 +804,7 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
 
   Function  : rptrs = $stars + $ret.ptrs
+            : down fn     = $name
           : down env    = empty
             : down scope  = empty
             : down bytes  = 0
@@ -808,6 +825,10 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
+
+  Labelled : labels = bind($labels, ("{}/{}" of $fn, $name), true)
+           ! defined($labels, "{}/{}" of $fn, $name)
+               : "the label '{}' is in this function twice" of $name .
 
   (* A parameter is never an array, because the subset has no declarator for
    * one and C would have rewritten it to a pointer if it had. A scalar or a
@@ -1127,6 +1148,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Arg      : type = $value.type
            : carries = lookup([[true, $value.tag]], $value.record, "") .
   Program  : down callees = $allsigs
+           : down labelled = $alllabels
            : down results = $allrets
            : down wides   = $allpwidths .
   (* **A call is worth what its function returns**, the three numbers an
@@ -1155,7 +1177,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * a function returning a pointer to a struct gives "", since what it
    * returns is not one. *)
   Function : down gives = lookup([[0, $ret.tagname]], $rptrs, "")
-           : down loops = 0 .
+           : down loops = 0
+           : down fn    = $name .
   Return ! $value.record and $gives = ""
              : "'struct {}' is returned, and this function returns an int" of $value.tag
          ! $value.record and $gives <> "" and $value.tag <> $gives
@@ -1177,6 +1200,10 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **`break` and `continue` belong to a loop**, C11 6.8.6.2 and 6.8.6.3, so
    * each counts the loops it is inside, from 0 at a function's start, and
    * one outside all of them is refused, as `cc` refuses it. *)
+  (* A `goto` names a label of its own function, anywhere in it, which the
+   * `locals` pass has gathered; one in another function is not one. *)
+  Goto     ! not defined($labelled, "{}/{}" of $fn, $name)
+               : "there is no label '{}' in this function to go to" of $name .
   Break    ! $loops = 0 : "'break' is not inside a loop" .
   Continue ! $loops = 0 : "'continue' is not inside a loop" .
   Compare ! $left.record or $right.record

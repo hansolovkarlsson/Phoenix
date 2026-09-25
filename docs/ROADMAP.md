@@ -567,7 +567,12 @@ C11 6.4.1 says it always was.
    the assembler's label is the function's and the name's together, and a
    `goto` may name a label further down, which the `locals` pass has not
    read yet: the labels are gathered on the way out and handed down, the
-   way `sigs` is for calls.
+   way `sigs` is for calls. *Built 2026-09-25*: `goto.c` and `goto-labels.c`
+   agree with `cc`, the second with a label name two functions share and a
+   `goto` into a block. The assembler's label is `L.function.label`: with an
+   underscore between them, `f` and `x_y` would have met `f_x` and `y`. A
+   refused `goto` is placed at the `goto`, where `cc` places it at the
+   label's name.
 3. **`switch`, `case` and `default`**, after [6.5](#65-constant-expressions).
    The controlling expression is evaluated once and promoted, and each
    `case` compared against it in turn, a chain of compares rather than a jump

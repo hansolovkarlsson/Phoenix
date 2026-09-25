@@ -529,6 +529,14 @@
           : down cont = "Lc{}_{}" of $pos.line, $pos.column
           : out = "L{}.top:\n{}{}:\n{}\tcmp x0, #0\n\tb.ne L{}.top\n{}:\n"
               of $n, $body.out, $cont, $cond.out, $n, $brk .
+  (* **A label is the function's name and its own**, `L.main.again`,
+   * since 2026-09-25: two functions may use one label name, and the dots
+   * keep `f` and `x_y` apart from `f_x` and `y`, which an underscore would
+   * not, and `goto-labels.c` has both. A `goto` is a branch to it. The stack
+   * is level at every statement, so a branch between two of them needs
+   * nothing put right, into a block or out of one. *)
+  Labelled : out = "L.{}.{}:\n{}" of $fname, $name, $body.out .
+  Goto     : out = "\tb L.{}.{}\n" of $fname, $name .
   Break    : out = "\tb {}\n" of $brk .
   Continue : out = "\tb {}\n" of $cont .
   Empty    : out = "" .
