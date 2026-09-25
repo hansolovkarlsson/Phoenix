@@ -266,6 +266,49 @@
             : out   = lookup([[true, $copied]], $aggregate, $store)
             : addr  = $out .
 
+  (* **An update reads its place, changes it and writes it back**, since
+   * 2026-09-25, with the place's address worked out **once**: pushed while the
+   * right side is computed, then popped into `x2` and used for both the load
+   * and the store. That is what makes `x[k++] += 10` move `k` once and a call
+   * in a subscript run once, which `update-place-once.c` counts.
+   *
+   * The arithmetic is C11 6.3.1.8's, over the place's type and the right
+   * side's, and then converted back to the place's. So a `long` on either
+   * side makes it sixty-four bits: `i /= 4294967298` on an `int` is a
+   * division by that and not by its low half, 2, and `update-widths.c` asks.
+   * A `char` is loaded sign-extended, changed as an `int`, stored as a byte
+   * and narrowed in the register, as an assignment is. A pointer on the left
+   * steps in elements, by the multiply-add `Binary` uses, and the right side
+   * is never a pointer, which the `types` pass saw to.
+   *
+   * `x4` keeps the value from before the change, and a postfix `++` or `--`
+   * is worth that. Everything here runs after the right side, so a call in it
+   * can use any register it likes. *)
+  Update : wideop = $place.type = 0 and ($place.wide or $value.wide)
+         : r      = lookup([[true, "x"]], $wideop, "w")
+         : load   = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $place.size, "ldr x0")
+         : lwiden = lookup([[true, "\tsxtw x0, w0\n"]], $wideop and not $place.wide, "")
+         : vwiden = lookup([[true, "\tsxtw x1, w1\n"]], $wideop and not $value.wide, "")
+         : step   = lookup([[1, $place.width]], $place.type, 8)
+         : pointer = lookup([[true, "\tldr x3, ={}\n\tm{} x0, x1, x3, x0\n"
+                                      of $step, lookup([["+", "add"]], $arith, "sub")]],
+                            $value.wide,
+                            "\tldr w3, ={}\n\tsm{}l x0, w1, w3, x0\n"
+                              of $step, lookup([["+", "add"]], $arith, "sub"))
+         : number = lookup([["%", "\tsdiv {}3, {}0, {}1\n\tmsub {}0, {}3, {}1, {}0\n"
+                                    of $r, $r, $r, $r, $r, $r, $r]],
+                           $arith,
+                           "\t{} {}0, {}0, {}1\n"
+                             of lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]],
+                                       $arith, "?"), $r, $r, $r)
+         : store  = lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0")
+         : narrow = lookup([[1, "\tsxtb w0, w0\n"]], $place.size,
+                           lookup([[true, "\tmov w0, w0\n"]], $place.size = 4 and $wideop, ""))
+         : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x2, [sp], #16\n\t{}, [x2]\n\tmov x4, x0\n{}{}{}\t{}, [x2]\n{}{}"
+             of $place.addr, $value.out, $load, $lwiden, $vwiden,
+                lookup([[0, $number]], $place.type, $pointer),
+                $store, $narrow, lookup([[true, "\tmov x0, x4\n"]], $post, "") .
+
   (* A declaration with an initialiser knows its own slot, so it stores
    * straight into it rather than working out an address it already has. *)
   LocalInit : copies = $ptrs = 0 and $base.tagname <> ""

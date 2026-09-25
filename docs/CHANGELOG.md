@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `++`, `--` and the compound assignments in C
+
+**The C subset has `++` and `--`, before and after, and `+=`, `-=`, `*=`,
+`/=` and `%=`**, the third part of [ROADMAP 6.3](ROADMAP.md#63-the-operators).
+The place is worked out once, so `x[k++] += 10` moves `k` once and a call in
+a subscript runs once. A pointer steps by what it points at, twelve bytes for
+a struct of three `int`s. The arithmetic is done at the wider of the two
+sides, so an `int` divided in place by a `long` is divided by all of it, and
+a `char` is narrowed on the way back, as an assignment narrows it. They chain
+as C's postfix operators do: `q++->c` and `*p++` are what they are in C.
+
+**Tests:** 325 → 333, for eight refusals, each one `cc` makes too. Six
+programs join the C oracle: 217 agree with `cc`, 97 are refused, none
+diverges.
+
+---
+
 ## 2026-09-25: an `int` from a function `cc` compiled is read correctly
 
 **Fixed: a C program compiled by Phoenix could misread an `int` returned by

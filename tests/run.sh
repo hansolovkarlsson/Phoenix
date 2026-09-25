@@ -1720,14 +1720,15 @@ refuses "a ninth parameter, which is outside the subset" "only eight are compile
 # constraint at no cost. The rest are the `types` pass, which knows how many
 # stars a value has and nothing else about its type.
 #
-# The message for `&1` names what may follow the `1`, and has moved three
+# The message for `&1` names what may follow the `1`, and has moved four
 # times. A subscript was the first way a number becomes the start of a place,
 # `&1[a]` being `&(1[a])`, and a member is the second, since `struct`: `&1.x`
-# is a place the `types` pass refuses rather than the grammar. So the refusal
-# is only certain at the token after the `1`, and names all three.
+# is a place the `types` pass refuses rather than the grammar. A postfix `++`
+# and `--` are the third, since 2026-09-25, as suffixes in the same fold. So
+# the refusal is only certain at the token after the `1`, and names all five.
 # `address-of-a-subscripted-number` in the oracle is the program that makes
 # the message true.
-refuses "the address of something that is not a place" 'expected [, . or ->, and found ";"' \
+refuses "the address of something that is not a place" 'expected [, ., ->, ++ or --, and found ";"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
 refuses "and an assignment to one" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
@@ -1753,6 +1754,27 @@ refuses "a struct on the left of '&&'" "'&&' tests numbers and pointers, and thi
         --driver check "$root/languages/c/c-arm64.phx" "$r/and-a-struct.c"
 refuses "and on the right of '||'" "'||' tests numbers and pointers, and this is 'struct t'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/or-a-struct.c"
+# `++`, `--` and the compound assignments, since 2026-09-25: an update takes
+# what `=` takes and what its operator takes, both. Every one below `cc`
+# refuses too. `3 += x` is a syntax error here, as `3 = x` is, and
+# `(x = 2)++` gets past the grammar, since a postfix `++` is a suffix like
+# `[ ]`, and is refused by the `types` pass, where `lvalue` is.
+refuses "a '++' on an array" "'++' is given an array" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-array.c"
+refuses "a '+=' to a struct" "'+=' wants a number or a pointer, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-to-a-struct.c"
+refuses "and of one" "'+=' wants a number on its right, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-a-struct.c"
+refuses "a pointer added to an int in place" "'+=' does not take a pointer on its right" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-a-pointer-to-an-int.c"
+refuses "and to a pointer" "'+=' does not take a pointer on its right" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-a-pointer-to-a-pointer.c"
+refuses "a pointer multiplied in place" "'*=' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/multiply-a-pointer-in-place.c"
+refuses "a '+=' to a number" 'and found "+="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-to-a-number.c"
+refuses "a '++' on an assignment" "'++' wants somewhere a value is kept" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-assignment.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

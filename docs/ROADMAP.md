@@ -552,7 +552,10 @@ since a program there that Phoenix cannot compile fails the suite:
    it back, so the place has to be worked out once: `x[k++] += 10` adds 10 to
    `x[0]` and moves `k` once. A pointer steps by its element's width, which
    is twelve for the struct in `increment.c`, and a `char` has to be narrowed
-   on the way back in.
+   on the way back in. *Built 2026-09-25*: `increment.c` and five more agree
+   with `cc`. All of them are one node, `Update`, and a postfix `++` became
+   a suffix in the same fold as `[ ]` and `->`, because `q++->c` is C and a
+   `++` outside the fold ended the chain there.
 4. **Bitwise `& | ^ ~`, the shifts, `?:`, the comma operator and unary `+`.**
    Mechanical once the three before them are in, apart from the grammar work
    below.

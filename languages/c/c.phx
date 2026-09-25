@@ -114,6 +114,7 @@ block-comment = "/*" { ! "*/" } "*/" .
  * as two `&`s, and the day binary `&` arrives that spelling would parse, as
  * `a & (&b)`, which is ROADMAP 6.3's reason for building `&&` first. *)
 symbol = "==" | "!=" | "<=" | ">=" | "->" | "&&" | "||"
+       | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%="
        | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "="
        | "&" | "!" | "[" | "]" | "." .
 
@@ -288,7 +289,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | block
           | e:expression ";"                        -> Discard(value: $e) .
 
-(* C's expression grammar, eight of its fifteen levels. `lib/expression.phx`
+(* C's expression grammar, nine of its fifteen levels. `lib/expression.phx`
  * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
  * it, and C's is written here a level at a time as the constructs arrive.
  * The shape is the module's, though, and so is the fold: `$$` is what has
@@ -305,7 +306,17 @@ expression = assignment .
  * which is what ordered choice is for; `==` is a different token, so `x == 1`
  * never gets this far. *)
 assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
+           | p:place o:compound a:assignment
+               -> Update(place: $p, op: $o, value: $a, post: false)
            | logical-or .
+
+(* **A compound assignment changes a place in place**, since 2026-09-25, and
+ * is not built as `a = a + b`: C11 6.5.16.2 says `a` is evaluated once, and
+ * `x[k++] += 10` moves `k` once. So it is a node of its own, `Update`, which
+ * `++` and `--` build too: C11 6.5.3.1 defines `++a` as `a += 1`, and `a++`
+ * is the same step worth the value from before it, which is `post`. The
+ * operator is kept as written, for the messages. *)
+compound = "+=" | "-=" | "*=" | "/=" | "%=" .
 
 (* **`||` and `&&`**, since 2026-09-25, the loosest levels below assignment:
  * `a || b && c` is `a || (b && c)`, and both group to the left. They are one
@@ -379,6 +390,8 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * declarations give above. *)
 unary   = "-" u:unary -> Negate(value: $u)
         | "!" u:unary -> Not(value: $u)
+        | "++" p:place -> Update(place: $p, op: "++", value: Number(text: "1"), post: false)
+        | "--" p:place -> Update(place: $p, op: "--", value: Number(text: "1"), post: false)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
         | "sizeof" "(" b:base s:{ "*" } ")" -> SizeOfType(base: $b, stars: size($s))
@@ -406,16 +419,26 @@ unary   = "-" u:unary -> Negate(value: $u)
  * because a rule cannot both build its first suffix and fold the rest in
  * one list: `$$` needs its base in the list it folds, and `suffix` is that
  * base. The three suffixes are one repetition and not three, because C
- * mixes them freely: `a[i].next->v[2]` is four of them, in one fold. *)
+ * mixes them freely: `a[i].next->v[2]` is four of them, in one fold.
+ *
+ * **A postfix `++` or `--` is a suffix too**, since 2026-09-25, for the same
+ * reason: `q++->c` and `p++[0]` are C, and a `++` outside the fold would end
+ * the chain. What it is a suffix *of* need not be a place, in the grammar: a
+ * `++` on a call or on an assignment parses, and the `types` pass refuses it
+ * as `cc` does, since `lvalue` is what knows. *)
 postfix   = suffixed | primary .
 suffixed  = suffix { "[" e:expression "]"
                           -> Deref(value: Binary(op: "+", left: $$, right: $e))
                       | "." n:name  -> Member(value: $$, name: $n)
-                      | "->" n:name -> Member(value: Deref(value: $$), name: $n) } .
+                      | "->" n:name -> Member(value: Deref(value: $$), name: $n)
+                      | "++" -> Update(place: $$, op: "++", value: Number(text: "1"), post: true)
+                      | "--" -> Update(place: $$, op: "--", value: Number(text: "1"), post: true) } .
 suffix    = p:primary "[" e:expression "]"
               -> Deref(value: Binary(op: "+", left: $p, right: $e))
           | p:primary "." n:name  -> Member(value: $p, name: $n)
-          | p:primary "->" n:name -> Member(value: Deref(value: $p), name: $n) .
+          | p:primary "->" n:name -> Member(value: Deref(value: $p), name: $n)
+          | p:primary "++" -> Update(place: $p, op: "++", value: Number(text: "1"), post: true)
+          | p:primary "--" -> Update(place: $p, op: "--", value: Number(text: "1"), post: true) .
 
 (* A call before a variable, because `f` fails at `(` and falls through.
  * Each argument is a node of its own for the same reason a parameter is:
@@ -1018,6 +1041,32 @@ arg  = e:expression -> Arg(value: $e) .
                              "something that is not a struct")
            ! $value.record and not $place.record
                : "'struct {}' is put where a number or a pointer goes" of $value.tag .
+
+  (* **An update is an assignment that reads its place first**, C11
+   * 6.5.16.2 and 6.5.2.4, so it is worth the place's type, and it takes what
+   * `=` takes and what the operator takes, both. The place has to be one, and
+   * not an array; a struct has no arithmetic, on either side; and the right
+   * side is a number, because a pointer there is either two pointers added or
+   * a pointer put in a number, and `cc` refuses both. A pointer on the left
+   * steps by `+` and `-` only, as C11 6.5.6 allows it to. `arith` is the
+   * operator the update stands for, `+` for `++` and for `+=`. *)
+  Update   : type  = $place.type
+           : width = $place.width
+           : tag   = $place.tag
+           : arith = lookup([["++", "+"], ["--", "-"], ["+=", "+"], ["-=", "-"],
+                             ["*=", "*"], ["/=", "/"], ["%=", "%"]], $op, "?")
+           ! $place.aggregate and $place.type > 0
+               : "'{}' is given an array, and an array is not something a value can be put in" of $op
+           ! not $place.lvalue
+               : "'{}' wants somewhere a value is kept, and an assignment, a call or an update is a value" of $op
+           ! $place.record
+               : "'{}' wants a number or a pointer, and this is 'struct {}'" of $op, $place.tag
+           ! $value.record
+               : "'{}' wants a number on its right, and this is 'struct {}'" of $op, $value.tag
+           ! $value.type > 0
+               : "'{}' does not take a pointer on its right" of $op
+           ! $place.type > 0 and $op <> "++" and $op <> "--" and $op <> "+=" and $op <> "-="
+               : "'{}' does not take a pointer" of $op .
 
   (* The same rule for a declaration's initialiser, which is an assignment to
    * a place the declaration names. `ptrs` and the base are the `locals`
