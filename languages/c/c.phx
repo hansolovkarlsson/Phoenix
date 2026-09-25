@@ -111,7 +111,7 @@ block-comment = "/*" { ! "*/" } "*/" .
 (* Two characters before one, every time: `<` first would leave the `=` of
  * `<=` behind, and the error would surface at the token after it. *)
 symbol = "==" | "!=" | "<=" | ">=" | "->"
-       | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "<" | ">" | "="
+       | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "="
        | "&" | "[" | "]" | "." .
 
 %skip space line-comment block-comment .
@@ -349,7 +349,7 @@ relational     = additive       { ( "<" | "<=" | ">" | ">=" ) additive
 
 additive       = multiplicative { ( "+" | "-" ) multiplicative
                                     -> Binary(op: $1, left: $$, right: $2) } .
-multiplicative = unary          { ( "*" | "/" ) unary
+multiplicative = unary          { ( "*" | "/" | "%" ) unary
                                     -> Binary(op: $1, left: $$, right: $2) } .
 
 (* `&` takes a place and `*` takes anything, which is C11 6.5.3.2 as written.
@@ -1215,8 +1215,9 @@ arg  = e:expression -> Arg(value: $e) .
             and ($left.type <> $right.type or $left.width <> $right.width
                  or $left.tag <> $right.tag)
           : "'-' takes two pointers only when they point at the same type" .
-  (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, so a pointer on
-   * either is C's own refusal rather than this subset's. *)
+  (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, and integers on
+   * both sides of `%`, which since 2026-09-25 is one of these too. So a pointer
+   * on either is C's own refusal rather than this subset's. *)
   Binary : width = lookup([[true, 8]], $left.wide or $right.wide, 4)
          ! $left.record or $right.record
       : "'{}' wants numbers, and this is 'struct {}'"

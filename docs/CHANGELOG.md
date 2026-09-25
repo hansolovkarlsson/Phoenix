@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `%` in C
+
+**The C subset has `%`**, the remainder, on `int`, `char` and `long`
+operands, the first of the operators [ROADMAP 6.3](ROADMAP.md#63-the-operators)
+lists. It truncates toward zero as `/` does, so `-7 % 3` is -1 and `7 % -3`
+is 1, and an `int` meeting a `long` is widened first. A pointer or a struct on
+either side is refused, as `cc` refuses it.
+
+**Tests:** 320 → 322, for the two refusals. Four programs join the C oracle:
+206 agree with `cc`, 86 are refused, none diverges.
+
+---
+
 ## 2026-09-25: `.phx` in colour, in VS Code
 
 **`editors/vscode/` is an extension for `.phx` descriptions**: comments,

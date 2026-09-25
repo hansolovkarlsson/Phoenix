@@ -539,7 +539,10 @@ since a program there that Phoenix cannot compile fails the suite:
 **Built in four parts, in this order**, each with the suite green:
 
 1. **`%`**, next to `/`: `sdiv` and then `msub`, on `w` or `x` registers as
-   `/` already chooses.
+   `/` already chooses. *Built 2026-09-25*: `remainder.c` and three more
+   agree with `cc`, and the `types` pass needed nothing, because its general
+   `Binary` clause already refused a pointer or a struct on either side of
+   an operator that is neither `+` nor `-`.
 2. **`!`, `&&` and `||`**, whose right side runs only when the left has not
    decided the answer. The emit pass already makes labels for `if` and
    `while`.

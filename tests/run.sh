@@ -1739,6 +1739,12 @@ refuses "a '-' on a pointer" "'-' wants a number" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/negate-a-pointer.c"
 refuses "a '*' between a pointer and a number" "'*' does not take a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/multiply-a-pointer.c"
+# `%` wants integers on both sides, C11 6.5.5, since 2026-09-25 (ROADMAP 6.3).
+# `cc` refuses both, at the same column.
+refuses "a '%' of a pointer" "'%' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/remainder-of-a-pointer.c"
+refuses "and of a struct" "'%' wants numbers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/remainder-of-a-struct.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

@@ -466,6 +466,15 @@
    * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
    * and 0 on this processor, and no program in the oracle asks.
    *
+   * **`%` is the division and then a multiply-subtract**, since 2026-09-25:
+   * `sdiv` leaves the quotient in `{r}2` and `msub` takes quotient times
+   * divisor from the dividend. arm64 has no remainder instruction, and C11
+   * 6.5.5p6 defines `%` by exactly that identity, `(a/b)*b + a%b == a`, so
+   * the sign of a remainder is the dividend's because the quotient truncated.
+   * `remainder-signs.c` holds all four sign pairs against `cc`. The register
+   * width is `/`'s choice again, and an `int` side meeting a `long` is
+   * widened first by the same `lconv` and `rconv`.
+   *
    * **A pointer and an int is a multiply and an add.** After the pop the
    * left operand is in `x0` and the right in `x1`, and the `types` pass has
    * said which of them is the pointer. `smaddl x0, w{i}, w2, x{p}` takes the
@@ -526,9 +535,11 @@
    * anything else is two `int`s. *)
   Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
          : both       = $left.type > 0 and $right.type > 0
-         : plain      = "\t{} {}0, {}0, {}1\n"
-                          of $mnemonic, lookup([[true, "x"]], $wide, "w"),
-                             lookup([[true, "x"]], $wide, "w"), lookup([[true, "x"]], $wide, "w")
+         : r          = lookup([[true, "x"]], $wide, "w")
+         : plain      = lookup([["%", "\tsdiv {}2, {}0, {}1\n\tmsub {}0, {}2, {}1, {}0\n"
+                                        of $r, $r, $r, $r, $r, $r, $r]],
+                               $op,
+                               "\t{} {}0, {}0, {}1\n" of $mnemonic, $r, $r, $r)
          : ixwide     = lookup([[0, $left.wide]], $left.type, $right.wide)
          : scaled     = lookup([[true, "\tldr x2, ={}\n\tm{} x0, x{}, x2, x{}\n"
                                         of lookup([[1, $width]], $type, 8), $mnemonic,
