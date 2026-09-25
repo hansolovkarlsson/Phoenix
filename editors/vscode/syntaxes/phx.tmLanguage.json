@@ -1,0 +1,381 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Phoenix",
+  "scopeName": "source.phx",
+  "fileTypes": [
+    "phx"
+  ],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#driver"
+    },
+    {
+      "include": "#names"
+    },
+    {
+      "include": "#section"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#production"
+    },
+    {
+      "include": "#thread"
+    },
+    {
+      "include": "#definition"
+    },
+    {
+      "include": "#label"
+    },
+    {
+      "include": "#expression"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.block.phx",
+          "begin": "\\(\\*",
+          "end": "\\*\\)",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.phx"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.phx"
+            }
+          },
+          "patterns": [
+            {
+              "name": "markup.inline.raw.phx",
+              "match": "`(?:[^`*]|\\*(?!\\)))+`"
+            },
+            {
+              "name": "markup.bold.phx",
+              "match": "\\*\\*(?:[^*]|\\*(?![*)]))+?\\*\\*"
+            }
+          ]
+        },
+        {
+          "name": "comment.line.semicolon.phx",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.phx",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.phx"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.phx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#escape"
+            },
+            {
+              "include": "#hole"
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.phx",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.phx"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.phx"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#escape"
+            },
+            {
+              "include": "#hole"
+            }
+          ]
+        }
+      ]
+    },
+    "escape": {
+      "name": "constant.character.escape.phx",
+      "match": "\\\\(?:[\"\\\\ntr0']|x[0-9A-Fa-f]{2})"
+    },
+    "hole": {
+      "name": "constant.other.placeholder.phx",
+      "match": "\\{\\{|\\}\\}|\\{\\}"
+    },
+    "driver": {
+      "begin": "(%driver)\\s+([a-z][A-Za-z0-9_-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.phx"
+        },
+        "2": {
+          "name": "entity.name.section.phx"
+        }
+      },
+      "end": "\\.(?![a-z.])",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.phx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "name": "keyword.other.until.phx",
+          "match": "\\buntil\\b"
+        },
+        {
+          "match": "(->)\\s*([a-z][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.arrow.phx"
+            },
+            "2": {
+              "name": "variable.other.property.phx"
+            }
+          }
+        },
+        {
+          "name": "entity.name.function.stage.phx",
+          "match": "\\b[a-z][A-Za-z0-9_-]*"
+        },
+        {
+          "name": "keyword.operator.phx",
+          "match": "="
+        },
+        {
+          "name": "punctuation.separator.comma.phx",
+          "match": ","
+        }
+      ]
+    },
+    "names": {
+      "begin": "(%names)\\s+([a-z][A-Za-z0-9_-]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.phx"
+        },
+        "2": {
+          "name": "entity.name.section.phx"
+        }
+      },
+      "end": "\\.(?![a-z])",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.phx"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#comment"
+        },
+        {
+          "name": "keyword.other.names.phx",
+          "match": "\\b(?:declare|hide|scope|guard)\\b"
+        },
+        {
+          "name": "entity.name.type.node.phx",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "variable.other.property.phx",
+          "match": "(?<=[\\w)\\]])\\.[a-z][A-Za-z0-9_-]*"
+        }
+      ]
+    },
+    "section": {
+      "patterns": [
+        {
+          "match": "(%pass)\\s+([a-z][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.phx"
+            },
+            "2": {
+              "name": "entity.name.section.phx"
+            }
+          }
+        },
+        {
+          "match": "(%rewrite)\\s+([a-z][A-Za-z0-9_-]*)\\s+([a-z][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.phx"
+            },
+            "2": {
+              "name": "entity.name.section.phx"
+            },
+            "3": {
+              "name": "support.constant.strategy.phx"
+            }
+          }
+        },
+        {
+          "match": "(%start)\\s+([a-z][A-Za-z0-9_-]*)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.phx"
+            },
+            "2": {
+              "name": "entity.name.function.production.phx"
+            }
+          }
+        }
+      ]
+    },
+    "directive": {
+      "name": "keyword.control.directive.phx",
+      "match": "%[A-Za-z]+"
+    },
+    "production": {
+      "match": "^\\s*(?!(?:thread|otherwise)\\b)([a-z][A-Za-z0-9_-]*)\\s*(::=|:=|=)(?![=>])",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.production.phx"
+        },
+        "2": {
+          "name": "keyword.operator.definition.phx"
+        }
+      }
+    },
+    "thread": {
+      "match": "\\b(thread|otherwise)\\s+([a-z][A-Za-z0-9_-]*)",
+      "captures": {
+        "1": {
+          "name": "storage.modifier.phx"
+        },
+        "2": {
+          "name": "entity.other.attribute-name.phx"
+        }
+      }
+    },
+    "definition": {
+      "match": "(:)\\s*(?:(down)\\s+)?([a-z][A-Za-z0-9_-]*)\\s*(=)(?![=>])",
+      "captures": {
+        "1": {
+          "name": "punctuation.separator.clause.phx"
+        },
+        "2": {
+          "name": "storage.modifier.down.phx"
+        },
+        "3": {
+          "name": "entity.other.attribute-name.phx"
+        },
+        "4": {
+          "name": "keyword.operator.definition.phx"
+        }
+      }
+    },
+    "label": {
+      "match": "\\b([a-z][A-Za-z0-9_-]*)(:)(?![:=])",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.phx"
+        },
+        "2": {
+          "name": "punctuation.separator.label.phx"
+        }
+      }
+    },
+    "expression": {
+      "patterns": [
+        {
+          "name": "variable.language.phx",
+          "match": "\\$\\$|\\$pos\\b"
+        },
+        {
+          "name": "variable.other.reference.phx",
+          "match": "\\$[0-9]+|\\$[A-Za-z_][A-Za-z0-9_-]*"
+        },
+        {
+          "name": "variable.other.property.phx",
+          "match": "(?<=[\\w)\\]])\\.[a-z][A-Za-z0-9_-]*"
+        },
+        {
+          "name": "entity.name.type.node.phx",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        },
+        {
+          "name": "constant.language.phx",
+          "match": "\\b(?:true|false|nil|empty)\\b"
+        },
+        {
+          "name": "support.function.phx",
+          "match": "\\b(?:bind|lookup|defined|positions|int|float|text|floor|ceiling|round|truncate|quotient|remainder|size|sizes|at|slice|split|join|flatten|each|bytes)(?=\\s*\\()"
+        },
+        {
+          "name": "keyword.operator.word.phx",
+          "match": "\\b(?:and|or|not|of|div|mod)\\b"
+        },
+        {
+          "name": "constant.numeric.phx",
+          "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
+        },
+        {
+          "name": "keyword.operator.arrow.phx",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.spread.phx",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.range.phx",
+          "match": "\\.\\."
+        },
+        {
+          "name": "punctuation.terminator.phx",
+          "match": "\\.(?![a-z])"
+        },
+        {
+          "name": "keyword.operator.alternation.phx",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.negation.phx",
+          "match": "!"
+        },
+        {
+          "name": "keyword.operator.phx",
+          "match": "::=|:=|<>|<=|>=|[=<>+\\-*/]"
+        },
+        {
+          "name": "variable.language.anything.phx",
+          "match": "\\b_\\b"
+        }
+      ]
+    }
+  }
+}

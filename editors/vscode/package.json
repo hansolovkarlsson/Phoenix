@@ -1,0 +1,41 @@
+{
+  "name": "phoenix",
+  "displayName": "Phoenix",
+  "description": "Syntax colouring, bracket matching and comment toggling for Phoenix .phx descriptions",
+  "version": "0.1.0",
+  "publisher": "hansolovkarlsson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hansolovkarlsson/Phoenix",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "phx",
+        "aliases": [
+          "Phoenix",
+          "phx"
+        ],
+        "extensions": [
+          ".phx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "phx",
+        "scopeName": "source.phx",
+        "path": "./syntaxes/phx.tmLanguage.json"
+      }
+    ]
+  }
+}

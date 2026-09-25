@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `.phx` in colour, in VS Code
+
+**`editors/vscode/` is an extension for `.phx` descriptions**: comments,
+literals and the `{}` holes in them, directives, the rule a production
+defines, the attribute a pass clause defines, references, nodes, labels and
+the library are each coloured, brackets match, and `Cmd+/` writes `(* … *)`.
+It is installed by linking the directory into `~/.vscode/extensions`, which
+[its README](../editors/vscode/README.md) shows.
+
+It is checked against the notation's own description of itself:
+`languages/phx/phoenix.phx` lexes every `.phx` file in the repository, and
+the colouring has to agree with it about every comment and every literal.
+`python3 editors/vscode/test.py` runs that; it is not part of `make test`,
+which needs nothing outside the repository.
+
+---
+
 ## 2026-09-25: a C function can return a pointer
 
 **`int *f()` compiles.** A function in the C subset returned an `int`, a
