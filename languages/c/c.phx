@@ -108,15 +108,16 @@ space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
 block-comment = "/*" { ! "*/" } "*/" .
 
-(* Two characters before one, every time: `<` first would leave the `=` of
+(* Three characters before two before one, every time: `<` first would leave the `=` of
  * `<=` behind, and the error would surface at the token after it. It matters
  * most for `&&`, since 2026-09-25: before it was a token, `a && b` was lexed
  * as two `&`s, and the day binary `&` arrives that spelling would parse, as
  * `a & (&b)`, which is ROADMAP 6.3's reason for building `&&` first. *)
-symbol = "==" | "!=" | "<=" | ">=" | "->" | "&&" | "||"
-       | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%="
+symbol = "<<=" | ">>="
+       | "==" | "!=" | "<=" | ">=" | "->" | "&&" | "||" | "<<" | ">>"
+       | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
        | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "="
-       | "&" | "!" | "[" | "]" | "." .
+       | "&" | "|" | "^" | "~" | "!" | "?" | ":" | "[" | "]" | "." .
 
 %skip space line-comment block-comment .
 
@@ -268,7 +269,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * count at all, and one node would have to spell both the same. *)
           | b:base s:{ "*" } n:name "[" c:integer "]" ";"
                    -> LocalArray(name: $n, base: $b, stars: size($s), count: int($c))
-          | b:base s:{ "*" } n:name "=" e:expression ";"
+          | b:base s:{ "*" } n:name "=" e:assignment ";"
                    -> LocalInit(name: $n, base: $b, stars: size($s), value: $e)
           | b:base s:{ "*" } n:name ";"
                    -> Local(name: $n, base: $b, stars: size($s), count: 0)
@@ -289,13 +290,20 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | block
           | e:expression ";"                        -> Discard(value: $e) .
 
-(* C's expression grammar, nine of its fifteen levels. `lib/expression.phx`
+(* C's expression grammar, all fifteen of its levels. `lib/expression.phx`
  * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
  * it, and C's is written here a level at a time as the constructs arrive.
  * The shape is the module's, though, and so is the fold: `$$` is what has
  * been built so far, and an action naming it replaces that, which is what
  * makes `100 - 50 - 25` group to the left without anybody saying so. *)
-expression = assignment .
+expression = assignment { "," a:assignment -> Comma(left: $$, right: $a) } .
+
+(* **The comma operator is the loosest level**, since 2026-09-25, and so is
+ * what `expression` means: C11 6.5.17 evaluates the left, throws it away and
+ * is worth the right. That is also why an argument and an initialiser are
+ * *not* an `expression`, and read an `assignment` instead: `f(a, b)` is two
+ * arguments and `int x = 1, y;` would otherwise be a comma. A subscript, a
+ * condition and a parenthesis take the whole thing, as C's do. *)
 
 (* Assignment is an expression in C, worth the value assigned, and it groups
  * to the right: `a = b = 21` sets both. What is on the left is a **place**
@@ -308,7 +316,7 @@ expression = assignment .
 assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
            | p:place o:compound a:assignment
                -> Update(place: $p, op: $o, value: $a, post: false)
-           | logical-or .
+           | conditional .
 
 (* **A compound assignment changes a place in place**, since 2026-09-25, and
  * is not built as `a = a + b`: C11 6.5.16.2 says `a` is evaluated once, and
@@ -316,7 +324,14 @@ assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
  * `++` and `--` build too: C11 6.5.3.1 defines `++a` as `a += 1`, and `a++`
  * is the same step worth the value from before it, which is `post`. The
  * operator is kept as written, for the messages. *)
-compound = "+=" | "-=" | "*=" | "/=" | "%=" .
+compound = "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>=" .
+
+(* **`?:` is one arm or the other, never both**, C11 6.5.15, and groups to
+ * the right: `a ? b : c ? d : e` is `a ? b : (c ? d : e)`. The middle takes
+ * a whole `expression`, since nothing can end it early but the `:`. *)
+conditional = c:logical-or "?" t:expression ":" f:conditional
+                -> Choose(cond: $c, then: $t, other: $f)
+            | logical-or .
 
 (* **`||` and `&&`**, since 2026-09-25, the loosest levels below assignment:
  * `a || b && c` is `a || (b && c)`, and both group to the left. They are one
@@ -326,8 +341,15 @@ compound = "+=" | "-=" | "*=" | "/=" | "%=" .
  * an operand's value. *)
 logical-or  = logical-and { "||" logical-and
                               -> Logical(op: $1, left: $$, right: $2) } .
-logical-and = equality    { "&&" equality
+logical-and = bit-or      { "&&" bit-or
                               -> Logical(op: $1, left: $$, right: $2) } .
+
+(* **The bitwise three sit between `&&` and the comparisons**, since
+ * 2026-09-25, which is C's order and its famous trap: `a & b == c` is
+ * `a & (b == c)`. They are arithmetic, and a `Binary` like `+`. *)
+bit-or  = bit-xor { "|" bit-xor -> Binary(op: $1, left: $$, right: $2) } .
+bit-xor = bit-and { "^" bit-and -> Binary(op: $1, left: $$, right: $2) } .
+bit-and = equality { "&" equality -> Binary(op: $1, left: $$, right: $2) } .
 
 (* A place is somewhere a value can be **put**, and it is the one thing `&`
  * can be asked for. There are two: a name, and a dereference of anything.
@@ -369,8 +391,10 @@ place = suffixed
  * `0 == 1 < 2` is `0 == (1 < 2)`. *)
 equality       = relational     { ( "==" | "!=" ) relational
                                     -> Compare(op: $1, left: $$, right: $2) } .
-relational     = additive       { ( "<" | "<=" | ">" | ">=" ) additive
+relational     = shift          { ( "<" | "<=" | ">" | ">=" ) shift
                                     -> Compare(op: $1, left: $$, right: $2) } .
+shift          = additive       { ( "<<" | ">>" ) additive
+                                    -> Binary(op: $1, left: $$, right: $2) } .
 
 additive       = multiplicative { ( "+" | "-" ) multiplicative
                                     -> Binary(op: $1, left: $$, right: $2) } .
@@ -390,6 +414,8 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * declarations give above. *)
 unary   = "-" u:unary -> Negate(value: $u)
         | "!" u:unary -> Not(value: $u)
+        | "~" u:unary -> Invert(value: $u)
+        | "+" u:unary -> Plus(value: $u)
         | "++" p:place -> Update(place: $p, op: "++", value: Number(text: "1"), post: false)
         | "--" p:place -> Update(place: $p, op: "--", value: Number(text: "1"), post: false)
         | "&" p:place -> Addr(place: $p)
@@ -453,7 +479,7 @@ primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
         | "(" expression ")" -> $2 .
 
 args = [ arg { "," b:arg -> $b } ] -> $1 .   (* `-> $1` as for params *)
-arg  = e:expression -> Arg(value: $e) .
+arg  = e:assignment -> Arg(value: $e) .
 
 (* ------------------------------------------------------------------ *)
 (* Pass one: the questions about functions that no order can answer.   *)
@@ -1054,7 +1080,9 @@ arg  = e:expression -> Arg(value: $e) .
            : width = $place.width
            : tag   = $place.tag
            : arith = lookup([["++", "+"], ["--", "-"], ["+=", "+"], ["-=", "-"],
-                             ["*=", "*"], ["/=", "/"], ["%=", "%"]], $op, "?")
+                             ["*=", "*"], ["/=", "/"], ["%=", "%"], ["&=", "&"],
+                             ["|=", "|"], ["^=", "^"], ["<<=", "<<"], [">>=", ">>"]],
+                            $op, "?")
            ! $place.aggregate and $place.type > 0
                : "'{}' is given an array, and an array is not something a value can be put in" of $op
            ! not $place.lvalue
@@ -1135,6 +1163,49 @@ arg  = e:expression -> Arg(value: $e) .
    * 6.5.3.3 and 6.5.13 to 6.5.14, so a struct is refused in them for the same
    * reason. Each is an `int`, 0 or 1, which is what `type` and `width` say
    * already when nothing says otherwise. *)
+  (* **`~` and unary `+` promote**, C11 6.5.3.3: a `char` comes out an `int`,
+   * so `sizeof(+c)` is 4 where `sizeof(c)` is 1, and that is the whole of
+   * what `+` does. Both want a number. *)
+  Invert  : width = lookup([[true, 8]], $value.wide, 4)
+          ! $value.record : "'~' wants a number, and this is 'struct {}'" of $value.tag
+          ! $value.type > 0 : "'~' wants a number, and this is a pointer" .
+  Plus    : width = lookup([[true, 8]], $value.wide, 4)
+          ! $value.record : "'+' wants a number, and this is 'struct {}'" of $value.tag
+          ! $value.type > 0 : "'+' wants a number, and this is a pointer" .
+
+  (* **A comma is worth its right side**, C11 6.5.17, and is not a place.
+   * An array on the right has decayed already, so `sizeof((0, a))` is a
+   * pointer's 8 and not the array's, which `comma.c` asks. *)
+  Comma   : type  = $right.type
+          : width = $right.width
+          : tag   = $right.tag
+          : aggregate = $right.aggregate .
+
+  (* **`?:` brings its two arms to one type**, C11 6.5.15. Two numbers are
+   * the usual arithmetic conversions, so a `long` arm makes it a `long` and
+   * two `char`s make an `int`; two pointers must be to the same type; two
+   * structs must be the same struct, and the answer is one. What `cc` also
+   * takes and this does not: a pointer on one side and `0` on the other, a
+   * null pointer constant, which would need this pass to know a literal 0
+   * from any other `int`; and pointers to two types, which `cc` only warns
+   * about and which has no one type to be. *)
+  Choose  : type  = $then.type
+          : width = lookup([[0, lookup([[true, 8]], $then.wide or $other.wide, 4)]],
+                           $then.type, $then.width)
+          : tag   = $then.tag
+          : aggregate = $then.record
+          ! $cond.record
+              : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag
+          ! $then.record <> $other.record
+              : "'?:' has a struct on one side and not on the other"
+          ! $then.record and $other.record and $then.tag <> $other.tag
+              : "'?:' has 'struct {}' on one side and 'struct {}' on the other" of $then.tag, $other.tag
+          ! ($then.type > 0) <> ($other.type > 0)
+              : "'?:' has a pointer on one side and a number on the other, and this subset has no null pointer constant"
+          ! $then.type > 0 and $other.type > 0
+              and ($then.type <> $other.type or $then.width <> $other.width or $then.tag <> $other.tag)
+              : "'?:' has pointers to two different types" .
+
   Not     ! $value.record
               : "'!' tests a number or a pointer, and this is 'struct {}'" of $value.tag .
   Logical ! $left.record or $right.record
@@ -1288,9 +1359,27 @@ arg  = e:expression -> Arg(value: $e) .
             and ($left.type <> $right.type or $left.width <> $right.width
                  or $left.tag <> $right.tag)
           : "'-' takes two pointers only when they point at the same type" .
+  (* **A shift is the type of its left side**, C11 6.5.7, and not of the
+   * wider of the two: `1 << (long)3` is an `int`, and `shifts.c` asks its
+   * `sizeof`. Both sides are integers, so a pointer or a struct on either is
+   * C's refusal. The emit pass shifts in the left side's register, and a
+   * `long` count is read from its low half, which is all a shift reads. *)
+  Binary(op: "<<") : width = lookup([[true, 8]], $left.wide, 4)
+      ! $left.record or $right.record
+          : "'{}' wants numbers, and this is 'struct {}'"
+              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+      ! $left.type > 0 or $right.type > 0
+          : "'{}' does not take a pointer" of $op .
+  Binary(op: ">>") : width = lookup([[true, 8]], $left.wide, 4)
+      ! $left.record or $right.record
+          : "'{}' wants numbers, and this is 'struct {}'"
+              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+      ! $left.type > 0 or $right.type > 0
+          : "'{}' does not take a pointer" of $op .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, and integers on
-   * both sides of `%`, which since 2026-09-25 is one of these too. So a pointer
-   * on either is C's own refusal rather than this subset's. *)
+   * both sides of `%`, which since 2026-09-25 is one of these too, and so are
+   * `&`, `|` and `^`, C11 6.5.10 to 6.5.12. So a pointer on either is C's own
+   * refusal rather than this subset's. *)
   Binary : width = lookup([[true, 8]], $left.wide or $right.wide, 4)
          ! $left.record or $right.record
       : "'{}' wants numbers, and this is 'struct {}'"

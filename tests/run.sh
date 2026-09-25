@@ -1775,6 +1775,33 @@ refuses "a '+=' to a number" 'and found "+="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/add-to-a-number.c"
 refuses "a '++' on an assignment" "'++' wants somewhere a value is kept" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-assignment.c"
+# The bitwise operators, the shifts, `~`, unary `+` and `?:`, since 2026-09-25.
+# The first nine `cc` refuses too.
+refuses "a '~' of a pointer" "'~' wants a number, and this is a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/invert-a-pointer.c"
+refuses "a '+' of a pointer" "'+' wants a number, and this is a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/plus-a-pointer.c"
+refuses "a pointer shifted" "'<<' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/shift-a-pointer.c"
+refuses "a pointer and-ed" "'&' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/and-a-pointer.c"
+refuses "a struct or-ed" "'|' wants numbers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/or-a-struct-bitwise.c"
+refuses "a struct as the choice" "'struct t' is a condition" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-as-a-choice.c"
+refuses "a struct on one side of '?:' only" "'?:' has a struct on one side and not on the other" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-struct-or-a-number.c"
+refuses "two kinds of struct" "'?:' has 'struct t' on one side and 'struct u' on the other" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-structs.c"
+refuses "a pointer shifted in place" "'<<=' does not take a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/shift-a-pointer-in-place.c"
+# These two `cc` compiles, and this subset declines by name: a pointer beside
+# `0` needs a null pointer constant, a literal 0 known from any other `int`,
+# and two kinds of pointer have no one type for the answer. `cc` only warns.
+refuses "a pointer or 0" "this subset has no null pointer constant" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-zero.c"
+refuses "pointers to two types" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-pointers.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

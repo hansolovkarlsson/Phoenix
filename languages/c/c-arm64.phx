@@ -299,7 +299,9 @@
                                     of $r, $r, $r, $r, $r, $r, $r]],
                            $arith,
                            "\t{} {}0, {}0, {}1\n"
-                             of lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]],
+                             of lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"],
+                                        ["&", "and"], ["|", "orr"], ["^", "eor"],
+                                        ["<<", "lsl"], [">>", "asr"]],
                                        $arith, "?"), $r, $r, $r)
          : store  = lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0")
          : narrow = lookup([[1, "\tsxtb w0, w0\n"]], $place.size,
@@ -520,6 +522,14 @@
    * `(0 - 7) / 2` is -3 on both routes. A quotient by zero is undefined in C
    * and 0 on this processor, and no program in the oracle asks.
    *
+   * **`&`, `|`, `^` and the shifts are one instruction each**, since
+   * 2026-09-25, in the same template as `+`. `>>` is `asr`, an arithmetic
+   * shift that keeps the sign, because C11 6.5.7p5 leaves a negative left
+   * side to the implementation and this machine's C is `cc`, which shifts
+   * arithmetically: `-16 >> 2` is -4 on both routes. A shift takes the
+   * register of its left side, as the `types` pass typed it, and reads only
+   * the low bits of the count, so a `long` count needs no conversion.
+   *
    * **`%` is the division and then a multiply-subtract**, since 2026-09-25:
    * `sdiv` leaves the quotient in `{r}2` and `msub` takes quotient times
    * divisor from the dividend. arm64 has no remainder instruction, and C11
@@ -587,7 +597,9 @@
    * Which of the three a node is, the `types` pass has already said: a
    * pointer on each side is a difference, a pointer answer is a step, and
    * anything else is two `int`s. *)
-  Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"]], $op, "?")
+  Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"],
+                                ["&", "and"], ["|", "orr"], ["^", "eor"],
+                                ["<<", "lsl"], [">>", "asr"]], $op, "?")
          : both       = $left.type > 0 and $right.type > 0
          : r          = lookup([[true, "x"]], $wide, "w")
          : plain      = lookup([["%", "\tsdiv {}2, {}0, {}1\n\tmsub {}0, {}2, {}1, {}0\n"
@@ -617,6 +629,30 @@
 
   Negate : out = "{}\tneg {}0, {}0\n"
              of $value.out, lookup([[true, "x"]], $wide, "w"), lookup([[true, "x"]], $wide, "w") .
+
+  (* `~` is `mvn`, in the register its promoted type wants, and unary `+`
+   * is nothing at all: its value was already promoted by the load. *)
+  Invert : out = "{}\tmvn {}0, {}0\n"
+             of $value.out, lookup([[true, "x"]], $wide, "w"), lookup([[true, "x"]], $wide, "w") .
+  Plus   : out = $value.out .
+
+  (* **A comma runs its left side and keeps its right.** The left's value is
+   * left in `x0` and overwritten, which is all throwing it away takes. *)
+  Comma  : out  = "{}{}" of $left.out, $right.out
+         : addr = $out .
+
+  (* **`?:` is an `if` that is worth something**: the condition, a branch to
+   * the second arm when it is zero, and each arm leaving its value in `x0`.
+   * An `int` arm of a `long` answer is sign-extended where it is chosen. A
+   * struct arm leaves its address, as any struct does, so a member of the
+   * answer or a copy from it reads the one that was chosen. `conditional.c`
+   * counts which arm ran. *)
+  Choose : n     = $label : label = $label + 1
+         : tconv = lookup([[true, "\tsxtw x0, w0\n"]], $wide and $then.type = 0 and not $then.wide, "")
+         : oconv = lookup([[true, "\tsxtw x0, w0\n"]], $wide and $other.type = 0 and not $other.wide, "")
+         : out   = "{}\tcmp x0, #0\n\tb.eq L{}.other\n{}{}\tb L{}.chosen\nL{}.other:\n{}{}L{}.chosen:\n"
+             of $cond.out, $n, $then.out, $tconv, $n, $n, $other.out, $oconv, $n
+         : addr  = $out .
 
   (* **`!` is a comparison with zero**, since 2026-09-25, and worth what
    * C11 6.5.3.3 says `(0 == e)` is worth: 1 or 0. The test is on all of `x0`

@@ -501,9 +501,11 @@ document has the order of the whole arc, and this page copies none of it.
 is complete**, closed on 2026-09-23 when `long` made its last two
 divergences agree. **Its second, [6.2](COMPLETED.md#62-a-function-that-returns-a-pointer),
 a function that returns a pointer, was opened and closed on 2026-09-25.**
-**Its third is [6.3](#63-the-operators), the operators**, opened the same
-day with what breaks without them written down first, the way every entry
-arrives.
+**Its third, [6.3](COMPLETED.md#63-the-operators), the rest of C's
+expression operators, was opened and closed the same day.** Nothing in the
+arc is open here until the next construct is started. The next group is the
+statements, `break`, `continue`, `do`, `switch` and `goto`, and it arrives
+the way every entry does, with what breaks without it written down first.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -513,90 +515,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.3 The operators
-
-The subset has `+ - * /`, unary `-`, the six comparisons, `=`, `&`, `*`,
-`sizeof`, `[]`, `.` and `->`, and nothing else. **Every oracle program so far
-is written around the rest**: `n - (n / 10) * 10` for `%`, an `if` inside
-an `if` for `&&`, and `i = i + 1` in every loop. This entry is the rest of
-C's expression operators, apart from casts, and it comes before the
-statements because they lean on it: a test of `break` is naturally
-`for (i = 0; i < n; i++)` with an `&&` in the condition, and a `case` label
-is a constant expression that usually has an operator in it.
-
-**Four programs show what breaks without it.** `cc` compiles and runs each.
-They join `languages/c/tests/oracle/` with the part that makes them agree,
-since a program there that Phoenix cannot compile fails the suite:
-
-| program | `cc` exits | Phoenix stops at |
-| --- | --- | --- |
-| `remainder.c`: `17 % 5`, `-17 % 5`, `17 % -5`, and a `long` `% 7` | 24 | the first `%`, in the lexer |
-| `logic.c`: `&&` and `\|\|` whose right side prints, `!0`, `!7` | 3, printing a newline and `z` | the first `\|\|`, in the lexer |
-| `increment.c`: `*p++`, `*++p`, `q++` on a struct pointer, `c += 1` on a `char` of 127, `x[k++] += 10`, `p[-1]--`, and `+= -= *= /=` | 24 | the first `++`, in the parser |
-| `bits.c`: `& \| ^ ~ << >>`, `?:`, the comma operator and unary `+` | 40 | the first `\|`, in the lexer |
-
-**Built in four parts, in this order**, each with the suite green:
-
-1. **`%`**, next to `/`: `sdiv` and then `msub`, on `w` or `x` registers as
-   `/` already chooses. *Built 2026-09-25*: `remainder.c` and three more
-   agree with `cc`, and the `types` pass needed nothing, because its general
-   `Binary` clause already refused a pointer or a struct on either side of
-   an operator that is neither `+` nor `-`.
-2. **`!`, `&&` and `||`**, whose right side runs only when the left has not
-   decided the answer. The emit pass already makes labels for `if` and
-   `while`. *Built 2026-09-25*: `logic.c` and four more agree with `cc`,
-   and `&&` is a token, so the hazard below is closed. `&&` and `||` are
-   one node and one template, differing in one letter of a branch.
-3. **`++`, `--` and the compound assignments.** Each reads a place and writes
-   it back, so the place has to be worked out once: `x[k++] += 10` adds 10 to
-   `x[0]` and moves `k` once. A pointer steps by its element's width, which
-   is twelve for the struct in `increment.c`, and a `char` has to be narrowed
-   on the way back in. *Built 2026-09-25*: `increment.c` and five more agree
-   with `cc`. All of them are one node, `Update`, and a postfix `++` became
-   a suffix in the same fold as `[ ]` and `->`, because `q++->c` is C and a
-   `++` outside the fold ended the chain there.
-4. **Bitwise `& | ^ ~`, the shifts, `?:`, the comma operator and unary `+`.**
-   Mechanical once the three before them are in, apart from the grammar work
-   below.
-
-**What each has to get right, and what the oracle is there to catch:**
-
-- **`%` truncates toward zero**, C11 6.5.5p6, so `-17 % 5` is -2 and
-  `17 % -5` is 2. It is the identity `(a/b)*b + a%b == a` over the `/` that
-  is already here.
-- **`&&` and `||` are worth 0 or 1**, an `int`, and not the value of their
-  operand: `0 || 3` is 1. `logic.c` prints `z` and not `x` or `y`, and that
-  output is the part a wrong short circuit changes.
-- **An `int` meeting a `long` is sign-extended**, at every operator here, as
-  at the ones already built: `n % 7` and `n += n` are `long` arithmetic.
-- **`>>` of a negative number** is implementation-defined in C11 6.5.7p5.
-  Apple's arm64 shifts arithmetically, and `cc` is the oracle, so `asr` and
-  not `lsr`. A shift by the width or more is undefined, and no program here
-  will write one.
-- **`?:` converts its two arms to one type**, C11 6.5.15: an `int` arm and
-  a `long` arm make a `long`. Two pointers, or two of the same struct, are
-  the other cases, and the `types` pass has to refuse the pairs `cc` refuses.
-
-**Three places where the grammar has to be careful:**
-
-- **`&&` has to reach the lexer before binary `&` does.** Today `&&` lexes
-  as two `&` tokens and fails in the parser. If binary `&` came first, `a &&
-  b` would parse as `a & (&b)`, the address of `b`, and some programs would
-  compile into a wrong answer. Part 2 comes before part 4 partly for this
-  reason. The same goes for `||` before `|`, `<<` before `<` and `<=`, `--`
-  and `-=` before `-`, and `++` and `+=` before `+`.
-- **The comma operator can't be inside an argument list.** `arg` reads an
-  `expression`, so if `expression` became the comma operator, `f(a, b)`
-  would be one argument. An argument, like a declaration's initialiser, is
-  C11's *assignment-expression*, one level below the comma.
-- **`++` and the compound assignments take a place**, like `=` does, so the
-  `place` rule is what they read, and `lvalue` is still what the `types`
-  pass checks.
-
-*Not in this step:* **casts**, which go with the types (`unsigned`, `short`
-and the conversions between them), since `(x) * y` is the typedef question
-[1.8](COMPLETED.md#18-names-the-parse-keeps) answered, asked again; and every
-statement, which is the group that comes after this one. **The entry closes**
-when the four programs, and whatever each part adds to them, agree with `cc`,
-with none diverging.

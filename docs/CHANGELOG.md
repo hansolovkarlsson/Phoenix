@@ -16,10 +16,31 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: the bitwise operators, the shifts, `?:` and the comma in C
+
+**The C subset has every expression operator C has except the cast.** The
+last part of [the operators](COMPLETED.md#63-the-operators) brings `&`, `|`,
+`^`, `~`, `<<` and `>>`, their compound assignments `&=`, `|=`, `^=`, `<<=`
+and `>>=`, the conditional `?:`, the comma operator and unary `+`. They take
+C's precedence, so `a & b == c` is `a & (b == c)` as it is in C. `>>` of a
+negative number shifts in its sign, as `cc` does here, and a shift is the
+type of its left side. `?:` runs one arm, and takes two numbers, two pointers
+to one type or two of the same struct. A comma is two arguments inside a
+call, as C says, and an operator anywhere else.
+
+Two things `cc` compiles are refused: `?:` with a pointer on one side and `0`
+on the other, and `?:` with pointers to two different types.
+
+**Tests:** 333 → 344, for eleven refusals, nine of them ones `cc` makes too.
+Six programs join the C oracle: 223 agree with `cc`, 108 are refused, none
+diverges.
+
+---
+
 ## 2026-09-25: `++`, `--` and the compound assignments in C
 
 **The C subset has `++` and `--`, before and after, and `+=`, `-=`, `*=`,
-`/=` and `%=`**, the third part of [ROADMAP 6.3](ROADMAP.md#63-the-operators).
+`/=` and `%=`**, the third part of [ROADMAP 6.3](COMPLETED.md#63-the-operators).
 The place is worked out once, so `x[k++] += 10` moves `k` once and a call in
 a subscript runs once. A pointer steps by what it points at, twelve bytes for
 a struct of three `int`s. The arithmetic is done at the wider of the two
@@ -54,7 +75,7 @@ of the same pairing.
 ## 2026-09-25: `!`, `&&` and `||` in C
 
 **The C subset has C's logical operators**, the second part of
-[ROADMAP 6.3](ROADMAP.md#63-the-operators). `&&` and `||` evaluate their
+[ROADMAP 6.3](COMPLETED.md#63-the-operators). `&&` and `||` evaluate their
 right side only when the left has not already decided the answer, so
 `p && *p` is safe and a call on the right of a decided `||` is never made.
 All three are worth 0 or 1, an `int`, whatever they were given: `0 || 3` is
@@ -69,7 +90,7 @@ oracle: 211 agree with `cc`, 89 are refused, none diverges.
 ## 2026-09-25: `%` in C
 
 **The C subset has `%`**, the remainder, on `int`, `char` and `long`
-operands, the first of the operators [ROADMAP 6.3](ROADMAP.md#63-the-operators)
+operands, the first of the operators [ROADMAP 6.3](COMPLETED.md#63-the-operators)
 lists. It truncates toward zero as `/` does, so `-7 % 3` is -1 and `7 % -3`
 is 1, and an `int` meeting a `long` is widened first. A pointer or a struct on
 either side is refused, as `cc` refuses it.
