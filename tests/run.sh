@@ -1940,14 +1940,13 @@ refuses "a member of a call, assigned" "a member of an assignment or a call is a
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-a-call-assigned.c"
 refuses "and its address taken" "'&' wants somewhere a value is kept" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-member-of-a-call-addressed.c"
-# Three that `cc` compiles and this subset declines by name. A `char` or a
-# pointer would come back in a register nothing here narrows or widens, and
-# `main` returning a struct, which `cc` only warns about, exits with whatever
-# the struct left in `w0`: there is no answer for the oracle to compare.
+# Two that `cc` compiles and this subset declines by name. A `char` would
+# come back in a register nothing here narrows, and `main` returning a struct,
+# which `cc` only warns about, exits with whatever the struct left in `w0`:
+# there is no answer for the oracle to compare. A pointer was the third until
+# 2026-09-25, ROADMAP 6.2, and its program is in the oracle now.
 refuses "a function returning a char" "'f' returns a char" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returns-a-char.c"
-refuses "a function returning a pointer" "'f' returns a pointer" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-returns-a-pointer.c"
 refuses "main returning a struct" "'main' returns an int" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/main-returns-a-struct.c"
 # **`long`**, since 2026-09-23. A caller widens an `int` it passes to a `long`

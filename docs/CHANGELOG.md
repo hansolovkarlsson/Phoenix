@@ -16,6 +16,27 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: a C function can return a pointer
+
+**`int *f()` compiles.** A function in the C subset returned an `int`, a
+`long` or a struct; it can now return a pointer, to any of them, written
+with stars before its name or through a typedef. That is what lets a program
+declare `malloc`, with a `char *` prototype, and use what it gives back. A
+function returning a pointer to a struct was the care the change needed: it
+has a struct's tag and is not a struct, and three places in the compiler
+took one for the other until each was asked for no stars as well.
+
+A `long` index into a pointer, built on 2026-09-23 as a 64-bit multiply and
+add, had no program that could tell it from the 32-bit one it replaced,
+because only an object over 2 GB could. One now does: it `malloc`s three
+billion bytes and indexes near the end. `void` is still not in the subset.
+
+**Tests:** 321 → 320. The check that refused a function returning a pointer
+is gone, and its program is one of six new ones the C oracle holds against
+`cc`: 202 agree, 84 are refused, none diverges.
+
+---
+
 ## 2026-09-24: a test that never finishes fails instead of hanging
 
 **`make test` can no longer hang.** Every program the suite runs, `phx`

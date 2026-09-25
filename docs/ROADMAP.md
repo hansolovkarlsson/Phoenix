@@ -499,9 +499,11 @@ reaches a machine — are outside the grammar, not a stronger grammar. That
 document has the order of the whole arc, and this page copies none of it.
 **Its first step, [6.1](COMPLETED.md#61-step-one--a-subset-that-runs-and-cc-as-its-oracle),
 is complete**, closed on 2026-09-23 when `long` made its last two
-divergences agree. **Its next construct is [6.2](#62-a-function-that-returns-a-pointer)**,
-opened 2026-09-25 with what breaks without it written down first, the way
-every entry arrives.
+divergences agree. **Its second, [6.2](COMPLETED.md#62-a-function-that-returns-a-pointer),
+a function that returns a pointer, was opened and closed on 2026-09-25.**
+Nothing in the arc is open here until the next construct is started, and it
+arrives the way every entry does, with what breaks without it written down
+first.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -511,47 +513,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.2 A function that returns a pointer
-
-A function here returns an `int`, a `long` or a struct, and nothing else. C
-returns pointers all the time, and the first one any program meets is
-`malloc`'s. **Two programs show what breaks without it**, and `cc` compiles and
-runs both:
-
-```c
-int *second(int *p) { return p + 1; }
-int main() { int a[2]; a[1] = 9; return *second(a); }
-```
-
-```c
-char *malloc(long n);
-int main() { char *p; p = malloc(16); p[3] = 7; return p[3]; }
-```
-
-`cc` exits 9 and 7. Phoenix stops at the first `*` of each, `expected name,
-and found "*"`, because **it is refused in three places and the first is the
-grammar**:
-
-| | |
-| --- | --- |
-| the grammar | `function` reads a `base` and then a name, with no stars between them. `int *f()` is a syntax error, as the comment above the rule says. Only a typedef of a pointer gets past it, which is what `tests/refused/function-returns-a-pointer.c` does |
-| the `locals` pass | refuses `$ret.ptrs > 0` by name, on `Prototype` and `Function` alike, because nothing on the way out of a function widens or narrows `x0` |
-| the `types` pass | `rets` records a function as `[tag, base width]`, with no stars, and `Call` sets no `type`, so a call is typed an `int` whatever it returns. Lifting the refusal alone would read a returned pointer as a 32-bit number: the divergence the oracle is there to see |
-
-So the step is stars on a function's name in the grammar, the stars kept in
-`rets` and a call's `type` read from them, the refusal lifted, and a `return`
-checked against a pointer the way an assignment already is. Whether the emit
-pass needs anything is for the oracle to say: a pointer is not `wide`, which
-is kept for `long`, so the `return` template may already leave all of `x0`
-alone, and that is a prediction, not a finding.
-
-**The witness this entry exists for** is the one waiting at `madd` in
-`c-arm64.phx`: a `long` index has no program that tells it from `smaddl`,
-because only an object over 2 GB could, and the only way this subset can get
-one is `malloc`. A 2 GB `malloc` indexed near its end is that program, and it
-runs under a harness that can now say a witness did not finish.
-
-*Not in this step:* `void`, and so `void *`, which `malloc` really returns. A
-prototype that says `char *` is C that `cc` compiles, and `void` is a type of
-its own with rules of its own: it waits for a program that needs it.

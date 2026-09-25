@@ -378,11 +378,11 @@
        : down nargs   = size($args)
        : argn   = $held
        : argreg = $heldreg
-       : small  = $tag <> "" and $width <= 16
-       : large  = $tag <> "" and $width > 16
+       : small  = $aggregate and $width <= 16
+       : large  = $aggregate and $width > 16
        : room   = (($width + 15) div 16) * 16
        : tpos   = $framebase + $temps + $room
-       : temps  = $temps + lookup([[true, $room]], $tag <> "", 0)
+       : temps  = $temps + lookup([[true, $room]], $aggregate, 0)
        : out = "{}{}\tadd sp, sp, #{}\n{}\tbl _{}\n{}"
            of join($args.out), join($args.load), 16 * size($args),
               lookup([[true, "\tsub x8, x29, #{}\n" of $tpos]], $large, ""),
@@ -506,13 +506,12 @@
    * *A `long` index is a `madd`*, since 2026-09-23: the same multiply and
    * add over the whole of both registers, because a `long` is already
    * sixty-four bits and sign-extending its low half would throw the high
-   * half away. **It has no witness, and cannot have one yet.** Below 2^31
-   * elements the low half sign-extended is the same number, so only an
-   * object over 2 GB could tell, and this subset cannot get one: no array
-   * that size fits in a frame, and `malloc` returns a pointer, which no
-   * function here may. Replaced by `smaddl`, every program agreed. It is
-   * kept because it is what the type says, and the day a function can
-   * return a pointer, a 2 GB `malloc` indexed near its end is the program.
+   * half away. Below 2^31 elements the low half sign-extended is the same
+   * number, so only an object over 2 GB can tell, and no array that size
+   * fits in a frame. **It had no witness until 2026-09-25**, when a function
+   * could return a pointer and so `malloc` could be declared:
+   * `long-index-past-two-gigabytes.c` indexes three billion bytes near their
+   * end, and with `smaddl` here it is the one program that disagrees.
    *
    * *The division gained one with `struct`.* It is **signed** because a
    * difference can be negative. While every width was a power of two, `asr`
@@ -619,11 +618,12 @@
    * *A function returning a large struct keeps `x8`* in the first of its
    * `temps`, sixteen bytes held back from the start for it, and stores it
    * there before anything else in the prologue can disturb it. `retsize` is
-   * 0 for an `int`, which is what every `Return` asks first. *)
+   * 0 for anything not a struct, a pointer to one included, which is what
+   * every `Return` asks first. *)
   Function : down fname     = $name
            : down framebase = $frame
-           : down retsize   = lookup([[true, $ret.basew]], $ret.tagname <> "", 0)
-           : down retlong   = $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 8
+           : down retsize   = lookup([[true, $ret.basew]], $rptrs = 0 and $ret.tagname <> "", 0)
+           : down retlong   = $rptrs = 0 and $ret.tagname = "" and $ret.basew = 8
            : down x8slot    = $frame + 8
            : down temps     = lookup([[true, 16]], $retsize > 16, 0)
            : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
