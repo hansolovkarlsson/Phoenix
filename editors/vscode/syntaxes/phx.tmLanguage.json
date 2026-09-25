@@ -333,7 +333,7 @@
         },
         {
           "name": "support.function.phx",
-          "match": "\\b(?:bind|lookup|defined|positions|int|float|text|floor|ceiling|round|truncate|quotient|remainder|size|sizes|at|slice|split|join|flatten|each|bytes)(?=\\s*\\()"
+          "match": "\\b(?:bind|lookup|defined|positions|int|float|text|floor|ceiling|round|truncate|quotient|remainder|bitand|bitor|bitxor|size|sizes|at|slice|split|join|flatten|each|bytes)(?=\\s*\\()"
         },
         {
           "name": "keyword.operator.word.phx",

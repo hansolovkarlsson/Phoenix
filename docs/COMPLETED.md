@@ -13,10 +13,10 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **9,466 lines** hand-written.
+C11, no dependencies, **9,491 lines** hand-written.
 
 The figure usually quoted is ~13,900, and both are right about different
-things: `phoenix/` also holds `runtime.h`, 4,425 generated lines which are the
+things: `phoenix/` also holds `runtime.h`, 4,450 generated lines which are the
 seven runtime files re-emitted as a C string literal so that a compiler `phx`
 writes is one file. Counting it measures what is in the directory; not counting
 it measures what anybody wrote. The runtime is in both numbers, once or twice.

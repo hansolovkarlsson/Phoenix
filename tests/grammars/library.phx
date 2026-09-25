@@ -92,6 +92,12 @@ case = number -> Case(text: $1) .
   (* ---- arithmetic the target's way ---- *)
        ! not (quotient(0 - 7, 2) = 0 - 3)  : "quotient truncates toward zero"
        ! not (remainder(0 - 7, 2) = 0 - 1) : "and remainder carries the sign of the left"
+       ! not (bitand(12, 10) = 8)          : "bitand keeps the bits both have"
+       ! not (bitor(12, 10) = 14)          : "bitor keeps the bits either has"
+       ! not (bitxor(12, 10) = 6)          : "bitxor keeps the bits one has"
+       ! not (bitand(0 - 8, 7) = 0)        : "on two's complement, so -8 has no low bits"
+       ! not (bitxor(9223372036854775807, 0 - 1) = 0 - 9223372036854775807 - 1)
+                                           : "and every one of the sixty-four is there"
 
   (* ---- text ---- *)
        ! not (size("hello") = 5)              : "size counts bytes"

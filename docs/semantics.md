@@ -105,6 +105,18 @@ truncates instead, so a C backend must emit the correction rather than the bare
 **Division by zero is an error.** So is `div` or `mod` by zero, and so is
 negating the most negative integer.
 
+**Bitwise, on the sixty-four bits of two's complement.** `bitand(a, b)`,
+`bitor(a, b)` and `bitxor(a, b)` keep the bits both have, either has and
+exactly one has. A negative integer is its two's complement, so
+`bitand(-1, 255)` is 255 and `bitxor(x, -1)` is `-x - 1`. They are
+functions, not operators, because `and`, `or` and `not` are the booleans'
+words, and none of them can overflow:
+
+```
+bitand(12, 10) =  8     bitor(12, 10) = 14     bitxor(12, 10) = 6
+bitand(-1, 255) = 255   bitor(-8, 3)  = -5     bitxor(5, -1)  = -6
+```
+
 ## Floats
 
 Plain IEEE 754 binary64, with its rules and not Phoenix's: division by zero

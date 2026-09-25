@@ -47,6 +47,14 @@ case = number -> Case(text: $1) .
        ! not (quotient(-7, 2)  = -3) : "quotient truncates"
        ! not (remainder(-7, 2) = -1) : "remainder truncates"
 
+         (* "Bitwise, on the sixty-four bits of two's complement." *)
+       ! not (bitand(12, 10) =  8) : "bitand 12 and 10"
+       ! not (bitor(12, 10)  = 14) : "bitor 12 and 10"
+       ! not (bitxor(12, 10) =  6) : "bitxor 12 and 10"
+       ! not (bitand(-1, 255) = 255) : "a negative is its two's complement"
+       ! not (bitor(-8, 3)   = -5) : "bitor keeps the sign bit"
+       ! not (bitxor(5, -1)  = -6) : "bitxor with -1 is -x - 1"
+
   (* ---- floats: IEEE 754, and they do not trap ---- *)
        ! not (("{}" of 1.0 / 0.0) = "infinity")  : "a float divided by zero"
        ! not (("{}" of (0.0 - 1.0) / 0.0) = "-infinity") : "and the other way"

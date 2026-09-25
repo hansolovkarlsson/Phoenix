@@ -941,6 +941,15 @@ These exist because there is no way to write truncation in terms of flooring in
 a notation with no conditional — and without them an emit pass and an eval pass
 for the same language quietly disagree about negative division.
 
+| | |
+| --- | --- |
+| `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)` | the bits both, either and exactly one of two integers have, on their sixty-four bits of two's complement |
+
+These exist for the same reason: a pass that works out a target language's
+constants before its program runs, C's `case A | B:`, has no way to spell them
+in `+ - * div mod`. They are functions because `and`, `or` and `not` already
+belong to the booleans. None can overflow, and each wants two integers.
+
 ### Text
 
 | | |

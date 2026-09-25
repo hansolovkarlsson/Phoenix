@@ -682,7 +682,8 @@ for want in "does not narrow a float" \
             "cannot split on nothing" \
             "writes one to eight bytes, not 9" \
             "writes one to eight bytes, not 0" \
-            "a float is four or eight bytes"; do
+            "a float is four or eight bytes" \
+            "'bitand' wants two integers"; do
     printf '%s' "$lout" | grep -qF -- "$want" || lmissing="$lmissing [$want]"
 done
 if [ -z "$lmissing" ]; then

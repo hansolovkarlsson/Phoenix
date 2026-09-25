@@ -175,6 +175,7 @@ braces. A nil, a node or a list has no written form.
 | `int(t)`, `int(t, base)`, `float(x)`, `text(x)` | conversions |
 | `floor(f)`, `ceiling(f)`, `round(f)`, `truncate(f)` | float to integer, named |
 | `quotient(a, b)`, `remainder(a, b)` | division that **truncates**, as C does |
+| `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)` | the bits, on 64-bit two's complement |
 | `size(x)` | bytes of text, elements of a list, fields of a node |
 | `sizes(list)` | the same for each element |
 | `at(list, i)` | one-based |

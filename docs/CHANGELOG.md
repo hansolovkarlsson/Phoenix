@@ -16,6 +16,31 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `bitand`, `bitor` and `bitxor` in the library
+
+**The notation changed.** Three functions join the library, next to
+`quotient` and `remainder`:
+
+```
+bitand(12, 10) = 8      bitor(12, 10) = 14      bitxor(12, 10) = 6
+```
+
+Each takes two integers and works on their sixty-four bits, a negative
+integer being its two's complement, so `bitxor(x, -1)` is `-x - 1`. None can
+overflow. They are functions and not operators because `and`, `or` and `not`
+already belong to the booleans. A description that works out another
+language's constants before its program runs needs them, and could not
+write them before in `+ - * div mod`; C's `case A | B:` is the first,
+[ROADMAP 6.5](ROADMAP.md#65-constant-expressions). A compiler written out
+with `-o` has them too. [semantics.md](semantics.md) specifies them, and the
+VS Code extension colours them.
+
+**Tests:** 350 → 350. None added: the notation's own claim files, run
+through `phx` and through a compiler it writes, check eleven more claims,
+and the library's refusals one more, a float given to `bitand`.
+
+---
+
 ## 2026-09-25: `goto` and labels in C
 
 **The C subset has `goto` and labels**, the second part of

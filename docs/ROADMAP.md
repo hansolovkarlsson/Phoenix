@@ -201,6 +201,23 @@ thing about the notation — see [1.3](COMPLETED.md#13-a-way-for-a-description-t
 | `sizes(list)` | the size of each element. The companion to `positions`: that one answers where each thing is, this one how big it is, and neither can be asked any other way |
 | `bytes(list, width)` | a **column** of numbers, each as bytes. Not a new entry — the same function taking a list, the way `bind` takes names pairwise and `each` takes two lists |
 
+C's constant expressions added **three more**, on 2026-09-25, for
+[6.5](#65-constant-expressions):
+
+| | |
+| --- | --- |
+| `bitand(a, b)`, `bitor(a, b)`, `bitxor(a, b)` | the bits of two integers. A pass that works out `case A \| B:` before the program runs has nothing to write it with in `+ - * div mod` |
+
+**What was not added says as much.** C's other three bit operators, `~`,
+`<<` and `>>`, can be written in the notation: `-x - 1`, a multiply by a
+power of two, and a `div` by one, which floors as an arithmetic shift does.
+So they are not in the library, by this rule, and the C description will
+spell them out. The question this section asks of every entry was asked of
+these: whether they were one case of a shape nobody saw. The shape here is
+operators on integers the notation does not have, and the answer was three
+functions and not a fourth kind of operator, because the booleans already
+own the words.
+
 **Both are cases `otherwise` would have covered**, and that is the entry worth
 reading beside this one. They were added while the question looked like *"a map
 over a list"*; it was [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)'s,
@@ -642,7 +659,17 @@ rule for a mechanism, *one is a workaround; two is a mechanism*, and the C
 description is one customer. Against that, three functions are arithmetic,
 the kind of thing `quotient` and `remainder` already are, and not a new form
 of the notation the way a counted repetition would be. The choice is made
-when 6.5 is started, and written here first. A long constant that would overflow
+when 6.5 is started, and written here first.
+
+**Chosen 2026-09-25: the three functions**, `bitand`, `bitor` and `bitxor`,
+added to the library before the rest of 6.5, on 64-bit two's complement.
+The argument that carried it is the one above: they are arithmetic, as
+`quotient` is, and 1.7's rule is about a new form of the notation, which a
+function is not. [semantics.md](semantics.md) says what they are, and six
+claims in `tests/grammars/semantics.phx` and five in `library.phx` hold both
+`phx` and a compiler it writes to that, with a swap of `bitor` for `bitxor`
+caught by both files. The C description does not call them yet: that is the
+rest of this entry. A long constant that would overflow
 the notation's own integers, `9223372036854775807 + 1`, is the other edge:
 C calls it undefined, and here it would stop the compiler with an arithmetic
 error rather than a message, so the fold refuses it by name first.

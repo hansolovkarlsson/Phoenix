@@ -1,10 +1,10 @@
 (* The other half of docs/reference.md § 11: what that page says is an
  * **error**.
  *
- * Four refusals are named there in so many words, and each is a place the
+ * Five refusals are named there in so many words, and each is a place the
  * obvious answer would be wrong rather than absent -- a narrowing with no
  * direction, a split with nothing to split on, a width that cannot hold what
- * it is given. A library that quietly did any of them would be a library two
+ * it is given, and the bits of something that is not an integer. A library that quietly did any of them would be a library two
  * backends could disagree about.
  *
  * One clause per refusal, all in one pass: a clause whose value cannot be
@@ -34,6 +34,10 @@ case = number -> Case(text: $1) .
 
          (* "A float is written as its IEEE 754 bits, at width 8 or 4. Narrower
           * is refused rather than quietly rounded." *)
-       : e = bytes(1.0, 2) .
+       : e = bytes(1.0, 2)
+
+         (* "Each wants two integers." A float's bits are not its value's,
+          * so `bitand` of one would be an answer about something else. *)
+       : f = bitand(1.0, 2) .
 
 %driver check = refused .

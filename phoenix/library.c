@@ -245,6 +245,31 @@ Value *eval_call(Eval *e, const Expr *x)
         return value_int(a, f[0] == 'q' ? n / d : n % d);   /* C truncates */
     }
 
+    /* ---- the bits ----
+     *
+     * `bitand`, `bitor` and `bitxor`, on the sixty-four bits of two's
+     * complement, which docs/semantics.md fixes. They are functions and not
+     * operators because `and`, `or` and `not` are already the booleans'
+     * words, and they are here by the same rule as the pair above: a pass
+     * that folds a target language's constants needs them, and there is no
+     * way to spell them in `+ - * div mod`. The C description was the first
+     * to ask, for `case A | B:`, ROADMAP 6.5. None of the three can
+     * overflow. The work is done unsigned, so that it is defined on every
+     * bit whatever the host makes of a negative number. */
+
+    if (strcmp(f, "bitand") == 0 || strcmp(f, "bitor") == 0
+            || strcmp(f, "bitxor") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_INT || args[1]->kind != V_INT)
+            return library_fail(e, x, "'%s' wants two integers, and got %s and %s",
+                        f, value_kind_name(args[0]), value_kind_name(args[1]));
+
+        unsigned long long l = (unsigned long long)args[0]->ival;
+        unsigned long long r = (unsigned long long)args[1]->ival;
+        unsigned long long v = f[3] == 'a' ? (l & r) : f[3] == 'o' ? (l | r) : (l ^ r);
+        return value_int(a, (long long)v);
+    }
+
     /* ---- conversions ---- */
 
     /* `int(text)` and `int(text, base)` -- the same operation with the base
