@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `!`, `&&` and `||` in C
+
+**The C subset has C's logical operators**, the second part of
+[ROADMAP 6.3](ROADMAP.md#63-the-operators). `&&` and `||` evaluate their
+right side only when the left has not already decided the answer, so
+`p && *p` is safe and a call on the right of a decided `||` is never made.
+All three are worth 0 or 1, an `int`, whatever they were given: `0 || 3` is
+1. They take numbers and pointers, a `long` tested on all its 64 bits, and
+refuse a struct as `cc` does.
+
+**Tests:** 322 → 325, for the three refusals. Five programs join the C
+oracle: 211 agree with `cc`, 89 are refused, none diverges.
+
+---
+
 ## 2026-09-25: `%` in C
 
 **The C subset has `%`**, the remainder, on `int`, `char` and `long`

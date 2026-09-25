@@ -1745,6 +1745,14 @@ refuses "a '%' of a pointer" "'%' does not take a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/remainder-of-a-pointer.c"
 refuses "and of a struct" "'%' wants numbers, and this is 'struct t'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/remainder-of-a-struct.c"
+# `!`, `&&` and `||` test what they are given as a condition does, so a struct
+# is refused in each, as `cc` refuses it, at the same column.
+refuses "a '!' of a struct" "'!' tests a number or a pointer, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/not-a-struct.c"
+refuses "a struct on the left of '&&'" "'&&' tests numbers and pointers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/and-a-struct.c"
+refuses "and on the right of '||'" "'||' tests numbers and pointers, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/or-a-struct.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

@@ -564,6 +564,24 @@
   Negate : out = "{}\tneg {}0, {}0\n"
              of $value.out, lookup([[true, "x"]], $wide, "w"), lookup([[true, "x"]], $wide, "w") .
 
+  (* **`!` is a comparison with zero**, since 2026-09-25, and worth what
+   * C11 6.5.3.3 says `(0 == e)` is worth: 1 or 0. The test is on all of `x0`
+   * whatever the operand, because a pointer and a `long` are sixty-four bits
+   * and an `int` is zero-extended into the same register, as every condition
+   * here already assumes. `!` on a `long` of 2^32, whose low half is zero, is
+   * 0, and `logic-values.c` is the program that asks.
+   *
+   * **`&&` and `||` are one template.** The left side is tested and turned
+   * into 0 or 1 first; if that already decides it, 0 for `&&` and 1 for `||`,
+   * it is the answer, and a branch goes past the right side without running
+   * it. Otherwise the right side's 0 or 1 is. The branch is `cbz` for `&&`
+   * and `cbnz` for `||`, and that is the whole of the difference.
+   * `logic-short-circuit.c` counts the calls each side made. *)
+  Not     : out = "{}\tcmp x0, #0\n\tcset w0, eq\n" of $value.out .
+  Logical : n   = $label : label = $label + 1
+          : out = "{}\tcmp x0, #0\n\tcset w0, ne\n\tcb{} w0, L{}.done\n{}\tcmp x0, #0\n\tcset w0, ne\nL{}.done:\n"
+              of $left.out, lookup([["&&", "z"]], $op, "nz"), $n, $right.out, $n .
+
   (* The same push and pop, then a compare and a conditional set: `x0` is 1
    * where the condition held and 0 where it did not, which is what C11 6.5.8
    * and 6.5.9 say a comparison is worth. The conditions are the **signed**

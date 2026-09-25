@@ -545,7 +545,9 @@ since a program there that Phoenix cannot compile fails the suite:
    an operator that is neither `+` nor `-`.
 2. **`!`, `&&` and `||`**, whose right side runs only when the left has not
    decided the answer. The emit pass already makes labels for `if` and
-   `while`.
+   `while`. *Built 2026-09-25*: `logic.c` and four more agree with `cc`,
+   and `&&` is a token, so the hazard below is closed. `&&` and `||` are
+   one node and one template, differing in one letter of a branch.
 3. **`++`, `--` and the compound assignments.** Each reads a place and writes
    it back, so the place has to be worked out once: `x[k++] += 10` adds 10 to
    `x[0]` and moves `k` once. A pointer steps by its element's width, which

@@ -109,10 +109,13 @@ line-comment  = "//" { ! "\n" } .
 block-comment = "/*" { ! "*/" } "*/" .
 
 (* Two characters before one, every time: `<` first would leave the `=` of
- * `<=` behind, and the error would surface at the token after it. *)
-symbol = "==" | "!=" | "<=" | ">=" | "->"
+ * `<=` behind, and the error would surface at the token after it. It matters
+ * most for `&&`, since 2026-09-25: before it was a token, `a && b` was lexed
+ * as two `&`s, and the day binary `&` arrives that spelling would parse, as
+ * `a & (&b)`, which is ROADMAP 6.3's reason for building `&&` first. *)
+symbol = "==" | "!=" | "<=" | ">=" | "->" | "&&" | "||"
        | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "="
-       | "&" | "[" | "]" | "." .
+       | "&" | "!" | "[" | "]" | "." .
 
 %skip space line-comment block-comment .
 
@@ -285,7 +288,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | block
           | e:expression ";"                        -> Discard(value: $e) .
 
-(* C's expression grammar, six of its fifteen levels. `lib/expression.phx`
+(* C's expression grammar, eight of its fifteen levels. `lib/expression.phx`
  * is not imported: its table is calc's, with `and`, `or`, `not` and `<>` in
  * it, and C's is written here a level at a time as the constructs arrive.
  * The shape is the module's, though, and so is the fold: `$$` is what has
@@ -302,7 +305,18 @@ expression = assignment .
  * which is what ordered choice is for; `==` is a different token, so `x == 1`
  * never gets this far. *)
 assignment = p:place "=" a:assignment -> Assign(place: $p, value: $a)
-           | equality .
+           | logical-or .
+
+(* **`||` and `&&`**, since 2026-09-25, the loosest levels below assignment:
+ * `a || b && c` is `a || (b && c)`, and both group to the left. They are one
+ * node with an operator in it, as the arithmetic is, and not a `Binary`,
+ * because they are not arithmetic: C11 6.5.13 and 6.5.14 evaluate the right
+ * side only when the left has not decided, and the answer is 0 or 1, never
+ * an operand's value. *)
+logical-or  = logical-and { "||" logical-and
+                              -> Logical(op: $1, left: $$, right: $2) } .
+logical-and = equality    { "&&" equality
+                              -> Logical(op: $1, left: $$, right: $2) } .
 
 (* A place is somewhere a value can be **put**, and it is the one thing `&`
  * can be asked for. There are two: a name, and a dereference of anything.
@@ -364,6 +378,7 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * one node with a field that is sometimes a type, for the reason the
  * declarations give above. *)
 unary   = "-" u:unary -> Negate(value: $u)
+        | "!" u:unary -> Not(value: $u)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
         | "sizeof" "(" b:base s:{ "*" } ")" -> SizeOfType(base: $b, stars: size($s))
@@ -1066,6 +1081,15 @@ arg  = e:expression -> Arg(value: $e) .
              : "a struct is a condition, and C tests only numbers and pointers" .
   Compare ! $left.record or $right.record
               : "'{}' compares numbers and pointers, and this is 'struct {}'"
+                  of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
+  (* `!`, `&&` and `||` test their operands the way a condition does, C11
+   * 6.5.3.3 and 6.5.13 to 6.5.14, so a struct is refused in them for the same
+   * reason. Each is an `int`, 0 or 1, which is what `type` and `width` say
+   * already when nothing says otherwise. *)
+  Not     ! $value.record
+              : "'!' tests a number or a pointer, and this is 'struct {}'" of $value.tag .
+  Logical ! $left.record or $right.record
+              : "'{}' tests numbers and pointers, and this is 'struct {}'"
                   of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
   Deref    : type  = $value.type - 1
            : width = $value.width
