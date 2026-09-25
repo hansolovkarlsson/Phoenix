@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `break`, `continue`, `do` and the empty statement in C
+
+**The C subset has `break`, `continue`, `do … while` and the empty
+statement `;`**, the first part of [ROADMAP 6.4](ROADMAP.md#64-the-statements).
+`break` leaves the innermost loop and `continue` goes on with it: in a `for`
+that runs the step, and in a `do` the test at the bottom. A `do` runs its
+body once before it tests. `break` or `continue` outside every loop is
+refused, as `cc` refuses it. `do`, `break` and `continue` are now reserved
+words; before this, `break;` was read as a variable nobody had declared.
+
+**Tests:** 344 → 347, for the three refusals. Five programs join the C
+oracle: 228 agree with `cc`, 111 are refused, none diverges.
+
+---
+
 ## 2026-09-25: the bitwise operators, the shifts, `?:` and the comma in C
 
 **The C subset has every expression operator C has except the cast.** The

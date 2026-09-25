@@ -495,18 +495,43 @@
   IfElse : n = $label : label = $label + 1
          : out = "{}\tcmp x0, #0\n\tb.eq L{}.else\n{}\tb L{}.end\nL{}.else:\n{}L{}.end:\n"
              of $cond.out, $n, $then.out, $n, $n, $else.out, $n .
+  (* **A loop hands its `break` and `continue` their labels**, since
+   * 2026-09-25, and they cannot be the loop's numbered ones: a node takes its
+   * number on the way *out*, after its body, and the body is where the
+   * `break` is. So the two are named from where the loop is in the source,
+   * which is known on the way in and is one place per loop, `Lb` and `Lc`
+   * and its line and column, the way `awk-c.phx` names a rule. An inner loop
+   * hands down its own, so a `break` leaves the innermost.
+   *
+   * *Where `continue` goes is the one thing that differs.* In a `while` it
+   * is the test at the top. In a `for` it is the step, which had no label
+   * until then because nothing jumped to it: `continue-runs-the-step.c`
+   * counts the steps. In a `do` it is the test at the bottom, not the top,
+   * or the condition would be skipped, and `do-while.c` counts the tests. *)
   While  : n = $label : label = $label + 1
-         : out = "L{}.top:\n{}\tcmp x0, #0\n\tb.eq L{}.end\n{}\tb L{}.top\nL{}.end:\n"
-             of $n, $cond.out, $n, $body.out, $n, $n .
-  (* A missing condition is a loop that runs until a `return`, so the test
-   * is there only when the condition is: the table answers "" for an empty
-   * list and the branch for one of one. The other two clauses join to
-   * nothing when empty and need no table. *)
+         : down brk  = "Lb{}_{}" of $pos.line, $pos.column
+         : down cont = "Lc{}_{}" of $pos.line, $pos.column
+         : out = "L{}.top:\n{}:\n{}\tcmp x0, #0\n\tb.eq L{}.end\n{}\tb L{}.top\nL{}.end:\n{}:\n"
+             of $n, $cont, $cond.out, $n, $body.out, $n, $n, $brk .
+  (* A missing condition is a loop that runs until a `return` or a `break`,
+   * so the test is there only when the condition is: the table answers ""
+   * for an empty list and the branch for one of one. The other two clauses
+   * join to nothing when empty and need no table. *)
   For    : n = $label : label = $label + 1
+         : down brk  = "Lb{}_{}" of $pos.line, $pos.column
+         : down cont = "Lc{}_{}" of $pos.line, $pos.column
          : test = lookup([[0, ""]], size($cond),
                          "{}\tcmp x0, #0\n\tb.eq L{}.end\n" of join($cond.out), $n)
-         : out = "{}L{}.top:\n{}{}{}\tb L{}.top\nL{}.end:\n"
-             of join($init.out), $n, $test, $body.out, join($step.out), $n, $n .
+         : out = "{}L{}.top:\n{}{}{}:\n{}\tb L{}.top\nL{}.end:\n{}:\n"
+             of join($init.out), $n, $test, $body.out, $cont, join($step.out), $n, $n, $brk .
+  DoWhile : n = $label : label = $label + 1
+          : down brk  = "Lb{}_{}" of $pos.line, $pos.column
+          : down cont = "Lc{}_{}" of $pos.line, $pos.column
+          : out = "L{}.top:\n{}{}:\n{}\tcmp x0, #0\n\tb.ne L{}.top\n{}:\n"
+              of $n, $body.out, $cont, $cond.out, $n, $brk .
+  Break    : out = "\tb {}\n" of $brk .
+  Continue : out = "\tb {}\n" of $cont .
+  Empty    : out = "" .
 
   (* The push is sixteen bytes for an eight-byte value, because `sp` on this
    * machine must stay sixteen-aligned at every instruction that uses it, and

@@ -287,6 +287,18 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * and the emit pass joins them the same way. *)
           | "for" "(" i:[ expression ] ";" c:[ expression ] ";" s:[ expression ] ")"
                 b:statement                         -> For(init: $i, cond: $c, step: $s, body: $b)
+          (* **A `do` runs its body before it tests**, C11 6.8.5.2, so once
+           * even when the condition is false, and ends with a `;` of its own.
+           * `break` and `continue` are statements with nothing in them, and
+           * a `;` alone is the empty statement, the body of `for (...) ;`.
+           * All four arrived on 2026-09-25, ROADMAP 6.4, and naming `do`,
+           * `break` and `continue` here is what reserved them: before, `break;`
+           * was an expression statement naming a variable. *)
+          | "do" b:statement "while" "(" c:expression ")" ";"
+                                                    -> DoWhile(body: $b, cond: $c)
+          | "break" ";"                             -> Break
+          | "continue" ";"                          -> Continue
+          | ";"                                     -> Empty
           | block
           | e:expression ";"                        -> Discard(value: $e) .
 
@@ -1142,7 +1154,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * `int` no struct. What the function returns is handed down from it, and
    * a function returning a pointer to a struct gives "", since what it
    * returns is not one. *)
-  Function : down gives = lookup([[0, $ret.tagname]], $rptrs, "") .
+  Function : down gives = lookup([[0, $ret.tagname]], $rptrs, "")
+           : down loops = 0 .
   Return ! $value.record and $gives = ""
              : "'struct {}' is returned, and this function returns an int" of $value.tag
          ! $value.record and $gives <> "" and $value.tag <> $gives
@@ -1153,9 +1166,19 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The places a number is wanted and a struct is not one. *)
   If     ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
   IfElse ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
-  While  ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
-  For    ! $cond.record = [true]
+  While  : down loops = $loops + 1
+         ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+  For    : down loops = $loops + 1
+         ! $cond.record = [true]
              : "a struct is a condition, and C tests only numbers and pointers" .
+  DoWhile : down loops = $loops + 1
+          ! $cond.record : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+
+  (* **`break` and `continue` belong to a loop**, C11 6.8.6.2 and 6.8.6.3, so
+   * each counts the loops it is inside, from 0 at a function's start, and
+   * one outside all of them is refused, as `cc` refuses it. *)
+  Break    ! $loops = 0 : "'break' is not inside a loop" .
+  Continue ! $loops = 0 : "'continue' is not inside a loop" .
   Compare ! $left.record or $right.record
               : "'{}' compares numbers and pointers, and this is 'struct {}'"
                   of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .

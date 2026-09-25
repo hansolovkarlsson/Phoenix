@@ -1802,6 +1802,15 @@ refuses "a pointer or 0" "this subset has no null pointer constant" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-zero.c"
 refuses "pointers to two types" "'?:' has pointers to two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-pointers.c"
+# `break` and `continue` belong to a loop, since 2026-09-25 (ROADMAP 6.4):
+# outside every loop, or after one has ended, each is refused, as `cc`
+# refuses it, at the same column.
+refuses "a 'break' outside a loop" "'break' is not inside a loop" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/break-outside-a-loop.c"
+refuses "a 'continue' outside a loop" "'continue' is not inside a loop" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/continue-outside-a-loop.c"
+refuses "a 'break' after a loop has ended" "'break' is not inside a loop" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/break-after-a-loop.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.

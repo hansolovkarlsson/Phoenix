@@ -553,7 +553,12 @@ C11 6.4.1 says it always was.
    hands its labels down, so a `break` jumps to the innermost loop's end and
    a `continue` to where it continues. **In a `for`, that is not the top**:
    `continue` runs the step first, and the step is emitted today straight
-   before the jump back with no label of its own, so it gains one.
+   before the jump back with no label of its own, so it gains one. *Built
+   2026-09-25*: `loop-exits.c` and four more agree with `cc`. **The labels
+   could not be the loop's numbered ones**, because a node takes its number
+   on the way out and the `break` is in the body, compiled before that; they
+   are named from the loop's line and column instead, which are known on the
+   way in, as `awk-c.phx` names a rule.
 2. **`goto` and labels.** A label is a name and a `:` in front of a
    statement, and has to be tried before an expression statement, which
    would read the name and fail at the `:`. Labels are **scoped to the
