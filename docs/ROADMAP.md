@@ -527,8 +527,8 @@ program runs**, built in the order 6.4 without `switch`, then 6.5, then
 declarations, step four of the toolchain document, and each arrives the way
 every entry does, with what breaks without it written down first. **The
 first of them, [6.6](COMPLETED.md#66-a-call-to-printf), a call to a function
-declared with `...`, was opened and closed on 2026-09-26.** Nothing in the
-arc is open here until the next construct is started.
+declared with `...`, was opened and closed on 2026-09-26.** **Open:
+[6.7](#67-void-and-casts), `void` and casts**, the second.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -538,3 +538,99 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
+
+### 6.7 `void` and casts
+
+The subset has three types, `int`, `char` and `long`, pointers to them and
+structs. **It has no `void`**, so a function cannot say it returns nothing,
+`return;` is a syntax error, `int main(void)` does not parse, and `malloc`
+is declared returning `char *` in both programs that call it. **It has no
+cast**, so there is no way to say `(long)a * a` and have the multiply done
+in sixty-four bits, to read an `int`'s bytes through a `char *`, or to narrow
+a value on purpose. The two are one entry because each needs the other:
+`void *` is the pointer a cast turns into a useful one, and `(void)` is a
+cast.
+
+**Four programs show what breaks without it.** `cc` compiles and runs each,
+and they join `languages/c/tests/oracle/` with the part that makes them
+agree:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `void-functions.c`: a `void` function that returns early with `return;` and one that falls off its end, `f(void)` for a function of no parameters, a `void` call in a `for` header, and `(void)` on a variable and on a call | exits 14, prints `1 11 11 12` a line each | stops at the first `void`, expecting a type |
+| `void-pointers.c`: `void *malloc(long n)` and `void free(void *p)`, an `int *` passed to a `void *` parameter and a `void *` put in an `int *`, neither with a cast, `(char *)` on one, and `v == (void *)a` | exits 4, prints `10 2 1` | as above |
+| `casts.c`: `(long)a * a` with `a` 100000, `(int)` of a `long` whose low half is 5, `(char)300` and `(char)200`, an `int`'s bytes read through `(char *)&x`, and `(long)(char *)-1` | exits 44, prints `10000000000 5 44 -56`, `2 1 -1` and `3` | stops at the `char` of the first `(char *)`, expecting an expression |
+| `constant-casts.c`: `case (char)300:`, `case (int)4294967341:`, `case (char)200:` in a `switch (-56)`, and `sizeof` of two casts | exits 21 | as above, at the first `case` |
+
+**Each witness looks at the bits a wrong answer would change.** `(long)a *
+a` in thirty-two bits is 1410065408, and in sixty-four is 10000000000.
+`(char)200` sign-extended is -56 and zero-extended is 200. `(int)` of
+4294967301 is 5 only if the high half goes. And `(long)(char *)-1` is -1
+only if an `int` becomes a pointer **sign-extended**, which is what `cc` does
+and what C leaves to the implementation: a zero-extending cast prints
+4294967295.
+
+**What writing them found: `void` may already be half built.** The subset
+refuses a struct wherever C wants a number, in some forty places, by asking
+whether a value is a `record`: no stars and a tag, asked on some forty
+lines of `c.phx`. A `void` value is refused in the same places, for a different reason, and `int`, `char` and
+`long` are already in the table of layouts as structs with no members. So
+**the first thing to try is `void` as a fourth such entry**, with a tag, so
+that every place that refuses a struct refuses it, and only the messages need
+to learn to say `void`. It is not free: the emit pass gives a call that
+returns a struct a temporary in the caller's frame, sixteen bytes rounded
+from its size, and a `void` call must not get one of none.
+
+**And the constants pass needs the cast most.** It folds only operands that
+fit in thirty-two bits, so that it never traps. A cast cannot trap, so it
+folds whatever it is given: `(int)4294967341` is 45 whatever the operand's
+width, which is also **the one way a constant wider than an `int` legally
+reaches a `case`**. `(char)300` beside a `case 44:` is two labels with one
+value, which `cc` refuses and so will this: `duplicate-case-through-a-cast.c`.
+
+**Built in two parts, in this order**, each with the suite green:
+
+1. **`void`.** A base, as `int` is, and a return type. `return;` in a
+   function that returns `void`, and falling off its end, which already
+   emits nothing that matters. `(void)` as a parameter list meaning none,
+   which must not swallow `(void *p)`. `void *`, which converts to and from
+   any other pointer without a cast, because the `types` pass checks no
+   pointer conversion at all; see below.
+2. **Casts.** `( type-name ) unary`, tried before a parenthesised
+   expression, where `%names` has already said whether `(t)` is a type. A
+   cast is a value and not a place, so `(int)x = 3` and `&(long)x` are
+   refused as an assignment to a call is. The emit pass has four
+   conversions to make and no more: to `long` from `int`, a `sxtw`; to `int`
+   from anything wider, the `mov w0, w0` a call's result already gets; to
+   `char`, a `sxtb`; and to a pointer from an `int`, a `sxtw`. The rest,
+   pointer to pointer, pointer to `long` and back, and anything to `void`,
+   move no bits. The constants pass folds a cast to an integer type as
+   above.
+
+**What `cc` refuses, and so will this**: `return;` in a function that
+returns a value, and `return 1;` in one that returns `void`; a `void` value
+anywhere a value is read, `int x = f();`; a local declared `void`; `*p` on a
+`void *` read as a value; a cast of a struct to a number; an assignment to a
+cast, and its address. **Refused by name, though `cc` compiles them**, as
+GNU C: `sizeof(void)`, which `cc` says is 1; arithmetic on a `void *`, which
+`cc` does as if on a `char *`; and a cast to a struct type, `(struct s)v`,
+which C11 6.5.4 does not allow. Each is a program in `refused/` when its part
+is built.
+
+**What this entry does not start: checking a conversion that has no
+cast.** `cc` refuses `long n = p;` and `p = 5;` with a pointer `p`, as
+constraint violations it will not downgrade even under `-w`, and warns at
+`char *c = q;` with an `int *q`. The subset compiles all three. That is held
+on purpose: the `types` pass was written on 2026-09-22 to refuse **what
+would otherwise mis-compile, and nothing else**, and the journal of that day
+found that the programs on which a wrong width could show are exactly the
+ones `cc` will not build. A cast makes each of them expressible legally, which
+is the reason to have one, and not a reason to refuse the version without.
+
+*Not in this step:* the null pointer constant. `c ? p : 0` stays refused by
+name, because the check is in the `types` pass and whether an expression is
+a constant 0 is the `constants` pass's answer, which runs after it; moving
+the check is its own change. Also `unsigned`, the next entry and the
+largest; `const` and `volatile` in a cast; a `typedef` of `void`; and casts to
+a function pointer, which the subset does not have. **The entry closes**
+when the four programs agree with `cc`, with none diverging.
