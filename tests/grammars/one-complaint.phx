@@ -21,9 +21,15 @@ line = { number -> N(text: $1) } -> L(items: $1) .
   N : out = "{}" of $text
     ! $text = "0" : "zero is refused, and this is the only complaint" .
 
-  (* Each of these met the failure and used to add a complaint of its own. *)
-  L : out = "{} {} {}" of join($items.out),
-                          join(each($items.out, "<{}>")),
-                          join(sizes($items.out), ",") .
+  (* Each of these met the failure and used to add a complaint of its own.
+   * **So did `and` and `or`**, until 2026-09-26, when the failure was on
+   * their right: the left has always been passed through. C's `types` pass
+   * found it, at an assignment asking of a cast that had just been refused
+   * whether it was a struct. *)
+  L : both   = size($items) > 0 and join($items.out) = ""
+    : either = size($items) = 0 or join($items.out) = ""
+    : out = "{} {} {} {} {}" of join($items.out),
+                                join(each($items.out, "<{}>")),
+                                join(sizes($items.out), ","), $both, $either .
 
 %driver d = p -> out .

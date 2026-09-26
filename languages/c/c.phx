@@ -469,7 +469,18 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * no expression begins with it. The two build different nodes rather than
  * one node with a field that is sometimes a type, for the reason the
  * declarations give above. *)
-unary   = "-" u:unary -> Negate(value: $u)
+(* **A cast is a type in parentheses before a unary expression**, C11
+ * 6.5.4, since 2026-09-26, ROADMAP 6.7. It is tried first, because a
+ * parenthesised expression is a `primary` and would take the `(`; a base
+ * is a keyword or a name `%names` has made a typedef, so `(x)` with `x` a
+ * variable fails at once and falls through to the expression it is. It
+ * binds tighter than every binary operator and looser than a suffix, so
+ * `(char)x + 1` is `((char)x) + 1` and `(char)a[1]` is `(char)(a[1])`, as
+ * in C. `sizeof (int) x` stays a syntax error, since the type form of
+ * `sizeof` is tried before this and leaves the `x`. *)
+unary   = "(" b:base s:{ "*" } ")" u:unary
+            -> Cast(base: $b, stars: size($s), value: $u)
+        | "-" u:unary -> Negate(value: $u)
         | "!" u:unary -> Not(value: $u)
         | "~" u:unary -> Invert(value: $u)
         | "+" u:unary -> Plus(value: $u)
@@ -794,6 +805,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : ptrs    = at($means, 4) .
 
   SizeOfType : ptrs = $stars + $base.ptrs .
+  Cast       : ptrs = $stars + $base.ptrs .
 
   Base : ptrs    = 0
        : layout  = lookup($layouts, $name, [0, 1, empty])
@@ -1461,6 +1473,26 @@ arg  = e:assignment -> Arg(value: $e) .
    * now. *Not an `unsigned` one*, which is a later step, and nothing can see
    * the difference yet: a size is never negative, and `unsigned` arithmetic
    * is what would show it. *)
+  (* **A cast is worth the type it names**, C11 6.5.4, and is a value and
+   * not a place, so `lvalue` stays false. A cast to `void` is a `void`
+   * value, a record with the tag `void`, which a statement may throw away
+   * and nothing may read, as for a call to a `void` function.
+   *
+   * C casts only to a number, a pointer or `void`, and only from a number
+   * or a pointer, or anything at all to `void`. `cc` refuses a struct cast
+   * to a number, and a `void` value cast to anything but `void`; it
+   * compiles a cast **to** a struct of the same kind, as GNU C does, which
+   * is refused here by name. *)
+  Cast : type  = $ptrs
+       : width = $base.basew
+       : tag   = $base.tagname
+       ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
+           : "a cast to 'struct {}' is not C, C11 6.5.4; this cc allows one to the same struct, as GNU C does"
+               of $base.tagname
+       ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
+           : "'{}' is cast to something other than 'void', and only a number or a pointer can be"
+               of $value.kind .
+
   SizeOfType : type = 0 : width = 8
              (* **`sizeof` of `void` is refused by name**, since 2026-09-26:
               * C11 6.5.3.4 wants a complete type, and `cc` answers 1, as GNU
@@ -1655,6 +1687,21 @@ arg  = e:assignment -> Arg(value: $e) .
   SizeOfType : settled = true : folded = lookup([[0, $base.basew]], $ptrs, 8) .
   SizeOfExpr : settled = true : folded = $value.size .
   Plus       : settled = $value.settled : folded = $value.folded .
+
+  (* **A cast to an integer type folds whatever it is given**, since
+   * 2026-09-26, C11 6.6p6: an integer constant expression may cast to one.
+   * A cast cannot trap, so unlike an operator it does not ask that its
+   * operand fit in thirty-two bits, and `(int)4294967341` is 45, which is
+   * the one way a constant wider than an `int` legally reaches a `case`.
+   * To a `char` it keeps eight bits and puts the sign back; to an `int`,
+   * thirty-two; to a `long`, all of them. A cast to a pointer or to `void`
+   * is not an integer constant expression, and is not settled. *)
+  Cast       : low8    = $value.folded mod 256
+             : low32   = $value.folded mod 4294967296
+             : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
+             : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128, 0)],
+                                 [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648, 0)]],
+                                $base.basew, $value.folded) .
   Invert     : settled = $value.settled : folded = bitxor($value.folded, 0 - 1) .
   Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) .
 

@@ -171,7 +171,8 @@ refuses "a fold with nothing to fold onto" "nothing to fold onto" \
 # A failed check is reported once. `join` has always passed a failure through;
 # `sizes`, `each` and `bytes` over a list complained about it instead, so a
 # correct diagnosis about the user's program was followed by one naming a line
-# of the description.
+# of the description. So did `and` and `or` with a failure on the right, until
+# 2026-09-26, found by a cast in C refused and then asked about.
 if out=$(bounded "$phx" --quiet "$root/tests/grammars/one-complaint.phx" \
             "$root/tests/sources/has-a-zero.txt" 2>&1); then
     report fail "a failed check is reported once" "it was accepted"
@@ -2120,6 +2121,24 @@ refuses "arithmetic on a void pointer" "'+' on a 'void *' counts in something of
         --driver check "$root/languages/c/c-arm64.phx" "$r/void-pointer-arithmetic.c"
 refuses "a typedef of void" "is a typedef of 'void', which is C and is not here yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-void.c"
+# **Casts**, since 2026-09-26, ROADMAP 6.7. `cc` refuses all but the third,
+# a cast to a struct, which it allows as GNU C does. A cast is a value and
+# not a place, and the `place` rule has no cast in it, so assigning to one
+# and taking its address are syntax errors, as `f() = 3` is.
+refuses "a struct cast to a number" "'struct s' is cast to something other than 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/cast-a-struct-to-a-number.c"
+refuses "a void value cast to an int" "'void' is cast to something other than 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/cast-a-void-value.c"
+refuses "a cast to a struct" "a cast to 'struct s' is not C" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/cast-to-a-struct.c"
+refuses "an assignment to a cast" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-cast.c"
+refuses "the address of a cast" 'and found "long"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-cast.c"
+refuses "a cast to void read as a value" "'void' is put where a number or a pointer goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/use-a-void-cast.c"
+refuses "two case labels equal through a cast" "'case 44' is in this switch twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case-through-a-cast.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

@@ -740,6 +740,25 @@
              of $value.out, lookup([[true, "x"]], $wide, "w"), lookup([[true, "x"]], $wide, "w") .
   Plus   : out = $value.out .
 
+  (* **A cast makes one of four conversions, or none**, since 2026-09-26,
+   * ROADMAP 6.7. To a `long` or a pointer from an `int`, a `sxtw`: C leaves
+   * an `int` made a pointer to the implementation, and `cc` sign-extends it,
+   * so -1 made a `char` pointer and then a `long` is -1 again, which
+   * `casts.c` prints. To an `int` from anything eight bytes wide,
+   * the `mov w0, w0` that keeps the promise the header makes about `x0`. To
+   * a `char`, a `sxtb`, whose `w` write zeroes the upper half as well. The
+   * rest, a pointer to a pointer or to a `long` and back, and anything to
+   * `void`, move no bits. A `char` value is already an `int` here, so a
+   * cast from one is a cast from an `int`. *)
+  Cast   : tovoid = $ptrs = 0 and $base.tagname = "void"
+         : eight  = $ptrs > 0 or $base.basew = 8
+         : from8  = $value.type > 0 or $value.wide
+         : out = "{}{}" of $value.out,
+                   lookup([[true, ""]], $tovoid,
+                     lookup([[true, lookup([[true, ""]], $from8, "\tsxtw x0, w0\n")]], $eight,
+                       lookup([[1, "\tsxtb w0, w0\n"]], $base.basew,
+                              lookup([[true, "\tmov w0, w0\n"]], $from8, "")))) .
+
   (* **A comma runs its left side and keeps its right.** The left's value is
    * left in `x0` and overwritten, which is all throwing it away takes. *)
   Comma  : out  = "{}{}" of $left.out, $right.out

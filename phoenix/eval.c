@@ -422,6 +422,11 @@ Value *eval_expr(Eval *e, const Expr *x)
 
             Value *r = eval_expr(e, x->kids[1]);
             if (!r) return NULL;
+            /* A failure on the right has been reported where it happened,
+             * and is passed through as one on the left is. Until 2026-09-26
+             * it was complained about, naming this line of the description
+             * after the right diagnosis about the source. */
+            if (value_failed(r)) return r;
             if (r->kind != V_BOOL)
                 return eval_fail(e, x, "'%s' wants booleans, and the right is %s",
                             x->name, value_kind_name(r));

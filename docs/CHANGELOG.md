@@ -16,10 +16,32 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: casts in C, and a failure passed through `and` and `or`
+
+**The C subset has casts**, which closes
+[6.7](COMPLETED.md#67-void-and-casts): `(long)a * a` multiplies in 64 bits,
+`(char)200` is -56, `(char *)&x` reads an `int`'s bytes, and `(void)x`
+throws a value away. A cast in a `case` label is worked out when the program
+is compiled, so `case (char)300:` is `case 44:`, and two labels equal through
+a cast are refused, as `cc` refuses them. A struct cast to a number, a `void`
+value cast to anything but `void`, and an assignment to a cast are refused;
+declined by name, although `cc` compiles it, a cast to a struct.
+
+**A description's checks say one thing once, again.** When the right side of
+`and` or `or` in a description was an attribute whose check had already
+failed, Phoenix reported a second error, naming a line of the description,
+after the right one about the source. The left side has always been passed
+over quietly, and now the right is too. Written-out compilers carry the fix.
+
+**Tests:** 379 → 386, for seven refusals. Four programs join the C oracle:
+246 agree with `cc`, 150 are refused, none diverges.
+
+---
+
 ## 2026-09-26: `void` in C
 
 **A C function can return `void`**, the first part of
-[ROADMAP 6.7](ROADMAP.md#67-void-and-casts). `return;` leaves one, and falling
+[6.7](COMPLETED.md#67-void-and-casts). `return;` leaves one, and falling
 off its end does too. `f(void)` declares a function of no parameters, as
 `int main(void)` does. `void *` converts to and from any other pointer
 without a cast, so `void *malloc(long n);` is how `malloc` is declared now.
