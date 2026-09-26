@@ -2139,6 +2139,21 @@ refuses "a cast to void read as a value" "'void' is put where a number or a poin
         --driver check "$root/languages/c/c-arm64.phx" "$r/use-a-void-cast.c"
 refuses "two case labels equal through a cast" "'case 44' is in this switch twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case-through-a-cast.c"
+# **A `long` constant folds**, since 2026-09-26, ROADMAP 6.8, when its
+# answer fits in sixty-four bits. One that does not is an overflow, which C
+# leaves undefined and `cc` wraps with a warning; it is not settled here, so
+# a `case` of one is refused.
+# Each operator that can overflow asks first, and each asking has its own
+# witness here, since one program with four labels stays refused when only
+# one of the four questions is broken.
+refuses "a case label that adds past a long" "has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-overflows-a-long.c"
+refuses "a case label that subtracts past a long" "has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-subtracts-past-a-long.c"
+refuses "a case label that divides the most negative long by -1" "has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-divides-the-most-negative-long.c"
+refuses "a case label that shifts an int past its width" "has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-shifts-an-int-past-its-width.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

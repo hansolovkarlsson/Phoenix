@@ -589,9 +589,14 @@ address initialiser is a relocation the assembler writes: `cc` puts
 1. **`long` constants fold.** An operator folds when every operand is
    settled and the answer fits in sixty-four bits, asked before it is
    computed; an `int` answer is still cut to thirty-two. No program in the
-   oracle changes, and `case` gains nothing it can show, since a `long`
-   label in an `int` `switch` is already refused as too wide; the witness
-   is `global-initialisers.c`, when part 2 lets it compile.
+   oracle changes. *Built 2026-09-26*, and **this said wrongly that `case`
+   gains nothing it can show**: a `switch` on a `long` takes a label as
+   wide as it likes, and `case 4294967296 * 2:` was refused there.
+   `long-case-labels.c` is the witness, eight labels `cc` takes and this
+   refused. An overflow is not settled, and four refusals hold the four
+   questions that decide it, one file each: a file with all four stays
+   refused when one question is broken, which is how the first run of the
+   breaks passed three of them.
 2. **A global, and an arithmetic initialiser.** `item` gains a declaration:
    a base, stars and a name, with an optional `[` count `]` or `=`
    initialiser. The `locals` pass gathers globals on a thread that is

@@ -16,6 +16,22 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: `long` constants in C
+
+**A constant `long` expression is worked out when the program is compiled**,
+the first part of [ROADMAP 6.8](ROADMAP.md#68-globals). Until now only
+arithmetic on numbers that fit in 32 bits was, which was enough for a `case`
+in an `int` `switch` and not for one in a `long` `switch`: `case 4294967296 *
+2:` was refused, and is now 8589934592, as `cc` has it. An answer that does
+not fit in 64 bits is an overflow, which C leaves undefined; `cc` wraps it,
+and a `case` of one is refused here by name, as is an `int` shifted by 32 or
+more.
+
+**Tests:** 386 → 390, for four refusals. One program joins the C oracle: 247
+agree with `cc`, 154 are refused, none diverges.
+
+---
+
 ## 2026-09-26: casts in C, and a failure passed through `and` and `or`
 
 **The C subset has casts**, which closes

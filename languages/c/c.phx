@@ -1715,23 +1715,52 @@ arg  = e:assignment -> Arg(value: $e) .
 
   (* **One rule for every arithmetic operator**, with the answer read off a
    * table by the operator. Every entry is worked out whichever is asked
-   * for, which is why each has to be safe on any operands it can be given. *)
-  Binary : csafe  = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
-                     and $left.folded >= 0 - 2147483648 and $left.folded <= 2147483647
-                     and $right.folded >= 0 - 2147483648 and $right.folded <= 2147483647
-         : cl     = lookup([[true, $left.folded]], $csafe, 0)
-         : cr     = lookup([[true, $right.folded]], $csafe, 0)
-         : cd     = lookup([[0, 1]], $cr, $cr)
-         : ck     = lookup([[true, $cr]], $cr >= 0 and $cr < 32, 0)
-         : cpower = at([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824, 2147483648], $ck + 1)
-         : craw   = lookup([["+", $cl + $cr], ["-", $cl - $cr], ["*", $cl * $cr],
-                           ["/", quotient($cl, $cd)], ["%", remainder($cl, $cd)],
+   * for, which is why each has to be safe on any operands it can be given.
+   *
+   * **A `long` folds too**, since 2026-09-26, ROADMAP 6.8. Until then an
+   * operator folded only when both operands fitted in thirty-two bits, which
+   * made every entry safe at once: nothing two such numbers make overflows
+   * the notation's sixty-four. A `long` operand can be anything, so each
+   * operator that can overflow asks first whether its answer fits, `fadd` to
+   * `fshl`, with `and` and `or` that stop before the arithmetic that would
+   * trap, and **its entry is worked out on its own operands**, which are the
+   * real ones only when its answer fits and 0 otherwise. A `+` asked for
+   * with two huge operands therefore works out a `*` of two zeros and not a
+   * product that traps. An answer that does not fit is an overflow, which
+   * C leaves undefined; `cc` wraps it and warns, and here it is not settled,
+   * so a `case` of one is refused. An `int` answer is cut to thirty-two bits
+   * as before: two `int`s never overflow sixty-four, so every test passes
+   * for them and nothing about an `int` changed. *)
+  Binary : cbase  = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
+         : cl     = lookup([[true, $left.folded]], $cbase, 0)
+         : cr     = lookup([[true, $right.folded]], $cbase, 0)
+         : cmax   = 9223372036854775807
+         : cmin   = 0 - 9223372036854775807 - 1
+         : fadd   = ($cr >= 0 and $cl <= $cmax - $cr) or ($cr < 0 and $cl >= $cmin - $cr)
+         : fsub   = ($cr >= 0 and $cl >= $cmin + $cr) or ($cr < 0 and $cl <= $cmax + $cr)
+         : fmul   = $cr = 0
+                    or ($cr > 0 and $cl <= $cmax div $cr and $cl >= quotient($cmin, $cr))
+                    or ($cr = 0 - 1 and $cl > $cmin)
+                    or ($cr < 0 - 1 and $cl >= quotient($cmax, $cr) and $cl <= $cmin div $cr)
+         : fdiv   = $cr <> 0 and not ($cl = $cmin and $cr = 0 - 1)
+         : climit = lookup([[true, 63]], $wide, 32)
+         : ck     = lookup([[true, $cr]], $cr >= 0 and $cr < $climit, 0)
+         : cpower = at([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824, 2147483648, 4294967296, 8589934592, 17179869184, 34359738368, 68719476736, 137438953472, 274877906944, 549755813888, 1099511627776, 2199023255552, 4398046511104, 8796093022208, 17592186044416, 35184372088832, 70368744177664, 140737488355328, 281474976710656, 562949953421312, 1125899906842624, 2251799813685248, 4503599627370496, 9007199254740992, 18014398509481984, 36028797018963968, 72057594037927936, 144115188075855872, 288230376151711744, 576460752303423488, 1152921504606846976, 2305843009213693952, 4611686018427387904], $ck + 1)
+         : fshl   = $cl <= $cmax div $cpower and $cl >= quotient($cmin, $cpower)
+         : al     = lookup([[true, $cl]], $fadd, 0) : ar = lookup([[true, $cr]], $fadd, 0)
+         : sl     = lookup([[true, $cl]], $fsub, 0) : sr = lookup([[true, $cr]], $fsub, 0)
+         : ml     = lookup([[true, $cl]], $fmul, 0) : mr = lookup([[true, $cr]], $fmul, 0)
+         : dl     = lookup([[true, $cl]], $fdiv, 0) : dr = lookup([[true, $cr]], $fdiv, 1)
+         : pl     = lookup([[true, $cl]], $fshl, 0)
+         : craw   = lookup([["+", $al + $ar], ["-", $sl - $sr], ["*", $ml * $mr],
+                           ["/", quotient($dl, $dr)], ["%", remainder($dl, $dr)],
                            ["&", bitand($cl, $cr)], ["|", bitor($cl, $cr)], ["^", bitxor($cl, $cr)],
-                           ["<<", $cl * $cpower], [">>", $cl div $cpower]], $op, 0)
+                           ["<<", $pl * $cpower], [">>", $cl div $cpower]], $op, 0)
          : clow   = bitand($craw, 4294967295)
-         : settled = $csafe and $type = 0
-                     and (($op <> "/" and $op <> "%") or $cr <> 0)
-                     and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < 32))
+         : fits   = lookup([["+", $fadd], ["-", $fsub], ["*", $fmul], ["/", $fdiv], ["%", $fdiv],
+                            ["<<", $fshl]], $op, true)
+         : settled = $cbase and $type = 0 and $fits
+                     and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < $climit))
          : folded = lookup([[true, $craw]], $wide,
                            $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
 
