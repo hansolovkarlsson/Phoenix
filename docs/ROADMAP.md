@@ -530,8 +530,9 @@ first of them, [6.6](COMPLETED.md#66-a-call-to-printf), a call to a function
 declared with `...`, was opened and closed on 2026-09-26.** **So was the
 second, [6.7](COMPLETED.md#67-void-and-casts), `void` and casts, and the
 third, [6.8](COMPLETED.md#68-globals), a variable declared outside every
-function.** Nothing in the arc is open here until the next construct is
-started.
+function.** **Open: [6.9](#69-unsigned), the `unsigned` types**, the
+fourth, and the first entry in the arc with a program the subset compiles
+today and gets wrong.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -541,3 +542,105 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
+
+### 6.9 `unsigned`
+
+C has `unsigned char`, `unsigned int` and `unsigned long`, whose arithmetic
+wraps where a signed type's overflows, and whose comparisons, division,
+remainder and right shift are different instructions. The subset has none
+of them: `unsigned x;` stops at the `x`, having read `unsigned` as a name.
+It also has none of what C writes them with, a `u` or `l` suffix, a hex or
+an octal constant: `1L` is refused by name today, and `0x10` stops at the
+`x10`. This is the largest of the four, because it touches every operator
+the emit pass has and every conversion the `types` pass makes.
+
+**What writing the witnesses found first: the subset gets a program wrong
+today, and none of them says `unsigned`.** C11 6.5.3.4 makes `sizeof` a
+`size_t`, which on this machine is an `unsigned long`. Phoenix makes it a
+`long`, and the comment on `SizeOfType` in `c.phx` says *nothing can see
+the difference yet: a size is never negative, and `unsigned` arithmetic is
+what would show it*. `sizeof(int) - 5` is that arithmetic, written without
+the word. Phoenix compiles this program and every answer is different:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `sizeof-is-unsigned.c`: `sizeof(int) - 5 < 0`, `(sizeof(int) - 5) / 2`, `(sizeof(int) - 5) >> 60`, `(sizeof(char) - 2) % 7`, and `-1 < sizeof(int)` | exits 15, prints `0 9223372036854775807 15 1 0` | **compiles**, exits 0, prints `1 0 -1 -1 1` |
+
+The oracle has never held a program that subtracts past a `sizeof`, so its
+*none diverges* has been true of what it holds and not of the subset. The
+comment is wrong, and so is COMPLETED's `c/` row where it says `sizeof` is
+a `long` *as C has it*; both are corrected with the part that fixes it.
+
+**Two more show what breaks without it**, and join the oracle beside the
+first, each with the part that makes it agree:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `unsigned-arithmetic.c`: `4294967295u + 1` through a function, `/`, `>>` and `%` on an `unsigned int`, `-2 < 7u`, `-1 < 1u`, an `unsigned char` of 200 and one plus it, a `char` of -56 made `unsigned char`, an `unsigned int` widened to a `long`, and an `unsigned long` of 0 less 1, divided and compared | exits 244, prints four lines, the first `0 2147483647 2147483644 5` | stops at `unsigned`, the return type of the first function |
+| `unsigned-constants.c`: `0x10`, `017`, `0x7fffffff`, `0x100000000`, `0xffffffff`, `18446744073709551615ul`, `10L` and `0xFFFFFFFFFFFFFFFFUL`, two comparisons that depend on a constant's type, and two `switch`es on `unsigned` values | exits 42, prints `16 15 2147483647 4294967296` and four lines more | stops at the `int` of `unsigned int u`, having read `unsigned` as a variable |
+
+**And writing the third found a defect in the tool.** The `constants` pass
+reads a number with the library's `int`, which calls `strtoll` and never
+asks whether it overflowed, so `int("9223372036854775808")` is
+9223372036854775807, **clamped without a word**, where the notation's
+integers are said to trap on overflow. `case 9223372036854775808:` folds
+today to the wrong label, silently; nothing reaches it yet, because every
+program here that writes one takes no path that compares it. It is fixed
+first, in `phoenix/library.c`, with a claim in `docs/semantics.md`: text
+that does not fit in sixty-four bits is refused, and a C constant that
+large is read in two halves by the description rather than in one by the
+library.
+
+**The notation's integers are signed, and an `unsigned long` is not.** An
+`unsigned int` fits in them whole, and wrapping one is `mod 4294967296`. An
+`unsigned long` above 2^63 does not: it can be carried as its bit pattern,
+which is what `cc` writes into the object file anyway, and a literal needs
+no more than that. **Arithmetic on one is the hard part**: `+`, `-` and `*`
+agree with the notation's bit for bit only where the notation would trap,
+and `<`, `/`, `%` and `>>` read the top bit as a sign. So the `constants`
+pass folds an `unsigned long` operator only when its operands and its
+answer are below 2^63, and leaves the rest unsettled, which refuses them by
+name in a `case` or a global's initialiser; `cc` folds them all.
+
+**Built in three parts after the tool's fix, in this order**, each with the
+suite green:
+
+1. **The types.** `unsigned`, `unsigned int`, `unsigned char` and
+   `unsigned long` as bases, and `signed` before `char`, `int` and `long`,
+   in that order only; C allows the words in any order, and `long unsigned`
+   is a syntax error here. A type gains a fourth part, whether it is
+   unsigned, and the `types` pass does C11 6.3.1.8's usual arithmetic
+   conversions with it: an `int` beside an `unsigned int` becomes one, a
+   `long` beside an `unsigned int` stays a `long`, which can hold every
+   value of it, and an `unsigned long` takes everything. The emit pass
+   learns an unsigned instruction for each signed one it has: `ldrb` for
+   `ldrsb`, `udiv` for `sdiv`, `lsr` for `asr`, `lo` and `hs` for `lt` and
+   `ge`, and **no `sxtw`** where an `unsigned int` is widened, which is
+   already zero-extended in `x0`, the header's promise doing the work. The
+   emit pass names `sxtw` seventeen times, one per conversion or its
+   comment, and each has to ask. `unsigned-arithmetic.c` is the witness.
+2. **`sizeof` is an `unsigned long`**, and the difference of two pointers
+   stays a `long`, `ptrdiff_t`. `sizeof-is-unsigned.c` is the witness, and
+   the comment and COMPLETED's row are corrected.
+3. **The constants.** Hex and octal, and the suffixes `u`, `l` and both in
+   either order and case, which lifts today's refusal of `1L`: its program
+   leaves `refused/`, as C it always was. A constant's type is C11
+   6.4.4.1's table, which is not the same for a decimal and a hex one:
+   `0xffffffff` is an `unsigned int` and `4294967295` is a `long`, which is
+   why `-1 < 0xffffffff` is 0. The `constants` pass wraps an `unsigned int`
+   and folds an `unsigned long` as above. `unsigned-constants.c` is the
+   witness.
+
+**What `cc` refuses, and so will this**: `unsigned` beside `struct`,
+`void` or `signed`; an octal constant with an 8 or a 9 in it; `0x` with no
+digits; a suffix twice, `1uu`; and a constant too big for an `unsigned
+long`. **Refused by name, though `cc` compiles them**: the words of a type
+in any order but the one above; and an `unsigned long` constant expression
+whose operands or answer pass 2^63. Each is a program in `refused/` when
+its part is built.
+
+*Not in this step:* `short` and `unsigned short`, which the subset has
+never had; `long long`, the same width here as `long`, and its `ll`
+suffix; `_Bool`; a plain `char` stays signed, as Apple's arm64 has it. The
+conversion that has no cast stays unchecked, by 6.7's rule. **The entry
+closes** when the three programs agree with `cc`, with none diverging.
