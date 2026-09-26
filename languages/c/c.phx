@@ -179,6 +179,12 @@ item = function
      | "typedef" b:base s:{ "*" } n:name ";"
          -> Typedef(name: $n, base: $b, stars: size($s)) .
 
+(* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
+ * 2026-09-26. It is two alternatives of its own, tried first, because the
+ * notation has no syntactic lookahead: a `params` that took `void` alone
+ * would have taken the `void` of `(void *p)` and been unable to give it
+ * back. Here the whole alternative fails at the `*`, and the next is tried
+ * from the name. *)
 (* A function is a rule of its own because it is a **scope**: see `%names`
  * above. Its parameters hide a typedef of the same name from the `(` to the
  * end of the body, or to the `;` of a prototype, and no further.
@@ -192,7 +198,12 @@ item = function
  *
  * `item` tries this alternative first, and a struct's definition fails it at
  * the `{` after the tag, where a function's name was wanted, and moves on. *)
-function = r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
+function = r:base t:{ "*" } n:name "(" "void" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), params: [], variadic: 0)
+         | r:base t:{ "*" } n:name "(" "void" ")" "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), params: [], variadic: 0,
+                         body: $s)
+         | r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), params: $p,
                           variadic: size($v))
          | r:base t:{ "*" } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
@@ -243,6 +254,7 @@ param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
  * A function's return type is one too, since a struct can be returned whole:
  * see `function` above. *)
 base   = "int"             -> Base(name: "int")
+       | "void"            -> Base(name: "void")
        | "char"            -> Base(name: "char")
        | "long"            -> Base(name: "long")
        | "struct" t:name   -> Base(name: $t)
@@ -267,6 +279,10 @@ block = "{" { statement } "}" -> Block(body: $2) .
  * second number. `struct` was the day it was to need a node, and gave one
  * to the base instead: see `base` above and the `types` pass. *)
 statement = "return" e:expression ";"              -> Return(value: $e)
+          (* **`return;` returns nothing**, since 2026-09-26, ROADMAP 6.7,
+           * and is refused by the `types` pass in a function that returns
+           * something, as `cc` refuses it. *)
+          | "return" ";"                             -> ReturnNothing
           (* **A label is a name and a `:` before a statement**, and a
            * `goto` names one, since 2026-09-25, ROADMAP 6.4. The label is
            * tried before an expression statement, which would read the name
@@ -685,8 +701,22 @@ arg  = e:assignment -> Arg(value: $e) .
    * lookup whatever it names: the keyword and the tag are asked the same
    * question of the same table. A struct is defined at file scope only, so
    * this is never reset and flows from each definition to everything after
-   * it, which is C11 6.2.1's scope for a tag declared outside any block. *)
-  thread layouts = [["int", [4, 4, empty]], ["char", [1, 1, empty]], ["long", [8, 8, empty]]]
+   * it, which is C11 6.2.1's scope for a tag declared outside any block.
+   *
+   * **`void` is the fourth**, since 2026-09-26, ROADMAP 6.7, and unlike the
+   * other three it keeps its name as its tag: see `Base`. So a `void` value
+   * is a `record` to the `types` pass, no stars and a tag, and every place
+   * that refuses a struct where C wants a number refuses it too, which is
+   * C11 6.3.2.2's rule that a void expression's value is never used. It is
+   * nought bytes wide, which is what makes `void *` arithmetic something to
+   * refuse rather than to count in. No struct can take the tag, because
+   * `void` is reserved the moment `base` names it.
+   *
+   * *The width has no witness, and cannot have one*: arithmetic, `*` and
+   * `sizeof` are the three that would read it, and each refuses a `void`
+   * by name. Made four, the oracle and every refusal stayed green. *)
+  thread layouts = [["int", [4, 4, empty]], ["char", [1, 1, empty]], ["long", [8, 8, empty]],
+                    ["void", [0, 1, empty]]]
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
@@ -743,6 +773,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * says something different. *)
   Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
           : typedefs = bind($typedefs, $name, $means)
+          (* **Not a typedef of `void` itself**, since 2026-09-26: C allows
+           * one, and nothing here has needed it. `typedef void *vp;` is a
+           * pointer and is allowed. *)
+          ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+              : "'{}' is a typedef of 'void', which is C and is not here yet; a typedef of 'void *' is" of $name
           ! defined($typedefs, $name)
               and lookup($typedefs, $name, empty)
                   <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
@@ -780,9 +815,11 @@ arg  = e:assignment -> Arg(value: $e) .
                : moff   = $offset + $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars + $base.ptrs = 0 and $base.basew = 0
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void"
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
-                       of $base.name .
+                       of $base.name
+               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                   : "'{}' is a member of type 'void', and a member's type has to be complete, C11 6.7.2.1p3" of $name .
   MemberArray  : ptrs   = $stars + $base.ptrs
                : basew  = $base.basew
                : ebytes = lookup([[0, $basew]], $ptrs, 8)
@@ -795,9 +832,11 @@ arg  = e:assignment -> Arg(value: $e) .
                    : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                        of $name
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars + $base.ptrs = 0 and $base.basew = 0
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void"
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
-                       of $base.name .
+                       of $base.name
+               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                   : "'{}' is a member of type 'void', and a member's type has to be complete, C11 6.7.2.1p3" of $name .
 
   (* **A function returns an `int`, a `long`, a struct or a pointer.** A
    * struct is returned whole, since 2026-09-23, and a pointer since
@@ -832,7 +871,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
-                : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
+                : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
+                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of $ret.tagname) .
 
   Function  : rptrs = $stars + $ret.ptrs
             : down fn     = $name
@@ -855,7 +895,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
-                : "'main' returns an int, C11 5.1.2.2.1, and this says 'struct {}'" of $ret.tagname .
+                : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
+                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of $ret.tagname) .
 
   Labelled : labels = bind($labels, ("{}/{}" of $fn, $name), true)
            ! defined($labels, "{}/{}" of $fn, $name)
@@ -886,6 +927,8 @@ arg  = e:assignment -> Arg(value: $e) .
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
         ! defined($scope, $name) : "'{}' is a parameter twice" of $name
+        ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+            : "'{}' is a parameter of type 'void', and only '(void)' alone, for no parameters, is C" of $name
         ! $pindex + lookup([[true, 2]], $stars + $base.ptrs = 0 and $base.tagname <> ""
                                         and $base.basew > 8 and $base.basew <= 16, 1) > 8
             : "'{}' needs a ninth register, and only eight are compiled: the rest go on the stack, and nothing here puts them there"
@@ -925,6 +968,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
+            ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
   (* **The name is bound on the way out**, after its initialiser has been
    * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
@@ -943,6 +988,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
+            ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
             ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   (* An element is one byte, four or eight, or a struct's size, the whole
@@ -965,6 +1012,8 @@ arg  = e:assignment -> Arg(value: $e) .
              ! $count < 1
                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                      of $name
+             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
              ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   (* The five once, and their parts named from them. `Assign` has no clause
@@ -1076,6 +1125,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * as a number. So each of those places asks this, and refuses. *)
   otherwise record = $type = 0 and $tag <> ""
 
+  (* **What a `record` is called in a message**, since 2026-09-26: a
+   * `void` value is one, see `layouts` in the `locals` pass, so every
+   * refusal of a struct where C wants a number refuses it too, and says
+   * `'void'` where it would have said `'struct void'`. *)
+  otherwise kind = lookup([["void", "void"]], $tag, "struct {}" of $tag)
+
   (* **Whether it is somewhere a value can be put**, C11 6.3.2.1's lvalue.
    * The `place` rule settled this in the grammar while the only places were
    * names and `*`s. A member is a place when what it is a member of is one,
@@ -1134,10 +1189,10 @@ arg  = e:assignment -> Arg(value: $e) .
            ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
                : "'struct {}' is assigned {}, and a struct takes only its own kind"
                    of $place.tag,
-                      lookup([[true, "'struct {}'" of $value.tag]], $value.record,
+                      lookup([[true, "'{}'" of $value.kind]], $value.record,
                              "something that is not a struct")
            ! $value.record and not $place.record
-               : "'struct {}' is put where a number or a pointer goes" of $value.tag .
+               : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   (* **An update is an assignment that reads its place first**, C11
    * 6.5.16.2 and 6.5.2.4, so it is worth the place's type, and it takes what
@@ -1159,13 +1214,15 @@ arg  = e:assignment -> Arg(value: $e) .
            ! not $place.lvalue
                : "'{}' wants somewhere a value is kept, and an assignment, a call or an update is a value" of $op
            ! $place.record
-               : "'{}' wants a number or a pointer, and this is 'struct {}'" of $op, $place.tag
+               : "'{}' wants a number or a pointer, and this is '{}'" of $op, $place.kind
            ! $value.record
-               : "'{}' wants a number on its right, and this is 'struct {}'" of $op, $value.tag
+               : "'{}' wants a number on its right, and this is '{}'" of $op, $value.kind
            ! $value.type > 0
                : "'{}' does not take a pointer on its right" of $op
            ! $place.type > 0 and $op <> "++" and $op <> "--" and $op <> "+=" and $op <> "-="
-               : "'{}' does not take a pointer" of $op .
+               : "'{}' does not take a pointer" of $op
+           ! $place.type = 1 and $place.tag = "void"
+               : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
 
   (* The same rule for a declaration's initialiser, which is an assignment to
    * a place the declaration names. `ptrs` and the base are the `locals`
@@ -1174,10 +1231,10 @@ arg  = e:assignment -> Arg(value: $e) .
                 and ($value.type <> 0 or $value.tag <> $base.tagname)
                 : "'{}' is a 'struct {}' initialised from {}, and a struct takes only its own kind"
                     of $name, $base.tagname,
-                       lookup([[true, "a 'struct {}'" of $value.tag]], $value.record,
+                       lookup([[true, "a '{}'" of $value.kind]], $value.record,
                               "something that is not a struct")
             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
-                : "'struct {}' is put where a number or a pointer goes" of $value.tag .
+                : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   (* An argument is a copy into the parameter, so the same rule again, asked
    * of each argument where both sides are known: `$sig` is the callee's
@@ -1200,11 +1257,13 @@ arg  = e:assignment -> Arg(value: $e) .
   Arg      : type = $value.type
            : carries = lookup([[true, $value.tag]], $value.record, "")
            : argi = $argi + 1
-           ! $argi < size($sig)
+           ! $value.record and $value.tag = "void"
+               : "'{}' is given the value of something 'void', which has none" of $callee
+           ! $argi < size($sig) and $value.tag <> "void"
              and lookup([[true, $value.tag]], $value.record, "") <> at($sig, $argi + 1)
                : "'{}' is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
                    of $callee
-           ! $argi >= size($sig) and $value.record
+           ! $argi >= size($sig) and $value.record and $value.tag <> "void"
                : "'{}' is given a 'struct {}' through '...', and a struct is not passed that way here"
                    of $callee, $value.tag .
   Program  : down callees = $allsigs
@@ -1231,7 +1290,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : tag       = at($returns, 1)
            : width     = at($returns, 2)
            : type      = at($returns, 3)
-           : aggregate = $type = 0 and $tag <> "" .
+           : aggregate = $type = 0 and $tag <> "" and $tag <> "void" .
 
   (* **A `return` is a copy into what the function returns**, so it is the
    * assignment's rule once more: a struct takes only its own kind, and an
@@ -1243,22 +1302,31 @@ arg  = e:assignment -> Arg(value: $e) .
            : down switches = 0
            : down fn    = $name .
   Return ! $value.record and $gives = ""
-             : "'struct {}' is returned, and this function returns an int" of $value.tag
-         ! $value.record and $gives <> "" and $value.tag <> $gives
-             : "'struct {}' is returned, and this function returns 'struct {}'" of $value.tag, $gives
-         ! not $value.record and $gives <> ""
-             : "a function that returns 'struct {}' returns something that is not a struct" of $gives .
+             : "'{}' is returned, and this function returns an int" of $value.kind
+         ! $value.record and $gives <> "" and $gives <> "void" and $value.tag <> $gives
+             : "'{}' is returned, and this function returns 'struct {}'" of $value.kind, $gives
+         ! not $value.record and $gives <> "" and $gives <> "void"
+             : "a function that returns 'struct {}' returns something that is not a struct" of $gives
+         (* **A `void` function returns nothing**, since 2026-09-26, and
+          * `cc` refuses `return 1;` in one. `return f();` of another `void`
+          * function is refused too, which C11 6.8.6.4 requires and `cc`
+          * allows with a warning. *)
+         ! $gives = "void"
+             : "a function that returns 'void' returns a value; 'return;' returns nothing" .
+
+  ReturnNothing ! $gives <> "void"
+                    : "'return;' returns nothing, and this function returns a value, which C11 6.8.6.4 requires" .
 
   (* The places a number is wanted and a struct is not one. *)
-  If     ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
-  IfElse ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+  If     ! $cond.record  : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind .
+  IfElse ! $cond.record  : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind .
   While  : down loops = $loops + 1
-         ! $cond.record  : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+         ! $cond.record  : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind .
   For    : down loops = $loops + 1
          ! $cond.record = [true]
              : "a struct is a condition, and C tests only numbers and pointers" .
   DoWhile : down loops = $loops + 1
-          ! $cond.record : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
+          ! $cond.record : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind .
 
   (* A `goto` names a label of its own function, anywhere in it, which the
    * `locals` pass has gathered; one in another function is not one. *)
@@ -1279,13 +1347,13 @@ arg  = e:assignment -> Arg(value: $e) .
    * `default` are labels of the innermost `switch` around them, loops or no
    * loops between, and are refused outside every one. *)
   Switch   : down switches = $switches + 1
-           ! $cond.record : "'switch' wants an integer, and this is 'struct {}'" of $cond.tag
+           ! $cond.record : "'switch' wants an integer, and this is '{}'" of $cond.kind
            ! $cond.type > 0 : "'switch' wants an integer, and this is a pointer" .
   Case     ! $switches = 0 : "'case' is not inside a switch" .
   Default  ! $switches = 0 : "'default' is not inside a switch" .
   Compare ! $left.record or $right.record
-              : "'{}' compares numbers and pointers, and this is 'struct {}'"
-                  of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
+              : "'{}' compares numbers and pointers, and this is '{}'"
+                  of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
   (* `!`, `&&` and `||` test their operands the way a condition does, C11
    * 6.5.3.3 and 6.5.13 to 6.5.14, so a struct is refused in them for the same
    * reason. Each is an `int`, 0 or 1, which is what `type` and `width` say
@@ -1294,10 +1362,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * so `sizeof(+c)` is 4 where `sizeof(c)` is 1, and that is the whole of
    * what `+` does. Both want a number. *)
   Invert  : width = lookup([[true, 8]], $value.wide, 4)
-          ! $value.record : "'~' wants a number, and this is 'struct {}'" of $value.tag
+          ! $value.record : "'~' wants a number, and this is '{}'" of $value.kind
           ! $value.type > 0 : "'~' wants a number, and this is a pointer" .
   Plus    : width = lookup([[true, 8]], $value.wide, 4)
-          ! $value.record : "'+' wants a number, and this is 'struct {}'" of $value.tag
+          ! $value.record : "'+' wants a number, and this is '{}'" of $value.kind
           ! $value.type > 0 : "'+' wants a number, and this is a pointer" .
 
   (* **A comma is worth its right side**, C11 6.5.17, and is not a place.
@@ -1320,13 +1388,13 @@ arg  = e:assignment -> Arg(value: $e) .
           : width = lookup([[0, lookup([[true, 8]], $then.wide or $other.wide, 4)]],
                            $then.type, $then.width)
           : tag   = $then.tag
-          : aggregate = $then.record
+          : aggregate = $then.record and $then.tag <> "void"
           ! $cond.record
-              : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag
+              : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind
           ! $then.record <> $other.record
               : "'?:' has a struct on one side and not on the other"
           ! $then.record and $other.record and $then.tag <> $other.tag
-              : "'?:' has 'struct {}' on one side and 'struct {}' on the other" of $then.tag, $other.tag
+              : "'?:' has '{}' on one side and '{}' on the other" of $then.kind, $other.kind
           ! ($then.type > 0) <> ($other.type > 0)
               : "'?:' has a pointer on one side and a number on the other, and this subset has no null pointer constant"
           ! $then.type > 0 and $other.type > 0
@@ -1334,10 +1402,10 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'?:' has pointers to two different types" .
 
   Not     ! $value.record
-              : "'!' tests a number or a pointer, and this is 'struct {}'" of $value.tag .
+              : "'!' tests a number or a pointer, and this is '{}'" of $value.kind .
   Logical ! $left.record or $right.record
-              : "'{}' tests numbers and pointers, and this is 'struct {}'"
-                  of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
+              : "'{}' tests numbers and pointers, and this is '{}'"
+                  of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
   Deref    : type  = $value.type - 1
            : width = $value.width
            : tag   = $value.tag
@@ -1345,7 +1413,13 @@ arg  = e:assignment -> Arg(value: $e) .
            : lvalue = true
            ! $value.type < 1
                : "'*' wants a pointer, and this is {}"
-                   of lookup([["", "an int"]], $value.tag, "a struct") .
+                   of lookup([["", "an int"], ["void", "'void'"]], $value.tag, "a struct")
+           (* **`*` on a `void *` is refused**, since 2026-09-26. `cc`
+            * refuses it wherever the value is read, and only warns at a
+            * statement that throws it away; here it is refused at both,
+            * since there is nothing of no width to load. *)
+           ! $value.type = 1 and $value.tag = "void"
+               : "'*' on a 'void *' has nothing to read: convert it to a pointer to something first" .
 
   (* **A member is the struct's layout read at the member's name.** The
    * entry is the same five things a name's is, where it is, its stars, its
@@ -1369,14 +1443,14 @@ arg  = e:assignment -> Arg(value: $e) .
          : size  = lookup([[0, $elem]], at($entry, 3), at($entry, 3) * $elem)
          : aggregate = at($entry, 3) > 0 or (at($entry, 2) = 0 and $tag <> "")
          : lvalue = $value.lvalue
-         ! $value.type <> 0 or $value.tag = ""
+         ! $value.type <> 0 or $value.tag = "" or $value.tag = "void"
              : "'{}' is asked for as a member of something that is not a struct" of $name
-         ! $value.type = 0 and $value.tag <> ""
+         ! $value.type = 0 and $value.tag <> "" and $value.tag <> "void"
                and not defined(at(lookup($known, $value.tag, [0, 1, empty]), 3), $name)
              : "'struct {}' has no member '{}'" of $value.tag, $name .
 
   Negate : width = lookup([[true, 8]], $value.wide, 4)
-         ! $value.record : "'-' wants a number, and this is 'struct {}'" of $value.tag
+         ! $value.record : "'-' wants a number, and this is '{}'" of $value.kind
          ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
 
   (* **`sizeof` is worth a `long`**, since 2026-09-23. C11 6.5.3.4 makes it
@@ -1387,8 +1461,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * now. *Not an `unsigned` one*, which is a later step, and nothing can see
    * the difference yet: a size is never negative, and `unsigned` arithmetic
    * is what would show it. *)
-  SizeOfType : type = 0 : width = 8 .
-  SizeOfExpr : type = 0 : width = 8 .
+  SizeOfType : type = 0 : width = 8
+             (* **`sizeof` of `void` is refused by name**, since 2026-09-26:
+              * C11 6.5.3.4 wants a complete type, and `cc` answers 1, as GNU
+              * C does. *)
+             ! $ptrs = 0 and $base.tagname = "void"
+                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
+  SizeOfExpr : type = 0 : width = 8
+             ! $value.record and $value.tag = "void"
+                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
 
   (* **A constant too big for an `int` is a `long`**, C11 6.4.4.1: an
    * unsuffixed decimal constant has the first of `int`, `long` that can
@@ -1468,24 +1549,34 @@ arg  = e:assignment -> Arg(value: $e) .
                   : tag   = lookup([[0, ""]], $type,
                                    lookup([[0, $right.tag]], $left.type, $left.tag))
       ! $left.record or $right.record
-          : "'{}' wants numbers or pointers, and this is 'struct {}'"
-              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+          : "'{}' wants numbers or pointers, and this is '{}'"
+              of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type > 0 and $right.type > 0
-          : "'+' does not add two pointers" .
+          : "'+' does not add two pointers"
+      (* **Arithmetic on a `void *` is refused by name**, since
+       * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
+       * `void` has no size. `cc` counts in bytes, as GNU C does. *)
+      ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
+          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
   Binary(op: "-") : type  = $left.type - $right.type
                   : width = lookup([[0, lookup([[true, 8]], $left.wide or $right.wide
                                                              or $left.type > 0, 4)]],
                                    $type, $left.width)
                   : tag   = lookup([[0, ""]], $type, $left.tag)
       ! $left.record or $right.record
-          : "'{}' wants numbers or pointers, and this is 'struct {}'"
-              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+          : "'{}' wants numbers or pointers, and this is '{}'"
+              of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type = 0 and $right.type > 0
           : "'-' does not take a pointer from a number"
       ! $left.type > 0 and $right.type > 0
             and ($left.type <> $right.type or $left.width <> $right.width
                  or $left.tag <> $right.tag)
-          : "'-' takes two pointers only when they point at the same type" .
+          : "'-' takes two pointers only when they point at the same type"
+      (* **Arithmetic on a `void *` is refused by name**, since
+       * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
+       * `void` has no size. `cc` counts in bytes, as GNU C does. *)
+      ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
+          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
   (* **A shift is the type of its left side**, C11 6.5.7, and not of the
    * wider of the two: `1 << (long)3` is an `int`, and `shifts.c` asks its
    * `sizeof`. Both sides are integers, so a pointer or a struct on either is
@@ -1493,14 +1584,14 @@ arg  = e:assignment -> Arg(value: $e) .
    * `long` count is read from its low half, which is all a shift reads. *)
   Binary(op: "<<") : width = lookup([[true, 8]], $left.wide, 4)
       ! $left.record or $right.record
-          : "'{}' wants numbers, and this is 'struct {}'"
-              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+          : "'{}' wants numbers, and this is '{}'"
+              of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type > 0 or $right.type > 0
           : "'{}' does not take a pointer" of $op .
   Binary(op: ">>") : width = lookup([[true, 8]], $left.wide, 4)
       ! $left.record or $right.record
-          : "'{}' wants numbers, and this is 'struct {}'"
-              of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+          : "'{}' wants numbers, and this is '{}'"
+              of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type > 0 or $right.type > 0
           : "'{}' does not take a pointer" of $op .
   (* C11 6.5.5 wants arithmetic on both sides of `*` and `/`, and integers on
@@ -1509,8 +1600,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * refusal rather than this subset's. *)
   Binary : width = lookup([[true, 8]], $left.wide or $right.wide, 4)
          ! $left.record or $right.record
-      : "'{}' wants numbers, and this is 'struct {}'"
-          of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
+      : "'{}' wants numbers, and this is '{}'"
+          of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
          ! $left.type > 0 or $right.type > 0
       : "'{}' does not take a pointer" of $op .
 

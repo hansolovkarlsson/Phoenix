@@ -826,6 +826,12 @@
                                lookup([[true, $small]], $retsize <= 16, $large)),
                         $fname .
 
+  (* **`return;` is the jump alone**, since 2026-09-26, ROADMAP 6.7. A
+   * `void` function has a `retsize` of 0, its layout's width, so nothing in
+   * the prologue keeps an `x8` for it, and falling off its end puts the 0
+   * in `x0` that every function's epilogue does, which nobody reads. *)
+  ReturnNothing : out = "\tb L{}.ret\n" of $fname .
+
   Block  : out = join($body.out) .
 
   (* The prologue saves the frame pointer and the return address, and lowers

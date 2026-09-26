@@ -595,7 +595,15 @@ value, which `cc` refuses and so will this: `duplicate-case-through-a-cast.c`.
    emits nothing that matters. `(void)` as a parameter list meaning none,
    which must not swallow `(void *p)`. `void *`, which converts to and from
    any other pointer without a cast, because the `types` pass checks no
-   pointer conversion at all; see below.
+   pointer conversion at all; see below. *Built 2026-09-26*: two programs
+   of its own agree with `cc`, `void-returns.c` and
+   `void-pointer-conversions.c`, since the entry's two `void` programs use
+   casts. **`void` as a fourth layout held**: a `void` value is a
+   `record`, and each of the thirteen refusals says one thing, once. What it
+   cost was the messages, about twenty-five of them, which said
+   `'struct {}'` of a tag and now say a `kind`, `'void'` or `'struct t'`;
+   and three places that ask whether a record is a struct in memory, which
+   a `void` is not: a call's temporary, `?:`, and a member.
 2. **Casts.** `( type-name ) unary`, tried before a parenthesised
    expression, where `%names` has already said whether `(t)` is a type. A
    cast is a value and not a place, so `(int)x = 3` and `&(long)x` are

@@ -2088,6 +2088,38 @@ refuses "a variadic call with too few arguments" "takes at least 1 arguments, an
         --driver check "$root/languages/c/c-arm64.phx" "$r/too-few-for-a-variadic.c"
 refuses "a struct passed through ..." "is given a 'struct pair' through '...'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-through-dots.c"
+# **`void`**, since 2026-09-26, ROADMAP 6.7. A `void` value is a record
+# to the types pass, so it is refused wherever a struct is refused where C
+# wants a number, and the message says 'void'. `cc` refuses the first nine
+# as well. The last four it compiles: `main` returning `void`, and three
+# GNU extensions, `sizeof(void)` as 1 and `void *` arithmetic in bytes, and
+# a typedef of `void`, which is C and is not here yet.
+refuses "return; from a function that returns an int" "'return;' returns nothing" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-nothing-from-an-int.c"
+refuses "a value returned from a void function" "a function that returns 'void' returns a value" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-a-value-from-void.c"
+refuses "a void value put in an int" "'void' is put where a number or a pointer goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-value-used.c"
+refuses "a void value added to" "'+' wants numbers or pointers, and this is 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-value-added.c"
+refuses "a void value passed" "is given the value of something 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-value-as-an-argument.c"
+refuses "a void local" "'v' is declared 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-local.c"
+refuses "a void parameter" "'x' is a parameter of type 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-parameter.c"
+refuses "a void member" "'v' is a member of type 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-member.c"
+refuses "* on a void pointer" "'*' on a 'void *' has nothing to read" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/deref-a-void-pointer.c"
+refuses "main returning void" "'main' returns an int, C11 5.1.2.2.1, and this says 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/main-returns-void.c"
+refuses "sizeof of void" "'sizeof' of 'void' has no size" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/sizeof-void.c"
+refuses "arithmetic on a void pointer" "'+' on a 'void *' counts in something of no size" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-pointer-arithmetic.c"
+refuses "a typedef of void" "is a typedef of 'void', which is C and is not here yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-void.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

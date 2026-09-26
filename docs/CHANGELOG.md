@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: `void` in C
+
+**A C function can return `void`**, the first part of
+[ROADMAP 6.7](ROADMAP.md#67-void-and-casts). `return;` leaves one, and falling
+off its end does too. `f(void)` declares a function of no parameters, as
+`int main(void)` does. `void *` converts to and from any other pointer
+without a cast, so `void *malloc(long n);` is how `malloc` is declared now.
+A `void` value used as a number, `return;` in a function that returns one, a
+value returned from a `void` function, and a variable, parameter or member
+declared `void` are refused, as `cc` refuses them. Declined by name, although
+`cc` compiles them: `sizeof(void)`, arithmetic on a `void *`, `main`
+returning `void`, and a `typedef` of `void` itself.
+
+**Tests:** 366 → 379, for thirteen refusals. Two programs join the C
+oracle: 242 agree with `cc`, 143 are refused, none diverges.
+
+---
+
 ## 2026-09-26: `printf` in C
 
 **A C program can call `printf`**, and any function declared with `...`,
