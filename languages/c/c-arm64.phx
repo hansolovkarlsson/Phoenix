@@ -389,6 +389,29 @@
   thread argreg = 0
   thread temps  = 0
 
+  (* **An argument past the named ones**, to a function that ends in `...`,
+   * since 2026-09-26, ROADMAP 6.6. Apple's arm64 does not put it in a
+   * register even when one is free: every one goes on the stack, **each in a
+   * slot of eight bytes** from `sp` upward in order, which is not how a ninth
+   * named argument goes and is not what AAPCS64 itself says. `cc -S` on
+   * `printf("%d %ld %c\n", n, 5L, c)` stores the three at `[sp]`, `[sp, #8]`
+   * and `[sp, #16]`, and puts only the format in `x0`.
+   *
+   * So an extra is pushed like any argument and never loaded. Once the
+   * registers are, the call lowers `sp` by `vroom`, eight bytes an extra
+   * rounded up to sixteen, and each extra is copied from its push into its
+   * slot through `x9`. **The slots are below the pushes and not inside
+   * them**, which was the plan: in place, one of the copies overwrites a push
+   * not yet read, whichever way it runs, once there are enough extras, and
+   * ten are enough. `sp` goes back up after the `bl` instead of before it,
+   * by both amounts, and a call with no extras is emitted as it always was.
+   *
+   * An extra gets C's default argument promotions, C11 6.5.2.2p7, and
+   * nothing more. A `char` is already an `int` in `w0`, and an `int` is
+   * pushed zero-extended and is **not** widened, because no parameter says
+   * `long`: `printf` reads thirty-two bits for a `%d`. A struct is refused by
+   * the `types` pass, so an extra is always one register. *)
+
   Arg  : index  = $argn : argn = $argn + 1
        : small  = $value.record and $value.size <= 16
        : large  = $value.record and $value.size > 16
@@ -398,17 +421,23 @@
        : tpos   = $framebase + $temps + $room
        : temps  = $temps + lookup([[true, $room]], $large, 0)
        : n      = $label : label = $label + lookup([[true, 1]], $value.record, 0)
+       : extra  = $index >= size($wantwide)
        : widen  = lookup([[true, "\tsxtw x0, w0\n"]],
-                         at($wantwide, $index + 1) and $value.type = 0 and not $value.wide, "")
+                         not $extra and at($wantwide, $index + 1)
+                         and $value.type = 0 and not $value.wide, "")
        : scalar = "{}{}\tstr x0, [sp, #-16]!\n" of $value.out, $widen
        : packed = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}"
                     of $value.out, ($copy of $value.size, $n, "x0", "x1", $n)
        : copied = "{}\tsub x1, x29, #{}\n{}\tstr x1, [sp, #-16]!\n"
                     of $value.out, $tpos, ($copy of $value.size, $n, "x0", "x1", $n)
        : out    = lookup([[true, $packed]], $small, lookup([[true, $copied]], $large, $scalar))
-       : load   = lookup([[2, "\tldp x{}, x{}, [sp, #{}]\n" of $reg, $reg + 1, 16 * ($nargs - 1 - $index)]],
-                         $words,
-                         "\tldr x{}, [sp, #{}]\n" of $reg, 16 * ($nargs - 1 - $index)) .
+       : load   = lookup([[true, ""]], $extra,
+                         lookup([[2, "\tldp x{}, x{}, [sp, #{}]\n" of $reg, $reg + 1, 16 * ($nargs - 1 - $index)]],
+                                $words,
+                                "\tldr x{}, [sp, #{}]\n" of $reg, 16 * ($nargs - 1 - $index)))
+       : copy   = lookup([[true, "\tldr x9, [sp, #{}]\n\tstr x9, [sp, #{}]\n"
+                                   of $vroom + 16 * ($nargs - 1 - $index), 8 * ($index - size($wantwide))]],
+                         $extra, "") .
 
   (* **A struct returned** is AAPCS64's rule B.5 and C.8 read backwards,
    * since 2026-09-23. One of up to sixteen bytes comes back packed in `x0`
@@ -439,6 +468,7 @@
        : down argn    = 0
        : down argreg  = 0
        : down nargs   = size($args)
+       : down vroom   = ((8 * (size($args) - size($argwide)) + 15) div 16) * 16
        : argn   = $held
        : argreg = $heldreg
        : small  = $aggregate and $width <= 16
@@ -446,10 +476,15 @@
        : room   = (($width + 15) div 16) * 16
        : tpos   = $framebase + $temps + $room
        : temps  = $temps + lookup([[true, $room]], $aggregate, 0)
-       : out = "{}{}\tadd sp, sp, #{}\n{}\tbl _{}\n{}"
-           of join($args.out), join($args.load), 16 * size($args),
+       : extras = size($args) - size($argwide)
+       : below  = ((8 * $extras + 15) div 16) * 16
+       : out = "{}{}{}{}\tbl _{}\n{}{}"
+           of join($args.out), join($args.load),
+              lookup([[0, "\tadd sp, sp, #{}\n" of 16 * size($args)]], $extras,
+                     "\tsub sp, sp, #{}\n{}" of $below, join($args.copy)),
               lookup([[true, "\tsub x8, x29, #{}\n" of $tpos]], $large, ""),
               $name,
+              lookup([[0, ""]], $extras, "\tadd sp, sp, #{}\n" of 16 * size($args) + $below),
               lookup([[true, "\tsub x9, x29, #{}\n\tstp x0, x1, [x9]\n\tmov x0, x9\n" of $tpos]], $small,
                      lookup([[true, "\tsub x0, x29, #{}\n" of $tpos]], $large,
                             lookup([[true, "\tmov w0, w0\n"]], $type = 0 and not $wide, "")))

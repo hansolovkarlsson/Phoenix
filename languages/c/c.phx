@@ -638,7 +638,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * and parameter k was slot k; now it is counted on its own. *)
   thread pindex = 0
 
-  (* The functions declared so far, name to arity. A definition binds itself
+  (* The functions declared so far, name to its arity and whether it ends in
+   * `...`, 1 or 0, since 2026-09-26. A definition binds itself
    * on the way *in*, with a `down` clause, so that its own body can call it;
    * the value flows on to the functions after it, which is what a `down` on
    * a thread does when nothing restores it. A prototype binds on the way
@@ -817,7 +818,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : funcs = bind($funcs, $name, size($params))
+            : funcs = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
             : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs])
             : pwidths = bind($pwidths, $name, $params.pwide)
@@ -839,7 +840,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : down funcs  = bind($funcs, $name, size($params))
+            : down funcs  = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
             : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs])
             : pwidths = bind($pwidths, $name, $params.pwide)
@@ -892,9 +893,16 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Call ! not defined($funcs, $name)
            : "'{}' is called before it is declared" of $name
-       ! defined($funcs, $name) and size($args) <> lookup($funcs, $name, 0)
+       ! defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) = 0
+           and size($args) <> at(lookup($funcs, $name, [0, 0]), 1)
            : "'{}' takes {} arguments, and this gives {}"
-               of $name, lookup($funcs, $name, 0), size($args) .
+               of $name, at(lookup($funcs, $name, [0, 0]), 1), size($args)
+       (* **A function that ends in `...` takes at least its named
+        * arguments**, C11 6.5.2.2p2, and any number more. *)
+       ! defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) = 1
+           and size($args) < at(lookup($funcs, $name, [0, 0]), 1)
+           : "'{}' takes at least {} arguments, and this gives {}"
+               of $name, at(lookup($funcs, $name, [0, 0]), 1), size($args) .
 
   (* A block is a scope: its declarations are torn down on the way out and
    * the enclosing tables come back. The byte counter is *not* restored,
@@ -1172,11 +1180,33 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'struct {}' is put where a number or a pointer goes" of $value.tag .
 
   (* An argument is a copy into the parameter, so the same rule again, asked
-   * at the call where both sides are known: `$sig` is the callee's parameters
-   * as the `locals` pass had them, each the tag of a struct passed whole or
-   * "". The lists are compared whole, which is position by position. *)
+   * of each argument where both sides are known: `$sig` is the callee's
+   * parameters as the `locals` pass had them, each the tag of a struct passed
+   * whole or "", and `$argi` is where this argument is in the call.
+   *
+   * **It was asked of the call, comparing two lists whole**, until
+   * 2026-09-26. An argument past the named ones, to a function that ends in
+   * `...`, has no parameter to be compared with, and the notation has no way
+   * to take the first few of a list, so the question moved to where the
+   * position is known. It counts the way the emit pass counts: the call
+   * resets the thread for its own arguments and puts it back after.
+   *
+   * **A struct passed through `...` is refused by name**, though `cc`
+   * compiles it: Apple's arm64 lays one out by rules of its own, and nothing
+   * here needs it, `printf` having no conversion that reads one. A check
+   * cannot read what its own rule computes, so the tag is written out. *)
+  thread argi = 0
+
   Arg      : type = $value.type
-           : carries = lookup([[true, $value.tag]], $value.record, "") .
+           : carries = lookup([[true, $value.tag]], $value.record, "")
+           : argi = $argi + 1
+           ! $argi < size($sig)
+             and lookup([[true, $value.tag]], $value.record, "") <> at($sig, $argi + 1)
+               : "'{}' is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
+                   of $callee
+           ! $argi >= size($sig) and $value.record
+               : "'{}' is given a 'struct {}' through '...', and a struct is not passed that way here"
+                   of $callee, $value.tag .
   Program  : down callees = $allsigs
            : down labelled = $alllabels
            : down results = $allrets
@@ -1191,15 +1221,17 @@ arg  = e:assignment -> Arg(value: $e) .
    * pointed at: `lvalue` stays false, as it is for an assignment. The emit
    * pass puts it in the caller's frame, so, like any struct, it is its own
    * address. *)
-  Call     : argwide   = lookup($wides, $name, [])
+  Call     : down sig    = lookup($callees, $name, [])
+           : down callee = $name
+           : down held   = $argi
+           : down argi   = 0
+           : argi      = $held
+           : argwide   = lookup($wides, $name, [])
            : returns   = lookup($results, $name, ["", 4, 0])
            : tag       = at($returns, 1)
            : width     = at($returns, 2)
            : type      = at($returns, 3)
-           : aggregate = $type = 0 and $tag <> ""
-           ! $args.carries <> lookup($callees, $name, $args.carries)
-               : "'{}' is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
-                   of $name .
+           : aggregate = $type = 0 and $tag <> "" .
 
   (* **A `return` is a copy into what the function returns**, so it is the
    * assignment's rule once more: a struct takes only its own kind, and an

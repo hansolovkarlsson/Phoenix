@@ -525,9 +525,10 @@ expression operators, was opened and closed the same day.** **So were
 program runs**, built in the order 6.4 without `switch`, then 6.5, then
 `switch`. What keeps a C program out of the subset now is its types and its
 declarations, step four of the toolchain document, and each arrives the way
-every entry does, with what breaks without it written down first. **Open:
-[6.6](#66-a-call-to-printf), a call to a function declared with `...`**,
-the first of them.
+every entry does, with what breaks without it written down first. **The
+first of them, [6.6](COMPLETED.md#66-a-call-to-printf), a call to a function
+declared with `...`, was opened and closed on 2026-09-26.** Nothing in the
+arc is open here until the next construct is started.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -537,87 +538,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.6 A call to `printf`
-
-C11 6.7.6.3 lets a prototype end in `, ...`, and a call may then pass more
-arguments than the prototype names. The subset cannot declare one, so it
-cannot call `printf`, and **every oracle program that prints a number
-hand-writes a `digits` helper over `putchar`**: 24 of them do today. It comes
-first of the types and declarations because it costs the least and every
-program after it is shorter for it. It is also **the first time Phoenix puts
-an argument on the stack**, which the refusal of a ninth parameter has named
-as missing since 6.1.
-
-**Three programs show what breaks without it.** `cc` compiles and runs each,
-and Phoenix stops at the `.` of the `...` in the first line of each. They
-join `languages/c/tests/oracle/` with the part that makes them agree:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `printf-arguments.c`: `%d` of a negative `int`, `%ld` of a `long` whose low half is 5, `%c`, `%s`, `%%`, ten arguments in order, one with none, and one with one | exits 3, prints `-2 4294967301 A ok %` and four lines more | stops at `...`, `expected int, char, long, struct or name` |
-| `printf-nested.c`: an argument that is a call to a function that calls `printf`, so an inner variadic call runs while the outer call's arguments are on the stack | exits 6, prints `<4294967296>1 4 3` | as above |
-| `variadic-defined.c`: a function defined with `...` that never reads past its named parameter, called with no extras, with two, and with three, one of them a string | exits 15, prints `3` | as above |
-
-**What writing them found: on this machine, a variadic argument is not
-where an ordinary one is.** Apple's arm64 ABI puts the named arguments in
-`x0` to `x7` as AAPCS64 does, and then **every argument past them on the
-stack**, even when registers are free, each in **a slot of eight bytes** from
-`sp` upward in order. `cc -S` on `printf("%d %ld %c\n", n, 5L, c)` stores
-the three at `[sp]`, `[sp, #8]` and `[sp, #16]` and puts only the format in
-`x0`. **A ninth named argument is not laid out that way**: `cc` packs those
-at their own size, so two `int`s share one eight-byte word. The ninth
-parameter stays refused, and this entry does not open it.
-
-The witness is `libc`'s `printf`, compiled by `cc`. Nothing the subset
-compiles can read past its named parameters, so a callee compiled here cannot
-see a slot put in the wrong place: `printf` is the only reader, as a callee
-from the other compiler is the only reader in `tests/abi/`. So the witness has
-to **look at every bit it can**: the `long` is 4294967301 and not 5, because a
-slot stored with `str w0` would print 5 correctly, and the ten arguments are
-ten different numbers, because a slot out of order would pass with ten equal
-ones.
-
-**Built in two parts, in this order**, each with the suite green:
-
-1. **The declaration.** `...` joins the three-character line of `symbol`;
-   until then it is three `.`s, which is why Phoenix stops at the first.
-   `params` may end in `, ...`, and a `Prototype` and a `Function` carry
-   whether it does. The shape `locals` compares becomes the name, the count
-   and the ellipsis together, so a prototype with `...` and a definition
-   without are two shapes, as `cc` says they are two types. A definition
-   with `...` compiles as it would without, because nothing in its body can
-   reach the rest. *Built 2026-09-26*: `variadic-named-only.c` agrees with
-   `cc`, calling `printf` with a format alone and a function of its own with
-   its two named arguments, a `long` among them. **The flag is a list's
-   size**, `[ "," "..." ]` matched or not, as a declaration's stars are
-   counted, and the check that a prototype and its definition agree is a
-   second shape beside the arity's, so that each refusal names what differs.
-2. **The call.** A call to a variadic function is refused only when it gives
-   fewer arguments than the prototype names. An argument past them gets C's
-   **default argument promotions**, C11 6.5.2.2p7, and nothing more: a `char`
-   is already an `int` in `x0`, and an `int` is **not** widened to a `long`,
-   because no prototype says to. The emit pass loads the named arguments into
-   registers as today, then moves the rest from their sixteen-byte pushes
-   into eight-byte slots at the bottom of the area, in order, and raises `sp`
-   by what is left, so that it is still sixteen-aligned at the `bl`. Which
-   way that copy runs, so that no push is overwritten before it is read, is
-   the part to get right, and `printf-arguments.c`'s ten are its witness.
-
-**What `cc` refuses, and so will this**: `...` with no named parameter before
-it, which C11 requires and C23 does not; `...` anywhere but last; a call with
-fewer arguments than the named ones; and a prototype with `...` beside a
-definition without. **Refused by name, though `cc` compiles it**: a struct
-passed through `...`, which Apple's ABI lays out by its own rules and
-`printf` has no conversion to read. Each is a program in `refused/` when its
-part is built.
-
-*Not in this step:* `va_list`, `va_start` and `va_arg`, which is a function
-defined here reading its own extras; `<stdarg.h>` defines them as
-`__builtin_va_start` and its kin, which are the compiler's and not a header's,
-so no `cc -E` supplies them. `const`, so the prototype is written
-`int printf(char *format, ...);` and `cc`'s warning that the library's has a
-`const` is silenced by `-w`, as every oracle program's warnings are. The 24
-`digits` helpers stay as they are: each is part of the program it was written
-to witness, and a new program uses `printf`. **The entry closes** when the
-three programs agree with `cc`, with none diverging.

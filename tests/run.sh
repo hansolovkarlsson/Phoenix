@@ -2081,6 +2081,13 @@ refuses "... before another parameter" 'expected ), and found ","' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/ellipsis-not-last.c"
 refuses "... in a prototype and not in the definition" "with '...' in one place and without it in another" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/variadic-declared-two-ways.c"
+# A call through `...` gives at least the named arguments, as `cc` says.
+# A struct among the rest is refused by name, though `cc` compiles it:
+# Apple's arm64 lays one out by rules of its own, and nothing reads it.
+refuses "a variadic call with too few arguments" "takes at least 1 arguments, and this gives 0" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/too-few-for-a-variadic.c"
+refuses "a struct passed through ..." "is given a 'struct pair' through '...'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-through-dots.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

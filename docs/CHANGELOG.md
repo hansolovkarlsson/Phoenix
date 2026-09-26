@@ -16,10 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: `printf` in C
+
+**A C program can call `printf`**, and any function declared with `...`,
+with as many arguments past the named ones as it likes. That closes
+[6.6](COMPLETED.md#66-a-call-to-printf). The extra arguments go where
+Apple's arm64 puts them, on the stack in slots of eight bytes, so `printf`
+from the system library reads them: `%d`, `%ld`, `%c` and `%s` all work,
+with ten arguments or none. A call with fewer than the named arguments is
+refused, as `cc` refuses it. Declined by name, although `cc` compiles it: a
+struct passed through `...`.
+
+**Tests:** 364 → 366, for the two refusals. Three programs join the C
+oracle: 240 agree with `cc`, 130 are refused, none diverges.
+
+---
+
 ## 2026-09-26: a C function declared with `...`
 
 **A C function can be declared or defined with `...` after its
-parameters**, the first part of [ROADMAP 6.6](ROADMAP.md#66-a-call-to-printf).
+parameters**, the first part of [6.6](COMPLETED.md#66-a-call-to-printf).
 So `int printf(char *format, ...);` is now a declaration the subset reads,
 and `printf("hello\n")` works. A call still passes exactly the named
 arguments: passing more is the second part. `...` with no parameter before
