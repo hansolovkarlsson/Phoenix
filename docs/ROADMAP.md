@@ -608,7 +608,16 @@ address initialiser is a relocation the assembler writes: `cc` puts
    `add`, and writes each into `__DATA,__data` as a `.byte`, `.long` or
    `.quad`, or as zeros. An initialiser must be settled, and a global
    whose is not is refused as `cc` refuses it. `globals.c` and
-   `global-initialisers.c` are its witnesses.
+   `global-initialisers.c` are its witnesses. *Built 2026-09-26*, with
+   three things the plan did not say. **An initialiser needs the globals
+   too**: it is an expression at file scope, whose `env` was empty, so
+   `int b = a;` said `a` was undeclared rather than not constant, and it is
+   handed the globals as a function is. **A struct and a variable of it in
+   one statement**, `struct pt { ... } origin;`, is not in the subset, and
+   both witnesses were written that way and had to be split. And **no
+   witness looked at alignment**, which arm64 does not fault on: a global
+   placed with none passed until each program printed an address modulo
+   its type's size, after a `char`, which `cc` guarantees is 0.
 3. **An address initialiser**: a string literal, `&` of a global, or a
    global array's name, each written as the label it is. `global-pointers.c`
    is its witness. **An address with an offset**, `&table[1]`, `table + 2`

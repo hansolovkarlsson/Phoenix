@@ -177,7 +177,18 @@ item = function
       * count is a field of the declaration and not of its type; that arrives
       * when a program wants it. *)
      | "typedef" b:base s:{ "*" } n:name ";"
-         -> Typedef(name: $n, base: $b, stars: size($s)) .
+         -> Typedef(name: $n, base: $b, stars: size($s))
+     (* **A global is a declaration at file scope**, since 2026-09-26,
+      * ROADMAP 6.8, and is written as a local is: a base, stars and a name,
+      * with a count in brackets or an initialiser. It is tried after a
+      * function, which fails at the `;`, `[` or `=` where its `(` was
+      * wanted. Three nodes, for the reason a local is three. *)
+     | b:base s:{ "*" } n:name "[" c:integer "]" ";"
+         -> GlobalArray(name: $n, base: $b, stars: size($s), count: int($c))
+     | b:base s:{ "*" } n:name "=" e:assignment ";"
+         -> GlobalInit(name: $n, base: $b, stars: size($s), value: $e)
+     | b:base s:{ "*" } n:name ";"
+         -> Global(name: $n, base: $b, stars: size($s), count: 0) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -591,6 +602,9 @@ arg  = e:assignment -> Arg(value: $e) .
             : dshape = []
             : dname = []
             : fname = [] .
+  Global      : shape = [] : dshape = [] : dname = [] : fname = [] .
+  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] .
+  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] .
 
   (* Written out rather than named: a check runs before the attributes its
    * rule computes, so it cannot read them, and `phx` says so. *)
@@ -672,6 +686,16 @@ arg  = e:assignment -> Arg(value: $e) .
    * a thread does when nothing restores it. A prototype binds on the way
    * out, which for a node with no body is the same moment. *)
   thread funcs = empty
+
+  (* **The globals declared so far**, since 2026-09-26, ROADMAP 6.8, each
+   * the entry a local's is, with `true` for the sixth field, which says
+   * *global* to the emit pass, and a seventh, whether it was initialised.
+   * The offset is 0 and unused: a global is reached by its name. The thread
+   * is never reset, and **a function starts its `env` from it** instead of
+   * from `empty`, so a local or a parameter hides a global exactly as a
+   * block's local hides an outer one, and a function above a global does
+   * not see it, which is C11 6.2.1's order. *)
+  thread globals = empty
 
   (* **What each function takes**, name to a list with one entry per
    * parameter: the tag of a struct passed whole, or "". Bound on the way out,
@@ -789,6 +813,8 @@ arg  = e:assignment -> Arg(value: $e) .
            * pointer and is allowed. *)
           ! $stars + $base.ptrs = 0 and $base.tagname = "void"
               : "'{}' is a typedef of 'void', which is C and is not here yet; a typedef of 'void *' is" of $name
+          ! defined($globals, $name)
+              : "'{}' is a global already, and a typedef and a global share one name space, C11 6.2.3" of $name
           ! defined($typedefs, $name)
               and lookup($typedefs, $name, empty)
                   <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
@@ -876,6 +902,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
+            ! defined($globals, $name)
+                : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
             ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
@@ -888,7 +916,7 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Function  : rptrs = $stars + $ret.ptrs
             : down fn     = $name
-          : down env    = empty
+          : down env    = $globals
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
@@ -900,6 +928,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
+            ! defined($globals, $name)
+                : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
             ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
@@ -934,7 +964,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
@@ -977,7 +1007,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -997,7 +1027,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1018,7 +1048,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1028,10 +1058,71 @@ arg  = e:assignment -> Arg(value: $e) .
                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
              ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
+  (* **A global takes no frame**, and is bound in `globals` instead of
+   * `env`, with the name its entry needs and nothing the frame counts. Its
+   * width and alignment are the emit pass's, to lay it out in
+   * `__DATA,__data`. The refusals are a local's, and three of file scope's
+   * own: a name a function or a typedef already has, and a global declared
+   * twice. `cc` refuses two initialisers; it takes a second declaration
+   * when one of the two has none, C11 6.9.2's tentative definition, which
+   * is what a common symbol is for and is refused here by name. *)
+  Global      : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $ebytes
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false])
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($globals, $name)
+                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($funcs, $name)
+                  : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
+              ! defined($typedefs, $name)
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+  GlobalArray : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $count * $ebytes
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false])
+              ! $count < 1
+                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
+                      of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($globals, $name)
+                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($funcs, $name)
+                  : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
+              ! defined($typedefs, $name)
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+  (* An initialiser is an expression at file scope, where the names are the
+   * globals above it: `int b = a;` finds `a`, and is refused because it is
+   * not constant, as `cc` refuses it, rather than as undeclared. *)
+  GlobalInit  : down env = $globals
+              : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $ebytes
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true])
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
+                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
+                  : "'{}' is defined twice, with an initialiser each" of $name
+              ! defined($funcs, $name)
+                  : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
+              ! defined($typedefs, $name)
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, ""])
+  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false])
+           : global  = at($means, 6)
            : offset  = at($means, 1)
            : stars   = at($means, 2)
            : count   = at($means, 3)
@@ -1247,6 +1338,15 @@ arg  = e:assignment -> Arg(value: $e) .
                               "something that is not a struct")
             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
                 : "'{}' is put where a number or a pointer goes" of $value.kind .
+
+  (* **A global's initialiser** is an assignment too, since 2026-09-26, and
+   * a value is all it can be: a struct global would need a brace-enclosed
+   * initialiser, which the subset does not have, and is refused by name. *)
+  GlobalInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
+                 : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
+                     of $name, $base.tagname
+             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
+                 : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   (* An argument is a copy into the parameter, so the same rule again, asked
    * of each argument where both sides are known: `$sig` is the callee's
@@ -1804,3 +1904,11 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'case {}' is in this switch twice" of $value.folded .
   Default : defaults = $defaults + 1
           ! $defaults > 0 : "this switch has a 'default' already" .
+
+  (* **A global's initialiser is the pass's second customer**, since
+   * 2026-09-26, ROADMAP 6.8: C11 6.7.9p4 wants it worked out before the
+   * program runs, as a `case` label is, and `cc` refuses one that cannot
+   * be. The emit pass writes the folded value into the object file. *)
+  GlobalInit ! not $value.settled
+                 : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this cannot be"
+                     of $name .

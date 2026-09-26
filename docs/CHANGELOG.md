@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: global variables in C
+
+**A C program can declare a variable outside every function**, the second
+part of [ROADMAP 6.8](ROADMAP.md#68-globals): `int count;`, `long big =
+4294967296 * 2;`, `char table[16];`. One with no initialiser starts at
+zero, and one with an initialiser is given it when the program is compiled,
+converted to its type as an assignment would be, so `char c = 200;` is -56.
+A local or a parameter of the same name hides a global inside its function,
+and a function above a global cannot see it. A global defined twice, one
+named like a function or a typedef, a `void` one, and one initialised with a
+call or with another global are refused, as `cc` refuses them. Declined by
+name, although `cc` compiles them: a global declared twice where one has no
+initialiser, which C allows, and an array of no elements. An initialiser
+that is an address, `char *s = "hi";`, is the next part.
+
+**Tests:** 390 → 403, for thirteen refusals. Two programs join the C
+oracle: 249 agree with `cc`, 167 are refused, none diverges.
+
+---
+
 ## 2026-09-26: `long` constants in C
 
 **A constant `long` expression is worked out when the program is compiled**,

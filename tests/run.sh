@@ -2154,6 +2154,36 @@ refuses "a case label that divides the most negative long by -1" "has to be work
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-divides-the-most-negative-long.c"
 refuses "a case label that shifts an int past its width" "has to be worked out before the program runs" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-shifts-an-int-past-its-width.c"
+# **Globals**, since 2026-09-26, ROADMAP 6.8. `cc` refuses the first ten.
+# The last three it compiles: a global declared twice where one has no
+# initialiser, C11 6.9.2's tentative definition, both ways round, which is
+# what a common symbol is for; and an array of no elements, as for a local.
+refuses "a global defined twice" "'x' is defined twice, with an initialiser each" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-defined-twice.c"
+refuses "a global, then a function of its name" "'f' is a global already" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-then-function.c"
+refuses "a function, then a global of its name" "'f' is a function already" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-then-global.c"
+refuses "a global named like a typedef" "'t' is a typedef already" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-named-like-a-typedef.c"
+refuses "a typedef named like a global" "'t' is a global already" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-named-like-a-global.c"
+refuses "a void global" "'v' is declared 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/void-global.c"
+refuses "a global initialised from a call" "'x' has to be initialised with something worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-call.c"
+refuses "a global initialised from another" "'b' has to be initialised with something worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-another.c"
+refuses "a global used above its declaration" "'x' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-used-above.c"
+refuses "a struct global with an initialiser" 'which wants braces, and they are not here yet' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-struct-initialised.c"
+refuses "a global declared twice" "'x' is declared twice at file scope" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-declared-twice.c"
+refuses "a global declared, then defined" "'x' is declared twice at file scope" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-declared-then-defined.c"
+refuses "a global array of no elements" "'a' is an array of no elements" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-of-no-elements.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')

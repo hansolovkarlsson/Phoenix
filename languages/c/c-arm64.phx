@@ -181,9 +181,17 @@
    * An array's decay is the half that is observed. The register for a
    * scalar comes from its `size` rather than its stars, because `size` is
    * the thing that knows. *)
-  Variable  : load = "\t{}, [x29, #-{}]\n"
-                  of lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0"), $offset
-            : addr = "\tsub x0, x29, #{}\n" of $offset
+  (* **A global is reached by its name**, since 2026-09-26, ROADMAP 6.8,
+   * as a string literal is: `adrp` to its page and `add` for the rest, and
+   * a load from there. `cc` reaches a global with no initialiser through
+   * the GOT, because it makes one a common symbol another file may define;
+   * every global here is defined in its own file, so it is reached
+   * directly. *)
+  Variable  : ldr  = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")
+            : addr = lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $name, $name]],
+                            $global, "\tsub x0, x29, #{}\n" of $offset)
+            : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
+                            "\t{}, [x29, #-{}]\n" of $ldr, $offset)
             : out  = lookup([[true, $addr]], $aggregate, $load) .
 
   (* A dereference is a load from what the value came out as, and its address
@@ -882,8 +890,34 @@
   Prototype : out = "" .
   StructDef : out = "" .
   Typedef   : out = "" .
+
+  (* **Globals are written into `__DATA,__data`**, since 2026-09-26, after
+   * the code and the strings, collected on a thread of their own as the
+   * strings are. Each is `.globl`, as `cc` makes one, aligned as its type
+   * is, and is its initialiser's value in the width it has, or zeros,
+   * which is C11 6.7.9p10 for a global with none. The value is the
+   * `constants` pass's, **converted to the global's type** the way an
+   * assignment converts it: `char c = 300;` keeps the low byte, as `cc`
+   * does with a warning, and the assembler is handed the byte as a number
+   * from 0 to 255, which is how it wants one. A pointer initialised with 0
+   * is eight bytes of 0. *)
+  thread gdata = ""
+
+  Global      : out = ""
+              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t.space {}\n"
+                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+  GlobalArray : out = ""
+              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t.space {}\n"
+                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+  GlobalInit  : out = ""
+              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t{} {}\n"
+                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
+                             lookup([[1, ".byte"], [4, ".long"]], $ebytes, ".quad"),
+                             lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                    $ebytes, $value.folded) .
   Program   : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
-            : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
+            : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}"
+                      of join($items.out, "\n"), $data, $gdata .
 
 %driver arm64 = functions, locals, types, constants, emit-arm64 -> out .
 %driver check = functions, locals, types, constants .
