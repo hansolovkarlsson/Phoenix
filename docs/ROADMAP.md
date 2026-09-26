@@ -202,7 +202,7 @@ thing about the notation — see [1.3](COMPLETED.md#13-a-way-for-a-description-t
 | `bytes(list, width)` | a **column** of numbers, each as bytes. Not a new entry — the same function taking a list, the way `bind` takes names pairwise and `each` takes two lists |
 
 C's constant expressions added **three more**, on 2026-09-25, for
-[6.5](#65-constant-expressions):
+[6.5](COMPLETED.md#65-constant-expressions):
 
 | | |
 | --- | --- |
@@ -519,11 +519,14 @@ is complete**, closed on 2026-09-23 when `long` made its last two
 divergences agree. **Its second, [6.2](COMPLETED.md#62-a-function-that-returns-a-pointer),
 a function that returns a pointer, was opened and closed on 2026-09-25.**
 **Its third, [6.3](COMPLETED.md#63-the-operators), the rest of C's
-expression operators, was opened and closed the same day.** **Open:
-[6.4](#64-the-statements), the statements C has and the subset does not, and
-[6.5](#65-constant-expressions), expressions worked out before the program
-runs**, which `switch` is the first thing to need. They are built in the
-order 6.4 without `switch`, then 6.5, then `switch`.
+expression operators, was opened and closed the same day.** **So were
+[6.4](COMPLETED.md#64-the-statements), the statements, and
+[6.5](COMPLETED.md#65-constant-expressions), expressions worked out before the
+program runs**, built in the order 6.4 without `switch`, then 6.5, then
+`switch`. Nothing in the arc is open here until the next construct is
+started. What keeps a C program out of the subset now is its types and its
+declarations, step four of the toolchain document, and each arrives the way
+every entry does, with what breaks without it written down first.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -533,148 +536,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.4 The statements
-
-The subset has `return`, `if`, `else`, `while`, `for`, blocks, declarations
-and expression statements. C also has `break`, `continue`, `do`, `switch`,
-`case`, `default`, `goto` and labels, and the empty statement `;`. **This is
-the last gap in control flow**: after it, what keeps a C program out of the
-subset is its types and its declarations, which is step four of the
-toolchain document. It comes now because it depends on nothing that is not
-built, and it is where the operators of [6.3](COMPLETED.md#63-the-operators)
-get used the way C programs use them: `i++` in a loop header and `&&` in a
-condition.
-
-**Three programs show what breaks without it**, and `cc` compiles and runs
-each. They join `languages/c/tests/oracle/` with the part that makes them
-agree:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `loop-exits.c`: `break` and `continue` in `for` and `while`, a `break` in a nested loop leaving only the inner one, `do` running its body once when the condition is false, and `for (...) ;` | exits 170, prints `aabbcc` | stops at `do {`, having read `break;` as a name |
-| `goto.c`: a `goto` backwards to make a loop, one forwards out of two nested loops, and one over a statement that never runs | exits 35, prints `23` | stops at the `:` of the first label |
-| `switch.c`: several `case`s on one statement, falling through, `default` in the middle, `break` and `continue` inside a `switch` inside a loop, a `char` case and a negative one | exits 142, prints `zo.o.df.fdf` | stops at the `{` after `switch (c)`, having read it as a call |
-
-**What writing them found: the keywords are not reserved yet.** Phoenix
-reserves a word when a syntactic rule has it as a literal, and none has
-`break`, `continue`, `do`, `switch`, `case`, `default` or `goto`. So `break;`
-is an expression statement naming a variable, and `--driver check` says
-`'break' is not declared`; `switch (c)` is a call to a function named
-`switch`. Each becomes reserved the moment a rule names it, which is what
-C11 6.4.1 says it always was.
-
-**Built in three parts, in this order**, each with the suite green:
-
-1. **`break`, `continue`, `do … while` and the empty statement.** A loop
-   hands its labels down, so a `break` jumps to the innermost loop's end and
-   a `continue` to where it continues. **In a `for`, that is not the top**:
-   `continue` runs the step first, and the step is emitted today straight
-   before the jump back with no label of its own, so it gains one. *Built
-   2026-09-25*: `loop-exits.c` and four more agree with `cc`. **The labels
-   could not be the loop's numbered ones**, because a node takes its number
-   on the way out and the `break` is in the body, compiled before that; they
-   are named from the loop's line and column instead, which are known on the
-   way in, as `awk-c.phx` names a rule.
-2. **`goto` and labels.** A label is a name and a `:` in front of a
-   statement, and has to be tried before an expression statement, which
-   would read the name and fail at the `:`. Labels are **scoped to the
-   function**, not to the block, and in **a name space of their own**, C11
-   6.2.3, so `x: x++;` is legal C. Two functions may use one label name, so
-   the assembler's label is the function's and the name's together, and a
-   `goto` may name a label further down, which the `locals` pass has not
-   read yet: the labels are gathered on the way out and handed down, the
-   way `sigs` is for calls. *Built 2026-09-25*: `goto.c` and `goto-labels.c`
-   agree with `cc`, the second with a label name two functions share and a
-   `goto` into a block. The assembler's label is `L.function.label`: with an
-   underscore between them, `f` and `x_y` would have met `f_x` and `y`. A
-   refused `goto` is placed at the `goto`, where `cc` places it at the
-   label's name.
-3. **`switch`, `case` and `default`**, after [6.5](#65-constant-expressions).
-   The controlling expression is evaluated once and promoted, and each
-   `case` compared against it in turn, a chain of compares rather than a jump
-   table, which is the stack machine's shape. `break` inside a `switch`
-   leaves the `switch`, and `continue` inside one still means the loop
-   around it. Falling through is what happens anyway when no jump is
-   written, and `default` can be anywhere.
-
-**What `cc` refuses, and so will this**: `break` outside a loop or a
-`switch`, `continue` outside a loop, even inside a `switch`, a `goto` to a
-label no statement has, a label twice in one function, a `case` or a
-`default` outside a `switch`, two `default`s in one `switch`, and two `case`s
-with one value. Each is a program in `refused/` when its part is built.
-
-*Not in this step:* a declaration after a label, which C11 does not allow
-and C23 does; computed `goto`, a GNU extension; and a `case` range, another.
-**The entry closes** when the three programs agree with `cc`, with none
-diverging.
-
-### 6.5 Constant expressions
-
-C11 6.6 says where an expression must be worked out before the program runs:
-a `case` label, the size of an array, an `enum`'s value, a global's
-initialiser, and the null pointer constant, which is any such expression
-equal to 0. **Not one of those is in the subset yet, and every one of them is
-on the way**, which is why this is an entry of its own and not a corner of
-`switch`: built once, it serves the five. `switch` is the first customer.
-
-**One program shows what breaks without it.** `constant-labels.c` has a
-`switch` whose labels are `'a' + 1`, `1 << 3`, `-2 * 3`, `sizeof(int)`,
-`7 > 3 ? 100 : 200` and `~0`; `cc` exits 98, and Phoenix stops at the `{` of
-the `switch`, as `switch.c` does. **Writing it found the first refusal**: the
-first draft had `sizeof(long)` beside `1 << 3`, both 8, and `cc` refused it
-as a duplicate `case`. That program is kept as `duplicate-case.c`, and a
-duplicate can only be seen by a compiler that knows both values.
-
-**The mechanism is two attributes in the `types` pass**: whether an
-expression is constant, and if it is, its value. Both are folded from the
-leaves: a number, a character, whose code the pass already works out, and a
-`sizeof`, which is constant whatever its operand is; then every operator
-over constants, which C11 6.6p3 limits by leaving out assignment, `++`,
-`--`, calls and the comma. A `case` asks for both and refuses a label that is
-not constant, as `cc` does. The value has to be **C's arithmetic and not the
-notation's**: an `int` result is reduced to thirty-two bits and a `/` truncates,
-which is `quotient` and not `div`.
-
-**And the notation cannot say all of it**, which is the finding this entry
-exists for. Phoenix's expression language has `+ - * / div mod` and nothing
-bitwise, and an integer that overflows is an error rather than a wrap,
-[semantics.md](semantics.md). Three of C's operators fold anyway: `~x` is
-`-x - 1`, `x << k` is `x` times a power of two from a table, and `x >> k` is
-`x div` that power, because `div` floors and a floored division by a power of
-two is exactly an arithmetic shift. **`&`, `|` and `^` have no such
-spelling.** There are two ways out, and the entry is the choice between them:
-
-- **Refuse them by name** in a constant expression, so `case FLAG_A | FLAG_B:`
-  is not in the subset. Nothing changes in the tool, and C that `cc` compiles
-  is turned away.
-- **Add them to the notation's library**, as three functions next to
-  `quotient` and `remainder`. That is a change to the tool, and so to
-  [semantics.md](semantics.md), whose every sentence is a check, and to the
-  runtime a description written out with `-o` carries. It is the first thing
-  the C arc has asked of the notation since `%names`.
-
-**The entry does not settle it.** [1.7](#17-a-repetition-that-counts) sets a
-rule for a mechanism, *one is a workaround; two is a mechanism*, and the C
-description is one customer. Against that, three functions are arithmetic,
-the kind of thing `quotient` and `remainder` already are, and not a new form
-of the notation the way a counted repetition would be. The choice is made
-when 6.5 is started, and written here first.
-
-**Chosen 2026-09-25: the three functions**, `bitand`, `bitor` and `bitxor`,
-added to the library before the rest of 6.5, on 64-bit two's complement.
-The argument that carried it is the one above: they are arithmetic, as
-`quotient` is, and 1.7's rule is about a new form of the notation, which a
-function is not. [semantics.md](semantics.md) says what they are, and six
-claims in `tests/grammars/semantics.phx` and five in `library.phx` hold both
-`phx` and a compiler it writes to that, with a swap of `bitor` for `bitxor`
-caught by both files. The C description does not call them yet: that is the
-rest of this entry. A long constant that would overflow
-the notation's own integers, `9223372036854775807 + 1`, is the other edge:
-C calls it undefined, and here it would stop the compiler with an arithmetic
-error rather than a message, so the fold refuses it by name first.
-
-**The entry closes** when `constant-labels.c` agrees with `cc` and
-`duplicate-case.c` is refused. The null pointer constant, array sizes, `enum`
-and global initialisers each come with their own construct, and read the
-same two attributes.

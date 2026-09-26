@@ -260,6 +260,16 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * tried before an expression statement, which would read the name
            * and fail at the `:`, and before a declaration, whose base is a
            * reserved word or a typedef's name and so never a label's. *)
+          (* **A `switch` is a statement with labels in it**, C11 6.8.4.2,
+           * since 2026-09-25: its body is any statement, and a `case` or a
+           * `default` is a label on one of the statements inside, however
+           * deep, which is why a `case` can sit inside a loop inside the
+           * `switch` and still be the `switch`'s. A `case` label is C's
+           * *constant-expression*, which is a `conditional`: it may have a
+           * `?:` in it, whose own `:` it keeps, and not a comma. *)
+          | "switch" "(" c:expression ")" b:statement -> Switch(cond: $c, body: $b)
+          | "case" v:conditional ":" b:statement     -> Case(value: $v, body: $b)
+          | "default" ":" b:statement                -> Default(body: $b)
           | "goto" n:name ";"                        -> Goto(name: $n)
           | n:name ":" b:statement                   -> Labelled(name: $n, body: $b)
           (* An array first, because the three declaration forms are told
@@ -1178,6 +1188,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * returns is not one. *)
   Function : down gives = lookup([[0, $ret.tagname]], $rptrs, "")
            : down loops = 0
+           : down switches = 0
            : down fn    = $name .
   Return ! $value.record and $gives = ""
              : "'struct {}' is returned, and this function returns an int" of $value.tag
@@ -1197,15 +1208,29 @@ arg  = e:assignment -> Arg(value: $e) .
   DoWhile : down loops = $loops + 1
           ! $cond.record : "'struct {}' is a condition, and C tests only numbers and pointers" of $cond.tag .
 
-  (* **`break` and `continue` belong to a loop**, C11 6.8.6.2 and 6.8.6.3, so
-   * each counts the loops it is inside, from 0 at a function's start, and
-   * one outside all of them is refused, as `cc` refuses it. *)
   (* A `goto` names a label of its own function, anywhere in it, which the
    * `locals` pass has gathered; one in another function is not one. *)
   Goto     ! not defined($labelled, "{}/{}" of $fn, $name)
                : "there is no label '{}' in this function to go to" of $name .
-  Break    ! $loops = 0 : "'break' is not inside a loop" .
+
+  (* **`break` and `continue` belong to a loop**, C11 6.8.6.2 and 6.8.6.3, so
+   * each counts the loops it is inside, from 0 at a function's start, and
+   * one outside all of them is refused, as `cc` refuses it. A `break`
+   * belongs to a `switch` as well, since 2026-09-25, and a `continue` does
+   * not: one in a `switch` in no loop is refused, and one in a `switch` in a
+   * loop goes on with the loop. *)
+  Break    ! $loops = 0 and $switches = 0 : "'break' is not inside a loop or a switch" .
   Continue ! $loops = 0 : "'continue' is not inside a loop" .
+
+  (* **A `switch` wants an integer**, C11 6.8.4.2, which it promotes, so a
+   * pointer and a struct are refused as `cc` refuses them. A `case` and a
+   * `default` are labels of the innermost `switch` around them, loops or no
+   * loops between, and are refused outside every one. *)
+  Switch   : down switches = $switches + 1
+           ! $cond.record : "'switch' wants an integer, and this is 'struct {}'" of $cond.tag
+           ! $cond.type > 0 : "'switch' wants an integer, and this is a pointer" .
+  Case     ! $switches = 0 : "'case' is not inside a switch" .
+  Default  ! $switches = 0 : "'default' is not inside a switch" .
   Compare ! $left.record or $right.record
               : "'{}' compares numbers and pointers, and this is 'struct {}'"
                   of $op, lookup([[true, $left.tag]], $left.record, $right.tag) .
@@ -1436,3 +1461,127 @@ arg  = e:assignment -> Arg(value: $e) .
           of $op, lookup([[true, $left.tag]], $left.record, $right.tag)
          ! $left.type > 0 or $right.type > 0
       : "'{}' does not take a pointer" of $op .
+
+
+(* ------------------------------------------------------------------- *)
+(* **What is known before the program runs**, since 2026-09-25, ROADMAP *)
+(* 6.5. C11 6.6 names the places an expression must be worked out at   *)
+(* compile time, and a `case` label is the first here; array sizes,    *)
+(* `enum`, a global's initialiser and the null pointer constant will   *)
+(* read the same two attributes. `settled` says whether it can be, and   *)
+(* `folded` what it is.                                                *)
+(*                                                                     *)
+(* **The arithmetic is C's, done in the notation's**, and the two      *)
+(* differ in three ways this pass has to bridge. C's `int` wraps at     *)
+(* thirty-two bits where the notation's integers trap at sixty-four,   *)
+(* so an `int` result is cut to thirty-two with `bitand` and its sign  *)
+(* put back. C's `/` truncates and `div` floors, so it is `quotient`.  *)
+(* And the notation has no shift and no bits: `<<` and `>>` are a      *)
+(* multiply and a `div` by a power of two, `div` flooring exactly as   *)
+(* an arithmetic shift does, and `&`, `|` and `^` are the library's    *)
+(* `bitand`, `bitor` and `bitxor`, which were added for this.          *)
+(*                                                                     *)
+(* **Nothing here may trap**, because a trap is the compiler stopping  *)
+(* with an arithmetic error rather than a message. So an operator only *)
+(* folds operands that fit in thirty-two bits, where no product passes *)
+(* 2^62, and reads 0 for one that does not; a divisor of 0 is read as  *)
+(* 1 and the answer is not known; a shift is folded only by 0 to 31.   *)
+(* An operand that did not fold makes the answer not known, which a    *)
+(* `case` then refuses.                                                *)
+(*                                                                     *)
+(* *The thirty-two bit wrap has no witness, and cannot have one.* An   *)
+(* `int` result passes thirty-two bits only when C's arithmetic has    *)
+(* overflowed, which is undefined, so no program the oracle may hold   *)
+(* can tell. Taking it out changed no answer. It is kept because it is *)
+(* what `cc` folds `1 << 31` to, and an `unsigned` will need it.       *)
+(* ------------------------------------------------------------------- *)
+
+%pass constants
+
+  otherwise settled  = false
+  otherwise folded = 0
+
+  (* Whether this `switch` compares all sixty-four bits, and the labels
+   * it has seen and how many `default`s: each `switch` starts its own and
+   * puts the outer one back, which is how a thread nests. *)
+  thread seen     = empty
+  thread defaults = 0
+
+  Number     : settled = true : folded = int($text) .
+  Character  : settled = true : folded = $code .
+  SizeOfType : settled = true : folded = lookup([[0, $base.basew]], $ptrs, 8) .
+  SizeOfExpr : settled = true : folded = $value.size .
+  Plus       : settled = $value.settled : folded = $value.folded .
+  Invert     : settled = $value.settled : folded = bitxor($value.folded, 0 - 1) .
+  Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) .
+
+  (* Negating overflows only the most negative integer, so that is the one
+   * a `-` does not fold: `-4294967296` is a `long` constant, and a label. *)
+  Negate : settled = $value.settled and $value.folded > 0 - 9223372036854775807
+         : craw   = 0 - lookup([[true, $value.folded]], $settled, 0)
+         : clow   = bitand($craw, 4294967295)
+         : folded = lookup([[true, $craw]], $wide,
+                           $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
+
+  (* **One rule for every arithmetic operator**, with the answer read off a
+   * table by the operator. Every entry is worked out whichever is asked
+   * for, which is why each has to be safe on any operands it can be given. *)
+  Binary : csafe  = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
+                     and $left.folded >= 0 - 2147483648 and $left.folded <= 2147483647
+                     and $right.folded >= 0 - 2147483648 and $right.folded <= 2147483647
+         : cl     = lookup([[true, $left.folded]], $csafe, 0)
+         : cr     = lookup([[true, $right.folded]], $csafe, 0)
+         : cd     = lookup([[0, 1]], $cr, $cr)
+         : ck     = lookup([[true, $cr]], $cr >= 0 and $cr < 32, 0)
+         : cpower = at([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824, 2147483648], $ck + 1)
+         : craw   = lookup([["+", $cl + $cr], ["-", $cl - $cr], ["*", $cl * $cr],
+                           ["/", quotient($cl, $cd)], ["%", remainder($cl, $cd)],
+                           ["&", bitand($cl, $cr)], ["|", bitor($cl, $cr)], ["^", bitxor($cl, $cr)],
+                           ["<<", $cl * $cpower], [">>", $cl div $cpower]], $op, 0)
+         : clow   = bitand($craw, 4294967295)
+         : settled = $csafe and $type = 0
+                     and (($op <> "/" and $op <> "%") or $cr <> 0)
+                     and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < 32))
+         : folded = lookup([[true, $craw]], $wide,
+                           $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
+
+  Compare : cl = $left.folded : cr = $right.folded
+          : settled = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
+          : folded = lookup([[true, 1]],
+                            lookup([["<", $cl < $cr], ["<=", $cl <= $cr], [">", $cl > $cr],
+                                    [">=", $cl >= $cr], ["==", $cl = $cr], ["!=", $cl <> $cr]],
+                                   $op, false), 0) .
+
+  (* **An operand that is not evaluated need not be settled**, which is how
+   * `cc` reads C11 6.6p3: `1 ? 40 : 1 / 0` is 40, and `0 && f()` is 0. So
+   * `?:`, `&&` and `||` ask only of the side that decides. *)
+  Logical : cdecides = lookup([["&&", $left.folded = 0]], $op, $left.folded <> 0)
+          : settled = $left.settled and ($cdecides or $right.settled)
+          : folded = lookup([[true, lookup([["&&", 0]], $op, 1)]], $cdecides,
+                            lookup([[true, 1]], $right.folded <> 0, 0)) .
+  Choose  : settled = $cond.settled and $type = 0
+                      and lookup([[0, $other.settled]], $cond.folded, $then.settled)
+          : folded = lookup([[0, $other.folded]], $cond.folded, $then.folded) .
+
+  (* **A `case` is refused unless it is settled**, and the labels of one
+   * `switch` are gathered so that two alike can be refused, as `cc` refuses
+   * them. A `switch` on an `int` compares an `int`, and a label too wide for
+   * one is declined by name: `cc` converts it and warns, and keeping labels
+   * the values they were written as keeps the comparison one width. *)
+  Switch  : down held     = $seen
+          : down helddef  = $defaults
+          : down seen     = empty
+          : down defaults = 0
+          : down swide    = $cond.wide
+          : seen     = $held
+          : defaults = $helddef .
+  Case    : seen = bind($seen, text($value.folded), true)
+          ! not $value.settled
+              : "a 'case' label has to be worked out before the program runs, and this one cannot be"
+          ! $value.settled and not $swide
+              and ($value.folded < 0 - 2147483648 or $value.folded > 2147483647)
+              : "'case {}' is wider than the int this switch compares" of $value.folded
+          ! $value.settled and defined($seen, text($value.folded))
+              : "'case {}' is in this switch twice" of $value.folded .
+  Default : defaults = $defaults + 1
+          ! $defaults > 0 : "this switch has a 'default' already" .

@@ -64,6 +64,14 @@
    * because they start with `L`. *)
   thread label = 0
 
+  (* **What a `switch` has gathered from its labels**, since 2026-09-25: the
+   * compares its `case`s ask for, and its `default`'s label or "". Each
+   * `switch` starts both afresh and puts the outer ones back, so a `case`
+   * finds its own `switch` through any number of loops, and a nested one
+   * keeps its own. *)
+  thread cases = ""
+  thread dflt  = ""
+
   (* ---- which half of the register ----
    *
    * A value with a star is a pointer and lives in an `x`. One with none is an
@@ -535,6 +543,34 @@
    * not, and `goto-labels.c` has both. A `goto` is a branch to it. The stack
    * is level at every statement, so a branch between two of them needs
    * nothing put right, into a block or out of one. *)
+  (* **A `switch` is a chain of compares, then its body**, C11 6.8.4.2: the
+   * value once, sign-extended when it is an `int` so that every compare is
+   * sixty-four bits against the label as it was written, then one compare
+   * and branch per `case`, in the order the labels were left, then a branch
+   * to `default` or past the end. The body follows with its labels in it,
+   * so falling from one `case` into the next is what happens when nothing
+   * branches, and a `break` leaves by the label a `switch` hands down as a
+   * loop does. `continue` is not handed down, so it means the loop outside.
+   * The stack machine's shape, and no jump table: `switch-duff.c` has its
+   * labels inside a `do` inside the `switch`, and they are the `switch`'s. *)
+  Switch  : down brk   = "Lb{}_{}" of $pos.line, $pos.column
+          : down heldc = $cases
+          : down heldd = $dflt
+          : down cases = ""
+          : down dflt  = ""
+          : mine   = $cases
+          : mydflt = $dflt
+          : cases  = $heldc
+          : dflt   = $heldd
+          : out = "{}{}{}\tb {}\n{}{}:\n"
+              of $cond.out, lookup([[true, ""]], $cond.wide, "\tsxtw x0, w0\n"), $mine,
+                 lookup([["", $brk]], $mydflt, $mydflt), $body.out, $brk .
+  Case    : here  = "Lk{}_{}" of $pos.line, $pos.column
+          : cases = "{}\tldr x1, ={}\n\tcmp x0, x1\n\tb.eq {}\n" of $cases, $value.folded, $here
+          : out   = "{}:\n{}" of $here, $body.out .
+  Default : here  = "Ld{}_{}" of $pos.line, $pos.column
+          : dflt  = $here
+          : out   = "{}:\n{}" of $here, $body.out .
   Labelled : out = "L.{}.{}:\n{}" of $fname, $name, $body.out .
   Goto     : out = "\tb L.{}.{}\n" of $fname, $name .
   Break    : out = "\tb {}\n" of $brk .
@@ -789,5 +825,5 @@
   Program   : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
             : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}" of join($items.out, "\n"), $data .
 
-%driver arm64 = functions, locals, types, emit-arm64 -> out .
-%driver check = functions, locals, types .
+%driver arm64 = functions, locals, types, constants, emit-arm64 -> out .
+%driver check = functions, locals, types, constants .

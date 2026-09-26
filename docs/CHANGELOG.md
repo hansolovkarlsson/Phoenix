@@ -16,6 +16,30 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-25: `switch`, and constants worked out before the program runs
+
+**The C subset has `switch`, `case` and `default`**, which finishes
+[the statements](COMPLETED.md#64-the-statements). A `case` can sit anywhere
+inside its `switch`, inside a loop inside it included, as Duff's device has
+it; falling from one `case` into the next, `default` anywhere, and `break`
+leaving the `switch` all work as in C, and `continue` in a `switch` goes on
+with the loop around it.
+
+**A `case` label is worked out when the program is compiled**, as C
+requires: `'a' + 1`, `1 << 3`, `-7 / 2`, `sizeof(int)`, `~0 & 7`,
+`1 ? 40 : 1 / 0` and the like, with C's arithmetic, a truncating `/` and
+32-bit `int`s. [Constant expressions](COMPLETED.md#65-constant-expressions)
+are a pass of their own, which array sizes, `enum` and globals will use too.
+A label that is not constant, two `case`s with one value and two `default`s
+are refused, as `cc` refuses them. Declined by name, although `cc` compiles
+them: a comma in a label, which C11 forbids and clang allows, and a label
+too wide for an `int` `switch`.
+
+**Tests:** 350 → 361, for eleven refusals. Six programs join the C oracle:
+236 agree with `cc`, 125 are refused, none diverges.
+
+---
+
 ## 2026-09-25: `bitand`, `bitor` and `bitxor` in the library
 
 **The notation changed.** Three functions join the library, next to
@@ -31,7 +55,7 @@ overflow. They are functions and not operators because `and`, `or` and `not`
 already belong to the booleans. A description that works out another
 language's constants before its program runs needs them, and could not
 write them before in `+ - * div mod`; C's `case A | B:` is the first,
-[ROADMAP 6.5](ROADMAP.md#65-constant-expressions). A compiler written out
+[ROADMAP 6.5](COMPLETED.md#65-constant-expressions). A compiler written out
 with `-o` has them too. [semantics.md](semantics.md) specifies them, and the
 VS Code extension colours them.
 
@@ -44,7 +68,7 @@ and the library's refusals one more, a float given to `bitand`.
 ## 2026-09-25: `goto` and labels in C
 
 **The C subset has `goto` and labels**, the second part of
-[ROADMAP 6.4](ROADMAP.md#64-the-statements). A label belongs to the whole
+[ROADMAP 6.4](COMPLETED.md#64-the-statements). A label belongs to the whole
 function, so a `goto` can jump forwards or backwards, out of loops and into
 blocks, and two functions can each have a label of the same name. Labels
 are a name space of their own, as C says, so a label and a variable may
@@ -59,7 +83,7 @@ oracle: 230 agree with `cc`, 114 are refused, none diverges.
 ## 2026-09-25: `break`, `continue`, `do` and the empty statement in C
 
 **The C subset has `break`, `continue`, `do … while` and the empty
-statement `;`**, the first part of [ROADMAP 6.4](ROADMAP.md#64-the-statements).
+statement `;`**, the first part of [ROADMAP 6.4](COMPLETED.md#64-the-statements).
 `break` leaves the innermost loop and `continue` goes on with it: in a `for`
 that runs the step, and in a `do` the test at the bottom. A `do` runs its
 body once before it tests. `break` or `continue` outside every loop is

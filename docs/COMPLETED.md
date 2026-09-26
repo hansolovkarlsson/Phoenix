@@ -41,7 +41,7 @@ which is why `cc pascal.c -o cpas` needs no flags, no headers and no library.
 | [`solvm/`](../languages/solvm/) | 860 lines, 32 node types | an assembly language for SolVM and an assembler producing `.sob` bytecode. Two passes, because a jump names a label below it. Every program is held against `solas` instruction by instruction, and against the bytes it made last time when no Solveig is to hand |
 | [`calc/`](../languages/calc/) | 494 lines, 15 node types | the smallest language worth a compiler. **Three backends** — C, awk, and Solveig parked — and the conformance rule is checked on it. The first two both run in the suite, so a program with a loop in it is checked by two implementations rather than against an expectation somebody typed |
 | [`z80/`](../languages/z80/) | 396 lines, 19 node types | a Z80 subset, an assembler making raw bytes, and a listing backend. **The customer [2.5](#25-circular-attributes--from-jastadd) was waiting for**: `br` picks between a two-byte relative jump and a three-byte absolute one, which is a size that depends on a distance that depends on sizes. `layout` assumes every forward `br` long, and `relax`, the first walk **written out a second time**, decides both directions against the last walk's table; the driver runs it `until labels` settles, since 2026-09-23, so [`two-rounds.z80`](../languages/z80/tests/oracle/two-rounds.z80) reaches its minimum on the third walk and [`three-rounds.z80`](../languages/z80/tests/oracle/three-rounds.z80) on the fourth. Until then it ran once and the first missed by a byte. 10 programs agree with `z80asm` byte for byte, six through the listing, because `z80asm` has no `br` |
-| [`c/`](../languages/c/) | 2,231 lines, 48 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler), which is [complete](#61-step-one--a-subset-that-runs-and-cc-as-its-oracle): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is copied whole since 2026-09-23, by `=`, by an initialiser and as an argument under AAPCS64, which `tests/abi/` holds against `cc`'s own code by linking each compiler's caller to the other's callee; a copy between two kinds of struct is refused, and so is a struct wherever C wants a number. A struct is returned whole the same day, in `x0` and `x1` or through the caller's `x8`, and `tests/abi/` holds that against `cc` in both directions too. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. **Then signed `long`**, eight bytes, with the usual arithmetic conversions sign-extending an `int` wherever it meets one, and `sizeof` and a pointer difference `long`s as C has them. **Then a function that returns a pointer** ([6.2](#62-a-function-that-returns-a-pointer)), which is what let `malloc` be declared and gave a `long` index its witness. **Then `%`**, the first of [6.3](#63-the-operators)'s operators, as a division and a multiply-subtract, **and `!`, `&&` and `||`**, the second, whose right side runs only when the left has not decided, **and `++`, `--` and the compound assignments**, the third, one node that reads a place once and writes it back, **and the bitwise operators, the shifts, `?:` and the comma**, the fourth, which leaves every expression operator C has except the cast. **Then `break`, `continue`, `do` and the empty statement**, the first of [6.4](ROADMAP.md#64-the-statements)'s statements, **and `goto` and labels**, the second. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 230 programs exit with what `cc` makes them exit with, 114 are refused with a position, none diverges, and nothing in the directory has a hand-written expected result |
+| [`c/`](../languages/c/) | 2,416 lines, 51 node types | a C subset, every construct of step one of [ROADMAP 6](ROADMAP.md#6-a-c-compiler), which is [complete](#61-step-one--a-subset-that-runs-and-cc-as-its-oracle): `int main(){return 42;}`, then `+ - * /` with parentheses, then unary minus and the six comparisons, then a local `int` with a symbol pass that gives it a frame slot, then `if`, `while`, `for` and blocks with the scoping C11 6.2.1 asks for, then functions with up to eight parameters, prototypes and calls under AAPCS64, then `&` and `*` with the pointer declarators, where the left of an `=` becomes a **place**: a rule with two alternatives, so that C11 6.5.3.2's lvalue is the grammar's job rather than a pass's. A `types` pass counts stars, which does two jobs: it refuses what would otherwise mis-compile, and it says which half of the register a value lives in, an `int` being 32 bits in a `w` and a pointer 64 in an `x`, as this machine's C has them. Then `sizeof`, in both its shapes, which does not evaluate its operand, and an array of `int` or of pointers, which decays to a pointer to its first element everywhere but under `sizeof`, and which moved the frame from numbered slots to byte offsets. Then indexing, which builds no node: `a[i]` is C11 6.5.2.1's `*((a)+(i))` written as the grammar action, and pointer `+` and `-` count in elements, with one multiply-add that sign-extends the index. The difference of two pointers is an `int`, as it was in K&R's first edition, because C11's `ptrdiff_t` is a typedef. Then `char`, signed as Apple's arm64 has it, which made a type two numbers: the stars, and the width of what is under them. Then character constants, printable ASCII and six escapes, each worth an `int`. Then string literals, arrays of `char` in `__TEXT,__cstring`, their length counted in the description and their bytes written by the assembler, so programs print through a declared `puts` and the oracle compares what they print. Then `struct`, with `.` and `->`, defined at file scope with a tag: members are laid out by a thread with C's alignment and padding, a declaration's base became a node that looks its width up in a table of layouts holding `int` and `char` as two structs with no members, and `->` is built as `(*p).x` as a subscript is built as a `*` of a `+`. A struct is copied whole since 2026-09-23, by `=`, by an initialiser and as an argument under AAPCS64, which `tests/abi/` holds against `cc`'s own code by linking each compiler's caller to the other's callee; a copy between two kinds of struct is refused, and so is a struct wherever C wants a number. A struct is returned whole the same day, in `x0` and `x1` or through the caller's `x8`, and `tests/abi/` holds that against `cc` in both directions too. **Nothing in `phoenix/` changed through all of it**, which was the arc's first prediction. **Then `typedef`, which is where it did**: a typedef names a base and some stars, at file scope, and an ordinary name declared in a block or as a parameter hides it until that scope ends, which the parse is told by `%names` ([1.8](#18-names-the-parse-keeps)) and not by a pass, because `x * y;` has to be built as one thing or the other before any pass runs. The arc's second prediction. **Then signed `long`**, eight bytes, with the usual arithmetic conversions sign-extending an `int` wherever it meets one, and `sizeof` and a pointer difference `long`s as C has them. **Then a function that returns a pointer** ([6.2](#62-a-function-that-returns-a-pointer)), which is what let `malloc` be declared and gave a `long` index its witness. **Then `%`**, the first of [6.3](#63-the-operators)'s operators, as a division and a multiply-subtract, **and `!`, `&&` and `||`**, the second, whose right side runs only when the left has not decided, **and `++`, `--` and the compound assignments**, the third, one node that reads a place once and writes it back, **and the bitwise operators, the shifts, `?:` and the comma**, the fourth, which leaves every expression operator C has except the cast. **Then `break`, `continue`, `do` and the empty statement**, the first of [6.4](#64-the-statements)'s statements, **and `goto` and labels**, the second, **and `switch`**, the last, over [6.5](#65-constant-expressions)'s constants, which a pass of their own works out before the program runs. Compiled to arm64 assembly that `cc` assembles and links by a stack machine with no register allocator. **The one language on the roadmap as a goal rather than a mechanism.** 236 programs exit with what `cc` makes them exit with, 125 are refused with a position, none diverges, and nothing in the directory has a hand-written expected result |
 | [`phx/`](../languages/phx/) | 274 lines | the notation described in itself. It parses itself and every other description here |
 
 **Nine directories, eight rows.** [`languages/units/`](../languages/units/) —
@@ -631,6 +631,78 @@ last part `Comma`, `Choose`, `Invert` and `Plus`. Twenty-one programs joined
 the oracle, 223 in all, and 24 refusals, 108; nothing diverges. Every part
 had its templates broken on purpose, twenty-six ways in all, and each break
 that was not the same instruction under another spelling failed a witness.
+
+### 6.4 The statements
+
+*Opened and closed 2026-09-25, in three parts.* The subset had `return`,
+`if`, `while`, `for` and blocks; it now has every statement C has:
+`break`, `continue`, `do … while`, the empty statement, `goto` and labels,
+and `switch` with `case` and `default`. **Writing the witnesses found that
+none of the keywords was reserved**: `break;` was an expression statement
+naming a variable, and `switch (c)` a call. Naming each in a rule reserved
+it.
+
+**`break` and `continue` could not use the loop's numbered labels**,
+because a node takes its number on the way out and the `break` is in the
+body, compiled before that. The targets are named from the loop's line and
+column instead, which are known on the way in, as `awk-c.phx` names a rule.
+`continue` goes to the test in a `while`, to a new label in front of the
+step in a `for`, and to the test at the bottom of a `do`, and most of the
+breaks made on purpose showed up as programs the limit stopped.
+
+**A label is its function's**, gathered by the `locals` pass as
+`function/label` and handed down from the root as `sigs` is, so a `goto` may
+name one further down; labels are never in `env`, so `x: x++;` is two
+names, C11 6.2.3. The assembler's label is `L.function.label`, because an
+underscore would let `f` and `x_y` meet `f_x` and `y`, and the first run of
+the witnesses had no label name two functions shared, so could not see a
+label missing its function. A refused `goto` is placed at the `goto`, where
+`cc` places it at the name.
+
+**A `switch` is a chain of compares, then its body.** Its labels are
+gathered through a thread that each `switch` starts afresh and gives back,
+the way [semantics.md](semantics.md) says a thread nests, and the
+`switch`'s leaving clauses read what its body left before putting the outer
+one back; reversing them empties every chain, and six programs say so. So a
+`case` is its `switch`'s through any loops between, and `switch-duff.c`,
+Duff's device, is the witness. An `int` value is sign-extended so that every
+compare is sixty-four bits against the label as written.
+
+Thirteen programs joined the oracle across 6.4 and 6.5, 236 in all, and 17
+refusals, 125, all but two of which `cc` makes too.
+
+### 6.5 Constant expressions
+
+*Opened and closed 2026-09-25.* A pass of its own, `constants`, after
+`types`: every expression answers whether it is **settled** before the
+program runs, and if so what it is, **folded**. A `case` label is the first
+reader; array sizes, `enum`, a global's initialiser and the null pointer
+constant are the next, and will read the same two attributes.
+
+**It is C's arithmetic done in the notation's**, which differ three ways.
+An `int` result is cut to thirty-two bits and its sign put back; `/` is
+`quotient`, since `div` floors; and the notation had no bits, so `<<` and
+`>>` are a multiply and a `div` by a power of two, `div` flooring as an
+arithmetic shift does, and **`&`, `|` and `^` needed three new library
+functions**, `bitand`, `bitor` and `bitxor`. That was the entry's choice,
+against [ROADMAP 3.4](ROADMAP.md#34-a-library-that-grows-without-deciding)'s
+rule that one customer is a workaround: they are arithmetic, as `quotient`
+is, and 3.4 now lists them, and why `~`, `<<` and `>>` are not there.
+
+**Nothing in the pass may trap**, since a trap is the compiler stopping with
+an arithmetic error rather than a message. An operator folds only operands
+that fit in thirty-two bits, a zero divisor is read as one and the answer is
+not settled, and a shift is folded only by 0 to 31. The first draft held a
+`-` to thirty-two bits as well, and refused `case -4294967296:`, which is C;
+negation traps only on the most negative integer, and that is now the one
+it will not fold. **`?:`, `&&` and `||` ask only of the side that decides**,
+as `cc` does, so `1 ? 40 : 1 / 0` is 40.
+
+**Of seven breaks made on purpose, six were caught**, one of them, floored division, by the duplicate-label refusal
+rather than an answer: `-7 / 2` folded to -4 beside `-16 >> 2`. The seventh
+cannot be: the thirty-two bit wrap only matters when C's arithmetic has
+overflowed, which is undefined, so no program the oracle may hold can tell,
+and the pass says so where the wrap is written.
 
 ---
 

@@ -1821,6 +1821,35 @@ refuses "a 'goto' to another function's label" "there is no label 'here' in this
         --driver check "$root/languages/c/c-arm64.phx" "$r/goto-another-functions-label.c"
 refuses "a label twice" "the label 'here' is in this function twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/label-twice.c"
+# `switch`, `case` and `default`, since 2026-09-25 (ROADMAP 6.4 and 6.5). A
+# `case` label is worked out before the program runs, by the `constants` pass,
+# and the first nine below `cc` refuses too. `duplicate-case` is `sizeof(long)`
+# beside `1 << 3`, and only a compiler that knows both values can see it.
+refuses "a 'case' outside a switch" "'case' is not inside a switch" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-outside-a-switch.c"
+refuses "a 'default' outside a switch" "'default' is not inside a switch" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/default-outside-a-switch.c"
+refuses "two 'default's" "this switch has a 'default' already" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/default-twice.c"
+refuses "a 'continue' in a switch in no loop" "'continue' is not inside a loop" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/continue-in-a-switch.c"
+refuses "a switch on a pointer" "'switch' wants an integer, and this is a pointer" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/switch-on-a-pointer.c"
+refuses "and on a struct" "'switch' wants an integer, and this is 'struct t'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/switch-on-a-struct.c"
+refuses "a 'case' label that is a variable" "a 'case' label has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-not-constant.c"
+refuses "one divided by zero" "a 'case' label has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-divided-by-zero.c"
+refuses "two 'case's with one value" "'case 8' is in this switch twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case.c"
+# Two `cc` compiles, and this subset declines by name. C11 6.6p3 says a
+# constant expression has no comma, and clang takes one as an extension; and a
+# label too wide for an `int` switch, which `cc` converts and warns about.
+refuses "a comma in a 'case' label" "a 'case' label has to be worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-with-a-comma.c"
+refuses "a label wider than the switch" "'case 4294967296' is wider than the int this switch compares" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-wider-than-the-switch.c"
 # Pointer arithmetic, C11 6.5.6. A pointer and a number go either way round
 # for `+` and pointer first for `-`, and two pointers may be subtracted when
 # they point at the same type. All three refused here `cc` refuses too.
