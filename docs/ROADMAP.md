@@ -528,8 +528,10 @@ declarations, step four of the toolchain document, and each arrives the way
 every entry does, with what breaks without it written down first. **The
 first of them, [6.6](COMPLETED.md#66-a-call-to-printf), a call to a function
 declared with `...`, was opened and closed on 2026-09-26.** **So was the
-second, [6.7](COMPLETED.md#67-void-and-casts), `void` and casts.** **Open:
-[6.8](#68-globals), a variable declared outside every function**, the third.
+second, [6.7](COMPLETED.md#67-void-and-casts), `void` and casts, and the
+third, [6.8](COMPLETED.md#68-globals), a variable declared outside every
+function.** Nothing in the arc is open here until the next construct is
+started.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -539,106 +541,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.8 Globals
-
-Everything the subset declares outside a function is a function, a struct
-or a typedef. **A variable there is a syntax error**: `int count;` stops at
-the `;`, where a function's `(` was wanted. So a counter two functions share
-has to be passed by pointer, a table a program builds once has to live in
-`main`'s frame, and a string a program names once has to be written where
-it is used. It comes before `unsigned` because it is smaller, and because
-it is the second customer [6.5](COMPLETED.md#65-constant-expressions) named
-for the `constants` pass, after `case`.
-
-**Three programs show what breaks without it.** `cc` compiles and runs
-each, and Phoenix stops at the first global, at the `;` or the `=` after
-its name. They join `languages/c/tests/oracle/` with the part that makes
-them agree:
-
-| program | `cc` | what it holds |
-| --- | --- | --- |
-| `globals.c`: an `int` two functions count in, a global array one function fills and another reads, a struct a function writes a member of, two `char`s side by side written one at a time, a `long`, and a local that hides a global inside a block | exits 51, prints `0 0 0`, `2 -4 5 4294967301 30` and `1` | a global with no initialiser is **zero** before anything writes it, C11 6.7.9p10, which the first line prints; and a `char` written is one byte and not four, which `high` beside `low` would show |
-| `global-initialisers.c`: `6 * 7`, `(char)300`, `4294967296 * 2`, `sizeof(struct pt)`, `-2147483647 - 1` and a `?:` of two characters | exits 86, prints `42 44 8589934592 8 -2147483648 97` | an initialiser is worked out when the program is compiled, as a `case` label is |
-| `global-pointers.c`: a `char *` initialised with a string, an `int *` with `&answer`, another with an array's name, a struct pointer with `&origin`, and one with `0`, each then written through, and two reassigned | exits 12, prints `hello 7 5 9 1` and `bye 5` | an initialiser that is an **address**, which no pass here can fold to a number |
-
-**What writing them found: the `constants` pass folds only within thirty-two
-bits**, so that it never traps, and was right to for `case`, whose labels
-are an `int`'s. A global `long` is initialised from a `long`, and
-`4294967296 * 2` has an operand wider than thirty-two bits, so today it
-would be refused as not constant where `cc` answers 8589934592. **The pass
-has to fold a `long` operator too**, and still not trap: the notation's
-integers are sixty-four bits and trap on overflow, and an overflowing
-`long` is undefined in C, so the answer is to ask before computing whether
-the result fits, and to leave it unsettled when it does not. That is its own
-part, first, because `case` is a customer of the same fold.
-
-**And `cc` does not put a global where Phoenix would.** One with no
-initialiser is a `.comm`, a common symbol, which the linker may merge with a
-definition in another file, and so is reached through the GOT, with
-`adrp x8, _count@GOTPAGE` and an `ldr`; one with an initialiser is in
-`__DATA,__data` and reached directly, with `@PAGE` and `@PAGEOFF`. The
-subset has no `extern` and links nothing of its own to another file's
-globals, so **every global here is defined in its own file, initialised or
-zero, and reached directly**, the way a string literal already is. An
-address initialiser is a relocation the assembler writes: `cc` puts
-`.quad _answer` for `&answer` and `.quad l_.str` for a string.
-
-**Built in three parts, in this order**, each with the suite green:
-
-1. **`long` constants fold.** An operator folds when every operand is
-   settled and the answer fits in sixty-four bits, asked before it is
-   computed; an `int` answer is still cut to thirty-two. No program in the
-   oracle changes. *Built 2026-09-26*, and **this said wrongly that `case`
-   gains nothing it can show**: a `switch` on a `long` takes a label as
-   wide as it likes, and `case 4294967296 * 2:` was refused there.
-   `long-case-labels.c` is the witness, eight labels `cc` takes and this
-   refused. An overflow is not settled, and four refusals hold the four
-   questions that decide it, one file each: a file with all four stays
-   refused when one question is broken, which is how the first run of the
-   breaks passed three of them.
-2. **A global, and an arithmetic initialiser.** `item` gains a declaration:
-   a base, stars and a name, with an optional `[` count `]` or `=`
-   initialiser. The `locals` pass gathers globals on a thread that is
-   never reset, and **a function starts its `env` from it** instead of from
-   `empty`, so a local hides a global exactly as an inner block's local
-   hides an outer one, and a function above a global cannot see it, which
-   is C's order. An entry is the five things a local's is, with the offset
-   replaced by the global's name. The emit pass reaches one by `adrp` and
-   `add`, and writes each into `__DATA,__data` as a `.byte`, `.long` or
-   `.quad`, or as zeros. An initialiser must be settled, and a global
-   whose is not is refused as `cc` refuses it. `globals.c` and
-   `global-initialisers.c` are its witnesses. *Built 2026-09-26*, with
-   three things the plan did not say. **An initialiser needs the globals
-   too**: it is an expression at file scope, whose `env` was empty, so
-   `int b = a;` said `a` was undeclared rather than not constant, and it is
-   handed the globals as a function is. **A struct and a variable of it in
-   one statement**, `struct pt { ... } origin;`, is not in the subset, and
-   both witnesses were written that way and had to be split. And **no
-   witness looked at alignment**, which arm64 does not fault on: a global
-   placed with none passed until each program printed an address modulo
-   its type's size, after a `char`, which `cc` guarantees is 0.
-3. **An address initialiser**: a string literal, `&` of a global, or a
-   global array's name, each written as the label it is. `global-pointers.c`
-   is its witness. **An address with an offset**, `&table[1]`, `table + 2`
-   or `"hi" + 1`, **is refused by name**, though `cc` compiles each as a
-   symbol and a constant: folding one needs the pass to carry a symbol
-   beside a number, which is a design of its own and no program here asks
-   for yet.
-
-**What `cc` refuses, and so will this**: a global defined twice with an
-initialiser each; a global with the name of a function or a typedef; a
-global declared `void`; an initialiser that is not constant, a call or
-another global's value; and a global used above its declaration.
-**Refused by name, though `cc` compiles it**: a global declared twice
-where one or both has no initialiser, C11 6.9.2's tentative definition,
-which is the rule `.comm` exists for and nothing here needs. Each is a
-program in `refused/` when its part is built.
-
-*Not in this step:* `extern` and `static`, the storage classes, at file
-scope and in a block; a brace-enclosed initialiser, `int a[3] = {1, 2, 3};`,
-which locals do not have either and which is an entry of its own for both;
-a struct initialised, which needs one; `const`; and a global shared with a
-file `cc` compiled, which needs `extern` and would be `tests/abi/`'s to
-hold. **The entry closes** when the three programs agree with `cc`, with
-none diverging.

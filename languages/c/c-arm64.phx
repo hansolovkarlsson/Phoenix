@@ -144,6 +144,7 @@
   thread data = ""
 
   String : n    = $label : label = $label + 1
+         : sym  = "Lstr{}" of $n
          : asm  = join(split(join(split(join(split($body, "\\\\"), "\t"), "\\'"), "'"),
                              "\t"), "\\\\")
          : data = "{}Lstr{}:\n\t.asciz \"{}\"\n" of $data, $n, $asm
@@ -187,7 +188,8 @@
    * the GOT, because it makes one a common symbol another file may define;
    * every global here is defined in its own file, so it is reached
    * directly. *)
-  Variable  : ldr  = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")
+  Variable  : sym  = "_{}" of $name
+            : ldr  = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")
             : addr = lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $name, $name]],
                             $global, "\tsub x0, x29, #{}\n" of $offset)
             : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
@@ -223,7 +225,8 @@
                                  lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")) .
 
   (* `&` is the address and nothing more. *)
-  Addr      : out  = $place.addr .
+  Addr      : out  = $place.addr
+            : sym  = $place.sym .
 
   (* The address first, pushed, then the value, then the store. The value
    * stays in `x0`, which is what makes `a = b = 21` and `*p = *q = 4` work:
@@ -903,6 +906,13 @@
    * is eight bytes of 0. *)
   thread gdata = ""
 
+  (* **An address initialiser is written as its label**, since 2026-09-26:
+   * `.quad Lstr3` for a string and `.quad _answer` for `&answer`, which the
+   * assembler and the linker turn into the address, as `cc` has them. The
+   * label is a `sym`, which `String`, `Variable` and `Addr` answer with
+   * their other clauses above. *)
+  otherwise sym = ""
+
   Global      : out = ""
               : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t.space {}\n"
                           of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
@@ -913,8 +923,9 @@
               : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t{} {}\n"
                           of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
                              lookup([[1, ".byte"], [4, ".long"]], $ebytes, ".quad"),
-                             lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
-                                    $ebytes, $value.folded) .
+                             lookup([[true, $value.sym]], $value.anchored and not $value.settled,
+                                    lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                           $ebytes, $value.folded)) .
   Program   : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
             : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}"
                       of join($items.out, "\n"), $data, $gdata .

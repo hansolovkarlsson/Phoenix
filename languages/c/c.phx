@@ -697,6 +697,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * not see it, which is C11 6.2.1's order. *)
   thread globals = empty
 
+  (* Only a name can be a global; everything else a `&` can be asked of is
+   * not one, which the `constants` pass reads to tell `&answer` from
+   * `&table[1]`. *)
+  otherwise global = false
+
   (* **What each function takes**, name to a list with one entry per
    * parameter: the tag of a struct passed whole, or "". Bound on the way out,
    * when the parameters have been worked out, which a `down` clause cannot
@@ -1776,6 +1781,20 @@ arg  = e:assignment -> Arg(value: $e) .
   otherwise settled  = false
   otherwise folded = 0
 
+  (* **An address the assembler can write**, since 2026-09-26, ROADMAP 6.8:
+   * C11 6.6p9's address constant, as far as the subset takes it. A string
+   * literal is one, and so is `&` of a global and a global array's name,
+   * which decays to the address of its first element; each is a label in
+   * the object file, and a global initialised with one is written as that
+   * label. **An address with an offset is not**: `&table[1]`, `table + 2`
+   * and `"hi" + 1` are each a label and a number, which `cc` writes as
+   * `_table+4`, and folding one needs this pass to carry a label beside a
+   * number, which nothing here has asked for yet. *)
+  otherwise anchored = false
+  String   : anchored = true .
+  Variable : anchored = $global and $count > 0 .
+  Addr     : anchored = $place.global .
+
   (* Whether this `switch` compares all sixty-four bits, and the labels
    * it has seen and how many `default`s: each `switch` starts its own and
    * puts the outer one back, which is how a thread nests. *)
@@ -1909,6 +1928,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * 2026-09-26, ROADMAP 6.8: C11 6.7.9p4 wants it worked out before the
    * program runs, as a `case` label is, and `cc` refuses one that cannot
    * be. The emit pass writes the folded value into the object file. *)
-  GlobalInit ! not $value.settled
+  GlobalInit ! not $value.settled and $ptrs = 0
                  : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this cannot be"
+                     of $name
+             ! not $value.settled and $ptrs > 0 and not $value.anchored
+                 : "'{}' is initialised with an address this cannot write: a string, '&' of a global and a global array's name can be, and one with an offset is not yet"
                      of $name .

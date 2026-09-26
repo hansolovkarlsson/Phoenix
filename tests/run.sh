@@ -2184,6 +2184,20 @@ refuses "a global declared, then defined" "'x' is declared twice at file scope" 
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-declared-then-defined.c"
 refuses "a global array of no elements" "'a' is an array of no elements" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-of-no-elements.c"
+# An address initialiser is written as its label: a string, `&` of a
+# global, or a global array's name. `cc` also writes a label and a number,
+# `&table[1]` as `_table+4`, and those three are refused here by name; the
+# last two `cc` refuses as well.
+refuses "a global pointer to an element" 'one with an offset is not yet' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-address-of-an-element.c"
+refuses "a global pointer to an array plus a number" 'one with an offset is not yet' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-plus-a-number.c"
+refuses "a global pointer to a string plus a number" 'one with an offset is not yet' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-string-plus-a-number.c"
+refuses "a global int initialised with an address" "'x' has to be initialised with something worked out before the program runs" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-int-from-an-address.c"
+refuses "a global pointer initialised from another" "'q' is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
