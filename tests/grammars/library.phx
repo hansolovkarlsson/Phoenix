@@ -74,6 +74,12 @@ case = number -> Case(text: $1) .
        ! not (int(45) = 45)            : "an integer answers itself"
        ! not (int("ff", 16) = 255)     : "int takes a base"
        ! not (int("1010", 2) = 10)     : "as low as 2"
+       ! not (int("9223372036854775807") = 9223372036854775807)
+           : "the largest 64-bit integer is read"
+       ! not (int("-9223372036854775808") = 0 - 9223372036854775807 - 1)
+           : "and the most negative"
+       ! not (int("7fffffffffffffff", 16) = 9223372036854775807)
+           : "and the largest in a base"
        ! not (int("z", 36) = 35)       : "and as high as 36"
        ! not (float("1.5") = 1.5)      : "float reads text"
        ! not (float(3) = 3.0)          : "and widens an integer"

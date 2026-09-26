@@ -14,6 +14,7 @@
  */
 #include "phx.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -295,10 +296,18 @@ Value *eval_call(Eval *e, const Expr *x)
 
         char *end;
         char *copy = arena_strndup(a, args[0]->text, args[0]->len);
+        errno = 0;
         long long n = strtoll(copy, &end, base);
         if (end == copy || *end)
             return library_fail(e, x, "\"%s\" is not an integer in base %d",
                                 copy, base);
+        /* `strtoll` answers the nearest integer that fits and sets `errno`,
+         * and until 2026-09-26 nothing asked: text one past the largest was
+         * read as the largest, without a word, where every other integer
+         * that does not fit traps. */
+        if (errno == ERANGE)
+            return library_fail(e, x, "\"%s\" does not fit in a 64-bit integer",
+                                copy);
         return value_int(a, n);
     }
 

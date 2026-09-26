@@ -1611,8 +1611,21 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **A constant too big for an `int` is a `long`**, C11 6.4.4.1: an
    * unsuffixed decimal constant has the first of `int`, `long` that can
    * hold it. So `2147483648` is a `long`, and `-2147483648` is the negation
-   * of one. A suffix, `1L`, is a syntax error here: nothing has needed it. *)
-  Number : width = lookup([[true, 8]], int($text) > 2147483647, 4) .
+   * of one. A suffix, `1L`, is a syntax error here: nothing has needed it.
+   *
+   * **One past the largest `long` is refused by name**, since 2026-09-26.
+   * C makes it an `unsigned long`, which ROADMAP 6.9 brings, and the
+   * library's `int` refuses text that does not fit in sixty-four bits, as
+   * it has since the same day; until then it read this as the largest
+   * `long`, without a word. So the text is measured before it is read: a
+   * check is a guard, and the `width` it guards, and every pass after this
+   * one, are not worked out when it fails, so `int` is never handed text
+   * that does not fit. The text is compared as text, which for two strings
+   * of digits of one length is comparing the numbers. *)
+  Number : width  = lookup([[true, 8]], int($text) > 2147483647, 4)
+         ! size($text) > 19 or (size($text) = 19 and $text > "9223372036854775807")
+             : "'{}' is too big for a 'long', and C makes it an 'unsigned long', which is not here yet"
+                 of $text .
 
   (* **A character constant is an `int`**, C11 6.4.4.4, which the defaults
    * above already say: no stars, four bytes, so `sizeof 'a'` is 4 as C has

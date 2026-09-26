@@ -926,7 +926,7 @@ Keys are compared the way `=` compares, not as text only.
 
 | | |
 | --- | --- |
-| `int(text)`, `int(text, base)` | base 2 to 36. An integer answers itself; **a float is refused** — narrowing has a direction, so it is named |
+| `int(text)`, `int(text, base)` | base 2 to 36. An integer answers itself; **a float is refused** — narrowing has a direction, so it is named. **Text that does not fit in sixty-four bits is refused**, as every other integer that does not fit traps |
 | `float(x)` | from text or an integer |
 | `text(x)` | any value with a written form |
 | `floor(f)`, `ceiling(f)`, `round(f)`, `truncate(f)` | a float to an integer, saying which direction |

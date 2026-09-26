@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: `int` refuses a number too big for 64 bits
+
+**The library's `int` refuses text that does not fit in sixty-four bits.**
+It read `"9223372036854775808"` as 9223372036854775807, the nearest integer
+that fits, and said nothing, where every other integer that does not fit
+stops with an error. A description that reads numbers out of a source with
+`int` now hears about one too big, and written-out compilers carry the fix.
+
+**In C, a constant one past the largest `long` is refused by name.** C makes
+it an `unsigned long`, which is [ROADMAP 6.9](ROADMAP.md#69-unsigned)'s. A
+`case` of one had been folded to the largest `long`.
+
+**Tests:** 408 → 410, for the refusal and a check that it is said once. One
+program joins the C oracle, the largest and the most negative `long`: 251
+agree with `cc`, 173 are refused, none diverges.
+
+---
+
 ## 2026-09-26: a global initialised with an address
 
 **A C global can be initialised with an address**, which closes

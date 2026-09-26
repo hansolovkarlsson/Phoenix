@@ -589,7 +589,12 @@ program here that writes one takes no path that compares it. It is fixed
 first, in `phoenix/library.c`, with a claim in `docs/semantics.md`: text
 that does not fit in sixty-four bits is refused, and a C constant that
 large is read in two halves by the description rather than in one by the
-library.
+library. *Fixed 2026-09-26*, with the claim in `docs/reference.md` § 11
+rather than `semantics.md`, since § 11 is where the library's refusals are
+written and `library-refused.phx` holds them. **Until part 3, a C constant
+past the largest `long` is refused by name**, measured as text by a check
+on `Number`, which as a guard keeps `int` from ever being handed it; it had
+compiled, the assembler reading the text right and only the fold wrong.
 
 **The notation's integers are signed, and an `unsigned long` is not.** An
 `unsigned int` fits in them whole, and wrapping one is `mod 4294967296`. An

@@ -684,7 +684,10 @@ for want in "does not narrow a float" \
             "writes one to eight bytes, not 9" \
             "writes one to eight bytes, not 0" \
             "a float is four or eight bytes" \
-            "'bitand' wants two integers"; do
+            "'bitand' wants two integers" \
+            '"9223372036854775808" does not fit in a 64-bit integer' \
+            '"-9223372036854775809" does not fit in a 64-bit integer' \
+            '"10000000000000000" does not fit in a 64-bit integer'; do
     printf '%s' "$lout" | grep -qF -- "$want" || lmissing="$lmissing [$want]"
 done
 if [ -z "$lmissing" ]; then
@@ -2072,6 +2075,20 @@ refuses "a long return declared as an int" "returning a different type each time
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-return-declared-two-ways.c"
 refuses "a constant with a suffix" 'and found "L"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-constant-with-a-suffix.c"
+# One past the largest `long` is an `unsigned long` in C, which the subset
+# does not have yet. The library's `int` read it as the largest `long`,
+# silently, until 2026-09-26; the description now measures the text first.
+refuses "a constant one past the largest long" "is too big for a 'long'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/constant-past-the-largest-long.c"
+# And once: `int` is never handed the text, or it adds a second complaint,
+# naming a line of `c.phx`, after the right one about the program.
+n=$(bounded "$phx" --driver check "$root/languages/c/c-arm64.phx" \
+        "$r/constant-past-the-largest-long.c" 2>&1 | grep -c "error:")
+if [ "$n" -eq 1 ]; then
+    report pass "and says so once"
+else
+    report fail "and says so once" "got $n errors, wanted 1"
+fi
 # **`...`**, since 2026-09-26, ROADMAP 6.6. `cc` refuses all three: `...`
 # with no named parameter before it, `...` anywhere but last, and a
 # prototype with `...` beside a definition without. The first two are
