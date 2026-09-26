@@ -587,7 +587,12 @@ ones.
    and the ellipsis together, so a prototype with `...` and a definition
    without are two shapes, as `cc` says they are two types. A definition
    with `...` compiles as it would without, because nothing in its body can
-   reach the rest.
+   reach the rest. *Built 2026-09-26*: `variadic-named-only.c` agrees with
+   `cc`, calling `printf` with a format alone and a function of its own with
+   its two named arguments, a `long` among them. **The flag is a list's
+   size**, `[ "," "..." ]` matched or not, as a declaration's stars are
+   counted, and the check that a prototype and its definition agree is a
+   second shape beside the arity's, so that each refusal names what differs.
 2. **The call.** A call to a variadic function is refused only when it gives
    fewer arguments than the prototype names. An argument past them gets C's
    **default argument promotions**, C11 6.5.2.2p7, and nothing more: a `char`

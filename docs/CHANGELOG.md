@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: a C function declared with `...`
+
+**A C function can be declared or defined with `...` after its
+parameters**, the first part of [ROADMAP 6.6](ROADMAP.md#66-a-call-to-printf).
+So `int printf(char *format, ...);` is now a declaration the subset reads,
+and `printf("hello\n")` works. A call still passes exactly the named
+arguments: passing more is the second part. `...` with no parameter before
+it, `...` before another parameter, and a function declared with `...` in one
+place and without it in another are refused, as `cc` refuses them.
+
+**Tests:** 361 → 364, for the three refusals. One program joins the C
+oracle: 237 agree with `cc`, 128 are refused, none diverges.
+
+---
+
 ## 2026-09-25: `switch`, and constants worked out before the program runs
 
 **The C subset has `switch`, `case` and `default`**, which finishes

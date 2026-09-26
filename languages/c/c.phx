@@ -113,7 +113,7 @@ block-comment = "/*" { ! "*/" } "*/" .
  * most for `&&`, since 2026-09-25: before it was a token, `a && b` was lexed
  * as two `&`s, and the day binary `&` arrives that spelling would parse, as
  * `a & (&b)`, which is ROADMAP 6.3's reason for building `&&` first. *)
-symbol = "<<=" | ">>="
+symbol = "<<=" | ">>=" | "..."
        | "==" | "!=" | "<=" | ">=" | "->" | "&&" | "||" | "<<" | ">>"
        | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^="
        | "(" | ")" | "{" | "}" | ";" | "," | "+" | "-" | "*" | "/" | "%" | "<" | ">" | "="
@@ -192,10 +192,12 @@ item = function
  *
  * `item` tries this alternative first, and a struct's definition fails it at
  * the `{` after the tag, where a function's name was wanted, and moves on. *)
-function = r:base t:{ "*" } n:name "(" p:params ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), params: $p)
-         | r:base t:{ "*" } n:name "(" p:params ")" "{" s:{ statement } "}"
-             -> Function(name: $n, ret: $r, stars: size($t), params: $p, body: $s) .
+function = r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), params: $p,
+                          variadic: size($v))
+         | r:base t:{ "*" } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), params: $p,
+                         variadic: size($v), body: $s) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
@@ -213,6 +215,16 @@ member = b:base s:{ "*" } n:name "[" c:integer "]" ";"
  * one parameter would arrive bare and two would arrive in a node called
  * `params`. `-> $1` says *the list, whatever its length*. *)
 params = [ param { "," q:param -> $q } ] -> $1 .
+
+(* **`...` after the parameters**, since 2026-09-26, ROADMAP 6.6: a list of
+ * one when the function is variadic and of none when it is not, so that
+ * `size` is the flag, as it is the count of a declaration's stars. It needs
+ * the comma, so `int f(...)`, which C11 6.7.6.3 refuses for want of a named
+ * parameter before it, is `(` then `...` here and a syntax error at the
+ * `...`; so is `...` anywhere but last, where the `)` was wanted. A
+ * repetition's iteration that fails gives back what it took, which is what
+ * lets `params` stop at the `,` in front of the `...`. *)
+dots   = [ "," e:"..." -> $e ] -> $1 .
 param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
 
 (* What is at the bottom of the stars. **A node since `struct`**, and a keyword
@@ -525,14 +537,18 @@ arg  = e:assignment -> Arg(value: $e) .
 
   (* A shape is a name and an arity as one text, so that `positions` can
    * count how many distinct ones there are: more shapes than names means a
-   * name with two arities. *)
+   * name with two arities. **A `dshape` is the name and whether it ends in
+   * `...`**, since 2026-09-26, counted the same way and kept apart so that
+   * each refusal says which of the two differs. *)
   Prototype : shape = ["{}/{}" of $name, size($params)]
+            : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = []
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params) .
   Function  : shape = ["{}/{}" of $name, size($params)]
+            : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = [$name]
             ! size($params) > 8
@@ -541,9 +557,11 @@ arg  = e:assignment -> Arg(value: $e) .
 
   (* A struct is an item and not a function, and adds nothing to either count. *)
   StructDef : shape = []
+            : dshape = []
             : dname = []
             : fname = [] .
   Typedef   : shape = []
+            : dshape = []
             : dname = []
             : fname = [] .
 
@@ -552,7 +570,9 @@ arg  = e:assignment -> Arg(value: $e) .
   Program ! size(positions(flatten($items.fname))) < size(flatten($items.fname))
               : "a function is defined twice"
           ! size(positions(flatten($items.shape))) > size(positions(flatten($items.dname)))
-              : "a function is declared with two different numbers of parameters" .
+              : "a function is declared with two different numbers of parameters"
+          ! size(positions(flatten($items.dshape))) > size(positions(flatten($items.dname)))
+              : "a function is declared with '...' in one place and without it in another" .
 
 (* ------------------------------------------------------------------ *)
 (* Pass two: which local is which, where does it live, and what is it? *)

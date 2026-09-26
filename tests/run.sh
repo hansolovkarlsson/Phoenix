@@ -2071,6 +2071,16 @@ refuses "a long return declared as an int" "returning a different type each time
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-return-declared-two-ways.c"
 refuses "a constant with a suffix" 'and found "L"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-constant-with-a-suffix.c"
+# **`...`**, since 2026-09-26, ROADMAP 6.6. `cc` refuses all three: `...`
+# with no named parameter before it, `...` anywhere but last, and a
+# prototype with `...` beside a definition without. The first two are
+# syntax errors here, at the token where the `)` or a parameter was wanted.
+refuses "... with no parameter before it" 'and found "..."' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/ellipsis-with-no-parameter.c"
+refuses "... before another parameter" 'expected ), and found ","' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/ellipsis-not-last.c"
+refuses "... in a prototype and not in the definition" "with '...' in one place and without it in another" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/variadic-declared-two-ways.c"
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
