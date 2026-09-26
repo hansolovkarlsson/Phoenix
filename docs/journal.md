@@ -5910,3 +5910,108 @@ A Pascal `while` broken on purpose now fails the suite in 190 seconds
 with `control` and `semicolons` named, and a run with `fpc`, Solveig and
 `z80asm` hidden is 316 passed and 5 skipped, measured, as the README says.
 317 checks to 321: three for the limit itself and one for the whole run.
+
+## 2026-09-25: the rest of C's expressions and statements, and what the witnesses got wrong
+
+The standup left one item, a function that returns a pointer, and the day
+became four roadmap entries in the C arc, one change to the notation, one
+defect older than any of them, and a sidetrack. Fourteen commits; the suite
+went from 321 checks to 361, and the C oracle from 196 programs to 236.
+
+**Writing 6.2 down found that the refusal was in three places, not one.**
+The standup said a pointer return was refused by name, and it was, but only
+for a program that reached the `locals` pass through a typedef: `int *f()`
+was a syntax error, because the grammar wrote no stars between a function's
+base and its name, and the `types` pass typed every call from a table of tag
+and width, so a call was an `int` whatever it returned. The entry predicted
+the emit pass would need nothing, and it needed three guards, all for one
+reason: **a pointer to a struct has the struct's tag and is not a struct**,
+and three questions had read "has a tag" as "is a struct".
+[Postmortem 23](postmortem.md) scores it. The witness the entry existed for
+worked: a three-gigabyte `malloc` indexed near its end is the one program
+that disagrees when `smaddl` stands in for `madd`.
+
+**The order of what came next was argued from dependence.** The operators
+went first because the statements lean on them and every oracle program had
+been written around their absence; `switch` waited for constant expressions
+because a `case` label is one; constant expressions were made an entry of
+their own because five later constructs read the same answer. Writing the
+operators' witnesses found that `&&` already lexed, as two `&` tokens, so a
+binary `&` built first would have parsed `a && b` as `a & (&b)`. That was a
+second reason for the order of the parts, and not a guess about one.
+
+**The defect was found by reading, which the defects table had never
+recorded.** Building `!`, `&&` and `||`, which test all of `x0`, meant
+relying on the emit pass header's promise that an `int` sits there
+zero-extended. AAPCS64 does not promise it for a value a call returns, and a
+callee `cc` compiled hands back what it likes. I said it would take an
+optimising `cc` to show it, and that was wrong: `-O0` hands back the whole
+`long` too, and `tests/abi/`, which had linked Phoenix to `cc` since
+2026-09-23, never looked at more than the low half. The first witness for it
+looped forever when the bug was present, and only the output limit from
+yesterday stopped it; it is bounded now. [Postmortem 24](postmortem.md)
+scores the promise.
+
+**Every part was broken on purpose before it was called done, and the
+breaks that passed were each the witness's fault.** An `int` meeting a
+`long` left unextended passed, because every `long` divisor in the witnesses
+left the low half alone, until `-7 / (long)3` joined them. A `char` update
+left unnarrowed passed, because the only use of its value went out through
+an exit status of eight bits, where -99 and 156 agree. Two more were seen
+before running and added first: a negative `int` arm of a `long` `?:`, and a
+label name two functions share. One passed and could not be otherwise, the
+two factors of an `msub` swapped, which is the same instruction. And one
+cannot be witnessed at all, the thirty-two bit wrap in the constants pass,
+because only undefined arithmetic reaches it; the pass says so where the
+wrap is written.
+
+*Three rounds of breaks tested nothing, and reported green.* The
+replacements went through the shell, the quoting ate them, and the file
+under test was never changed; a break that does not apply looks exactly like
+a break that is caught by nothing. They were redone from a script that
+asserts its text occurs exactly once before it writes. Two witnesses also
+had undefined behaviour in them, an unsequenced read and write and an `int`
+overflow, and one used a cast the subset does not have; `cc -Wall` before a
+program joins the oracle catches all three kinds.
+
+**The sidetrack was colour for `.phx` in VS Code**, asked for to make the
+descriptions easier to follow. The oracle it needed was already in the
+repository: `languages/phx/phoenix.phx` describes the notation's own tokens,
+so `phx` lexes every `.phx` file with it and the colouring has to agree about
+every comment and literal. One of its fixture lines was wrong at first, and
+wrong the same way the break it was meant to catch was: it had a comment end
+at the second `*)` when `phx` ends it at the first.
+
+**The statements found that C's keywords were not reserved**, so `break;`
+had been an expression naming a variable. A `break` could not be handed its
+loop's numbered labels, because a node takes its number on the way out and
+the `break` is compiled inside, before that; the labels are named from the
+loop's line and column, which are known on the way in, as `awk-c.phx` names
+a rule. A `goto`'s label is gathered on the way out and handed down from the
+root as `sigs` is, and a `switch` gathers its `case`s through a thread each
+`switch` starts afresh and gives back, which is what lets Duff's device work.
+The one thing that had to be taken on trust, that a leaving clause reads
+what the body left before the restore beside it runs, was checked by
+reversing them: six programs fail.
+
+**Constant expressions asked the notation for the first thing since
+`%names`.** It has no bitwise operations, and `&`, `|` and `^` cannot be
+written in `+ - * div mod`; `~`, `<<` and `>>` can. Hans chose three library
+functions over refusing them. **I added them before reading
+[ROADMAP 3.4](ROADMAP.md#34-a-library-that-grows-without-deciding)**, which
+is the rule for adding anything to the library and which I found through
+the reference page's link afterwards. The rule was met, a real pass needed
+them and the notation could not spell them, and 3.4 now lists them and why
+the other three are not there. But it was met by luck of the case, not by
+reading first. The pass that uses them is written so that nothing traps,
+because a trap is the compiler stopping with an arithmetic error: operands
+are folded only within thirty-two bits, a zero divisor leaves the value
+unsettled, and a minus refuses only the most negative integer, after a first
+draft that held it to thirty-two bits refused `case -4294967296:`, which is C.
+
+*The records needed as much checking as the code.* Twice a closing summary
+had counts written from memory and wrong, once "two years" for a harness two
+days old, and once an entry cited 1.7 as supporting the library change when
+1.7 says the opposite, one customer being a workaround. Each was caught by
+counting or grepping before the commit and not after, which is the only
+reason none of them is in the history.

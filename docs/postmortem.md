@@ -1251,3 +1251,65 @@ log.
 > A harness that can only pass or hang has two answers, and one of them
 > looks like a slow machine. Give it a third, and then check that the third
 > is not being mistaken for the first.
+
+---
+
+## 23. "Whether the emit pass needs anything is for the oracle to say"
+
+[ROADMAP 6.2](COMPLETED.md#62-a-function-that-returns-a-pointer) was written
+on 2026-09-25 before any of it was built, and said, of a function returning
+a pointer: *a pointer is not `wide`, which is kept for `long`, so the
+`return` template may already leave all of `x0` alone, and that is a
+prediction, not a finding.* Built the same day. **Held for the case it was
+about, and missed the case beside it.**
+
+*A plain pointer needed nothing in the emit pass*, as predicted: the
+`return` template narrows only a `long` into an `int` and widens only the
+reverse, and a pointer is neither.
+
+*A pointer to a struct needed three guards*, and the prediction had not
+thought of it as a separate case. It has the struct's tag, and three places,
+the `types` pass's question of what a `return` must give, and the emit pass's
+questions of whether a call's result is copied into the frame and whether a
+`return` copies bytes out, asked "has a tag" to mean "is a struct". Each
+failed `struct-pointer-returned.c` when put back: a refusal, a wrong exit
+status and a crash.
+
+*What the prediction got right was its own last clause.* It deferred to the
+oracle, and it was the oracle that found the three.
+
+> A new kind of value passes through every question the old kinds answered,
+> and some of those questions were asking something narrower than they said.
+
+---
+
+## 24. "`x0` always holds the zero-extended `w0`"
+
+The header of `languages/c/c-arm64.phx` has said so since 2026-09-22, when
+`int` became thirty-two bits: every write to a `w` register zeroes the upper
+half, so an `int` in `x0` is zero-extended and a push of either width is
+lossless. Every condition in the emit pass tests all of `x0` on the strength
+of it. **True of everything the file emits, and false of the one value it
+does not emit**: an `int` returned by a function another compiler built.
+
+AAPCS64 leaves the upper half of a returned 32-bit value unspecified, and
+`cc` uses the freedom even at `-O0`: `int lnarrow(long x) { return x; }`
+returns the whole `long`. `if (lnarrow(4294967296))` was taken here and not
+under `cc`. The fix is one `mov w0, w0` after a call that returns an `int`.
+
+*The claim was scoped wrong, not reasoned wrong.* Its argument was about
+instructions, and every instruction the file writes keeps it. What it could
+not see was a value that arrives from outside the file, and the only place
+that happens is a call. `tests/abi/` was built on 2026-09-23 to link the two
+compilers' code together, and had the shape to find this from the start; it
+never tested more than the low half of what came back, so it asked nothing.
+
+*It was found by reading the promise against the convention*, while building
+`!`, `&&` and `||`, which lean on it hardest, and confirmed by a pair of
+files, one compiled by each compiler. It is the first entry in the defects
+table of [COMPLETED.md](COMPLETED.md#defects-found-and-what-found-them) that
+reading found, and the reading was the hypothesis; the pair was the finding.
+
+> An invariant stated about the code is only as wide as the code. Where a
+> value comes from somewhere else, the invariant is a claim about somebody
+> else's code, and it has to be tested there.
