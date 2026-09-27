@@ -1628,14 +1628,16 @@ arg  = e:assignment -> Arg(value: $e) .
          ! $value.record : "'-' wants a number, and this is '{}'" of $value.kind
          ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
 
-  (* **`sizeof` is worth a `long`**, since 2026-09-23. C11 6.5.3.4 makes it
-   * a `size_t`, which on this machine is an `unsigned long`. It was an
-   * `int` here from 2026-09-22, because the subset had no `long`, and one
-   * program showed it: `sizeof(sizeof(int))`, 8 under `cc` and 4 here,
-   * pinned in `tests/divergent/` with both answers. It is an oracle program
-   * now. *Not an `unsigned` one*, which is a later step, and nothing can see
-   * the difference yet: a size is never negative, and `unsigned` arithmetic
-   * is what would show it. *)
+  (* **`sizeof` is worth an `unsigned long`**, C11 6.5.3.4's `size_t` on
+   * this machine. It was an `int` here from 2026-09-22, because the subset
+   * had no `long`, and one program showed it: `sizeof(sizeof(int))`, 8
+   * under `cc` and 4 here. It was a `long` from 2026-09-23, and a comment
+   * here said nothing could see the difference, a size never being
+   * negative. **A size less a larger number can**, and the arithmetic is
+   * C's, not the reader's: `sizeof(int) - 5 < 0` is 0, and every answer of
+   * `sizeof-is-unsigned.c` differed until 2026-09-27, ROADMAP 6.9's second
+   * part, when it became unsigned. The difference of two pointers stays a
+   * `long`, C's `ptrdiff_t`. *)
   (* **A cast is worth the type it names**, C11 6.5.4, and is a value and
    * not a place, so `lvalue` stays false. A cast to `void` is a `void`
    * value, a record with the tag `void`, which a statement may throw away
@@ -1657,13 +1659,13 @@ arg  = e:assignment -> Arg(value: $e) .
            : "'{}' is cast to something other than 'void', and only a number or a pointer can be"
                of $value.kind .
 
-  SizeOfType : type = 0 : width = 8
+  SizeOfType : type = 0 : width = 8 : uns = true
              (* **`sizeof` of `void` is refused by name**, since 2026-09-26:
               * C11 6.5.3.4 wants a complete type, and `cc` answers 1, as GNU
               * C does. *)
              ! $ptrs = 0 and $base.tagname = "void"
                  : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
-  SizeOfExpr : type = 0 : width = 8
+  SizeOfExpr : type = 0 : width = 8 : uns = true
              ! $value.record and $value.tag = "void"
                  : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
 
@@ -1896,6 +1898,16 @@ arg  = e:assignment -> Arg(value: $e) .
    * teaches this pass to wrap, anything with one in it is refused where a
    * constant is wanted. So is a `?:` whose answer is unsigned.
    *
+   * **An `unsigned long` folds where it agrees with a `long`**, since
+   * 2026-09-27, when `sizeof` became one and the first unsigned value this
+   * pass could settle. Where its operands and its answer are all from 0 to
+   * 2^63, every operator here gives the unsigned answer, and C's `size_t`
+   * arithmetic stays there: `sizeof(long) - 4`, `sizeof(int) * 2`. Outside
+   * it the answer is the notation's signed one and C's is not, so
+   * `sizeof(int) - 5`, `-sizeof(int)`, `~sizeof(int)` and `-1 <
+   * sizeof(int)` are not settled, and refused where a constant is wanted,
+   * which `cc` folds; ROADMAP 6.9's third part is where they wrap.
+   *
    * **A cast to an integer type folds whatever it is given**, since
    * 2026-09-26, C11 6.6p6: an integer constant expression may cast to one.
    * A cast cannot trap, so unlike an operator it does not ask that its
@@ -1910,12 +1922,13 @@ arg  = e:assignment -> Arg(value: $e) .
              : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128, 0)],
                                  [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648, 0)]],
                                 $base.basew, $value.folded) .
-  Invert     : settled = $value.settled : folded = bitxor($value.folded, 0 - 1) .
+  Invert     : settled = $value.settled and not $uns : folded = bitxor($value.folded, 0 - 1) .
   Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) .
 
   (* Negating overflows only the most negative integer, so that is the one
    * a `-` does not fold: `-4294967296` is a `long` constant, and a label. *)
   Negate : settled = $value.settled and $value.folded > 0 - 9223372036854775807
+                  and (not $uns or $value.folded = 0)
          : craw   = 0 - lookup([[true, $value.folded]], $settled, 0)
          : clow   = bitand($craw, 4294967295)
          : folded = lookup([[true, $craw]], $wide,
@@ -1969,11 +1982,13 @@ arg  = e:assignment -> Arg(value: $e) .
                             ["<<", $fshl]], $op, true)
          : settled = $cbase and $type = 0 and $fits
                      and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < $climit))
+                     and (not $uns or ($wide and $cl >= 0 and $cr >= 0 and $craw >= 0))
          : folded = lookup([[true, $craw]], $wide,
                            $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
 
   Compare : cl = $left.folded : cr = $right.folded
           : settled = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
+                      and (not $cuns or ($cl >= 0 and $cr >= 0))
           : folded = lookup([[true, 1]],
                             lookup([["<", $cl < $cr], ["<=", $cl <= $cr], [">", $cl > $cr],
                                     [">=", $cl >= $cr], ["==", $cl = $cr], ["!=", $cl <> $cr]],

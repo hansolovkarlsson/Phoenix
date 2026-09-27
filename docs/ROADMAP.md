@@ -642,6 +642,18 @@ suite green:
 2. **`sizeof` is an `unsigned long`**, and the difference of two pointers
    stays a `long`, `ptrdiff_t`. `sizeof-is-unsigned.c` is the witness, and
    the comment and COMPLETED's row are corrected.
+   *Built 2026-09-27.* **It made the first unsigned value the `constants`
+   pass could settle**, and that pass does signed arithmetic, so it
+   learned this entry's rule early: an unsigned answer folds only where its
+   operands and it are from 0 to 2^63, and `case sizeof(int) - 5:`, `-`,
+   `~` and a comparison with a negative number are refused where a
+   constant is wanted, until part 3; `sizeof-folds.c` holds the folds that
+   agree, and four refusals the ones that do not. Of six breaks, two
+   passed at first: `sizeof` of an expression had no witness at run time,
+   and nothing held the guard on `~`. A line of `sizeof-folds.c` and
+   `case-inverts-sizeof.c` are theirs. Unguarded, `~` and `-` give the
+   right bits, which C reads as unsigned and the pass as negative; they
+   are guarded because the next operator would read them as the pass does.
 3. **The constants.** Hex and octal, and the suffixes `u`, `l` and both in
    either order and case, which lifts today's refusal of `1L`: its program
    leaves `refused/`, as C it always was. A constant's type is C11

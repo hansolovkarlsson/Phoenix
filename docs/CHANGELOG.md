@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-27: `sizeof` is unsigned
+
+**`sizeof` is an `unsigned long` in the C subset**, as C's `size_t` is on
+this machine, the second part of [ROADMAP 6.9](ROADMAP.md#69-unsigned). It
+had been a `long`, and a program that subtracts past a size got every
+answer wrong: `sizeof(int) - 5 < 0` was 1 where C says 0. The difference
+of two pointers stays a `long`.
+
+**A constant with unsigned arithmetic in it folds only where signed and
+unsigned agree**: operands and answer from 0 to 2^63. So `case
+sizeof(long) - 4:` compiles, and `case sizeof(int) - 5:`, `-sizeof(int)`,
+`~sizeof(int)` and `-1 < sizeof(int)` are refused where a constant is
+wanted, which `cc` folds. Constants that wrap are the third part.
+
+**Tests:** 416 → 416. None added: the C oracle and its refusals are one
+check each. Two programs join the oracle: 255 agree with `cc`, none
+diverges. Four join the refusals, 183.
+
+---
+
 ## 2026-09-26: the website builds again
 
 **The website at the project's GitHub Pages address is current again.**
