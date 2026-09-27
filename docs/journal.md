@@ -6110,3 +6110,28 @@ kept the text from it, and a break showed they guarded nothing: a check that
 fails is itself the guard, since the attributes of its rule and every pass
 after are never worked out. They came out, and a check that the refusal is
 said once is its witness.
+
+**Closed out a second time, after two more pieces of work.** The first was
+6.9's first part, the `unsigned` types, and the tool caught its worst
+mistake before a program ran: `locals` gave a base type an `uns` and
+`types` gave every node a default one, which would have hidden the base's,
+so that a cast to `unsigned` read as signed; `phx` warned that both passes
+defined the name. Of twenty-four breaks, five found a witness missing, and
+every one was an `unsigned int` meeting a `long` or a value with its top
+bit set, which is where signed and unsigned differ and where the first
+witness had not looked. One cannot be seen until the third part, a
+`switch` on an `unsigned int` sign-extended, which differs only against a
+negative label.
+
+**The second was the website, which had not been built for three weeks.**
+Hans asked why GitHub complained about `pages.yml`. Every run of it since
+2026-09-05, fifty-five, had failed before Jekyll read a page, because the
+site's `description` in `www/_config.yml` was rewritten that day to say
+Phoenix *writes both down: EBNF*, and in an unquoted YAML value a colon and
+a space begin a key. The journal of 2026-09-03 said the site, being built
+on every push, *cannot fall behind the documentation*; it fell behind by
+every document written since, and nothing in the repository ran the build
+or read its result. The value is quoted in the working tree, and parses,
+and every assembled page's front matter parses too; whether Jekyll then
+builds is for the next run on GitHub to say, and that commit is not made
+yet. [Postmortem 28](postmortem.md) scores the claim.

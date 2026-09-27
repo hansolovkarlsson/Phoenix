@@ -1396,3 +1396,31 @@ unsigned without saying so.
 
 > "Cannot be witnessed" is a prediction like any other. Before writing it,
 > list every reader of the thing, and try to write the program for each.
+
+---
+
+## 28. "The site cannot fall behind the documentation"
+
+The journal of 2026-09-03 said so of the website: `pages.yml` assembles it
+from `docs/` on every push that touches them, and nothing is committed
+built. **Failed, for three weeks, without a word to anyone reading the
+repository.**
+
+*The claim was about where the pages come from, and was true of that.*
+What it did not cover was the build failing. On 2026-09-05 the site's
+`description` in `www/_config.yml` was rewritten to say Phoenix *writes
+both down: EBNF*, and in an unquoted YAML value a colon and a space begin a
+key, so the file stopped parsing. Every run after it, fifty-five, failed
+before Jekyll read a page, and GitHub Pages went on serving the last site
+that had built. A site built on every push cannot fall behind only while
+every push builds; a failed build freezes it exactly as a committed one
+would, and a committed one at least shows its age in the history.
+
+*Nothing here looked.* `make test` parses nothing under `www/`, and the
+workflow's result is on GitHub, where it was found on 2026-09-26 because
+Hans asked why the workflow complained. The fix is one pair of quotes; the
+lesson is where the check was not.
+
+> "It is rebuilt from source" is a claim about the success path. Its
+> failure path has to be watched by something, or it is a claim about the
+> last time it worked.
