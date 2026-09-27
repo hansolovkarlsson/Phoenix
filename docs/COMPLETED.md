@@ -1006,6 +1006,7 @@ has meant, and the entries after the table say how.
 | **the suite could not say that a program did not finish** | `tests/run.sh` and every harness ran what they had just compiled with no limit, so a program that looped hung `make test`, and one that looped around a print ran the capturing shell out of memory and ended the run with no report. Found by a breakage harness that ran for two hours and forty minutes on 2026-09-23, until Hans asked why the background jobs were still going. Fixed 2026-09-24 by [`tests/limit.c`](../tests/limit.c), a time and output limit every harness runs its programs under, and a log of every stop that fails the run |
 | **`int` read text too big for sixty-four bits as the largest integer** | the library called `strtoll` and never asked whether it had overflowed, so `int("9223372036854775808")` was 9223372036854775807, without a word, where every other integer that does not fit traps. A C `case` of one past the largest `long` folded to the largest. Found by writing the witnesses for ROADMAP 6.9, which asked what a constant that large is |
 | **a failure on the right of `and` or `or` was complained about** | a check that fails leaves its node's attributes as failures, which everything above it passes through, since the source has been told once. `and` and `or` passed one on the left and reported one on the right, as *wants booleans, and the right is a failure*, naming a line of the description after the right diagnosis about the source. `sizes`, `each` and `bytes` had had the same defect, and `tests/grammars/one-complaint.phx`, which held them, now holds the two operators as well. Found by C's `types` pass, when a refused cast to a struct was asked by the assignment above it whether it was one |
+| **the website had not built for three weeks** | the site's `description` in `www/_config.yml` held *writes both down: EBNF*, and in an unquoted YAML value a colon and a space begin a key, so from 2026-09-05 every run of `pages.yml`, fifty-five, failed before Jekyll read a page, and GitHub Pages went on serving the last site that built. Found by Hans on 2026-09-26, asking why the workflow complained. Fixed the same day in `d79a808` by quoting the value; run 36290323644 on `462dfa9` built and deployed |
 | **an `int` a call returned was trusted to be zero-extended** | the C emit pass tests all of `x0` in every condition, on the header's promise that an `int` sits there zero-extended, and AAPCS64 leaves the upper half of a returned `int` unspecified. A callee `cc` compiled, `int lnarrow(long x) { return x; }`, hands back the whole `long` even at `-O0`, so `if (lnarrow(4294967296))` was taken. `tests/abi/` linked Phoenix to `cc` from the start and never tested more than the low half of what came back |
 
 **The rule this repeats**: a round trip can be green while the parse is
@@ -1070,6 +1071,13 @@ made. The reading was the hypothesis and not the finding: a four-line pair
 of files, one compiled by each, is what showed it, and that pair is now in
 `tests/abi/`. The harness had the right shape for this fault from the day
 it was written, 2026-09-23, and asked it nothing.
+
+**The website row is a ninth kind, and the plainest: somebody looked.**
+The check existed and ran on every push, and every run said so. It
+reported to a page on GitHub that nothing in this repository reads and
+nobody had opened, so a failure that was loud where it happened was
+silent everywhere else. `make test` still parses nothing under `www/`;
+[postmortem.md](postmortem.md) § 28 scores the claim it broke.
 
 **A test was holding the defect in place**, and that is worth its own line
 because it looked like the opposite. `languages/awk/tests/divergent/spaced-regex.awk`

@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: the website builds again
+
+**The website at the project's GitHub Pages address is current again.**
+From 2026-09-05 no build of it succeeded, fifty-five in a row, and the
+site went on showing the pages as they were that day: none of the C work,
+and none of the documents written since. The site's description had
+gained a colon that YAML reads as the start of a key, so the build
+stopped before it read a page. The description is quoted, and the first
+build after it deployed.
+
+**Tests:** 416 → 416. None added: nothing in `make test` builds the site.
+
+---
+
 ## 2026-09-26: `unsigned` types in C
 
 **The C subset has `unsigned char`, `unsigned int` and `unsigned long`**,
