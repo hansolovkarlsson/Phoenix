@@ -25,23 +25,28 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Every action here runs on Node 24, since 2026-09-27; the versions before
+# ran on Node 20, which GitHub deprecated. `ubuntu-latest` is left to move
+# to Ubuntu 26 when GitHub moves it, from 2026-10-19: the build is a shell
+# script and a Jekyll that runs in its own container, so nothing here asks
+# which Ubuntu it is.
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Assemble the site source
         run: ./www/assemble.sh
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - uses: actions/jekyll-build-pages@v1
         with:
           source: ./_site_src
           destination: ./_site
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
 
   deploy:
     needs: build
@@ -51,4 +56,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
