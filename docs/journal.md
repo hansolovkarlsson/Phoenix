@@ -6015,3 +6015,98 @@ days old, and once an entry cited 1.7 as supporting the library change when
 1.7 says the opposite, one customer being a workaround. Each was caught by
 counting or grepping before the commit and not after, which is the only
 reason none of them is in the history.
+
+## 2026-09-26: `printf`, `void`, casts and globals, and two defects in the tool
+
+The standup left one item, the C arc's next entry, with an order argued the
+day before: variadic calls for `printf`, then `void` and casts, then
+globals, then the `unsigned` family. All four entries were written, three
+built and closed, and the fourth drafted, with the tool changed twice on
+the way. Twelve commits; the suite went from 361 checks to 410, the C
+oracle from 236 programs to 251, and the refusals from 125 to 173.
+
+**On this machine a variadic argument is not where an ordinary one is.**
+Apple's arm64 puts the named arguments in `x0` to `x7` and every argument
+after them on the stack in a slot of eight bytes, even with registers free,
+and packs a ninth *named* argument at its own size; `cc -S` was the source
+for both. [6.6](COMPLETED.md#66-a-call-to-printf) planned to move each extra
+into its slot inside the area the pushes had already taken, and said which
+way the copy ran was the part to get right. No way was right: with ten
+extras the first slot is where the fourth was pushed, and running the copy
+the other way, the seventh's slot is where the first was. The slots went
+below the pushes instead, with `sp` raised after the `bl`, and
+[postmortem 25](postmortem.md) scores the plan. The witness is `printf`
+itself, compiled by `cc`, since nothing the subset compiles can read past
+its named parameters.
+
+**[6.7](COMPLETED.md#67-void-and-casts) guessed that `void` was half built,
+and it was.** `int`, `char` and `long` were already structs with no members
+in the table of layouts, and a `void` value has to be refused in exactly the
+places a struct is refused where C wants a number. As a fourth entry keeping
+its name as its tag, it is a `record`, and every one of those checks
+refuses it once. What it cost was about twenty-five messages that printed
+`'struct {}'` and now print a `kind`, and three places that took a record
+for a struct in memory; [postmortem 26](postmortem.md) scores it. The
+implicit conversions `cc` refuses and the subset compiles, `long n = p;`,
+were put to Hans and held out by the rule of 2026-09-22: the `types` pass
+refuses what would otherwise mis-compile, and a cast is what makes each
+legal, not a reason to refuse the version without.
+
+**A refused cast found a defect in the tool.** A cast to a struct was
+refused, and the assignment above it then asked the refused node whether it
+was a struct, on the right of an `and`. A failed check leaves failures
+behind, and every operator passes one through so that the source hears once;
+`and` and `or` passed one on the left and complained about one on the right,
+naming a line of `c.phx`. One line in `eval.c`, and
+`tests/grammars/one-complaint.phx`, which already held `sizes`, `each` and
+`bytes` to the same rule, holds the two operators too.
+
+**[6.8](COMPLETED.md#68-globals) needed the `constants` pass to fold a
+`long`, and that was harder than it looked.** The pass folded only when both
+operands fitted in thirty-two bits, and that one condition was what made the
+whole table safe, because the table works out every operator whichever is
+asked for: a `+` of two huge `long`s also computes their product, and the
+notation traps. So each operator that can overflow asks first, with `and`
+and `or` that stop before the arithmetic, and its entry works on operands
+that are real only when its own answer fits. The entry said `case` would
+gain nothing it could show, and a `switch` on a `long` showed eight labels
+it had refused. The globals themselves went as planned, except that an
+initialiser at file scope had an empty `env` and could not see the globals
+above it, and that `cc` reaches a global with no initialiser through the
+GOT, as a common symbol, which nothing here needs.
+
+**Three times today the instrument was wrong and not the code.** The script
+that applies breaks looked for the word *overflows* to spot a trap, found it
+in its own witness's file name, and reported all nine breaks caught; run
+honestly, three passed, and each needed a witness of its own, because one
+program with four bad labels stays refused when only one of the four
+questions breaks. Later the script restored a source with the time its copy
+was made, older than the binary it had just built, so `make` kept the broken
+`bin/phx` and the next break looked caught by a test it could not reach.
+And two breaks of alignment passed because arm64 does not fault on an
+unaligned load, until each witness printed an address modulo its type's size
+after a `char`. The one that passed for a reason already met yesterday was a
+`long` cast to an `int` without its `mov w0, w0`: every witness gave the
+`int` to `printf`'s `%d`, which reads thirty-two bits, the eight-bit exit
+status again in another place.
+
+**Drafting [6.9](ROADMAP.md#69-unsigned) found that the subset already gets
+a program wrong.** C makes `sizeof` an `unsigned long`; Phoenix makes it a
+`long`, under a comment in `c.phx` that says nothing can see the difference
+until `unsigned` arithmetic exists. `sizeof(int) - 5 < 0` is that
+arithmetic, and Phoenix compiles it and answers differently in all five
+values of `sizeof-is-unsigned.c`. The oracle's *none diverges* was true of
+what it held. [Postmortem 27](postmortem.md) scores the comment beside the
+`case` claim, since both said no program could see a thing.
+
+**Asking what a constant past the largest `long` folds to found the second
+defect in the tool.** The library's `int` called `strtoll` and never asked
+whether it had overflowed, so `"9223372036854775808"` was read as
+9223372036854775807, without a word. It is refused now, with the claim in
+`docs/reference.md` § 11 where the library's refusals are written, and in C
+such a constant is refused by name until 6.9 brings `unsigned long`. The
+first version of that refusal guarded `int` twice over, with attributes that
+kept the text from it, and a break showed they guarded nothing: a check that
+fails is itself the guard, since the attributes of its rule and every pass
+after are never worked out. They came out, and a check that the refusal is
+said once is its witness.

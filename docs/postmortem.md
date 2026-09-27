@@ -1313,3 +1313,86 @@ reading found, and the reading was the hypothesis; the pair was the finding.
 > An invariant stated about the code is only as wide as the code. Where a
 > value comes from somewhere else, the invariant is a claim about somebody
 > else's code, and it has to be tested there.
+
+---
+
+## 25. "Which way that copy runs is the part to get right"
+
+[ROADMAP 6.6](COMPLETED.md#66-a-call-to-printf) was written on 2026-09-26
+before any of it was built, and said of the extra arguments to a variadic
+call: *the emit pass loads the named arguments into registers as today,
+then moves the rest from their sixteen-byte pushes into eight-byte slots at
+the bottom of the area, in order, and raises `sp` by what is left*, and that
+the direction of the copy was the part to get right. **Failed: there is no
+direction.**
+
+*Worked through for ten extras before a line was written*, the first extra's
+slot is where the fourth was pushed, so an upward copy overwrites a push it
+has not read; and downward, the seventh's slot is where the first was
+pushed. The slots have to go somewhere the pushes are not, and the only
+such place is below them, which moves the `add sp` from before the `bl` to
+after it. A call with no extras is emitted as it always was.
+
+*What the prediction got right was naming the risk.* It picked out the one
+step that could go wrong and said so, and working that step by hand, on the
+largest case a witness would hold, was what refused it.
+
+> A plan that names its hard part has told you where to do the arithmetic
+> before the code. Do it there.
+
+---
+
+## 26. "The first thing to try is `void` as a fourth such entry"
+
+[ROADMAP 6.7](COMPLETED.md#67-void-and-casts) predicted, from the table of
+layouts holding `int`, `char` and `long` as structs with no members, that a
+`void` value would be refused wherever a struct is refused where C wants a
+number, for nothing, and that *only the messages need to learn to say
+`void`*. It added that the emit pass would have to keep a `void` call from
+getting a struct's temporary. **Held, and cost more than the messages.**
+
+*The mechanism held exactly*: thirteen refusals, each saying one thing once,
+through checks written for structs. *The messages were about twenty-five*,
+all printing `'struct {}'` of a tag, and now print a `kind`. And *the
+temporary was one of three* places that asked "is a record" and meant "is a
+struct in memory": a call's temporary, which it predicted, `?:` and a
+member, which it did not. It is postmortem 23's shape again: a new kind of
+value passes through every question the old kinds answered, and some of
+them were asking something narrower than they said.
+
+> Reusing a mechanism is cheap where the mechanism is general and costs
+> exactly where its questions were worded for the old case.
+
+---
+
+## 27. "Nothing can see the difference yet"
+
+Two claims said no program could show a thing. **Both were wrong, and each
+was refuted by a program of one line.**
+
+*The comment on `SizeOfType` in `c.phx`*, since 2026-09-23: `sizeof` is a
+`long` here and an `unsigned long` in C, and *nothing can see the difference
+yet: a size is never negative, and `unsigned` arithmetic is what would show
+it*. `sizeof(int) - 5 < 0` is unsigned arithmetic written without the word.
+`cc` answers 0 and Phoenix 1, and `sizeof-is-unsigned.c` differs in all five
+of its values. The oracle had never held a program that subtracts past a
+`sizeof`, so for three days its *none diverges* was a fact about the
+programs it held.
+
+*ROADMAP 6.8*, 2026-09-26: folding a `long` would change nothing `case` can
+show, *since a `long` label in an `int` `switch` is already refused as too
+wide*. True of an `int` `switch`, and a `switch` on a `long` takes wide
+labels: `case 4294967296 * 2:` had been refused there, and
+`long-case-labels.c` holds eight such labels.
+
+*The claims of the same kind that have held* are `void`'s width, today, and
+the zeroing of a small struct's register slot, since 2026-09-23, and they
+hold for a reason the
+two above lacked: every reader of the thing was listed, and each was
+refused or could not look. `void`'s width is read by arithmetic, `*` and
+`sizeof`, and all three refuse a `void`. The `sizeof` comment named its
+reader, unsigned arithmetic, and did not ask whether an expression could be
+unsigned without saying so.
+
+> "Cannot be witnessed" is a prediction like any other. Before writing it,
+> list every reader of the thing, and try to write the program for each.
