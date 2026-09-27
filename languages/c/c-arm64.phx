@@ -109,9 +109,13 @@
 
   (* `ldr w0, =n` is the assembler's pseudo-instruction for *any* constant:
    * it becomes a `mov` when the value fits and a load from a literal pool
-   * when it does not, and this description does not have to know which. A
-   * constant written in a C program is an `int`, so it is always a `w`. *)
-  Number : out = "\tldr {}0, ={}\n" of lookup([[8, "x"]], $width, "w"), $text .
+   * when it does not, and this description does not have to know which.
+   * The number is the constant's bits as the `types` pass read them, in
+   * decimal, since 2026-09-27, and not its text. This assembler happens to
+   * read `10L`, `017` and `0x10` as C does, so the text gave the same
+   * program and no witness can tell them apart here; the bits are what the
+   * constant is, and do not depend on an assembler's leniency. *)
+  Number : out = "\tldr {}0, ={}\n" of lookup([[8, "x"]], $width, "w"), $bits .
 
   (* A character constant is an `int` too, and its code was worked out by the
    * `types` pass, because what `'a'` is worth is C's business. *)
@@ -610,12 +614,11 @@
    * labels inside a `do` inside the `switch`, and they are the `switch`'s.
    *
    * **An `unsigned int` is not sign-extended**, since 2026-09-26: it is
-   * already zero-extended in `x0`, which is the value C compares. *That has
-   * no witness yet*: a value past 2^31 differs between the two only against
-   * a negative label, and a negative label in such a `switch` is refused
-   * until ROADMAP 6.9's third part converts it. Sign-extending it anyway
-   * passed. Labels past 2^31 arrive with that part, and so does the
-   * program that sees this. *)
+   * already zero-extended in `x0`, which is the value C compares, and each
+   * label is converted to the `unsigned int` it is compared with by the
+   * `constants` pass, so `case -1` is 4294967295. That had no witness until
+   * the labels arrived, 2026-09-27; sign-extending it now fails three
+   * programs, `case-negative-in-an-unsigned-switch.c` among them. *)
   Switch  : down brk   = "Lb{}_{}" of $pos.line, $pos.column
           : down heldc = $cases
           : down heldd = $dflt
@@ -629,7 +632,7 @@
               of $cond.out, lookup([[true, ""]], $cond.wide or $cond.puns, "\tsxtw x0, w0\n"), $mine,
                  lookup([["", $brk]], $mydflt, $mydflt), $body.out, $brk .
   Case    : here  = "Lk{}_{}" of $pos.line, $pos.column
-          : cases = "{}\tldr x1, ={}\n\tcmp x0, x1\n\tb.eq {}\n" of $cases, $value.folded, $here
+          : cases = "{}\tldr x1, ={}\n\tcmp x0, x1\n\tb.eq {}\n" of $cases, $klabel, $here
           : out   = "{}:\n{}" of $here, $body.out .
   Default : here  = "Ld{}_{}" of $pos.line, $pos.column
           : dflt  = $here

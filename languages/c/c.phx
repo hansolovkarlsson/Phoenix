@@ -57,9 +57,12 @@
  * a `main` that returns a struct.
  *
  * **Then `long`**, signed and eight bytes, as a base like `int` and `char`.
- * An `int` meeting a `long` is converted to one, C11 6.3.1.8, and `sizeof`
- * and the difference of two pointers are `long`s, as C has them. A decimal
- * constant too big for an `int` is a `long`; a suffix is a syntax error.
+ * An `int` meeting a `long` is converted to one, C11 6.3.1.8, and the
+ * difference of two pointers is a `long`, as C has it; `sizeof` was one too
+ * until 2026-09-27, when it became the `unsigned long` C has. A decimal
+ * constant too big for an `int` is a `long`; a suffix was a syntax error
+ * until the same day, when hex, octal and the suffixes arrived with C11
+ * 6.4.4.1's table of types.
  *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
@@ -69,13 +72,24 @@
  * strings with escapes -- arrive with the constructs that need them.
  *)
 
-%fragment letter digit escape plain sescape splain .
+%fragment letter digit hexdigit isuffix escape plain sescape splain .
 
-letter  = "a" .. "z" | "A" .. "Z" | "_" .
-digit   = "0" .. "9" .
+letter   = "a" .. "z" | "A" .. "Z" | "_" .
+digit    = "0" .. "9" .
+hexdigit = "0" .. "9" | "a" .. "f" | "A" .. "F" .
 
 name    = letter { letter | digit } .
-integer = digit { digit } .
+
+(* **An integer constant is decimal, octal or hex, with a suffix**, since
+ * 2026-09-27, ROADMAP 6.9: `u`, `l`, or both in either order and either
+ * case, C11 6.4.4.1. The scanner takes the longest match, so what C
+ * refuses is a syntax error at the letters left over: `0x` with no digits
+ * stops at the `x`, `1uu` at its second `u`, and `1ll`, `long long`'s
+ * suffix, which is not here, at its second `l`. An octal constant with an
+ * 8 or a 9 in it is scanned whole and refused by the `types` pass, which
+ * reads the digits. *)
+isuffix = ( "u" | "U" ) [ "l" | "L" ] | ( "l" | "L" ) [ "u" | "U" ] .
+integer = ( "0" ( "x" | "X" ) hexdigit { hexdigit } | digit { digit } ) [ isuffix ] .
 
 (* A character constant is one character between single quotes, or one
  * escape. **Printable ASCII only**, and the three ranges are that and nothing
@@ -672,6 +686,19 @@ arg  = e:assignment -> Arg(value: $e) .
 (* thing a program can measure, with `sizeof` and with `&`.             *)
 
 %pass locals
+
+  (* **What a constant's text says**, since 2026-09-27: its suffix, its
+   * base and its digits, read here and not in `types`, because a check
+   * there reads them before the value they guard is worked out. A letter
+   * `u` or `l` anywhere in it is a suffix, since no hex digit is one. *)
+  Number : ihasu   = size(split($text, "u")) > 1 or size(split($text, "U")) > 1
+         : ihasl   = size(split($text, "l")) > 1 or size(split($text, "L")) > 1
+         : ibody   = slice($text, 1, size($text) - lookup([[true, 1]], $ihasu, 0) - lookup([[true, 1]], $ihasl, 0))
+         : ihex    = slice($ibody, 1, 2) = "0x" or slice($ibody, 1, 2) = "0X"
+         : ioct    = not $ihex and slice($ibody, 1, 1) = "0" and size($ibody) > 1
+         : idec    = not $ihex and not $ioct
+         : idigits = lookup([[true, slice($ibody, 3, size($ibody))]], $ihex, $ibody)
+         : ndigits = size($idigits) .
 
   (* The table is a thread, because *what has been declared so far* is what
    * a walk in document order has. All three are set afresh at each function
@@ -1669,24 +1696,61 @@ arg  = e:assignment -> Arg(value: $e) .
              ! $value.record and $value.tag = "void"
                  : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
 
-  (* **A constant too big for an `int` is a `long`**, C11 6.4.4.1: an
-   * unsuffixed decimal constant has the first of `int`, `long` that can
-   * hold it. So `2147483648` is a `long`, and `-2147483648` is the negation
-   * of one. A suffix, `1L`, is a syntax error here: nothing has needed it.
+  (* **A constant's type is C11 6.4.4.1's table**, since 2026-09-27,
+   * ROADMAP 6.9: the first of a list that can hold it, and the list
+   * depends on the suffix and on whether it is decimal. Unsuffixed, a
+   * decimal constant is an `int` or a `long`, and a hex or octal one may
+   * also be an `unsigned int` between them, or an `unsigned long` after:
+   * `4294967295` is a `long` and `0xffffffff` an `unsigned int`, which is
+   * why `-1 < 0xffffffff` is 0. A `u` leaves only the unsigned ones, an
+   * `l` only the eight-byte ones. `long long` is the width of `long` here,
+   * so the table's last rows are not needed. **A decimal constant past the
+   * largest `long` is an `unsigned long`**, which C11 leaves with no type
+   * and `cc` and GNU C give that one, with a warning; until 2026-09-27 it
+   * was refused by name.
    *
-   * **One past the largest `long` is refused by name**, since 2026-09-26.
-   * C makes it an `unsigned long`, which ROADMAP 6.9 brings, and the
-   * library's `int` refuses text that does not fit in sixty-four bits, as
-   * it has since the same day; until then it read this as the largest
-   * `long`, without a word. So the text is measured before it is read: a
-   * check is a guard, and the `width` it guards, and every pass after this
-   * one, are not worked out when it fails, so `int` is never handed text
-   * that does not fit. The text is compared as text, which for two strings
-   * of digits of one length is comparing the numbers. *)
-  Number : width  = lookup([[true, 8]], int($text) > 2147483647, 4)
-         ! size($text) > 19 or (size($text) = 19 and $text > "9223372036854775807")
-             : "'{}' is too big for a 'long', and C makes it an 'unsigned long', which is not here yet"
-                 of $text .
+   * **The value is its sixty-four bits**, which are what `cc` writes and
+   * what the notation's signed integers can hold: an `unsigned long` past
+   * 2^63 is negative in `bits`. The library's `int` refuses text that does
+   * not fit, so a constant is read in two halves, each small enough, and
+   * put together in a way that cannot overflow. For hex, the low eight
+   * digits and the rest, each thirty-two bits; for octal the low eleven,
+   * thirty-three bits, and the rest; for decimal the low ten digits and
+   * the rest, where 2^64 is 1844674407 and 3709551616 in those halves, and
+   * one past the largest `long` is worked out from them as the value less
+   * 2^64, by a route whose every step is in range. Each base's halves are
+   * read from its own text or from nothing, because every entry of a
+   * `lookup` is worked out and `int` of a hex digit in base 8 is an error.
+   * Leading zeros above the sixty-four bits are allowed, as C allows them,
+   * and anything else there is too big: a check is a guard, so the halves
+   * are never worked out for a constant it refuses. *)
+  Number : xhi    = int(("0{}" of lookup([[true, slice($idigits, $ndigits - 15, $ndigits - 8)]], $ihex and $ndigits > 8, "")), 16)
+         : xlo    = int(("0{}" of lookup([[true, slice($idigits, $ndigits - 7, $ndigits)]], $ihex, "")), 16)
+         : ohi    = int(("0{}" of lookup([[true, slice($idigits, $ndigits - 21, $ndigits - 11)]], $ioct and $ndigits > 11, "")), 8)
+         : olo    = int(("0{}" of lookup([[true, slice($idigits, $ndigits - 10, $ndigits)]], $ioct, "")), 8)
+         : dhi    = int("0{}" of lookup([[true, slice($idigits, $ndigits - 19, $ndigits - 10)]], $idec and $ndigits > 10, ""))
+         : dlo    = int("0{}" of lookup([[true, slice($idigits, $ndigits - 9, $ndigits)]], $idec, ""))
+         : dbig   = $idec and ($ndigits = 20 or ($ndigits = 19 and $idigits > "9223372036854775807"))
+         : dsmall = lookup([[true, 0]], $dbig, $dhi) * 10000000000 + $dlo
+         : dwrap  = (lookup([[true, $dhi]], $dbig, 1844674407) - 1844674407 + 1) * 10000000000
+                    + ($dlo - 3709551616 - 10000000000)
+         : bits   = lookup([[true, ($xhi - lookup([[true, 4294967296]], $xhi >= 2147483648, 0)) * 4294967296 + $xlo]],
+                           $ihex,
+                    lookup([[true, ($ohi - lookup([[true, 2147483648]], $ohi >= 1073741824, 0)) * 8589934592 + $olo]],
+                           $ioct,
+                    lookup([[true, $dwrap]], $dbig, $dsmall)))
+         : fint   = $bits >= 0 and $bits <= 2147483647
+         : fuint  = $bits >= 0 and $bits <= 4294967295
+         : width  = lookup([[true, 4]], not $ihasl and ((not $ihasu and ($fint or (not $idec and $fuint)))
+                                                      or ($ihasu and $fuint)), 8)
+         : uns    = $ihasu or $bits < 0 or ($width = 4 and not $fint)
+         ! $ioct and (size(split($idigits, "8")) > 1 or size(split($idigits, "9")) > 1)
+             : "'{}' is an octal constant, and 8 and 9 are not octal digits" of $text
+         ! ($ihex and $ndigits > 16 and join(split(slice($idigits, 1, $ndigits - 16), "0")) <> "")
+           or ($ioct and (($ndigits > 22 and join(split(slice($idigits, 1, $ndigits - 22), "0")) <> "")
+                          or ($ndigits >= 22 and slice($idigits, $ndigits - 21, $ndigits - 21) > "1")))
+           or ($idec and ($ndigits > 20 or ($ndigits = 20 and $idigits > "18446744073709551615")))
+             : "'{}' is too big for any integer type, C11 6.4.4.1" of $text .
 
   (* **A character constant is an `int`**, C11 6.4.4.4, which the defaults
    * above already say: no stars, four bytes, so `sizeof 'a'` is 4 as C has
@@ -1858,7 +1922,8 @@ arg  = e:assignment -> Arg(value: $e) .
 (* `int` result passes thirty-two bits only when C's arithmetic has    *)
 (* overflowed, which is undefined, so no program the oracle may hold   *)
 (* can tell. Taking it out changed no answer. It is kept because it is *)
-(* what `cc` folds `1 << 31` to, and an `unsigned` will need it.       *)
+(* what `cc` folds `1 << 31` to, and an `unsigned int`'s answer is the  *)
+(* same cut without the sign put back, since 2026-09-27.               *)
 (* ------------------------------------------------------------------- *)
 
 %pass constants
@@ -1886,27 +1951,40 @@ arg  = e:assignment -> Arg(value: $e) .
   thread seen     = empty
   thread defaults = 0
 
-  Number     : settled = true : folded = int($text) .
+  Number     : settled = true : folded = $bits .
   Character  : settled = true : folded = $code .
   SizeOfType : settled = true : folded = lookup([[0, $base.basew]], $ptrs, 8) .
   SizeOfExpr : settled = true : folded = $value.size .
   Plus       : settled = $value.settled : folded = $value.folded .
 
-  (* **A cast to an unsigned type is not settled yet**, since
-   * 2026-09-26: C wraps one, and folding it as the signed value it was
-   * given would be wrong without a word, so until ROADMAP 6.9's third part
-   * teaches this pass to wrap, anything with one in it is refused where a
-   * constant is wanted. So is a `?:` whose answer is unsigned.
+  (* **An `unsigned int` wraps**, since 2026-09-27, ROADMAP 6.9's third
+   * part, and is always held as the value C means, 0 to 4294967295, never
+   * as the negative number with the same thirty-two bits. Each operator
+   * converts its operands to one, `mod 4294967296`, when its answer is
+   * one, and cuts its answer the same way without putting a sign back; a
+   * shift converts only its left. Nothing two such numbers make passes the
+   * notation's sixty-four bits except a product, which can reach 2^64, so
+   * `*` multiplies by the halves of its right operand, sixteen bits each.
+   * Where the value is held as C means it matters only once it widens: a
+   * global keeps thirty-two bits either way, and the next unsigned
+   * operator converts again, so `(1u - 2) + 0L`, which is 4294967295, is
+   * what shows it. A cast to an unsigned type and a `?:` whose answer is
+   * unsigned were refused where a constant is wanted until this was so.
    *
-   * **An `unsigned long` folds where it agrees with a `long`**, since
-   * 2026-09-27, when `sizeof` became one and the first unsigned value this
+   * **An `unsigned long` folds only where it agrees with a `long`**, since
+   * 2026-09-27, when `sizeof` became one, the first unsigned value this
    * pass could settle. Where its operands and its answer are all from 0 to
    * 2^63, every operator here gives the unsigned answer, and C's `size_t`
    * arithmetic stays there: `sizeof(long) - 4`, `sizeof(int) * 2`. Outside
    * it the answer is the notation's signed one and C's is not, so
-   * `sizeof(int) - 5`, `-sizeof(int)`, `~sizeof(int)` and `-1 <
-   * sizeof(int)` are not settled, and refused where a constant is wanted,
-   * which `cc` folds; ROADMAP 6.9's third part is where they wrap.
+   * `sizeof(int) - 5`, `-sizeof(int)` and `~sizeof(int)` are not settled,
+   * and refused where a constant is wanted, which `cc` folds. **This is
+   * the rule ROADMAP 6.9 chose and kept**, the notation's integers being
+   * signed: a constant past 2^63 is carried as its bits, which is all a
+   * literal or a label needs, and not folded further. **A comparison is
+   * the exception**, because it has an answer that fits: two `unsigned
+   * long`s compare as two `long`s with their top bits flipped, so `-1 <
+   * sizeof(int)` is 0, as C has it.
    *
    * **A cast to an integer type folds whatever it is given**, since
    * 2026-09-26, C11 6.6p6: an integer constant expression may cast to one.
@@ -1918,21 +1996,24 @@ arg  = e:assignment -> Arg(value: $e) .
    * is not an integer constant expression, and is not settled. *)
   Cast       : low8    = $value.folded mod 256
              : low32   = $value.folded mod 4294967296
-             : settled = $value.settled and $ptrs = 0 and $base.tagname = "" and not $base.buns
-             : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128, 0)],
-                                 [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648, 0)]],
+             : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
+             : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128 and not $base.buns, 0)],
+                                 [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648 and not $base.buns, 0)]],
                                 $base.basew, $value.folded) .
-  Invert     : settled = $value.settled and not $uns : folded = bitxor($value.folded, 0 - 1) .
+  Invert     : settled = $value.settled and not ($uns and $wide)
+             : folded  = lookup([[true, 4294967295 - $value.folded mod 4294967296]], $uns,
+                                bitxor($value.folded, 0 - 1)) .
   Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) .
 
   (* Negating overflows only the most negative integer, so that is the one
    * a `-` does not fold: `-4294967296` is a `long` constant, and a label. *)
   Negate : settled = $value.settled and $value.folded > 0 - 9223372036854775807
-                  and (not $uns or $value.folded = 0)
+                  and (not ($uns and $wide) or $value.folded = 0)
          : craw   = 0 - lookup([[true, $value.folded]], $settled, 0)
          : clow   = bitand($craw, 4294967295)
          : folded = lookup([[true, $craw]], $wide,
-                           $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
+                           lookup([[true, $clow]], $uns,
+                                  $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0))) .
 
   (* **One rule for every arithmetic operator**, with the answer read off a
    * table by the operator. Every entry is worked out whichever is asked
@@ -1953,8 +2034,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * as before: two `int`s never overflow sixty-four, so every test passes
    * for them and nothing about an `int` changed. *)
   Binary : cbase  = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
-         : cl     = lookup([[true, $left.folded]], $cbase, 0)
-         : cr     = lookup([[true, $right.folded]], $cbase, 0)
+         : cu32   = $uns and not $wide
+         : cshift = $op = "<<" or $op = ">>"
+         : cl     = lookup([[true, lookup([[true, $left.folded mod 4294967296]], $cu32, $left.folded)]], $cbase, 0)
+         : cr     = lookup([[true, lookup([[true, $right.folded mod 4294967296]], $cu32 and not $cshift,
+                                          $right.folded)]], $cbase, 0)
          : cmax   = 9223372036854775807
          : cmin   = 0 - 9223372036854775807 - 1
          : fadd   = ($cr >= 0 and $cl <= $cmax - $cr) or ($cr < 0 and $cl >= $cmin - $cr)
@@ -1973,22 +2057,29 @@ arg  = e:assignment -> Arg(value: $e) .
          : ml     = lookup([[true, $cl]], $fmul, 0) : mr = lookup([[true, $cr]], $fmul, 0)
          : dl     = lookup([[true, $cl]], $fdiv, 0) : dr = lookup([[true, $cr]], $fdiv, 1)
          : pl     = lookup([[true, $cl]], $fshl, 0)
-         : craw   = lookup([["+", $al + $ar], ["-", $sl - $sr], ["*", $ml * $mr],
+         : um     = lookup([[true, $cl]], $cu32, 0) : un = lookup([[true, $cr]], $cu32, 0)
+         : umul   = ($um * ($un mod 65536) + (($um * ($un div 65536)) mod 65536) * 65536) mod 4294967296
+         : craw   = lookup([["+", $al + $ar], ["-", $sl - $sr], ["*", lookup([[true, $umul]], $cu32, $ml * $mr)],
                            ["/", quotient($dl, $dr)], ["%", remainder($dl, $dr)],
                            ["&", bitand($cl, $cr)], ["|", bitor($cl, $cr)], ["^", bitxor($cl, $cr)],
                            ["<<", $pl * $cpower], [">>", $cl div $cpower]], $op, 0)
          : clow   = bitand($craw, 4294967295)
-         : fits   = lookup([["+", $fadd], ["-", $fsub], ["*", $fmul], ["/", $fdiv], ["%", $fdiv],
+         : fits   = lookup([["+", $fadd], ["-", $fsub], ["*", $fmul or $cu32], ["/", $fdiv], ["%", $fdiv],
                             ["<<", $fshl]], $op, true)
          : settled = $cbase and $type = 0 and $fits
                      and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < $climit))
-                     and (not $uns or ($wide and $cl >= 0 and $cr >= 0 and $craw >= 0))
+                     and (not ($uns and $wide) or ($cl >= 0 and $cr >= 0 and $craw >= 0))
          : folded = lookup([[true, $craw]], $wide,
-                           $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0)) .
+                           lookup([[true, $clow]], $cu32,
+                                  $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0))) .
 
-  Compare : cl = $left.folded : cr = $right.folded
+  Compare : cuw = $cuns and ($left.wide or $right.wide)
+          : cmin = 0 - 9223372036854775807 - 1
+          : cl = lookup([[true, bitxor($left.folded, $cmin)]], $cuw,
+                        lookup([[true, $left.folded mod 4294967296]], $cuns, $left.folded))
+          : cr = lookup([[true, bitxor($right.folded, $cmin)]], $cuw,
+                        lookup([[true, $right.folded mod 4294967296]], $cuns, $right.folded))
           : settled = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
-                      and (not $cuns or ($cl >= 0 and $cr >= 0))
           : folded = lookup([[true, 1]],
                             lookup([["<", $cl < $cr], ["<=", $cl <= $cr], [">", $cl > $cr],
                                     [">=", $cl >= $cr], ["==", $cl = $cr], ["!=", $cl <> $cr]],
@@ -2001,9 +2092,10 @@ arg  = e:assignment -> Arg(value: $e) .
           : settled = $left.settled and ($cdecides or $right.settled)
           : folded = lookup([[true, lookup([["&&", 0]], $op, 1)]], $cdecides,
                             lookup([[true, 1]], $right.folded <> 0, 0)) .
-  Choose  : settled = $cond.settled and $type = 0 and not $uns
+  Choose  : settled = $cond.settled and $type = 0
                       and lookup([[0, $other.settled]], $cond.folded, $then.settled)
-          : folded = lookup([[0, $other.folded]], $cond.folded, $then.folded) .
+          : cpick  = lookup([[0, $other.folded]], $cond.folded, $then.folded)
+          : folded = lookup([[true, $cpick mod 4294967296]], $uns and not $wide, $cpick) .
 
   (* **A `case` is refused unless it is settled**, and the labels of one
    * `switch` are gathered so that two alike can be refused, as `cc` refuses
@@ -2018,17 +2110,19 @@ arg  = e:assignment -> Arg(value: $e) .
           : down suns     = $cond.puns and not $cond.wide
           : seen     = $held
           : defaults = $helddef .
-  Case    : seen = bind($seen, text($value.folded), true)
+  Case    : klabel = lookup([[true, $value.folded mod 4294967296]], $suns, $value.folded)
+          : seen   = bind($seen, text($klabel), true)
           ! not $value.settled
               : "a 'case' label has to be worked out before the program runs, and this one cannot be"
           ! $value.settled and not $swide
-              and ($value.folded < 0 - 2147483648 or $value.folded > 2147483647)
-              : "'case {}' is wider than the int this switch compares" of $value.folded
-          ! $value.settled and defined($seen, text($value.folded))
-              : "'case {}' is in this switch twice" of $value.folded
-          ! $value.settled and $suns and $value.folded < 0
-              : "'case {}' in a switch on an 'unsigned int' is converted by C to the unsigned value it names, which is not here yet"
-                  of $value.folded .
+              and ($value.folded < 0 - 2147483648
+                   or $value.folded > lookup([[true, 4294967295]], $suns, 2147483647))
+              : "'case {}' is wider than the {} this switch compares"
+                  of $value.folded, lookup([[true, "unsigned int"]], $suns, "int")
+          ! $value.settled
+              and defined($seen, text(lookup([[true, $value.folded mod 4294967296]], $suns, $value.folded)))
+              : "'case {}' is in this switch twice"
+                  of lookup([[true, $value.folded mod 4294967296]], $suns, $value.folded) .
   Default : defaults = $defaults + 1
           ! $defaults > 0 : "this switch has a 'default' already" .
 

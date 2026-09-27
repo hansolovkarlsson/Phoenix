@@ -6090,7 +6090,7 @@ after a `char`. The one that passed for a reason already met yesterday was a
 `int` to `printf`'s `%d`, which reads thirty-two bits, the eight-bit exit
 status again in another place.
 
-**Drafting [6.9](ROADMAP.md#69-unsigned) found that the subset already gets
+**Drafting [6.9](COMPLETED.md#69-unsigned) found that the subset already gets
 a program wrong.** C makes `sizeof` an `unsigned long`; Phoenix makes it a
 `long`, under a comment in `c.phx` that says nothing can see the difference
 until `unsigned` arithmetic exists. `sizeof(int) - 5 < 0` is that

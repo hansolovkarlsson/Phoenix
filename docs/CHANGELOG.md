@@ -16,10 +16,37 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-27: hex, octal and suffixes in C
+
+**An integer constant in the C subset can be hex, `0x1F`, or octal, `017`,
+and can carry `u`, `l` or both**, in either order and either case: the
+third part of [ROADMAP 6.9](COMPLETED.md#69-unsigned), which closes it.
+Each has the type C gives it, which depends on its size, its suffix and
+whether it is decimal: `0xffffffff` is an `unsigned int` and `4294967295`
+a `long`, so `-1 < 0xffffffff` is 0. `1L` and `9223372036854775808`
+compile; both were refused until now.
+
+**Constant expressions wrap as `unsigned int`.** A `case` label or a
+global's initialiser can cast to an unsigned type, use `?:` with an
+unsigned answer, or wrap, `4294967295u + 2` being 1. In a `switch` on an
+`unsigned int` a label is converted to one, so `case -1` matches
+4294967295. An `unsigned long` expression that passes 2^63 is still
+refused where a constant is wanted, except a comparison.
+
+**Refused, as `cc` refuses them**: an octal constant with an 8 or a 9,
+`0x` with no digits, a suffix twice, and a constant too big for any type.
+`1ll` is refused too, `long long` not being in the subset.
+
+**Tests:** 416 → 423, for eleven refusals, less four checks whose programs
+now compile. Seven programs join the C oracle, five of them moved from the
+refusals: 262 agree with `cc`, none diverges. Refusals: 189.
+
+---
+
 ## 2026-09-27: `sizeof` is unsigned
 
 **`sizeof` is an `unsigned long` in the C subset**, as C's `size_t` is on
-this machine, the second part of [ROADMAP 6.9](ROADMAP.md#69-unsigned). It
+this machine, the second part of [ROADMAP 6.9](COMPLETED.md#69-unsigned). It
 had been a `long`, and a program that subtracts past a size got every
 answer wrong: `sizeof(int) - 5 < 0` was 1 where C says 0. The difference
 of two pointers stays a `long`.
@@ -53,7 +80,7 @@ build after it deployed.
 ## 2026-09-26: `unsigned` types in C
 
 **The C subset has `unsigned char`, `unsigned int` and `unsigned long`**,
-the first part of [ROADMAP 6.9](ROADMAP.md#69-unsigned), and `signed` before
+the first part of [ROADMAP 6.9](COMPLETED.md#69-unsigned), and `signed` before
 `char`, `int` or `long`. Their arithmetic wraps, and `/`, `%`, `>>` and the
 comparisons are the unsigned ones, with C's usual conversions deciding which
 applies: `-1 < (unsigned int)1` is 0, because the `-1` becomes 4294967295
@@ -80,7 +107,7 @@ stops with an error. A description that reads numbers out of a source with
 `int` now hears about one too big, and written-out compilers carry the fix.
 
 **In C, a constant one past the largest `long` is refused by name.** C makes
-it an `unsigned long`, which is [ROADMAP 6.9](ROADMAP.md#69-unsigned)'s. A
+it an `unsigned long`, which is [ROADMAP 6.9](COMPLETED.md#69-unsigned)'s. A
 `case` of one had been folded to the largest `long`.
 
 **Tests:** 408 → 410, for the refusal and a check that it is said once. One

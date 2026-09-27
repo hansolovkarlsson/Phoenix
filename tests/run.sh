@@ -2067,33 +2067,48 @@ refuses "main returning a struct" "'main' returns an int" \
 # **`long`**, since 2026-09-23. A caller widens an `int` it passes to a `long`
 # parameter, so a prototype and a definition have to agree about which
 # parameters are `long`s, and about what is returned; `cc` refuses both as
-# conflicting types. A suffix is outside the subset: `1L` is a syntax error,
-# and a constant too big for an `int` is a `long` without one.
+# conflicting types.
 refuses "a long parameter declared as an int" "a parameter that is a long in one is not in the other" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-parameter-declared-two-ways.c"
 refuses "a long return declared as an int" "returning a different type each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-return-declared-two-ways.c"
-refuses "a constant with a suffix" 'and found "L"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/long-constant-with-a-suffix.c"
-# One past the largest `long` is an `unsigned long` in C, which the subset
-# does not have yet. The library's `int` read it as the largest `long`,
-# silently, until 2026-09-26; the description now measures the text first.
-refuses "a constant one past the largest long" "is too big for a 'long'" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/constant-past-the-largest-long.c"
-# And once: `int` is never handed the text, or it adds a second complaint,
-# naming a line of `c.phx`, after the right one about the program.
+# **A constant**, since 2026-09-27, ROADMAP 6.9's third part: hex, octal and
+# the suffixes, whose programs `1L` and one past the largest `long` left this
+# list for the oracle. `cc` refuses all but one of these: an octal digit of 8
+# or 9, a constant too big for an `unsigned long` in each base, `0x` with no
+# digits, and a suffix twice. `1ll` is `long long`'s, which is not here, and a
+# syntax error at its second `l`.
+refuses "an octal constant with an 8" "8 and 9 are not octal digits" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/octal-with-an-eight.c"
+refuses "a decimal constant too big for any type" "is too big for any integer type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/decimal-too-big-for-any-type.c"
+# And once: the library's `int` refuses text that does not fit, and is never
+# handed it, or a second complaint names a line of `c.phx` after the right
+# one about the program. The check is the guard.
 n=$(bounded "$phx" --driver check "$root/languages/c/c-arm64.phx" \
-        "$r/constant-past-the-largest-long.c" 2>&1 | grep -c "error:")
+        "$r/decimal-too-big-for-any-type.c" 2>&1 | grep -c "error:")
 if [ "$n" -eq 1 ]; then
     report pass "and says so once"
 else
     report fail "and says so once" "got $n errors, wanted 1"
 fi
+refuses "a hex constant too big for any type" "is too big for any integer type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/hex-too-big-for-any-type.c"
+refuses "an octal constant too big for any type" "is too big for any integer type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/octal-too-big-for-any-type.c"
+refuses "0x with no digits" 'and found "x"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/hex-with-no-digits.c"
+refuses "a suffix twice" 'and found "u"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/suffix-twice.c"
+refuses "long long's suffix" 'and found "l"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-long-suffix.c"
 # **`unsigned`**, since 2026-09-26, ROADMAP 6.9. `cc` refuses the first
 # three. The rest it compiles: the words of a type in any order, which here
-# come in one; and, until the third part teaches the `constants` pass to
-# wrap, a negative `case` in a `switch` on an `unsigned int`, which C
-# converts, and a constant with a cast to an unsigned type in it.
+# come in one; and a label too wide for the `unsigned int` a `switch`
+# compares, which `cc` converts and this declines, as it declines one too
+# wide for an `int`. A negative label in such a `switch`, and a label with a
+# cast to an unsigned type, were refused until 2026-09-27, when the third
+# part taught the `constants` pass to wrap; both programs are in the oracle.
 refuses "unsigned beside struct" 'and found "struct"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-struct.c"
 refuses "unsigned beside void" 'and found "void"' \
@@ -2102,10 +2117,16 @@ refuses "signed beside unsigned" 'and found "unsigned"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/signed-unsigned.c"
 refuses "the words of a type in another order" 'and found "unsigned"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-unsigned.c"
-refuses "a negative case in an unsigned int switch" "in a switch on an 'unsigned int' is converted by C" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/case-negative-in-an-unsigned-switch.c"
-refuses "a case cast to unsigned" 'has to be worked out before the program runs' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/case-cast-to-unsigned.c"
+refuses "a case too wide for an unsigned int switch" "is wider than the unsigned int this switch compares" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-wider-than-an-unsigned-switch.c"
+# Two labels alike once converted to the `unsigned int` compared, which `cc`
+# refuses: `-1` and `4294967295u` are one label there.
+refuses "two case labels alike once converted" "'case 4294967295' is in this switch twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case-after-conversion.c"
+refuses "and the other way round" "'case 4294967295' is in this switch twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case-negative-after-conversion.c"
+refuses "an unsigned int label too wide for an int switch" "is wider than the int this switch compares" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-unsigned-in-an-int-switch.c"
 # **`...`**, since 2026-09-26, ROADMAP 6.6. `cc` refuses all three: `...`
 # with no named parameter before it, `...` anywhere but last, and a
 # prototype with `...` beside a definition without. The first two are
