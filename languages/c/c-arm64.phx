@@ -189,7 +189,7 @@
    * every global here is defined in its own file, so it is reached
    * directly. *)
   Variable  : sym  = "_{}" of $name
-            : ldr  = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")
+            : ldr  = lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0")
             : addr = lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $name, $name]],
                             $global, "\tsub x0, x29, #{}\n" of $offset)
             : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
@@ -206,7 +206,7 @@
   Deref     : out  = lookup([[true, $value.out]], $aggregate,
                             "{}\t{}, [x0]\n"
                               of $value.out,
-                                 lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0"))
+                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0"))
             : addr = $value.out .
 
   (* **A member is its struct's address plus its offset**, and then a load
@@ -222,7 +222,7 @@
             : out  = lookup([[true, $addr]], $aggregate,
                             "{}\t{}, [x0]\n"
                               of $addr,
-                                 lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $size, "ldr x0")) .
+                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0")) .
 
   (* `&` is the address and nothing more. *)
   Addr      : out  = $place.addr
@@ -271,8 +271,9 @@
   Assign    : n     = $label : label = $label + lookup([[true, 1]], $aggregate, 0)
             : widen  = lookup([[true, "\tsxtw x0, w0\n"]],
                               $place.wide and $value.type = 0 and not $value.wide
-                                and not $value.record, "")
-            : narrow = lookup([[1, "\tsxtb w0, w0\n"]], $place.size,
+                                and not $value.record and not $value.uns, "")
+            : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")]],
+                              $place.size,
                               lookup([[true, "\tmov w0, w0\n"]],
                                      $place.size = 4 and $value.wide, ""))
             : store = "{}\tstr x0, [sp, #-16]!\n{}{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
@@ -305,25 +306,32 @@
    * can use any register it likes. *)
   Update : wideop = $place.type = 0 and ($place.wide or $value.wide)
          : r      = lookup([[true, "x"]], $wideop, "w")
-         : load   = lookup([[1, "ldrsb w0"], [4, "ldr w0"]], $place.size, "ldr x0")
-         : lwiden = lookup([[true, "\tsxtw x0, w0\n"]], $wideop and not $place.wide, "")
-         : vwiden = lookup([[true, "\tsxtw x1, w1\n"]], $wideop and not $value.wide, "")
+         : load   = lookup([[1, lookup([[true, "ldrb w0"]], $place.uns, "ldrsb w0")], [4, "ldr w0"]],
+                           $place.size, "ldr x0")
+         : lwiden = lookup([[true, "\tsxtw x0, w0\n"]], $wideop and not $place.wide and not $place.uns, "")
+         : vwiden = lookup([[true, "\tsxtw x1, w1\n"]], $wideop and not $value.wide and not $value.uns, "")
+         : opuns  = lookup([[">>", $place.puns], ["<<", $place.puns]], $arith,
+                           lookup([[true, ($place.wide and $place.puns) or ($value.wide and $value.puns)]],
+                                  $place.wide or $value.wide, $place.puns or $value.puns))
+         : div    = lookup([[true, "udiv"]], $opuns, "sdiv")
          : step   = lookup([[1, $place.width]], $place.type, 8)
          : pointer = lookup([[true, "\tldr x3, ={}\n\tm{} x0, x1, x3, x0\n"
                                       of $step, lookup([["+", "add"]], $arith, "sub")]],
                             $value.wide,
-                            "\tldr w3, ={}\n\tsm{}l x0, w1, w3, x0\n"
-                              of $step, lookup([["+", "add"]], $arith, "sub"))
-         : number = lookup([["%", "\tsdiv {}3, {}0, {}1\n\tmsub {}0, {}3, {}1, {}0\n"
-                                    of $r, $r, $r, $r, $r, $r, $r]],
+                            "\tldr w3, ={}\n\t{}m{}l x0, w1, w3, x0\n"
+                              of $step, lookup([[true, "u"]], $value.uns, "s"),
+                                 lookup([["+", "add"]], $arith, "sub"))
+         : number = lookup([["%", "\t{} {}3, {}0, {}1\n\tmsub {}0, {}3, {}1, {}0\n"
+                                    of $div, $r, $r, $r, $r, $r, $r, $r]],
                            $arith,
                            "\t{} {}0, {}0, {}1\n"
-                             of lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"],
+                             of lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", $div],
                                         ["&", "and"], ["|", "orr"], ["^", "eor"],
-                                        ["<<", "lsl"], [">>", "asr"]],
+                                        ["<<", "lsl"], [">>", lookup([[true, "lsr"]], $opuns, "asr")]],
                                        $arith, "?"), $r, $r, $r)
          : store  = lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0")
-         : narrow = lookup([[1, "\tsxtb w0, w0\n"]], $place.size,
+         : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")]],
+                           $place.size,
                            lookup([[true, "\tmov w0, w0\n"]], $place.size = 4 and $wideop, ""))
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x2, [sp], #16\n\t{}, [x2]\n\tmov x4, x0\n{}{}{}\t{}, [x2]\n{}{}"
              of $place.addr, $value.out, $load, $lwiden, $vwiden,
@@ -342,7 +350,8 @@
                                of $value.out,
                                   lookup([[true, "\tsxtw x0, w0\n"]],
                                          $ptrs = 0 and $base.tagname = "" and $basew = 8
-                                           and $value.type = 0 and not $value.wide, ""),
+                                           and $value.type = 0 and not $value.wide
+                                           and not $value.uns, ""),
                                   lookup([[1, "strb w0"], [4, "str w0"]],
                                          lookup([[0, $basew]], $ptrs, 8), "str x0"),
                                   $offset) .
@@ -435,7 +444,7 @@
        : extra  = $index >= size($wantwide)
        : widen  = lookup([[true, "\tsxtw x0, w0\n"]],
                          not $extra and at($wantwide, $index + 1)
-                         and $value.type = 0 and not $value.wide, "")
+                         and $value.type = 0 and not $value.wide and not $value.uns, "")
        : scalar = "{}{}\tstr x0, [sp, #-16]!\n" of $value.out, $widen
        : packed = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}"
                     of $value.out, ($copy of $value.size, $n, "x0", "x1", $n)
@@ -598,7 +607,15 @@
    * branches, and a `break` leaves by the label a `switch` hands down as a
    * loop does. `continue` is not handed down, so it means the loop outside.
    * The stack machine's shape, and no jump table: `switch-duff.c` has its
-   * labels inside a `do` inside the `switch`, and they are the `switch`'s. *)
+   * labels inside a `do` inside the `switch`, and they are the `switch`'s.
+   *
+   * **An `unsigned int` is not sign-extended**, since 2026-09-26: it is
+   * already zero-extended in `x0`, which is the value C compares. *That has
+   * no witness yet*: a value past 2^31 differs between the two only against
+   * a negative label, and a negative label in such a `switch` is refused
+   * until ROADMAP 6.9's third part converts it. Sign-extending it anyway
+   * passed. Labels past 2^31 arrive with that part, and so does the
+   * program that sees this. *)
   Switch  : down brk   = "Lb{}_{}" of $pos.line, $pos.column
           : down heldc = $cases
           : down heldd = $dflt
@@ -609,7 +626,7 @@
           : cases  = $heldc
           : dflt   = $heldd
           : out = "{}{}{}\tb {}\n{}{}:\n"
-              of $cond.out, lookup([[true, ""]], $cond.wide, "\tsxtw x0, w0\n"), $mine,
+              of $cond.out, lookup([[true, ""]], $cond.wide or $cond.puns, "\tsxtw x0, w0\n"), $mine,
                  lookup([["", $brk]], $mydflt, $mydflt), $body.out, $brk .
   Case    : here  = "Lk{}_{}" of $pos.line, $pos.column
           : cases = "{}\tldr x1, ={}\n\tcmp x0, x1\n\tb.eq {}\n" of $cases, $value.folded, $here
@@ -712,13 +729,14 @@
    * Which of the three a node is, the `types` pass has already said: a
    * pointer on each side is a difference, a pointer answer is a step, and
    * anything else is two `int`s. *)
-  Binary : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", "sdiv"],
+  Binary : div        = lookup([[true, "udiv"]], $uns, "sdiv")
+         : mnemonic   = lookup([["+", "add"], ["-", "sub"], ["*", "mul"], ["/", $div],
                                 ["&", "and"], ["|", "orr"], ["^", "eor"],
-                                ["<<", "lsl"], [">>", "asr"]], $op, "?")
+                                ["<<", "lsl"], [">>", lookup([[true, "lsr"]], $uns, "asr")]], $op, "?")
          : both       = $left.type > 0 and $right.type > 0
          : r          = lookup([[true, "x"]], $wide, "w")
-         : plain      = lookup([["%", "\tsdiv {}2, {}0, {}1\n\tmsub {}0, {}2, {}1, {}0\n"
-                                        of $r, $r, $r, $r, $r, $r, $r]],
+         : plain      = lookup([["%", "\t{} {}2, {}0, {}1\n\tmsub {}0, {}2, {}1, {}0\n"
+                                        of $div, $r, $r, $r, $r, $r, $r, $r]],
                                $op,
                                "\t{} {}0, {}0, {}1\n" of $mnemonic, $r, $r, $r)
          : ixwide     = lookup([[0, $left.wide]], $left.type, $right.wide)
@@ -727,16 +745,18 @@
                                            lookup([[0, 0]], $left.type, 1),
                                            lookup([[0, 1]], $left.type, 0)]],
                                 $ixwide,
-                                "\tldr w2, ={}\n\tsm{}l x0, w{}, w2, x{}\n"
-                                  of lookup([[1, $width]], $type, 8), $mnemonic,
+                                "\tldr w2, ={}\n\t{}m{}l x0, w{}, w2, x{}\n"
+                                  of lookup([[1, $width]], $type, 8),
+                                     lookup([[true, "u"]], lookup([[0, $left.uns]], $left.type, $right.uns), "s"),
+                                     $mnemonic,
                                      lookup([[0, 0]], $left.type, 1),
                                      lookup([[0, 1]], $left.type, 0))
          : difference = "\tsub x0, x0, x1\n\tldr x1, ={}\n\tsdiv x0, x0, x1\n"
                           of lookup([[1, $left.width]], $left.type, 8)
          : lconv      = lookup([[true, "\tsxtw x0, w0\n"]],
-                               $wide and $left.type = 0 and not $left.wide, "")
+                               $wide and $left.type = 0 and not $left.wide and not $left.uns, "")
          : rconv      = lookup([[true, "\tsxtw x0, w0\n"]],
-                               $wide and $right.type = 0 and not $right.wide, "")
+                               $wide and $right.type = 0 and not $right.wide and not $right.uns, "")
          : out = "{}{}\tstr x0, [sp, #-16]!\n{}{}\tmov x1, x0\n\tldr x0, [sp], #16\n{}"
              of $left.out, $lconv, $right.out, $rconv,
                 lookup([[true, $difference]], $both,
@@ -766,8 +786,9 @@
          : from8  = $value.type > 0 or $value.wide
          : out = "{}{}" of $value.out,
                    lookup([[true, ""]], $tovoid,
-                     lookup([[true, lookup([[true, ""]], $from8, "\tsxtw x0, w0\n")]], $eight,
-                       lookup([[1, "\tsxtb w0, w0\n"]], $base.basew,
+                     lookup([[true, lookup([[true, ""]], $from8 or $value.uns, "\tsxtw x0, w0\n")]], $eight,
+                       lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $base.buns, "\tsxtb w0, w0\n")]],
+                              $base.basew,
                               lookup([[true, "\tmov w0, w0\n"]], $from8, "")))) .
 
   (* **A comma runs its left side and keeps its right.** The left's value is
@@ -782,8 +803,10 @@
    * answer or a copy from it reads the one that was chosen. `conditional.c`
    * counts which arm ran. *)
   Choose : n     = $label : label = $label + 1
-         : tconv = lookup([[true, "\tsxtw x0, w0\n"]], $wide and $then.type = 0 and not $then.wide, "")
-         : oconv = lookup([[true, "\tsxtw x0, w0\n"]], $wide and $other.type = 0 and not $other.wide, "")
+         : tconv = lookup([[true, "\tsxtw x0, w0\n"]],
+                          $wide and $then.type = 0 and not $then.wide and not $then.uns, "")
+         : oconv = lookup([[true, "\tsxtw x0, w0\n"]],
+                          $wide and $other.type = 0 and not $other.wide and not $other.uns, "")
          : out   = "{}\tcmp x0, #0\n\tb.eq L{}.other\n{}{}\tb L{}.chosen\nL{}.other:\n{}{}L{}.chosen:\n"
              of $cond.out, $n, $then.out, $tconv, $n, $n, $other.out, $oconv, $n
          : addr  = $out .
@@ -812,15 +835,17 @@
    * ones, `lt` and not `lo`, because `int` is signed and `-1 < 1` has to be 1. *)
   Compare : wideop = $left.type > 0 or $right.type > 0 or $left.wide or $right.wide
           : lconv  = lookup([[true, "\tsxtw x0, w0\n"]],
-                            $wideop and $left.type = 0 and not $left.wide, "")
+                            $wideop and $left.type = 0 and not $left.wide and not $left.uns, "")
           : rconv  = lookup([[true, "\tsxtw x0, w0\n"]],
-                            $wideop and $right.type = 0 and not $right.wide, "")
+                            $wideop and $right.type = 0 and not $right.wide and not $right.uns, "")
           : out = "{}{}\tstr x0, [sp, #-16]!\n{}{}\tmov x1, x0\n\tldr x0, [sp], #16\n\tcmp {}0, {}1\n\tcset w0, {}\n"
               of $left.out, $lconv, $right.out, $rconv,
                  lookup([[true, "x"]], $wideop, "w"),
                  lookup([[true, "x"]], $wideop, "w"),
-                 lookup([["==", "eq"], ["!=", "ne"], ["<", "lt"], ["<=", "le"],
-                         [">", "gt"], [">=", "ge"]], $op, "?") .
+                 lookup([[true, lookup([["==", "eq"], ["!=", "ne"], ["<", "lo"], ["<=", "ls"],
+                                        [">", "hi"], [">=", "hs"]], $op, "?")]], $cuns,
+                        lookup([["==", "eq"], ["!=", "ne"], ["<", "lt"], ["<=", "le"],
+                                [">", "gt"], [">=", "ge"]], $op, "?")) .
 
   (* The value is already in `x0`, so returning is a jump to the epilogue.
    * The epilogue's label is the enclosing function's, handed down.
@@ -848,7 +873,7 @@
                      of $value.out, $x8slot, ($copy of $retsize, $n, "x0", "x1", $n)
          : scalar = "{}{}" of $value.out,
                       lookup([[true, "\tsxtw x0, w0\n"]],
-                             $retlong and $value.type = 0 and not $value.wide,
+                             $retlong and $value.type = 0 and not $value.wide and not $value.uns,
                              lookup([[true, "\tmov w0, w0\n"]],
                                     not $retlong and $value.wide, ""))
          : out   = "{}\tb L{}.ret\n"

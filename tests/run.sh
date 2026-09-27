@@ -2089,6 +2089,23 @@ if [ "$n" -eq 1 ]; then
 else
     report fail "and says so once" "got $n errors, wanted 1"
 fi
+# **`unsigned`**, since 2026-09-26, ROADMAP 6.9. `cc` refuses the first
+# three. The rest it compiles: the words of a type in any order, which here
+# come in one; and, until the third part teaches the `constants` pass to
+# wrap, a negative `case` in a `switch` on an `unsigned int`, which C
+# converts, and a constant with a cast to an unsigned type in it.
+refuses "unsigned beside struct" 'and found "struct"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-struct.c"
+refuses "unsigned beside void" 'and found "void"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-void.c"
+refuses "signed beside unsigned" 'and found "unsigned"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/signed-unsigned.c"
+refuses "the words of a type in another order" 'and found "unsigned"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-unsigned.c"
+refuses "a negative case in an unsigned int switch" "in a switch on an 'unsigned int' is converted by C" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-negative-in-an-unsigned-switch.c"
+refuses "a case cast to unsigned" 'has to be worked out before the program runs' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-cast-to-unsigned.c"
 # **`...`**, since 2026-09-26, ROADMAP 6.6. `cc` refuses all three: `...`
 # with no named parameter before it, `...` anywhere but last, and a
 # prototype with `...` beside a definition without. The first two are

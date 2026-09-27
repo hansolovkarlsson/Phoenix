@@ -265,6 +265,19 @@ param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
  * A function's return type is one too, since a struct can be returned whole:
  * see `function` above. *)
 base   = "int"             -> Base(name: "int")
+       (* **`unsigned` and `signed`**, since 2026-09-26, ROADMAP 6.9, before
+        * `char`, `int` or `long`, or alone for an `int`, and in that order
+        * only: C11 6.7.2 allows the words of a type in any order, and
+        * `long unsigned` is a syntax error here. `signed` names the type
+        * without it, and so does `signed char`, since a plain `char` is
+        * signed on this machine. The two-word bases come first, because
+        * `unsigned` alone would take the first word of each and stop. *)
+       | "unsigned" "char" -> Base(name: "unsigned char")
+       | "unsigned" "long" -> Base(name: "unsigned long")
+       | "unsigned" [ "int" ] -> Base(name: "unsigned int")
+       | "signed" "char"   -> Base(name: "char")
+       | "signed" "long"   -> Base(name: "long")
+       | "signed" [ "int" ] -> Base(name: "int")
        | "void"            -> Base(name: "void")
        | "char"            -> Base(name: "char")
        | "long"            -> Base(name: "long")
@@ -756,7 +769,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * `sizeof` are the three that would read it, and each refuses a `void`
    * by name. Made four, the oracle and every refusal stayed green. *)
   thread layouts = [["int", [4, 4, empty]], ["char", [1, 1, empty]], ["long", [8, 8, empty]],
-                    ["void", [0, 1, empty]]]
+                    ["void", [0, 1, empty]],
+                    ["unsigned int", [4, 4, empty]], ["unsigned char", [1, 1, empty]],
+                    ["unsigned long", [8, 8, empty]]]
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
@@ -811,7 +826,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * every declaration that names it. C11 6.7p3 lets a typedef be declared
    * again **to the same type**, so a second one is refused only when it
    * says something different. *)
-  Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
+  Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns]
           : typedefs = bind($typedefs, $name, $means)
           (* **Not a typedef of `void` itself**, since 2026-09-26: C allows
            * one, and nothing here has needed it. `typedef void *vp;` is a
@@ -822,14 +837,15 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'{}' is a global already, and a typedef and a global share one name space, C11 6.2.3" of $name
           ! defined($typedefs, $name)
               and lookup($typedefs, $name, empty)
-                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs]
+                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns]
               : "'{}' is a typedef twice, for two different types" of $name .
 
   (* **A declaration's stars are its own and its typedef's**: `intp *q` with
    * `typedef int *intp` is two. A base that is a keyword or a tag has none,
    * and `ptrs` is the sum every declaration below reads in place of its
    * `stars` field. *)
-  Named : means   = lookup($typedefs, $name, [4, 4, "", 0])
+  Named : means   = lookup($typedefs, $name, [4, 4, "", 0, false])
+        : buns    = at($means, 5)
         : basew   = at($means, 1)
         : align   = at($means, 2)
         : tagname = at($means, 3)
@@ -842,7 +858,10 @@ arg  = e:assignment -> Arg(value: $e) .
        : layout  = lookup($layouts, $name, [0, 1, empty])
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
-       : tagname = lookup([["int", ""], ["char", ""], ["long", ""]], $name, $name)
+       : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
+                           ["unsigned char", ""], ["unsigned long", ""]], $name, $name)
+       : buns    = lookup([["unsigned int", true], ["unsigned char", true],
+                           ["unsigned long", true]], $name, false)
        ! not defined($layouts, $name) and $name <> $defining
            : "'struct {}' is not defined" of $name .
 
@@ -854,7 +873,7 @@ arg  = e:assignment -> Arg(value: $e) .
                : ebytes = lookup([[0, $basew]], $ptrs, 8)
                : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname])
+               : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname, $base.buns])
                : moff   = $offset + $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! defined($fields, $name) : "'{}' is a member twice" of $name
@@ -868,7 +887,7 @@ arg  = e:assignment -> Arg(value: $e) .
                : ebytes = lookup([[0, $basew]], $ptrs, 8)
                : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname])
+               : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname, $base.buns])
                : moff   = $offset + $count * $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! $count < 1
@@ -902,14 +921,14 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pindex = 0
             : funcs = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs])
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns])
             : pwidths = bind($pwidths, $name, $params.pwide)
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs]
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -927,7 +946,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pindex = 0
             : down funcs  = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs])
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns])
             : pwidths = bind($pwidths, $name, $params.pwide)
             : frame = $bytes
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
@@ -935,7 +954,7 @@ arg  = e:assignment -> Arg(value: $e) .
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs]
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -969,7 +988,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
@@ -1012,7 +1031,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1032,7 +1051,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1053,7 +1072,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1076,7 +1095,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name)
@@ -1090,7 +1109,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false])
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns])
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                       of $name
@@ -1111,7 +1130,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
@@ -1126,8 +1145,9 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false])
+  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false])
            : global  = at($means, 6)
+           : vuns    = at($means, 8)
            : offset  = at($means, 1)
            : stars   = at($means, 2)
            : count   = at($means, 3)
@@ -1216,6 +1236,24 @@ arg  = e:assignment -> Arg(value: $e) .
    * this to pick an `x` register and to sign-extend the `int` side. *)
   otherwise wide = $type = 0 and $width = 8 and $tag = ""
 
+  (* **Whether it is unsigned**, since 2026-09-26, ROADMAP 6.9, the fourth
+   * part of a type beside the stars, the width and the tag. Like the width
+   * and the tag it describes the thing at the bottom of the stars, so a
+   * pointer to an `unsigned char` carries it and a load through one knows
+   * to use `ldrb`. `puns` is the same question **after promotion**, C11
+   * 6.3.1.1: an `unsigned char` is an `int` before any operator sees it,
+   * since an `int` holds every value it has, so only an `unsigned int` or
+   * an `unsigned long` makes arithmetic unsigned.
+   *
+   * **C11 6.3.1.8's usual arithmetic conversions** are then one
+   * expression, written out at each operator that needs it: when either
+   * side is eight bytes wide the answer is unsigned only if an eight-byte
+   * side is, because a `long` holds every `unsigned int`; otherwise it is
+   * unsigned if either side is, because an `int` beside an `unsigned int`
+   * becomes one. *)
+  otherwise uns  = false
+  otherwise puns = $uns and $type = 0 and $width >= 4
+
   (* **Whether the value is its own address.** An array and a struct are
    * both things in memory that no register holds: an array decays to the
    * address of its first element, and a struct is only ever reached through
@@ -1260,6 +1298,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * being separate is what lets one of them answer a decayed question and the
    * other an undecayed one without either knowing about `sizeof`. *)
   Variable : width = $basew
+           : uns   = $vuns
            : tag   = $tagname
            : elem  = lookup([[0, $width]], $stars, 8)
            : type  = lookup([[0, $stars]], $count, $stars + 1)
@@ -1267,6 +1306,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : aggregate = $count > 0 or ($stars = 0 and $tag <> "")
            : lvalue = true .
   Addr     : type  = $place.type + 1
+           : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
            ! not $place.lvalue
@@ -1287,6 +1327,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * The assignment is worth the struct, as any assignment is worth what it
    * put, so `a = b = c` copies twice and `(a = b).x` is a member of `a`. *)
   Assign   : type  = $place.type
+           : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
            : aggregate = $place.aggregate and $place.type = 0
@@ -1311,6 +1352,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * steps by `+` and `-` only, as C11 6.5.6 allows it to. `arith` is the
    * operator the update stands for, `+` for `++` and for `+=`. *)
   Update   : type  = $place.type
+           : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
            : arith = lookup([["++", "+"], ["--", "-"], ["+=", "+"], ["-=", "-"],
@@ -1403,7 +1445,8 @@ arg  = e:assignment -> Arg(value: $e) .
            : down argi   = 0
            : argi      = $held
            : argwide   = lookup($wides, $name, [])
-           : returns   = lookup($results, $name, ["", 4, 0])
+           : returns   = lookup($results, $name, ["", 4, 0, false])
+           : uns       = at($returns, 4)
            : tag       = at($returns, 1)
            : width     = at($returns, 2)
            : type      = at($returns, 3)
@@ -1468,7 +1511,13 @@ arg  = e:assignment -> Arg(value: $e) .
            ! $cond.type > 0 : "'switch' wants an integer, and this is a pointer" .
   Case     ! $switches = 0 : "'case' is not inside a switch" .
   Default  ! $switches = 0 : "'default' is not inside a switch" .
-  Compare ! $left.record or $right.record
+  (* **A comparison is signed or unsigned by the usual conversions**, and
+   * its answer is an `int` either way, so `cuns` is for the emit pass to
+   * pick `lo` over `lt`: `-1 < 1u` is 0 in C, because the `-1` becomes
+   * 4294967295 first. *)
+  Compare : cuns = lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
+                          $left.wide or $right.wide, $left.puns or $right.puns)
+          ! $left.record or $right.record
               : "'{}' compares numbers and pointers, and this is '{}'"
                   of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
   (* `!`, `&&` and `||` test their operands the way a condition does, C11
@@ -1479,9 +1528,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * so `sizeof(+c)` is 4 where `sizeof(c)` is 1, and that is the whole of
    * what `+` does. Both want a number. *)
   Invert  : width = lookup([[true, 8]], $value.wide, 4)
+          : uns   = $value.puns
           ! $value.record : "'~' wants a number, and this is '{}'" of $value.kind
           ! $value.type > 0 : "'~' wants a number, and this is a pointer" .
   Plus    : width = lookup([[true, 8]], $value.wide, 4)
+          : uns   = $value.puns
           ! $value.record : "'+' wants a number, and this is '{}'" of $value.kind
           ! $value.type > 0 : "'+' wants a number, and this is a pointer" .
 
@@ -1489,6 +1540,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * An array on the right has decayed already, so `sizeof((0, a))` is a
    * pointer's 8 and not the array's, which `comma.c` asks. *)
   Comma   : type  = $right.type
+          : uns   = $right.uns
           : width = $right.width
           : tag   = $right.tag
           : aggregate = $right.aggregate .
@@ -1502,6 +1554,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * from any other `int`; and pointers to two types, which `cc` only warns
    * about and which has no one type to be. *)
   Choose  : type  = $then.type
+          : uns   = lookup([[0, lookup([[true, ($then.wide and $then.puns) or ($other.wide and $other.puns)]],
+                                       $then.wide or $other.wide, $then.puns or $other.puns)]],
+                           $then.type, $then.uns)
           : width = lookup([[0, lookup([[true, 8]], $then.wide or $other.wide, 4)]],
                            $then.type, $then.width)
           : tag   = $then.tag
@@ -1524,6 +1579,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'{}' tests numbers and pointers, and this is '{}'"
                   of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
   Deref    : type  = $value.type - 1
+           : uns   = $value.uns
            : width = $value.width
            : tag   = $value.tag
            : aggregate = $type = 0 and $tag <> ""
@@ -1552,7 +1608,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * `$known` is the table the `locals` pass kept at this node, which is every
    * struct defined above the function. *)
   Member : entry = lookup(at(lookup($known, $value.tag, [0, 1, empty]), 3), $name,
-                          [0, 0, 0, 4, ""])
+                          [0, 0, 0, 4, "", false])
+         : uns   = at($entry, 6)
          : width = at($entry, 4)
          : tag   = at($entry, 5)
          : elem  = lookup([[0, $width]], at($entry, 2), 8)
@@ -1567,6 +1624,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : "'struct {}' has no member '{}'" of $value.tag, $name .
 
   Negate : width = lookup([[true, 8]], $value.wide, 4)
+         : uns   = $value.puns
          ! $value.record : "'-' wants a number, and this is '{}'" of $value.kind
          ! $value.type > 0 : "'-' wants a number, and this is a pointer" .
 
@@ -1589,6 +1647,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * compiles a cast **to** a struct of the same kind, as GNU C does, which
    * is refused here by name. *)
   Cast : type  = $ptrs
+       : uns   = $base.buns
        : width = $base.basew
        : tag   = $base.tagname
        ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
@@ -1694,6 +1753,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * otherwise, which is C11 6.3.1.8's usual arithmetic conversions over the
    * promotion above. A difference of two pointers is 8, a `long`. *)
   Binary(op: "+") : type  = $left.type + $right.type
+                  : uns   = lookup([[0, lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
+                                   $left.wide or $right.wide, $left.puns or $right.puns)]],
+                                   $type, lookup([[0, $right.uns]], $left.type, $left.uns))
                   : width = lookup([[0, lookup([[true, 8]], $left.wide or $right.wide, 4)]], $type,
                                    lookup([[0, $right.width]], $left.type, $left.width))
                   : tag   = lookup([[0, ""]], $type,
@@ -1709,6 +1771,10 @@ arg  = e:assignment -> Arg(value: $e) .
       ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
           : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
   Binary(op: "-") : type  = $left.type - $right.type
+                  : uns   = lookup([[true, lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
+                                   $left.wide or $right.wide, $left.puns or $right.puns)]],
+                                   $left.type = 0 and $right.type = 0,
+                                   lookup([[0, false]], $type, $left.uns))
                   : width = lookup([[0, lookup([[true, 8]], $left.wide or $right.wide
                                                              or $left.type > 0, 4)]],
                                    $type, $left.width)
@@ -1733,12 +1799,14 @@ arg  = e:assignment -> Arg(value: $e) .
    * C's refusal. The emit pass shifts in the left side's register, and a
    * `long` count is read from its low half, which is all a shift reads. *)
   Binary(op: "<<") : width = lookup([[true, 8]], $left.wide, 4)
+                   : uns   = $left.puns
       ! $left.record or $right.record
           : "'{}' wants numbers, and this is '{}'"
               of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type > 0 or $right.type > 0
           : "'{}' does not take a pointer" of $op .
   Binary(op: ">>") : width = lookup([[true, 8]], $left.wide, 4)
+                   : uns   = $left.puns
       ! $left.record or $right.record
           : "'{}' wants numbers, and this is '{}'"
               of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
@@ -1749,6 +1817,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * `&`, `|` and `^`, C11 6.5.10 to 6.5.12. So a pointer on either is C's own
    * refusal rather than this subset's. *)
   Binary : width = lookup([[true, 8]], $left.wide or $right.wide, 4)
+         : uns   = lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
+                                   $left.wide or $right.wide, $left.puns or $right.puns)
          ! $left.record or $right.record
       : "'{}' wants numbers, and this is '{}'"
           of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
@@ -1820,7 +1890,13 @@ arg  = e:assignment -> Arg(value: $e) .
   SizeOfExpr : settled = true : folded = $value.size .
   Plus       : settled = $value.settled : folded = $value.folded .
 
-  (* **A cast to an integer type folds whatever it is given**, since
+  (* **A cast to an unsigned type is not settled yet**, since
+   * 2026-09-26: C wraps one, and folding it as the signed value it was
+   * given would be wrong without a word, so until ROADMAP 6.9's third part
+   * teaches this pass to wrap, anything with one in it is refused where a
+   * constant is wanted. So is a `?:` whose answer is unsigned.
+   *
+   * **A cast to an integer type folds whatever it is given**, since
    * 2026-09-26, C11 6.6p6: an integer constant expression may cast to one.
    * A cast cannot trap, so unlike an operator it does not ask that its
    * operand fit in thirty-two bits, and `(int)4294967341` is 45, which is
@@ -1830,7 +1906,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * is not an integer constant expression, and is not settled. *)
   Cast       : low8    = $value.folded mod 256
              : low32   = $value.folded mod 4294967296
-             : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
+             : settled = $value.settled and $ptrs = 0 and $base.tagname = "" and not $base.buns
              : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128, 0)],
                                  [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648, 0)]],
                                 $base.basew, $value.folded) .
@@ -1910,7 +1986,7 @@ arg  = e:assignment -> Arg(value: $e) .
           : settled = $left.settled and ($cdecides or $right.settled)
           : folded = lookup([[true, lookup([["&&", 0]], $op, 1)]], $cdecides,
                             lookup([[true, 1]], $right.folded <> 0, 0)) .
-  Choose  : settled = $cond.settled and $type = 0
+  Choose  : settled = $cond.settled and $type = 0 and not $uns
                       and lookup([[0, $other.settled]], $cond.folded, $then.settled)
           : folded = lookup([[0, $other.folded]], $cond.folded, $then.folded) .
 
@@ -1924,6 +2000,7 @@ arg  = e:assignment -> Arg(value: $e) .
           : down seen     = empty
           : down defaults = 0
           : down swide    = $cond.wide
+          : down suns     = $cond.puns and not $cond.wide
           : seen     = $held
           : defaults = $helddef .
   Case    : seen = bind($seen, text($value.folded), true)
@@ -1933,7 +2010,10 @@ arg  = e:assignment -> Arg(value: $e) .
               and ($value.folded < 0 - 2147483648 or $value.folded > 2147483647)
               : "'case {}' is wider than the int this switch compares" of $value.folded
           ! $value.settled and defined($seen, text($value.folded))
-              : "'case {}' is in this switch twice" of $value.folded .
+              : "'case {}' is in this switch twice" of $value.folded
+          ! $value.settled and $suns and $value.folded < 0
+              : "'case {}' in a switch on an 'unsigned int' is converted by C to the unsigned value it names, which is not here yet"
+                  of $value.folded .
   Default : defaults = $defaults + 1
           ! $defaults > 0 : "this switch has a 'default' already" .
 

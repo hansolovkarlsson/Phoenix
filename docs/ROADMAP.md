@@ -624,6 +624,21 @@ suite green:
    already zero-extended in `x0`, the header's promise doing the work. The
    emit pass names `sxtw` seventeen times, one per conversion or its
    comment, and each has to ask. `unsigned-arithmetic.c` is the witness.
+   *Built 2026-09-26.* **The witness was written with suffixes, `4294967295u`
+   and `1u`, which are part 3's**, so it says `(unsigned int)4294967295`
+   instead, and C means the same by both. The fourth part of a type is
+   `uns`, and `puns` is the same after promotion, so an `unsigned char`
+   makes nothing unsigned. **The tool caught a collision before any program
+   ran**: `locals` gave a base `uns` and `types` gave every node a default
+   one, and the default would have hidden the base's; `phx` warned that
+   both passes defined it, and the base's is `buns`. Of twenty-four breaks,
+   eighteen were caught at once, one was a pattern that matched twice and
+   refused itself, and five were missing witnesses, each an `unsigned int`
+   meeting a `long` or a value with its top bit set, all now written, with
+   a second program indexing three gigabytes past 2^31 through an
+   `unsigned int`. One cannot be seen until part 3: a `switch` on an
+   `unsigned int` sign-extended, which differs only against a negative
+   label, refused until then.
 2. **`sizeof` is an `unsigned long`**, and the difference of two pointers
    stays a `long`, `ptrdiff_t`. `sizeof-is-unsigned.c` is the witness, and
    the comment and COMPLETED's row are corrected.

@@ -16,6 +16,27 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-26: `unsigned` types in C
+
+**The C subset has `unsigned char`, `unsigned int` and `unsigned long`**,
+the first part of [ROADMAP 6.9](ROADMAP.md#69-unsigned), and `signed` before
+`char`, `int` or `long`. Their arithmetic wraps, and `/`, `%`, `>>` and the
+comparisons are the unsigned ones, with C's usual conversions deciding which
+applies: `-1 < (unsigned int)1` is 0, because the `-1` becomes 4294967295
+first, while a `long` beside an `unsigned int` stays signed. An `unsigned
+char` reads as 0 to 255. The words of a type come in one order here, and
+`long unsigned` is declined by name, as is, until constants learn to wrap,
+a `case` with a cast to an unsigned type or a negative one in a `switch` on
+an `unsigned int`. Suffixes such as `4294967295u` and hex constants are the
+next part.
+
+**Tests:** 410 → 416, for six refusals. Two programs join the C oracle: 253
+agree with `cc`, 179 are refused, none diverges among them. One program
+Phoenix compiles today still does, `sizeof` being a `long` here; that is the
+second part.
+
+---
+
 ## 2026-09-26: `int` refuses a number too big for 64 bits
 
 **The library's `int` refuses text that does not fit in sixty-four bits.**
