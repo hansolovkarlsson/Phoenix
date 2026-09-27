@@ -6135,3 +6135,72 @@ or read its result. The value is quoted in the working tree, and parses,
 and every assembled page's front matter parses too; whether Jekyll then
 builds is for the next run on GitHub to say, and that commit is not made
 yet. [Postmortem 28](postmortem.md) scores the claim.
+
+## 2026-09-27: `unsigned` closed, and the site's records
+
+The standup left five items: the website's fix put into the records, the
+workflow's warnings, whether `make test` should parse the site, and 6.9's
+second and third parts. Four were done, and the fourth closed
+[6.9](COMPLETED.md#69-unsigned). Four commits, all pushed, and the site
+built and deployed after each. The suite went from 416 checks to 423, the
+C oracle from 253 programs to 262, and the refusals from 179 to 189.
+
+**The site went into the records as a ninth kind of finder**, the plainest:
+somebody looked. The check had run on every push and said so every time,
+to a page nothing in the repository reads. The workflow's Node 20 warning
+was four actions a major version behind, each moved to its first release
+on Node 24; `upload-pages-artifact` leaves out dotfiles since v4, and the
+site has none. The Ubuntu 26 notice was left alone on purpose, because the
+build is a shell script and a Jekyll in its own container, and nothing in
+it asks which Ubuntu it is. Whether `make test` should parse `www/` with
+Ruby's YAML is still not decided.
+
+**Part 2, `sizeof` an `unsigned long`, was one attribute on two nodes and
+then a problem the plan had placed a day later.** The `constants` pass had
+never settled an unsigned value, because part 1 left every cast to one
+unsettled, and `sizeof` made it settle one. That pass does C's arithmetic
+in the notation's signed integers, so `case sizeof(int) - 5:` would have
+folded to -1 and `(sizeof(int) - 5) / 2` to 0. The roadmap's rule for part
+3, an `unsigned long` folds only where its operands and its answer lie
+from 0 to 2^63, was taken early. Of six breaks two passed: `sizeof` of an
+expression had no witness at run time, and nothing held the guard on `~`,
+whose unguarded answer is the right sixty-four bits anyway.
+
+**Part 3 read a constant in halves, because the notation cannot read it
+whole.** The library's `int` refuses text past sixty-four bits, as it has
+since yesterday's fix, and an `unsigned long` constant can be past 2^63.
+So each base splits its digits where both halves are small, and puts them
+together by a route with no step out of range: hex at thirty-two bits,
+octal at thirty-three, decimal at ten digits, where the value past 2^63 is
+worked out as itself less 2^64, the one form the notation can hold. Every
+entry of a `lookup` is worked out whichever is chosen, so each base reads
+its halves from its own text or from nothing; `int` of a hex digit in base
+8 is an error even in an entry nobody asked for. The reading had to move a
+pass earlier as well: a check in `types` refusing an octal 8 reads the
+digits, and a check may not read what its own rule computes, since it runs
+before them, which is what makes it a guard.
+
+**The first break run was mostly green, and the instrument was not at
+fault.** A control, one harmless edit, came back *nothing caught it*, so
+the harness could say so, and fourteen real breaks said the same. One was
+reproduced by hand before anything else was believed, as yesterday's
+lesson said, and it passed by hand too. Most were one hole: the `constants`
+pass could hold an `unsigned int` as -1 or as 4294967295, and nothing asked
+which, because a global keeps thirty-two bits either way and the next
+unsigned operator converts its operands again. Only a value widened to a
+`long` tells the two apart, and no witness widened one. A product needed a
+witness past 2^63, and the first witness for a converted right operand,
+`4294967295u / -1`, is 1 whether or not the `-1` is converted. Every one
+has a program now but one, and that one was checked directly rather than
+argued: writing a constant's text into the assembly passes because this
+assembler reads `10L` and `017` as C does. A comment written an hour
+earlier said it read neither; the same check corrected it.
+
+**What is held, and why.** An `unsigned long` past 2^63 is carried as its
+bits and not folded further, because the notation's integers are signed:
+`case sizeof(int) - 5:` is refused, which `cc` folds, and a comparison is
+the one exception, since flipping both top bits makes it a signed one.
+Those refusals, and part 1's, still say the label *cannot be* worked out,
+which is not true; a message that names the reason needs an attribute
+carried up through every node, and was not built. [Postmortem 29](postmortem.md)
+scores the witnesses the roadmap named.

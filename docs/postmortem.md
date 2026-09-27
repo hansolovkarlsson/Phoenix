@@ -1424,3 +1424,32 @@ lesson is where the check was not.
 > "It is rebuilt from source" is a claim about the success path. Its
 > failure path has to be watched by something, or it is a claim about the
 > last time it worked.
+
+---
+
+## 29. "`unsigned-constants.c` is the witness"
+
+ROADMAP 6.9 named one program for each of its three parts, written before
+the part, from what the part was for. **Each agreed with `cc` when its part
+was built, and each let breaks through**: five of twenty-four in part 1,
+two of six in part 2, and fourteen of twenty-eight in part 3, where
+`unsigned-constants.c` agreed with fourteen broken compilers.
+
+*It was written to show what breaks without the part*, and did: it could
+not be compiled at all before, and every line of it is a thing the part
+adds. What it did not do is look where the part could be wrong. The part
+3 witness has hex, suffixes and two unsigned `switch`es, and no constant
+expression that wraps, widens or multiplies past 2^63, which is where the
+`constants` pass does its work. The part 1 witness had no `unsigned int`
+meeting a `long`, which is where signed and unsigned differ.
+
+*The two predictions about what could not be seen held.* Part 1 said a
+`switch` on an `unsigned int` sign-extended differs only against a negative
+label, refused until part 3; part 3's labels saw it at once. And the rule
+that an `unsigned long` folds only below 2^63 held on both days it was
+used, a day earlier than planned, because the notation's integers are
+signed and a comparison was the only operator worth an exception.
+
+> A witness written from what a feature is for shows that it exists. The
+> program that shows it is right is written from how it could be wrong,
+> after the code, by breaking it.
