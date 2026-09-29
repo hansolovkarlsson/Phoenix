@@ -16,6 +16,29 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: a refused constant says why
+
+**When the C subset refuses a `case` label or a global's initialiser, it
+now says why.** Until now every one said the value *cannot be* worked out
+before the program runs, which was true of a variable or `1 / 0` and not of
+the rest. Now there are four answers:
+
+- *this one cannot be*: C says it is not a constant, as for `case y:`.
+- *C leaves this one undefined*: an overflow, like `9223372036854775807 + 1`,
+  or a shift past the width. `cc` folds these with a warning.
+- *this one is `unsigned long` arithmetic past 2^63, which C works out and
+  this compiler does not*: `sizeof(int) - 5`, `-sizeof(int)`,
+  `~sizeof(int)`. The limit is kept on purpose, and is now named as one.
+- *this one shifts a `long` by 63, which this compiler does not work out*.
+
+Where two parts of an expression disagree, the stronger reason is given.
+
+**Tests:** 423 → 444. Twenty refusals, three of them written for
+`sizeof` on 2026-09-27 and asserted by nothing until now, and one check
+that every program in the C refusals is asserted by name. Refusals: 206.
+
+---
+
 ## 2026-09-27: hex, octal and suffixes in C
 
 **An integer constant in the C subset can be hex, `0x1F`, or octal, `017`,

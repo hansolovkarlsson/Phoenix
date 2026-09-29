@@ -6204,3 +6204,56 @@ Those refusals, and part 1's, still say the label *cannot be* worked out,
 which is not true; a message that names the reason needs an attribute
 carried up through every node, and was not built. [Postmortem 29](postmortem.md)
 scores the witnesses the roadmap named.
+
+## 2026-09-29: a refusal that says why
+
+**Every refused constant said it *cannot be* worked out, and most of them
+can.** `case y:` and `case 1 / 0:` cannot, in C. `case 9223372036854775807
++ 1:` is an overflow, which C leaves undefined and `cc` folds with a
+warning. `case sizeof(int) - 5:` is C that this compiler declines on
+purpose, since 2026-09-27, because the notation's integers are signed. One
+sentence was covering three claims, and only one of them was true of the
+program in hand.
+
+**The reason is one more attribute, and a number rather than words.** The
+`constants` pass already carried `settled` and `folded` up every node, so
+`why` goes up beside them: 0 for a settled value, and otherwise 1 for an
+`unsigned long` past 2^63, 2 for a `long` shifted by 63, 3 for undefined
+and 4 for not a constant. It is a number so that two operands can be
+compared, and **the larger wins**, because each is a stronger claim than
+the one below it: an operand that is undefined makes the whole undefined
+whatever else is wrong, and one that is no constant makes the whole none.
+A node with no clause of its own, a variable or a call, answers 4 through
+`otherwise`, which runs after the node's own clauses and can read its
+`settled`. The words are a second `otherwise`, `because`, read off one
+table, so the `case` and the global's initialiser print the same sentence.
+
+**The shift by 63 is its own reason because it is neither of the others.**
+The pass folds a `long` shift only by 0 to 62, since the notation cannot
+hold 2^63 to divide by. C defines `4L >> 63`, so it is not undefined, and
+it is no `unsigned long`. Calling it either would have been the same
+mistake as *cannot be*, one level down.
+
+**Three refusals were asserted by nothing.** Looking for where
+`case-sizeof-below-zero.c` was held, to change what it expected, found no
+line in `tests/run.sh` naming it, nor `case-inverts-sizeof.c`, nor
+`global-negated-sizeof.c`. All three were written for 2026-09-27's second
+part, whose commit message counts them. Pascal's refusals are run by a
+loop over the directory; C's are named one by one, which gives each its
+own message and lets a file be forgotten. The suite now checks that every
+C refusal is named.
+
+**Yesterday's lesson was followed, and it found two holes.** The witnesses
+were written first from what the reasons are for, then twenty-eight breaks
+were made, one of them a control that nothing should catch and nothing
+did. Two others passed. `&&` and `||` had been tried with the reason only
+on their right, so ignoring the left went unseen; a witness with the
+reason on the left sees it now. And an operator's own 4 for a pointer
+operand cannot be seen: no value with a pointer's type is settled, so the
+operand has always answered 4 before the operator is asked. That is said in
+the pass, as the thirty-two bit wrap is, and kept for the day an address
+with an offset folds. One hole was in the witnesses themselves before any
+break ran: a `?:` whose condition was a variable, meant to show the
+condition's reason being read, would have printed *cannot be* whether it
+was read or not, since 0 and 4 read alike. It was replaced with a
+condition whose reason is 1.

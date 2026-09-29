@@ -1931,6 +1931,34 @@ arg  = e:assignment -> Arg(value: $e) .
   otherwise settled  = false
   otherwise folded = 0
 
+  (* **Why a value is not settled**, since 2026-09-29, because a refusal
+   * that said only *cannot be* was not true of most of them: `cc` works
+   * out `sizeof(int) - 5` and `9223372036854775807 + 1`, and C works out
+   * the first. `why` is 0 for a settled value and otherwise one of four,
+   * and **the larger wins** where two operands disagree, since each is a
+   * stronger claim than the one below it: an operand C leaves undefined
+   * makes the whole undefined whatever else is wrong with it, and an
+   * operand that is no constant at all makes it no constant.
+   *
+   *   1  an `unsigned long` past 2^63, which C works out and this does not
+   *   2  a `long` shifted by 63, which this does not work out either
+   *   3  what C leaves undefined: an overflow, or a shift past the width
+   *   4  what is not a constant in C, `1 / 0` among them
+   *
+   * A node no clause below names, a variable or a call, is the fourth.
+   * `because` is the words, written once for every refusal that asks.
+   *
+   * *An operator's own fourth, for a pointer, has no witness and cannot
+   * have one yet.* No value with a pointer's type is settled, a string, an
+   * `&` and a cast to a pointer among them, so an operand that is one has
+   * already answered 4 before the operator is asked. Changing it changed
+   * no refusal. It is kept for the day an address with an offset folds. *)
+  otherwise why = lookup([[true, 0]], $settled, 4)
+  otherwise because = lookup([[1, "this one is 'unsigned long' arithmetic past 2^63, which C works out and this compiler does not"],
+                              [2, "this one shifts a 'long' by 63, which this compiler does not work out"],
+                              [3, "C leaves this one undefined"]], $why,
+                             "this one cannot be")
+
   (* **An address the assembler can write**, since 2026-09-26, ROADMAP 6.8:
    * C11 6.6p9's address constant, as far as the subset takes it. A string
    * literal is one, and so is `&` of a global and a global array's name,
@@ -1955,7 +1983,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Character  : settled = true : folded = $code .
   SizeOfType : settled = true : folded = lookup([[0, $base.basew]], $ptrs, 8) .
   SizeOfExpr : settled = true : folded = $value.size .
-  Plus       : settled = $value.settled : folded = $value.folded .
+  Plus       : settled = $value.settled : folded = $value.folded : why = $value.why .
 
   (* **An `unsigned int` wraps**, since 2026-09-27, ROADMAP 6.9's third
    * part, and is always held as the value C means, 0 to 4294967295, never
@@ -1997,18 +2025,23 @@ arg  = e:assignment -> Arg(value: $e) .
   Cast       : low8    = $value.folded mod 256
              : low32   = $value.folded mod 4294967296
              : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
+             : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 4))
              : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128 and not $base.buns, 0)],
                                  [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648 and not $base.buns, 0)]],
                                 $base.basew, $value.folded) .
   Invert     : settled = $value.settled and not ($uns and $wide)
+             : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 1))
              : folded  = lookup([[true, 4294967295 - $value.folded mod 4294967296]], $uns,
                                 bitxor($value.folded, 0 - 1)) .
-  Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) .
+  Not        : settled = $value.settled : folded = lookup([[0, 1]], $value.folded, 0) : why = $value.why .
 
   (* Negating overflows only the most negative integer, so that is the one
    * a `-` does not fold: `-4294967296` is a `long` constant, and a label. *)
   Negate : settled = $value.settled and $value.folded > 0 - 9223372036854775807
                   and (not ($uns and $wide) or $value.folded = 0)
+         : why    = lookup([[true, 0]], $settled,
+                           lookup([[false, $value.why]], $value.settled,
+                                  lookup([[true, 1]], $uns and $wide, 3)))
          : craw   = 0 - lookup([[true, $value.folded]], $settled, 0)
          : clow   = bitand($craw, 4294967295)
          : folded = lookup([[true, $craw]], $wide,
@@ -2069,6 +2102,16 @@ arg  = e:assignment -> Arg(value: $e) .
          : settled = $cbase and $type = 0 and $fits
                      and (($op <> "<<" and $op <> ">>") or ($cr >= 0 and $cr < $climit))
                      and (not ($uns and $wide) or ($cl >= 0 and $cr >= 0 and $craw >= 0))
+         : cwhy   = lookup([[true, $left.why]], $left.why > $right.why, $right.why)
+         : cwidth = lookup([[true, 64]], $wide, 32)
+         : why    = lookup([[true, 0]], $settled,
+                    lookup([[true, $cwhy]], $cwhy > 0,
+                    lookup([[false, 4]], $cbase and $type = 0,
+                    lookup([[true, lookup([[true, 3]], $cr < 0 or $cr >= $cwidth, 2)]],
+                           $cshift and not ($cr >= 0 and $cr < $climit),
+                    lookup([[true, lookup([[true, 4]], ($op = "/" or $op = "%") and $cr = 0,
+                                          lookup([[true, 1]], $uns and $wide, 3))]], not $fits,
+                           1)))))
          : folded = lookup([[true, $craw]], $wide,
                            lookup([[true, $clow]], $cu32,
                                   $clow - lookup([[true, 4294967296]], $clow >= 2147483648, 0))) .
@@ -2080,6 +2123,8 @@ arg  = e:assignment -> Arg(value: $e) .
           : cr = lookup([[true, bitxor($right.folded, $cmin)]], $cuw,
                         lookup([[true, $right.folded mod 4294967296]], $cuns, $right.folded))
           : settled = $left.settled and $right.settled and $left.type = 0 and $right.type = 0
+          : cwhy = lookup([[true, $left.why]], $left.why > $right.why, $right.why)
+          : why = lookup([[true, 0]], $settled, lookup([[true, $cwhy]], $cwhy > 0, 4))
           : folded = lookup([[true, 1]],
                             lookup([["<", $cl < $cr], ["<=", $cl <= $cr], [">", $cl > $cr],
                                     [">=", $cl >= $cr], ["==", $cl = $cr], ["!=", $cl <> $cr]],
@@ -2090,10 +2135,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * `?:`, `&&` and `||` ask only of the side that decides. *)
   Logical : cdecides = lookup([["&&", $left.folded = 0]], $op, $left.folded <> 0)
           : settled = $left.settled and ($cdecides or $right.settled)
+          : why = lookup([[true, 0]], $settled, lookup([[false, $left.why]], $left.settled, $right.why))
           : folded = lookup([[true, lookup([["&&", 0]], $op, 1)]], $cdecides,
                             lookup([[true, 1]], $right.folded <> 0, 0)) .
   Choose  : settled = $cond.settled and $type = 0
                       and lookup([[0, $other.settled]], $cond.folded, $then.settled)
+          : why = lookup([[true, 0]], $settled,
+                  lookup([[false, $cond.why]], $cond.settled,
+                  lookup([[false, 4]], $type = 0,
+                         lookup([[0, $other.why]], $cond.folded, $then.why))))
           : cpick  = lookup([[0, $other.folded]], $cond.folded, $then.folded)
           : folded = lookup([[true, $cpick mod 4294967296]], $uns and not $wide, $cpick) .
 
@@ -2113,7 +2163,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Case    : klabel = lookup([[true, $value.folded mod 4294967296]], $suns, $value.folded)
           : seen   = bind($seen, text($klabel), true)
           ! not $value.settled
-              : "a 'case' label has to be worked out before the program runs, and this one cannot be"
+              : "a 'case' label has to be worked out before the program runs, and {}" of $value.because
           ! $value.settled and not $swide
               and ($value.folded < 0 - 2147483648
                    or $value.folded > lookup([[true, 4294967295]], $suns, 2147483647))
@@ -2131,8 +2181,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * program runs, as a `case` label is, and `cc` refuses one that cannot
    * be. The emit pass writes the folded value into the object file. *)
   GlobalInit ! not $value.settled and $ptrs = 0
-                 : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this cannot be"
-                     of $name
+                 : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and {}"
+                     of $name, $value.because
              ! not $value.settled and $ptrs > 0 and not $value.anchored
                  : "'{}' is initialised with an address this cannot write: a string, '&' of a global and a global array's name can be, and one with an offset is not yet"
                      of $name .

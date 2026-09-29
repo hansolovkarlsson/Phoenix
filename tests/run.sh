@@ -1841,16 +1841,16 @@ refuses "a switch on a pointer" "'switch' wants an integer, and this is a pointe
         --driver check "$root/languages/c/c-arm64.phx" "$r/switch-on-a-pointer.c"
 refuses "and on a struct" "'switch' wants an integer, and this is 'struct t'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/switch-on-a-struct.c"
-refuses "a 'case' label that is a variable" "a 'case' label has to be worked out before the program runs" \
+refuses "a 'case' label that is a variable" "a 'case' label has to be worked out before the program runs, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-not-constant.c"
-refuses "one divided by zero" "a 'case' label has to be worked out before the program runs" \
+refuses "one divided by zero" "a 'case' label has to be worked out before the program runs, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-divided-by-zero.c"
 refuses "two 'case's with one value" "'case 8' is in this switch twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/duplicate-case.c"
 # Two `cc` compiles, and this subset declines by name. C11 6.6p3 says a
 # constant expression has no comma, and clang takes one as an extension; and a
 # label too wide for an `int` switch, which `cc` converts and warns about.
-refuses "a comma in a 'case' label" "a 'case' label has to be worked out before the program runs" \
+refuses "a comma in a 'case' label" "a 'case' label has to be worked out before the program runs, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-with-a-comma.c"
 refuses "a label wider than the switch" "'case 4294967296' is wider than the int this switch compares" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-wider-than-the-switch.c"
@@ -2201,14 +2201,67 @@ refuses "two case labels equal through a cast" "'case 44' is in this switch twic
 # Each operator that can overflow asks first, and each asking has its own
 # witness here, since one program with four labels stays refused when only
 # one of the four questions is broken.
-refuses "a case label that adds past a long" "has to be worked out before the program runs" \
+refuses "a case label that adds past a long" "and C leaves this one undefined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-overflows-a-long.c"
-refuses "a case label that subtracts past a long" "has to be worked out before the program runs" \
+refuses "a case label that subtracts past a long" "and C leaves this one undefined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-subtracts-past-a-long.c"
-refuses "a case label that divides the most negative long by -1" "has to be worked out before the program runs" \
+refuses "a case label that divides the most negative long by -1" "and C leaves this one undefined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-divides-the-most-negative-long.c"
-refuses "a case label that shifts an int past its width" "has to be worked out before the program runs" \
+refuses "a case label that shifts an int past its width" "and C leaves this one undefined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-shifts-an-int-past-its-width.c"
+# **A refusal names its reason**, since 2026-09-29. Until then every one
+# said the value *cannot be* worked out, which was true of `y` and `1 / 0`
+# and not of the rest: C leaves an overflow undefined, and `cc` folds it
+# with a warning; and C works out an `unsigned long` past 2^63, which this
+# compiler holds on purpose and does not. The first three below were
+# written for ROADMAP 6.9's second part and asserted by nothing until now.
+# Each unary node hands its operand's reason up, and each has a witness, as
+# does each way a binary one decides. Where two operands disagree the
+# stronger claim wins, tried once on each side, so that a rule reading only
+# one operand is seen.
+L="which C works out and this compiler does not"
+refuses "sizeof less 5, which C works out" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-sizeof-below-zero.c"
+refuses "~sizeof, which C works out" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-inverts-sizeof.c"
+refuses "a global of -sizeof, which C works out" "'g' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one is 'unsigned long' arithmetic past 2^63" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-negated-sizeof.c"
+refuses "an unsigned long product past 2^64, which C wraps" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-multiplies-sizeof-past-2-64.c"
+refuses "and one divided by zero, which is no constant" "and this one cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-divides-sizeof-by-zero.c"
+refuses "a long shifted by 63" "shifts a 'long' by 63, which this compiler does not work out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-shifts-a-long-by-63.c"
+refuses "and by 64, which C leaves undefined" "and C leaves this one undefined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-shifts-a-long-by-64.c"
+refuses "the most negative long negated" "and C leaves this one undefined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-negates-the-most-negative-long.c"
+refuses "an overflow on the right beats sizeof on the left" "and C leaves this one undefined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-undefined-beside-sizeof.c"
+refuses "a variable on the left beats sizeof on the right" "and this one cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-variable-beside-sizeof.c"
+refuses "a comparison hands its operand's reason up" "and C leaves this one undefined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-compares-an-overflow.c"
+refuses "and so does '&&', from its left" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-and-of-sizeof-below-zero.c"
+refuses "and '||', from its right" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-or-of-sizeof-below-zero.c"
+refuses "and '?:' its condition's" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-chooses-on-sizeof-below-zero.c"
+refuses "and the side it picks, the first" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-picks-sizeof-below-zero.c"
+refuses "and the second" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-chooses-sizeof-below-zero.c"
+refuses "and '!'" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-not-of-sizeof-below-zero.c"
+refuses "and unary '+'" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-plus-of-sizeof-below-zero.c"
+refuses "and a cast" "$L" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-casts-sizeof-below-zero.c"
+# `cc` takes this one as it takes a comma, though C11 6.6p6 lets an integer
+# constant expression cast only to arithmetic types.
+refuses "a cast through a pointer" "and this one cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/case-casts-to-a-pointer.c"
 # **Globals**, since 2026-09-26, ROADMAP 6.8. `cc` refuses the first ten.
 # The last three it compiles: a global declared twice where one has no
 # initialiser, C11 6.9.2's tentative definition, both ways round, which is
@@ -2225,9 +2278,9 @@ refuses "a typedef named like a global" "'t' is a global already" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-named-like-a-global.c"
 refuses "a void global" "'v' is declared 'void'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/void-global.c"
-refuses "a global initialised from a call" "'x' has to be initialised with something worked out before the program runs" \
+refuses "a global initialised from a call" "'x' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-call.c"
-refuses "a global initialised from another" "'b' has to be initialised with something worked out before the program runs" \
+refuses "a global initialised from another" "'b' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-another.c"
 refuses "a global used above its declaration" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-used-above.c"
@@ -2249,10 +2302,23 @@ refuses "a global pointer to an array plus a number" 'one with an offset is not 
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-plus-a-number.c"
 refuses "a global pointer to a string plus a number" 'one with an offset is not yet' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-string-plus-a-number.c"
-refuses "a global int initialised with an address" "'x' has to be initialised with something worked out before the program runs" \
+refuses "a global int initialised with an address" "'x' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-int-from-an-address.c"
 refuses "a global pointer initialised from another" "'q' is initialised with an address this cannot write" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
+# **Every program in refused/ is asserted by name**, since 2026-09-29, when
+# three from ROADMAP 6.9's second part were found asserted by nothing: a
+# file there that no line names is refused for whatever reason it likes.
+# The names are looked for in this script, which is where they are asserted.
+unnamed=""
+for src in "$r"/*.c; do
+    grep -qF -- "\$r/$(basename "$src")\"" "$root/tests/run.sh" || unnamed="$unnamed $(basename "$src")"
+done
+if [ -z "$unnamed" ]; then
+    report pass "every refused C program is asserted by name"
+else
+    report fail "every refused C program is asserted by name" "not named:$unnamed"
+fi
 if [ "$(uname -m)" = "arm64" ]; then
     if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
