@@ -1920,7 +1920,7 @@ refuses "an array of no elements" "C11 6.7.6.2 forbids" \
 # inside a function, and one with no tag. A tag is written after `struct`
 # every time here, and a definition is an item at file scope, so each is a
 # syntax error at its `{`.
-refuses "a struct defined inside a function" 'expected * or name, and found "{"' \
+refuses "a struct defined inside a function" 'expected const, * or name, and found "{"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-in-a-function.c"
 refuses "and a struct with no tag" 'expected name, and found "{"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-with-no-tag.c"
@@ -2312,7 +2312,7 @@ refuses "a global pointer initialised from another" "'q' has to be initialised w
 # word is what refuses the first, which compiled until then; `cc` refuses
 # the next five as well. The last two it compiles, and they are syntax
 # errors here: the word is first or it is not there.
-refuses "'static' as a name" 'expected * or name, and found "static"' \
+refuses "'static' as a name" 'expected const, * or name, and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-as-a-name.c"
 refuses "a 'static' definition after a declaration without it" "'f' is declared 'static' after a declaration without it" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-after-a-declaration-without-it.c"
@@ -2324,7 +2324,7 @@ refuses "a 'static' typedef" 'and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-typedef.c"
 refuses "'static' twice" 'and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-twice.c"
-refuses "'static' among the words of the type" 'expected * or name, and found "static"' \
+refuses "'static' among the words of the type" 'expected const, * or name, and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-among-the-words-of-the-type.c"
 # **A `static` local**, since 2026-09-29, ROADMAP 6.10's second part. Its
 # initialiser is a global's, so the `constants` pass refuses it for the same
@@ -2366,6 +2366,77 @@ refuses "a static local array of no elements" "'a' is an array of no elements" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-array-of-no-elements.c"
 refuses "a static local past 2^63" "'n' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one is 'unsigned long' arithmetic past 2^63" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-sizeof-past-2-63.c"
+# **`const`**, since 2026-09-29, ROADMAP 6.10's third part: C11 6.3.2.1p1's
+# modifiable lvalue, which a `const` place is not and nor is a struct with
+# a `const` member anywhere in it. `cc` refuses every one of these. Each
+# way a place's type is reached has its own: a name, a `*` of a pointer, of
+# one stepped on, of a sum either way round, a difference, a cast, an `&`,
+# an assignment, a comma, a `?:` and a call, a member and a member's
+# element, a typedef, and `const` written twice.
+refuses "a const local assigned" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-local.c"
+refuses "a const incremented" "'++' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/increment-a-const.c"
+refuses "a const long decremented, before" "'--' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/decrement-a-const-before.c"
+refuses "a const added to" "'+=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/add-to-a-const.c"
+refuses "a const global assigned" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-global.c"
+refuses "a const parameter assigned" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-parameter.c"
+refuses "a static const assigned" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-static.c"
+refuses "a const member assigned" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-member.c"
+refuses "an element of a const array" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-an-element-of-a-const-array.c"
+refuses "a write through a pointer to const" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-pointer-to-const.c"
+refuses "and through one stepped on, '*p++'" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-stepped-pointer-to-const.c"
+refuses "and through a sum, '*(p + 1)'" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-sum-to-const.c"
+refuses "and through a cast to one" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-cast-to-const.c"
+refuses "and through a typedef of one" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-typedef-to-const.c"
+refuses "and through '&' of a const, '*&x'" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-the-address-of-a-const.c"
+refuses "and through an assignment" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-an-assignment-to-const.c"
+refuses "and through a comma" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-comma-to-const.c"
+refuses "and through '?:'" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-choice-to-const.c"
+refuses "and through a call that returns one" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-call-to-const.c"
+refuses "and through a sum with the pointer on the right" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-number-plus-a-pointer-to-const.c"
+refuses "and through a difference" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/write-through-a-difference-to-const.c"
+refuses "and one with it in a struct named by a typedef" "'struct out' has a 'const' member, so it is not assigned whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member-through-a-typedef.c"
+refuses "a const pointer moved" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/move-a-const-pointer.c"
+refuses "'const' before a typedef of a pointer, moved" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-typedef.c"
+refuses "a member through a pointer to a const struct" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/member-through-a-pointer-to-a-const-struct.c"
+refuses "and an element of an array member" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/element-of-a-member-of-a-const-struct.c"
+refuses "'const' twice is still const" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/const-twice-still-const.c"
+refuses "a struct with a const member, whole" "'struct s' has a 'const' member, so it is not assigned whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member.c"
+refuses "and one with it a struct further in" "'struct out' has a 'const' member, so it is not assigned whole" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member-inside.c"
+refuses "'const' as a name" 'expected const, * or name, and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/const-as-a-name.c"
+refuses "a function returning const, then not" "'f' is declared twice, returning a different type each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/const-return-then-plain.c"
+refuses "a typedef, const and then not" "'t' is a typedef twice, for two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-const-and-not.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

@@ -16,10 +16,27 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: `const` in C
+
+**The C subset has `const`**, the third part of [ROADMAP
+6.10](COMPLETED.md#610-const-and-static), which closes it. It may be
+written before or after a type's base, after any `*`, and twice. A write to
+something `const` is refused, as `cc` refuses it: by `=`, `+=` and the
+other compound assignments, `++` and `--`, whether the thing is a variable,
+a parameter, a member, an element, or what a pointer to `const` points at.
+So is assigning a struct whole when a member of it is `const`. `const` and
+`static` are reserved words now. A pointer to `const` given to a pointer
+without it is not checked, which `cc` only warns about.
+
+**Tests:** 468 → 500. Thirty-two refusals. One program joins the C oracle:
+265 agree with `cc`, none diverges. Refusals: 261.
+
+---
+
 ## 2026-09-29: `static` locals in C
 
 **A local in the C subset can be `static`**, the second part of [ROADMAP
-6.10](ROADMAP.md#610-const-and-static): it keeps its value from one call to
+6.10](COMPLETED.md#610-const-and-static): it keeps its value from one call to
 the next, and is initialised once, before the program starts. Its
 initialiser has to be worked out before the program runs, as a global's
 does, and is refused with the reason when it is not.
@@ -38,7 +55,7 @@ cannot be worked out, as `cc` does.
 ## 2026-09-29: `static` functions and globals in C
 
 **A function or a global in the C subset can be `static`**, the first part
-of [ROADMAP 6.10](ROADMAP.md#610-const-and-static): it is its own file's,
+of [ROADMAP 6.10](COMPLETED.md#610-const-and-static): it is its own file's,
 and another file can have one of the same name. A declaration without
 `static` after one with it is its file's too, as C has it; the other order
 is refused, as `cc` refuses it. `static` is a reserved word now, so `int

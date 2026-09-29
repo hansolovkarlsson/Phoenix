@@ -533,9 +533,11 @@ third, [6.8](COMPLETED.md#68-globals), a variable declared outside every
 function.** **So was the fourth, [6.9](COMPLETED.md#69-unsigned), the
 `unsigned` types, opened on 2026-09-26 and closed on 2026-09-27**, the
 first entry in the arc with a program the subset compiled and got wrong.
-**Open: [6.10](#610-const-and-static), `const` and `static`**, the fifth,
-chosen on 2026-09-29 by what CPP's own source uses most that the subset
-does not have.
+**So was the fifth, [6.10](COMPLETED.md#610-const-and-static), `const`
+and `static`, opened and closed on 2026-09-29**, chosen by what CPP's own
+source uses most that the subset did not have. Nothing in the arc is open
+now; the next entry is written the way each of these was, with what breaks
+without it first.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -545,128 +547,3 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
-
-### 6.10 `const` and `static`
-
-C has two words the subset does not, and CPP, the workspace's own
-preprocessor and the first program the chain means to compile for
-Ouroboros, writes them more than any other it lacks: `const` 278 times and
-`static` 129. **`static` says where a thing lives and who can see it**: on
-a function or a global, that no other file can name it, C11 6.2.2p3; on a
-local, that it is kept for the whole run and initialised once, 6.2.4p3.
-**`const` says a thing is not written**, 6.7.3, and C refuses an
-assignment to one, 6.5.16p2. Neither is reserved today, so a program that
-writes either stops at a syntax error: `static int f(void)` at the
-`static`, read as a type's name, and `const char *s` at the `const`.
-CPP's other uses of `static`, five local arrays with an initialiser in
-braces, need the braces, which are not in this step.
-
-**What writing the witnesses found first: the subset compiles a program
-`cc` refuses.** Neither word is reserved, so each is a name:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `int main(void) { int static = 1; int const = 2; return static + const; }` | refuses it at the first `static`, *expected identifier* | **compiles**; the program exits 3 |
-
-No program the oracle may hold can show it, since the oracle holds only
-what `cc` compiles; each part reserves its word, and the program goes to
-`refused/`.
-
-**Three programs show what breaks without it**, and join the oracle with the
-part that makes each agree, beside a fourth that needs two files:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `static-files.c`: a `static` prototype and function, `static` globals zero and initialised with a number, a string and nothing, a `static` array and a `static` pointer to a struct, and a `static void` function that changes one | exits 2, prints `42 102 static 7 1` | stops at the `static` of the prototype, on line 2 |
-| `static-locals.c`: a counter kept across calls, one initialised to 40, a recursion that keeps its depth in one, a `static` pointer initialised with an array's address and moved on each call, one with a string, a `static` array summed across calls and an `unsigned char` one that wraps, and one in a block of `main` | exits 47, prints `1 2 41 42`, `5 5`, `10 20 30 hi`, `256 3 11` and `10 3` | stops at the `int` after `static` in the first function, having read `static` as a variable |
-| `const.c`: `const` before and after `int`, after a star, on a parameter, a member, a global and a typedef, a `const char *` walked along a string, an `int *const` written through, a `const struct` read through a pointer, a cast to `const int` and `sizeof` of two `const` types | exits 3, prints `5 4 17 2`, `5 7 9000000 4` and `42 8` | stops at the `const` of the typedef, on line 2 |
-| `tests/link/`: two files, each with a `static int count`, a `static long total` and a `static int helper`, compiled by Phoenix and linked | prints `2 12 1202` | stops at `static` in each |
-
-The fourth needs two files because **linkage cannot be seen in one**: a
-`static` function in a single file behaves as any other. The two files
-link only if each `helper` stays its own file's, and print `2 12 1202`
-only if each `count` does. That second part is the one that could go wrong
-quietly: a zero global written as a common symbol would be merged with the
-other file's by the linker, and the program would link and print something
-else. The emit pass writes every global today as `.globl` with its own
-`.space`, and never as a common symbol, so the risk is in what `static`
-leaves out, which is the `.globl`.
-
-**Built in three parts, in this order**, each with the suite green:
-
-1. **`static` on a function, a prototype and a global.** The word is
-   reserved, as the first word of an item, and a thing declared with it is
-   written without `.globl`. C11 6.2.2p4 lets a later declaration without
-   `static` take the earlier one's linkage, so `static int f(void);` then
-   `int f(void) { ... }` is internal; the other order is refused, as `cc`
-   refuses it. `static-files.c` and `tests/link/` are the witnesses; the
-   link test runs each file as Phoenix and as `cc` compile it, as
-   `tests/abi/` does.
-   *Built 2026-09-29.* `static` is an optional first word on each of the
-   four function forms and the three global ones, and `internal` its flag;
-   the `functions` pass keeps each function's linkage on a thread, in
-   document order, and the emit pass leaves out `.globl` for what is
-   `hidden`. **The word is first or it is not there**: C allows it among a
-   type's words, `int static f(void)`, which `cc` compiles and is a syntax
-   error here, beside `static` twice. `static-files.c` agrees with `cc`,
-   and the link test in all three pairings. **Of ten breaks, one was a
-   control that nothing caught, and one more passed**: a global array that
-   forgot its `static`, because neither file had one. Both have one now.
-2. **`static` on a local.** A declaration with it is a local in scope and a
-   global in storage: it hides and is hidden as a local is, and it lives
-   where a global does, under a label of its own that no two declarations
-   in a file share, since two functions may each have a `static int n` and
-   so may two blocks of one. Its initialiser is a global's, and **the
-   `constants` pass gains its third customer**, refusing one that is not
-   worked out before the program runs with the reason that pass now gives.
-   It is written into the object file once, and never run as a statement.
-   `static-locals.c` is the witness.
-   *Built 2026-09-29.* Three statement forms and three nodes, `Static`,
-   `StaticInit` and `StaticArray`, bound in the block's scope with an entry
-   that says *global*. **An entry gained a ninth part, its label**: the name
-   for a global, "" for what lives in the frame, and `f.n.K` for a `static`
-   local, `K` counted across the file, where `cc` writes `f.n` and `f.n.1`;
-   a name is reached by its label now, not by its name. **Writing the
-   refusals found a message that was not true**: `static int *p = &a;`, `a`
-   a local, was refused as *an address this cannot write*, which is what
-   `&table[1]` gets, the limit this compiler keeps, and `cc` says the
-   address of a local is no constant at all. File scope has no locals, so
-   no global could be given one. The `constants` pass now says whether an
-   address starts at a label, `rooted` of a value and `sited` of a place,
-   and only one that does gets the message about an offset; a global
-   pointer initialised from another's value, which said the same, says
-   *cannot be* now too. Of twenty-two breaks one was a control, and three
-   more passed at first: `rooted` read only the left of a `+`, and through
-   a member that is an array, and the label's counter never moved, since
-   no function had two `static`s of one name. Each has a witness now.
-3. **`const`.** The word is reserved and may stand where C puts it in the
-   subset's declarations: before or after the base, after any star, in a
-   typedef, a parameter, a member, a cast and `sizeof`. **A type gains a
-   fifth part**, which of its levels are `const`: bit 0 the value itself,
-   bit 1 what it points at, and so on, so a `*` halves it and an `&`
-   doubles it. A typedef carries its own, and `const` before a typedef's
-   name qualifies the typedef's top level, so `const text` where `text` is
-   a `const char *` is a `const char *const`. **What it changes is what is
-   refused**: an `=`, a compound assignment, a `++` or a `--` whose place
-   is `const`, and a struct assigned whole when a member of it is. Nothing
-   in the emit pass changes. `const.c` is the witness, and a program for
-   each refusal.
-
-**What `cc` refuses, and so will this**: an assignment, a compound
-assignment, `++` or `--` to a `const` local, global, member or pointer, or
-through a pointer to `const`, a `->` through a pointer to a `const` struct
-among them; a struct with a `const` member assigned whole; a `static`
-local initialised with what is not worked out before the program runs;
-`static` on a parameter, a member or a typedef; and a `static` definition
-after a declaration without it. `int static` and `int const` join them,
-from the table above. **Refused by name, though `cc` compiles them**:
-`static` twice, which `cc` warns about. **Accepted as `cc` accepts it**:
-`const` twice, which C11 6.7.3p5 allows.
-
-*Not in this step:* an initialiser in braces, which CPP's `static` arrays
-need and which a global does not have either; `extern`; `volatile` and
-`restrict`; `static` in an array parameter's brackets; and a `const` that
-a conversion with no cast drops, which `cc` warns about and C11 6.5.16.1
-makes a constraint: it stays unchecked, by 6.7's rule that a conversion
-with no cast is not checked. **The entry closes** when the three programs
-and the link test agree with `cc`, with none diverging.

@@ -191,19 +191,19 @@ item = function
       * syntax error. No array, `typedef int v[3];`, because a declaration's
       * count is a field of the declaration and not of its type; that arrives
       * when a program wants it. *)
-     | "typedef" b:base s:{ "*" } n:name ";"
-         -> Typedef(name: $n, base: $b, stars: size($s))
+     | "typedef" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+         -> Typedef(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")))
      (* **A global is a declaration at file scope**, since 2026-09-26,
       * ROADMAP 6.8, and is written as a local is: a base, stars and a name,
       * with a count in brackets or an initialiser. It is tried after a
       * function, which fails at the `;`, `[` or `=` where its `(` was
       * wanted. Three nodes, for the reason a local is three. *)
-     | k:[ "static" ] b:base s:{ "*" } n:name "[" c:integer "]" ";"
-         -> GlobalArray(name: $n, base: $b, stars: size($s), count: int($c), internal: size($k))
-     | k:[ "static" ] b:base s:{ "*" } n:name "=" e:assignment ";"
-         -> GlobalInit(name: $n, base: $b, stars: size($s), value: $e, internal: size($k))
-     | k:[ "static" ] b:base s:{ "*" } n:name ";"
-         -> Global(name: $n, base: $b, stars: size($s), count: 0, internal: size($k)) .
+     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+         -> GlobalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), internal: size($k))
+     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
+         -> GlobalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e, internal: size($k))
+     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+         -> Global(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, internal: size($k)) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -232,26 +232,26 @@ item = function
  * the type, `int static f(void)`, and that is a syntax error here. It is
  * the word being named here that reserves it, and until then it was a name:
  * `int static = 1;` compiled, which `cc` refuses. *)
-function = k:[ "static" ] r:base t:{ "*" } n:name "(" "void" ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), params: [], variadic: 0,
+function = k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" "void" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
                           internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" } n:name "(" "void" ")" "{" s:{ statement } "}"
-             -> Function(name: $n, ret: $r, stars: size($t), params: [], variadic: 0,
+         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" "void" ")" "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
                          body: $s, internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), params: $p,
+         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" p:params v:dots ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
                           variadic: size($v), internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
-             -> Function(name: $n, ret: $r, stars: size($t), params: $p,
+         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
                          variadic: size($v), body: $s, internal: size($k)) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
  * initialiser, because C has none for a member. *)
-member = b:base s:{ "*" } n:name "[" c:integer "]" ";"
-           -> MemberArray(name: $n, base: $b, stars: size($s), count: int($c))
-       | b:base s:{ "*" } n:name ";"
-           -> MemberScalar(name: $n, base: $b, stars: size($s), count: 0) .
+member = b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+           -> MemberArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+       | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+           -> MemberScalar(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0) .
 
 (* A parameter is a node and not a name, because it takes a slot the way a
  * local does and the emit pass has to store a register into it. The
@@ -271,7 +271,7 @@ params = [ param { "," q:param -> $q } ] -> $1 .
  * repetition's iteration that fails gives back what it took, which is what
  * lets `params` stop at the `,` in front of the `...`. *)
 dots   = [ "," e:"..." -> $e ] -> $1 .
-param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
+param  = b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
 
 (* What is at the bottom of the stars. **A node since `struct`**, and a keyword
  * before it: `int` and `char` were two words the `locals` pass turned into a
@@ -288,7 +288,7 @@ param  = b:base s:{ "*" } n:name -> Param(name: $n, base: $b, stars: size($s)) .
  *
  * A function's return type is one too, since a struct can be returned whole:
  * see `function` above. *)
-base   = "int"             -> Base(name: "int")
+base   = k:{ "const" } "int" q:{ "const" }             -> Base(name: "int", konst: size($k) + size($q))
        (* **`unsigned` and `signed`**, since 2026-09-26, ROADMAP 6.9, before
         * `char`, `int` or `long`, or alone for an `int`, and in that order
         * only: C11 6.7.2 allows the words of a type in any order, and
@@ -296,17 +296,17 @@ base   = "int"             -> Base(name: "int")
         * without it, and so does `signed char`, since a plain `char` is
         * signed on this machine. The two-word bases come first, because
         * `unsigned` alone would take the first word of each and stop. *)
-       | "unsigned" "char" -> Base(name: "unsigned char")
-       | "unsigned" "long" -> Base(name: "unsigned long")
-       | "unsigned" [ "int" ] -> Base(name: "unsigned int")
-       | "signed" "char"   -> Base(name: "char")
-       | "signed" "long"   -> Base(name: "long")
-       | "signed" [ "int" ] -> Base(name: "int")
-       | "void"            -> Base(name: "void")
-       | "char"            -> Base(name: "char")
-       | "long"            -> Base(name: "long")
-       | "struct" t:name   -> Base(name: $t)
-       | t:typedef-name    -> Named(name: $t) .
+       | k:{ "const" } "unsigned" "char" q:{ "const" } -> Base(name: "unsigned char", konst: size($k) + size($q))
+       | k:{ "const" } "unsigned" "long" q:{ "const" } -> Base(name: "unsigned long", konst: size($k) + size($q))
+       | k:{ "const" } "unsigned" [ "int" ] q:{ "const" } -> Base(name: "unsigned int", konst: size($k) + size($q))
+       | k:{ "const" } "signed" "char" q:{ "const" }   -> Base(name: "char", konst: size($k) + size($q))
+       | k:{ "const" } "signed" "long" q:{ "const" }   -> Base(name: "long", konst: size($k) + size($q))
+       | k:{ "const" } "signed" [ "int" ] q:{ "const" } -> Base(name: "int", konst: size($k) + size($q))
+       | k:{ "const" } "void" q:{ "const" }            -> Base(name: "void", konst: size($k) + size($q))
+       | k:{ "const" } "char" q:{ "const" }            -> Base(name: "char", konst: size($k) + size($q))
+       | k:{ "const" } "long" q:{ "const" }            -> Base(name: "long", konst: size($k) + size($q))
+       | k:{ "const" } "struct" t:name q:{ "const" }   -> Base(name: $t, konst: size($k) + size($q))
+       | k:{ "const" } t:typedef-name q:{ "const" }    -> Named(name: $t, konst: size($k) + size($q)) .
 
 (* A name that the declarations above have made a type, and not hidden
  * since. It is a `name` like any other to the scanner; what makes it a type
@@ -365,18 +365,18 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * whole run and initialised once, before the program starts. The
            * three forms are a local's, and three nodes of their own, since
            * nothing a pass says about a local's frame is true of one. *)
-          | "static" b:base s:{ "*" } n:name "[" c:integer "]" ";"
-                   -> StaticArray(name: $n, base: $b, stars: size($s), count: int($c))
-          | "static" b:base s:{ "*" } n:name "=" e:assignment ";"
-                   -> StaticInit(name: $n, base: $b, stars: size($s), value: $e)
-          | "static" b:base s:{ "*" } n:name ";"
-                   -> Static(name: $n, base: $b, stars: size($s), count: 0)
-          | b:base s:{ "*" } n:name "[" c:integer "]" ";"
-                   -> LocalArray(name: $n, base: $b, stars: size($s), count: int($c))
-          | b:base s:{ "*" } n:name "=" e:assignment ";"
-                   -> LocalInit(name: $n, base: $b, stars: size($s), value: $e)
-          | b:base s:{ "*" } n:name ";"
-                   -> Local(name: $n, base: $b, stars: size($s), count: 0)
+          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+                   -> StaticArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
+                   -> StaticInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
+          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+                   -> Static(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
+          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+                   -> LocalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
+                   -> LocalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
+          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+                   -> Local(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
            * before the outer one does, which is what C11 6.8.4 says. *)
@@ -537,8 +537,8 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * `(char)x + 1` is `((char)x) + 1` and `(char)a[1]` is `(char)(a[1])`, as
  * in C. `sizeof (int) x` stays a syntax error, since the type form of
  * `sizeof` is tried before this and leaves the `x`. *)
-unary   = "(" b:base s:{ "*" } ")" u:unary
-            -> Cast(base: $b, stars: size($s), value: $u)
+unary   = "(" b:base s:{ "*" cq:{ "const" } -> size($cq) } ")" u:unary
+            -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), value: $u)
         | "-" u:unary -> Negate(value: $u)
         | "!" u:unary -> Not(value: $u)
         | "~" u:unary -> Invert(value: $u)
@@ -547,7 +547,7 @@ unary   = "(" b:base s:{ "*" } ")" u:unary
         | "--" p:place -> Update(place: $p, op: "--", value: Number(text: "1"), post: false)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
-        | "sizeof" "(" b:base s:{ "*" } ")" -> SizeOfType(base: $b, stars: size($s))
+        | "sizeof" "(" b:base s:{ "*" cq:{ "const" } -> size($cq) } ")" -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")))
         | "sizeof" u:unary                 -> SizeOfExpr(value: $u)
         | postfix .
 
@@ -835,10 +835,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * *The width has no witness, and cannot have one*: arithmetic, `*` and
    * `sizeof` are the three that would read it, and each refuses a `void`
    * by name. Made four, the oracle and every refusal stayed green. *)
-  thread layouts = [["int", [4, 4, empty]], ["char", [1, 1, empty]], ["long", [8, 8, empty]],
-                    ["void", [0, 1, empty]],
-                    ["unsigned int", [4, 4, empty]], ["unsigned char", [1, 1, empty]],
-                    ["unsigned long", [8, 8, empty]]]
+  thread layouts = [["int", [4, 4, empty, false]], ["char", [1, 1, empty, false]],
+                    ["long", [8, 8, empty, false]], ["void", [0, 1, empty, false]],
+                    ["unsigned int", [4, 4, empty, false]], ["unsigned char", [1, 1, empty, false]],
+                    ["unsigned long", [8, 8, empty, false]]]
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
@@ -876,7 +876,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : down moff     = 0
             : down malign   = 1
             : layouts = bind($layouts, $name,
-                             [(($moff + $malign - 1) div $malign) * $malign, $malign, $fields])
+                             [(($moff + $malign - 1) div $malign) * $malign, $malign, $fields,
+                              size(flatten($members.mconst)) > 0])
             ! defined($layouts, $name) : "'struct {}' is defined twice" of $name
             ! size($members) = 0
                 : "'struct {}' has no members, which C11 6.7.2.1 forbids and this cc allows as an extension"
@@ -893,7 +894,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * every declaration that names it. C11 6.7p3 lets a typedef be declared
    * again **to the same type**, so a second one is refused only when it
    * says something different. *)
-  Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns]
+  Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns,
+                        "{}{}" of $base.bquals, $squals]
           : typedefs = bind($typedefs, $name, $means)
           (* **Not a typedef of `void` itself**, since 2026-09-26: C allows
            * one, and nothing here has needed it. `typedef void *vp;` is a
@@ -904,14 +906,19 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'{}' is a global already, and a typedef and a global share one name space, C11 6.2.3" of $name
           ! defined($typedefs, $name)
               and lookup($typedefs, $name, empty)
-                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns]
+                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns,
+                      "{}{}" of $base.bquals, $squals]
               : "'{}' is a typedef twice, for two different types" of $name .
 
   (* **A declaration's stars are its own and its typedef's**: `intp *q` with
    * `typedef int *intp` is two. A base that is a keyword or a tag has none,
    * and `ptrs` is the sum every declaration below reads in place of its
    * `stars` field. *)
-  Named : means   = lookup($typedefs, $name, [4, 4, "", 0, false])
+  Named : means   = lookup($typedefs, $name, [4, 4, "", 0, false, "0"])
+        : tq      = at($means, 6)
+        : bquals  = "{}{}" of lookup([[true, slice($tq, 1, size($tq) - 1)]], size($tq) > 1, ""),
+                              lookup([[true, "1"]], $konst > 0 or slice($tq, size($tq), size($tq)) = "1", "0")
+        : hasconst = at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 4)
         : buns    = at($means, 5)
         : basew   = at($means, 1)
         : align   = at($means, 2)
@@ -919,10 +926,13 @@ arg  = e:assignment -> Arg(value: $e) .
         : ptrs    = at($means, 4) .
 
   SizeOfType : ptrs = $stars + $base.ptrs .
-  Cast       : ptrs = $stars + $base.ptrs .
+  Cast       : ptrs = $stars + $base.ptrs
+             : dquals = "{}{}" of $base.bquals, $squals .
 
   Base : ptrs    = 0
-       : layout  = lookup($layouts, $name, [0, 1, empty])
+       : bquals  = lookup([[0, "0"]], $konst, "1")
+       : layout  = lookup($layouts, $name, [0, 1, empty, false])
+       : hasconst = at($layout, 4)
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
@@ -937,10 +947,13 @@ arg  = e:assignment -> Arg(value: $e) .
    * its element is. *)
   MemberScalar : ptrs   = $stars + $base.ptrs
                : basew  = $base.basew
+               : dquals = "{}{}" of $base.bquals, $squals
+               : mconst = lookup([[true, [1]]], slice($dquals, size($dquals), size($dquals)) = "1"
+                                                or ($ptrs = 0 and $base.hasconst), [])
                : ebytes = lookup([[0, $basew]], $ptrs, 8)
                : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname, $base.buns])
+               : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname, $base.buns, $dquals])
                : moff   = $offset + $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! defined($fields, $name) : "'{}' is a member twice" of $name
@@ -951,10 +964,13 @@ arg  = e:assignment -> Arg(value: $e) .
                    : "'{}' is a member of type 'void', and a member's type has to be complete, C11 6.7.2.1p3" of $name .
   MemberArray  : ptrs   = $stars + $base.ptrs
                : basew  = $base.basew
+               : dquals = "{}{}" of $base.bquals, $squals
+               : mconst = lookup([[true, [1]]], slice($dquals, size($dquals), size($dquals)) = "1"
+                                                or ($ptrs = 0 and $base.hasconst), [])
                : ebytes = lookup([[0, $basew]], $ptrs, 8)
                : ealign = lookup([[0, $base.align]], $ptrs, 8)
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
-               : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname, $base.buns])
+               : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname, $base.buns, $dquals])
                : moff   = $offset + $count * $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! $count < 1
@@ -988,14 +1004,14 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pindex = 0
             : funcs = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns])
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns, "{}{}" of $ret.bquals, $squals])
             : pwidths = bind($pwidths, $name, $params.pwide)
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns]
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1013,7 +1029,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pindex = 0
             : down funcs  = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns])
+            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns, "{}{}" of $ret.bquals, $squals])
             : pwidths = bind($pwidths, $name, $params.pwide)
             : frame = $bytes
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
@@ -1021,7 +1037,7 @@ arg  = e:assignment -> Arg(value: $e) .
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns]
+            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1048,6 +1064,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * stack, and nothing puts it there. *)
   Param : ptrs   = $stars + $base.ptrs
         : basew  = $base.basew
+        : dquals = "{}{}" of $base.bquals, $squals
         : whole  = $ptrs = 0 and $base.tagname <> ""
         : passes = lookup([[true, $base.tagname]], $whole, "")
         : pwide  = $ptrs = 0 and $base.tagname = "" and $basew = 8
@@ -1055,7 +1072,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
@@ -1096,9 +1113,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * its size rounded up to eight, the way an array is. *)
   Local     : ptrs   = $stars + $base.ptrs
             : basew  = $base.basew
+            : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1116,9 +1134,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * takes; the `types` pass checks the two are the same kind. *)
   LocalInit : ptrs   = $stars + $base.ptrs
             : basew  = $base.basew
+            : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1135,11 +1154,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * refusal it is a program both compile and answer differently. *)
   LocalArray : ptrs   = $stars + $base.ptrs
              : basew  = $base.basew
+             : dquals = "{}{}" of $base.bquals, $squals
              : ebytes = lookup([[0, $basew]], $ptrs, 8)
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, ""])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1163,24 +1183,26 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Static      : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $label])
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $label, $dquals])
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
   StaticArray : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $label])
+              : env    = bind($env, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $label, $dquals])
               : scope  = bind($scope, $name, true)
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
@@ -1194,12 +1216,13 @@ arg  = e:assignment -> Arg(value: $e) .
    * as `cc` refuses it. The name is bound on the way out, as a local's is. *)
   StaticInit  : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $label])
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $label, $dquals])
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
@@ -1215,10 +1238,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * is what a common symbol is for and is refused here by name. *)
   Global      : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name)
@@ -1229,10 +1253,11 @@ arg  = e:assignment -> Arg(value: $e) .
                   : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
   GlobalArray : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name])
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name, $dquals])
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                       of $name
@@ -1250,10 +1275,11 @@ arg  = e:assignment -> Arg(value: $e) .
   GlobalInit  : down env = $globals
               : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name, $dquals])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
@@ -1268,10 +1294,11 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, ""])
+  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0"])
            : global  = at($means, 6)
            : vuns    = at($means, 8)
            : label   = at($means, 9)
+           : vquals  = at($means, 10)
            : offset  = at($means, 1)
            : stars   = at($means, 2)
            : count   = at($means, 3)
@@ -1284,6 +1311,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * can read. So the table is kept at the node, as it stood when the walk
    * reached it, for the pass that can use it. *)
   Member : known = $layouts .
+  Assign : known = $layouts .
 
 (* ------------------------------------------------------------------ *)
 (* Pass three: how many stars, and what that makes impossible.         *)
@@ -1395,6 +1423,27 @@ arg  = e:assignment -> Arg(value: $e) .
    * as a number. So each of those places asks this, and refuses. *)
   otherwise record = $type = 0 and $tag <> ""
 
+  (* **Which levels of the type are `const`**, since 2026-09-29, ROADMAP
+   * 6.10's third part: the fifth part of a type, beside the stars, the
+   * width, the tag and whether it is unsigned. It is text, one `0` or `1`
+   * a level, in the order a declaration writes them: the base first, then
+   * each star's, so `const char *const p` is `11` and `char *q` is `00`,
+   * and **the last is the value's own**. So a `*` drops the last, a `&`
+   * puts a `0` after, and a pointer's arithmetic keeps its pointer's. It
+   * was to be a number, a bit a level, and is text because a declaration's
+   * stars reach a pass as a list, and the notation can make text of a list
+   * with `each` and `join` and has no way to make a number of one.
+   *
+   * **What it changes is what is refused**, C11 6.3.2.1p1: a place whose own
+   * level is `const` is not one a value can be put in, by `=`, by an update
+   * or by `++`, and nor is a struct with a `const` member anywhere in it,
+   * put whole. A value this pass knows nothing about is `0`, one level, so
+   * a pointer's is too short and what it points at is not `const` when
+   * asked: the gap loses a refusal and never makes one, and a conversion
+   * that drops a `const` without a cast is not checked, by 6.7's rule. *)
+  otherwise quals    = "0"
+  otherwise readonly = slice($quals, size($quals), size($quals)) = "1"
+
   (* **What a `record` is called in a message**, since 2026-09-26: a
    * `void` value is one, see `layouts` in the `locals` pass, so every
    * refusal of a struct where C wants a number refuses it too, and says
@@ -1428,8 +1477,10 @@ arg  = e:assignment -> Arg(value: $e) .
            : type  = lookup([[0, $stars]], $count, $stars + 1)
            : size  = lookup([[0, $elem]], $count, $count * $elem)
            : aggregate = $count > 0 or ($stars = 0 and $tag <> "")
+           : quals = lookup([[0, $vquals]], $count, "{}0" of $vquals)
            : lvalue = true .
   Addr     : type  = $place.type + 1
+           : quals = "{}0" of $place.quals
            : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
@@ -1451,6 +1502,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * The assignment is worth the struct, as any assignment is worth what it
    * put, so `a = b = c` copies twice and `(a = b).x` is a member of `a`. *)
   Assign   : type  = $place.type
+           : quals = "{}0" of lookup([[true, slice($place.quals, 1, size($place.quals) - 1)]], size($place.quals) > 1, "")
            : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
@@ -1465,7 +1517,11 @@ arg  = e:assignment -> Arg(value: $e) .
                       lookup([[true, "'{}'" of $value.kind]], $value.record,
                              "something that is not a struct")
            ! $value.record and not $place.record
-               : "'{}' is put where a number or a pointer goes" of $value.kind .
+               : "'{}' is put where a number or a pointer goes" of $value.kind
+           ! $place.readonly
+               : "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may"
+           ! $place.record and at(lookup($known, $place.tag, [0, 1, empty, false]), 4)
+               : "'struct {}' has a 'const' member, so it is not assigned whole, C11 6.3.2.1p1" of $place.tag .
 
   (* **An update is an assignment that reads its place first**, C11
    * 6.5.16.2 and 6.5.2.4, so it is worth the place's type, and it takes what
@@ -1476,6 +1532,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * steps by `+` and `-` only, as C11 6.5.6 allows it to. `arith` is the
    * operator the update stands for, `+` for `++` and for `+=`. *)
   Update   : type  = $place.type
+           : quals = "{}0" of lookup([[true, slice($place.quals, 1, size($place.quals) - 1)]], size($place.quals) > 1, "")
            : uns   = $place.uns
            : width = $place.width
            : tag   = $place.tag
@@ -1496,7 +1553,9 @@ arg  = e:assignment -> Arg(value: $e) .
            ! $place.type > 0 and $op <> "++" and $op <> "--" and $op <> "+=" and $op <> "-="
                : "'{}' does not take a pointer" of $op
            ! $place.type = 1 and $place.tag = "void"
-               : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
+               : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op
+           ! $place.readonly
+               : "'{}' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" of $op .
 
   (* The same rule for a declaration's initialiser, which is an assignment to
    * a place the declaration names. `ptrs` and the base are the `locals`
@@ -1575,7 +1634,8 @@ arg  = e:assignment -> Arg(value: $e) .
            : down argi   = 0
            : argi      = $held
            : argwide   = lookup($wides, $name, [])
-           : returns   = lookup($results, $name, ["", 4, 0, false])
+           : returns   = lookup($results, $name, ["", 4, 0, false, "0"])
+           : quals     = at($returns, 5)
            : uns       = at($returns, 4)
            : tag       = at($returns, 1)
            : width     = at($returns, 2)
@@ -1670,6 +1730,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * An array on the right has decayed already, so `sizeof((0, a))` is a
    * pointer's 8 and not the array's, which `comma.c` asks. *)
   Comma   : type  = $right.type
+          : quals = $right.quals
           : uns   = $right.uns
           : width = $right.width
           : tag   = $right.tag
@@ -1684,6 +1745,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * from any other `int`; and pointers to two types, which `cc` only warns
    * about and which has no one type to be. *)
   Choose  : type  = $then.type
+          : quals = $then.quals
           : uns   = lookup([[0, lookup([[true, ($then.wide and $then.puns) or ($other.wide and $other.puns)]],
                                        $then.wide or $other.wide, $then.puns or $other.puns)]],
                            $then.type, $then.uns)
@@ -1709,6 +1771,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'{}' tests numbers and pointers, and this is '{}'"
                   of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
   Deref    : type  = $value.type - 1
+           : quals = lookup([[true, slice($value.quals, 1, size($value.quals) - 1)]], size($value.quals) > 1, "")
            : uns   = $value.uns
            : width = $value.width
            : tag   = $value.tag
@@ -1738,7 +1801,14 @@ arg  = e:assignment -> Arg(value: $e) .
    * `$known` is the table the `locals` pass kept at this node, which is every
    * struct defined above the function. *)
   Member : entry = lookup(at(lookup($known, $value.tag, [0, 1, empty]), 3), $name,
-                          [0, 0, 0, 4, "", false])
+                          [0, 0, 0, 4, "", false, "0"])
+         (* A member of a `const` struct is `const`, as `cc` has it: its own
+          * level is its declaration's or the struct's, and an array member
+          * decays as a name does. *)
+         : mq    = at($entry, 7)
+         : mown  = "{}{}" of lookup([[true, slice($mq, 1, size($mq) - 1)]], size($mq) > 1, ""),
+                              lookup([[true, "1"]], slice($mq, size($mq), size($mq)) = "1" or $value.readonly, "0")
+         : quals = lookup([[0, $mown]], at($entry, 3), "{}0" of $mown)
          : uns   = at($entry, 6)
          : width = at($entry, 4)
          : tag   = at($entry, 5)
@@ -1779,6 +1849,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * compiles a cast **to** a struct of the same kind, as GNU C does, which
    * is refused here by name. *)
   Cast : type  = $ptrs
+       : quals = $dquals
        : uns   = $base.buns
        : width = $base.basew
        : tag   = $base.tagname
@@ -1922,6 +1993,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * otherwise, which is C11 6.3.1.8's usual arithmetic conversions over the
    * promotion above. A difference of two pointers is 8, a `long`. *)
   Binary(op: "+") : type  = $left.type + $right.type
+                  : quals = lookup([[0, "0"]], $type, lookup([[0, $right.quals]], $left.type, $left.quals))
                   : uns   = lookup([[0, lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
                                    $left.wide or $right.wide, $left.puns or $right.puns)]],
                                    $type, lookup([[0, $right.uns]], $left.type, $left.uns))
@@ -1940,6 +2012,7 @@ arg  = e:assignment -> Arg(value: $e) .
       ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
           : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
   Binary(op: "-") : type  = $left.type - $right.type
+                  : quals = lookup([[0, "0"]], $type, $left.quals)
                   : uns   = lookup([[true, lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
                                    $left.wide or $right.wide, $left.puns or $right.puns)]],
                                    $left.type = 0 and $right.type = 0,
