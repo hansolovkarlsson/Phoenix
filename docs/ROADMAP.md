@@ -535,9 +535,10 @@ function.** **So was the fourth, [6.9](COMPLETED.md#69-unsigned), the
 first entry in the arc with a program the subset compiled and got wrong.
 **So was the fifth, [6.10](COMPLETED.md#610-const-and-static), `const`
 and `static`, opened and closed on 2026-09-29**, chosen by what CPP's own
-source uses most that the subset did not have. Nothing in the arc is open
-now; the next entry is written the way each of these was, with what breaks
-without it first.
+source uses most that the subset did not have. **Open:
+[6.11](#611-a-second-target-elf-under-aapcs64), a second target**, the
+sixth, opened on 2026-09-29 as the destination below asks, before any
+construct.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -549,8 +550,9 @@ is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
 signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
 calling `printf` compiled for it would hand picolibc its arguments where
 picolibc does not look. The oracle for that target is clang with
-`--target=aarch64-unknown-none`. It is not opened here as an entry yet; it
-arrives the way the others did, with its failing program first.
+`--target=aarch64-unknown-none`. It is opened as
+[6.11](#611-a-second-target-elf-under-aapcs64), with its failing program
+first.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -581,9 +583,96 @@ of C11, so a construct missing from it is not proof that the subset has it.
 
 **Outside the grammar**, three things stand between the subset and a
 complete chain, and the toolchain document has their order: the **second
-target** above (ELF and AAPCS64, the first step), CPP put in `cc -E`'s place,
+target** ([6.11](#611-a-second-target-elf-under-aapcs64), open), CPP put in `cc -E`'s place,
 and an assembler and a linker that run on Ouroboros, the first of which waits
 on whether Futamura can describe how an arm64 instruction is encoded. Past
 correctness, the lcc route (an IR, instruction selection and a register
 allocator in place of the stack machine) is the toolchain document's last
 step and belongs to it.
+
+### 6.11 A second target: ELF under AAPCS64
+
+The destination is C written on Ouroboros, and the first step of
+[its order](../../docs/c-compiler-toolchain.md#the-order) is this one:
+**the back end writes for Ouroboros as well as for the Mac**, checked
+against clang under QEMU. It comes before any construct because every
+construct added before it is one more thing done twice, once for each
+target, and because it is the one step that is cheap and testable on the
+Mac. `%driver arm64` stays what it is, and `cc` stays its oracle.
+
+**What writing the witness found first: Phoenix's output is refused by the
+ELF assembler, and once that is fixed by hand, it runs and is wrong.** One
+program, calling `printf` with three numbers, the last of them a comparison
+on a `char` holding 200:
+
+| program | clang for `aarch64-unknown-none`, under QEMU | Phoenix today |
+| --- | --- | --- |
+| `char c = 200; int main(void) { printf("%d %d %d\n", 1, 2, c > 0); return 0; }` | prints `1 2 1`, exits 0 | `clang --target=aarch64-unknown-none -c` refuses it at six places: `@PAGE` twice, `@PAGEOFF` twice, and the Mach-O names of two sections |
+| the same `.s` with only those spellings rewritten by hand, `_main` to `main`, `L` to `.L` | | assembles, links, runs, and **prints `0 0 0`** |
+
+The second row is the one that matters, because nothing refuses it. It is
+two wrongs, and either one alone would print a wrong line. **The variadic
+arguments** are on the stack, where Apple's variant puts them, and
+picolibc reads them from `x1` to `x3`, where AAPCS64 as written does.
+**The `char`** is loaded with `ldrsb`, so 200 is -56 and `c > 0` is 0;
+plain `char` is unsigned under AAPCS64, and clang loads it with `ldrb`.
+
+**The target reaches `c.phx`, which says it has nothing about any target.**
+Two facts in the language file are Apple's: the `constants` pass folds a
+cast to `char` by putting the sign back, so `(char)200` is -56 in a `case`
+label, and `signed char` is read as a plain `char` because *a plain `char`
+is signed on this machine*. Under ELF those are two types and the fold
+keeps 200. Only the signedness of `char` crosses; the rest of the
+difference is spelling and the calling convention, which are the emit
+pass's.
+
+**How the oracle runs, tried by hand on 2026-09-29.** Nothing in the
+Makefile of Ouroboros is needed, and the OS is not booted. A program is
+compiled by clang with `--target=aarch64-unknown-none -mstrict-align`, or
+by Phoenix and assembled by clang, and linked by the `rust-lld` that
+`rustup` installs, against picolibc 1.8.9 as Ouroboros prebuilt it,
+compiler-rt's two 128-bit shifts from Ouroboros's `libc/pico/builtins.c`,
+and a harness of three short files: a start that sets the stack, turns on
+the floating point registers `printf` touches, and calls `main` and then
+`_exit`; a port that puts `stdout` on the PL011 UART of QEMU's `virt`
+machine and makes `_exit` a semihosting `SYS_EXIT_EXTENDED`, so the status
+reaches the shell; and a link script at `0x40080000`.
+`qemu-system-aarch64 -M virt -semihosting -kernel` runs it. clang's program
+above printed `1 2 1`, and one returning 7 exited 7. **It is an optional
+oracle**, skipped and not failed without QEMU, `rust-lld` or picolibc, as
+`fpc`, `solas` and `z80asm` are, so the suite still needs nothing outside
+this repository. picolibc is read where Ouroboros keeps it and never
+written there.
+
+**How much it touches.** Every one of the oracle's 266 programs has a
+`main`, so every one changes. 30 of them take an address with `@PAGE`
+today, 20 call `printf`, and 78 have a `char`.
+
+**Built in three parts, in this order**, each with the suite green:
+
+1. **The harness and the spellings.** The oracle's runner learns a second
+   target, and the emit pass writes, for it, names without the underscore,
+   local labels with `.L`, `adrp` with no suffix and `add` with `:lo12:`,
+   and ELF's section names. **How a description says which target is the
+   first thing this part settles**: `phx` has no option that reaches a
+   pass, so the target is chosen by a driver, `%driver elf` beside
+   `%driver arm64`, and whether that driver names a small pass that the
+   emit pass reads, or a second emit pass, is decided with the witnesses
+   in hand. The witnesses are every oracle program without a `printf` or
+   a `char`, which should agree once the spellings do.
+2. **Variadic arguments in registers**, AAPCS64 as written: a call to a
+   function declared with `...` passes its variadic arguments as it passes
+   the named ones, in `x0` to `x7` and then on the stack. The twenty
+   `printf` programs are the witnesses, the first of which is the one
+   above with its `char` taken out.
+3. **An unsigned plain `char`**: `ldrb` and not `ldrsb`, `and` and not
+   `sxtb` when a value is narrowed, a fold in `c.phx` that keeps 200, and
+   `signed char` a type of its own. The 78 `char` programs are the
+   witnesses, and the one above, whole.
+
+*Not in this step:* cross-compiling anything onto Ouroboros, an assembler
+or a linker there, which are the order's next steps and other projects'
+work; `.type` and `.size`, which the link does not need; and a third
+target. **The entry closes** when every program in the oracle agrees with
+clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
+either.
