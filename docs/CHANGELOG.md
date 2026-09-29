@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: `static` functions and globals in C
+
+**A function or a global in the C subset can be `static`**, the first part
+of [ROADMAP 6.10](ROADMAP.md#610-const-and-static): it is its own file's,
+and another file can have one of the same name. A declaration without
+`static` after one with it is its file's too, as C has it; the other order
+is refused, as `cc` refuses it. `static` is a reserved word now, so `int
+static = 1;`, which compiled until today, is refused. It has to be the
+first word of a declaration here: `int static f(void)` is C, and a syntax
+error. `static` inside a function, and `const`, are the next two parts.
+
+**Tests:** 444 → 452. Seven refusals, and a test that links two files, each
+with `static` names of the other's, compiled by Phoenix and by `cc` in
+every pairing. One program joins the C oracle: 263 agree with `cc`, none
+diverges. Refusals: 213.
+
+---
+
 ## 2026-09-29: a refused constant says why
 
 **When the C subset refuses a `case` label or a global's initialiser, it

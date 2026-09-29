@@ -602,6 +602,16 @@ leaves out, which is the `.globl`.
    refuses it. `static-files.c` and `tests/link/` are the witnesses; the
    link test runs each file as Phoenix and as `cc` compile it, as
    `tests/abi/` does.
+   *Built 2026-09-29.* `static` is an optional first word on each of the
+   four function forms and the three global ones, and `internal` its flag;
+   the `functions` pass keeps each function's linkage on a thread, in
+   document order, and the emit pass leaves out `.globl` for what is
+   `hidden`. **The word is first or it is not there**: C allows it among a
+   type's words, `int static f(void)`, which `cc` compiles and is a syntax
+   error here, beside `static` twice. `static-files.c` agrees with `cc`,
+   and the link test in all three pairings. **Of ten breaks, one was a
+   control that nothing caught, and one more passed**: a global array that
+   forgot its `static`, because neither file had one. Both have one now.
 2. **`static` on a local.** A declaration with it is a local in scope and a
    global in storage: it hides and is hidden as a local is, and it lives
    where a global does, under a label of its own that no two declarations

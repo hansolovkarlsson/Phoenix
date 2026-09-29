@@ -2306,6 +2306,24 @@ refuses "a global int initialised with an address" "'x' has to be initialised wi
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-int-from-an-address.c"
 refuses "a global pointer initialised from another" "'q' is initialised with an address this cannot write" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
+# **`static`**, since 2026-09-29, ROADMAP 6.10's first part. Reserving the
+# word is what refuses the first, which compiled until then; `cc` refuses
+# the next five as well. The last two it compiles, and they are syntax
+# errors here: the word is first or it is not there.
+refuses "'static' as a name" 'expected * or name, and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-as-a-name.c"
+refuses "a 'static' definition after a declaration without it" "'f' is declared 'static' after a declaration without it" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-after-a-declaration-without-it.c"
+refuses "a 'static' parameter" 'and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-parameter.c"
+refuses "a 'static' member" 'and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-member.c"
+refuses "a 'static' typedef" 'and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-typedef.c"
+refuses "'static' twice" 'and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-twice.c"
+refuses "'static' among the words of the type" 'expected * or name, and found "static"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-among-the-words-of-the-type.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.
@@ -2336,6 +2354,14 @@ if [ "$(uname -m)" = "arm64" ]; then
     else
         report fail "structs pass between Phoenix's code and cc's, both ways"
         printf '%s\n' "$ab" | grep FAIL | sed 's/^/        /' | head -4
+    fi
+    # **Linkage, which one file cannot show**, since 2026-09-29, ROADMAP
+    # 6.10: two files each with `static` names of the other's, linked.
+    if lk=$(harness "$root/languages/c/tests/link/run.sh" 2>&1); then
+        report pass "a static name is its own file's, linked beside another"
+    else
+        report fail "a static name is its own file's, linked beside another"
+        printf '%s\n' "$lk" | grep FAIL | sed 's/^/        /' | head -4
     fi
     # **The two divergences are oracle programs now.** `sizeof(sizeof(int))`
     # and `sizeof` of a pointer difference were 8 under `cc` and 4 here, pinned

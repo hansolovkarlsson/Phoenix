@@ -913,8 +913,9 @@
            : down retlong   = $rptrs = 0 and $ret.tagname = "" and $ret.basew = 8
            : down x8slot    = $frame + 8
            : down temps     = lookup([[true, 16]], $retsize > 16, 0)
-           : out = "\t.globl _{}\n\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
-               of $name, $name, (($frame + $temps + 15) div 16) * 16,
+           : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
+           : out = "{}\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
+               of $globl, $name, (($frame + $temps + 15) div 16) * 16,
                   lookup([[true, "\tstr x8, [x29, #-{}]\n" of $x8slot]], $retsize > 16, ""),
                   join($params.out), join($body.out), $name .
 
@@ -924,7 +925,11 @@
 
   (* **Globals are written into `__DATA,__data`**, since 2026-09-26, after
    * the code and the strings, collected on a thread of their own as the
-   * strings are. Each is `.globl`, as `cc` makes one, aligned as its type
+   * strings are. Each is `.globl`, as `cc` makes one, unless it is
+   * `static`, since 2026-09-29, ROADMAP 6.10, which is the whole of what
+   * that word changes here: the label is defined as before and the linker
+   * lets no other file see it. A function is written the same way, and
+   * `hidden`, the `functions` pass's, says which. Each is aligned as its type
    * is, and is its initialiser's value in the width it has, or zeros,
    * which is C11 6.7.9p10 for a global with none. The value is the
    * `constants` pass's, **converted to the global's type** the way an
@@ -942,14 +947,17 @@
   otherwise sym = ""
 
   Global      : out = ""
-              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t.space {}\n"
-                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+              : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
+              : gdata = "{}{}\t.p2align {}\n_{}:\n\t.space {}\n"
+                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
   GlobalArray : out = ""
-              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t.space {}\n"
-                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+              : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
+              : gdata = "{}{}\t.p2align {}\n_{}:\n\t.space {}\n"
+                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
   GlobalInit  : out = ""
-              : gdata = "{}\t.globl _{}\n\t.p2align {}\n_{}:\n\t{} {}\n"
-                          of $gdata, $name, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
+              : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
+              : gdata = "{}{}\t.p2align {}\n_{}:\n\t{} {}\n"
+                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
                              lookup([[1, ".byte"], [4, ".long"]], $ebytes, ".quad"),
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
                                     lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],

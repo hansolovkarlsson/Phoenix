@@ -197,12 +197,12 @@ item = function
       * with a count in brackets or an initialiser. It is tried after a
       * function, which fails at the `;`, `[` or `=` where its `(` was
       * wanted. Three nodes, for the reason a local is three. *)
-     | b:base s:{ "*" } n:name "[" c:integer "]" ";"
-         -> GlobalArray(name: $n, base: $b, stars: size($s), count: int($c))
-     | b:base s:{ "*" } n:name "=" e:assignment ";"
-         -> GlobalInit(name: $n, base: $b, stars: size($s), value: $e)
-     | b:base s:{ "*" } n:name ";"
-         -> Global(name: $n, base: $b, stars: size($s), count: 0) .
+     | k:[ "static" ] b:base s:{ "*" } n:name "[" c:integer "]" ";"
+         -> GlobalArray(name: $n, base: $b, stars: size($s), count: int($c), internal: size($k))
+     | k:[ "static" ] b:base s:{ "*" } n:name "=" e:assignment ";"
+         -> GlobalInit(name: $n, base: $b, stars: size($s), value: $e, internal: size($k))
+     | k:[ "static" ] b:base s:{ "*" } n:name ";"
+         -> Global(name: $n, base: $b, stars: size($s), count: 0, internal: size($k)) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -222,18 +222,27 @@ item = function
  * `char f()` parses too, and the `locals` pass refuses it by name.
  *
  * `item` tries this alternative first, and a struct's definition fails it at
- * the `{` after the tag, where a function's name was wanted, and moves on. *)
-function = r:base t:{ "*" } n:name "(" "void" ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), params: [], variadic: 0)
-         | r:base t:{ "*" } n:name "(" "void" ")" "{" s:{ statement } "}"
+ * the `{` after the tag, where a function's name was wanted, and moves on.
+ *
+ * **`static` in front says no other file can name it**, C11 6.2.2p3, since
+ * 2026-09-29, ROADMAP 6.10: a list of one or of none, so that `size` is
+ * the flag, as it is for `...`. A global takes it the same way, below.
+ * It is the first word or it is not there: C allows it among the words of
+ * the type, `int static f(void)`, and that is a syntax error here. It is
+ * the word being named here that reserves it, and until then it was a name:
+ * `int static = 1;` compiled, which `cc` refuses. *)
+function = k:[ "static" ] r:base t:{ "*" } n:name "(" "void" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), params: [], variadic: 0,
+                          internal: size($k))
+         | k:[ "static" ] r:base t:{ "*" } n:name "(" "void" ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), params: [], variadic: 0,
-                         body: $s)
-         | r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
+                         body: $s, internal: size($k))
+         | k:[ "static" ] r:base t:{ "*" } n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), params: $p,
-                          variadic: size($v))
-         | r:base t:{ "*" } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
+                          variadic: size($v), internal: size($k))
+         | k:[ "static" ] r:base t:{ "*" } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), params: $p,
-                         variadic: size($v), body: $s) .
+                         variadic: size($v), body: $s, internal: size($k)) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
@@ -600,6 +609,17 @@ arg  = e:assignment -> Arg(value: $e) .
 
 %pass functions
 
+  (* **Whether each function is its file's own**, since 2026-09-29, ROADMAP
+   * 6.10, in document order, because C11 6.2.2p4 decides it by what came
+   * first: a declaration without `static` takes the linkage of one above
+   * it, so `static int f(void);` then `int f(void) { ... }` is internal,
+   * and a `static` one after a declaration without it is refused, as `cc`
+   * refuses it. The name's first declaration decides and the entry is never
+   * changed, which is why `hidden` reads the same whether it is read before
+   * the node's own binding or after. A global is declared once here, so
+   * its own word is all it has. *)
+  thread linkage = empty
+
   (* A shape is a name and an arity as one text, so that `positions` can
    * count how many distinct ones there are: more shapes than names means a
    * name with two arities. **A `dshape` is the name and whether it ends in
@@ -609,6 +629,10 @@ arg  = e:assignment -> Arg(value: $e) .
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = []
+            : hidden  = lookup($linkage, $name, $internal = 1)
+            : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
+            ! $internal = 1 and defined($linkage, $name) and not lookup($linkage, $name, false)
+                : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params) .
@@ -616,6 +640,10 @@ arg  = e:assignment -> Arg(value: $e) .
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = [$name]
+            : hidden  = lookup($linkage, $name, $internal = 1)
+            : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
+            ! $internal = 1 and defined($linkage, $name) and not lookup($linkage, $name, false)
+                : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params) .
@@ -629,9 +657,9 @@ arg  = e:assignment -> Arg(value: $e) .
             : dshape = []
             : dname = []
             : fname = [] .
-  Global      : shape = [] : dshape = [] : dname = [] : fname = [] .
-  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] .
-  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] .
+  Global      : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
+  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
+  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
 
   (* Written out rather than named: a check runs before the attributes its
    * rule computes, so it cannot read them, and `phx` says so. *)
