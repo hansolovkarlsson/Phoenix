@@ -16,6 +16,25 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: `static` locals in C
+
+**A local in the C subset can be `static`**, the second part of [ROADMAP
+6.10](ROADMAP.md#610-const-and-static): it keeps its value from one call to
+the next, and is initialised once, before the program starts. Its
+initialiser has to be worked out before the program runs, as a global's
+does, and is refused with the reason when it is not.
+
+**A refusal that named the wrong reason is corrected.** A pointer
+initialised with an address that is no constant in C, the address of a
+local or a global pointer's value, was refused as an address this compiler
+cannot write yet, which is what `&table[1]` gets. It now says the value
+cannot be worked out, as `cc` does.
+
+**Tests:** 452 → 468. Sixteen refusals. One program joins the C oracle:
+264 agree with `cc`, none diverges. Refusals: 229.
+
+---
+
 ## 2026-09-29: `static` functions and globals in C
 
 **A function or a global in the C subset can be `static`**, the first part

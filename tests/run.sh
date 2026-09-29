@@ -2304,7 +2304,9 @@ refuses "a global pointer to a string plus a number" 'one with an offset is not 
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-string-plus-a-number.c"
 refuses "a global int initialised with an address" "'x' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-int-from-an-address.c"
-refuses "a global pointer initialised from another" "'q' is initialised with an address this cannot write" \
+# It said *an address this cannot write* until 2026-09-29, as `&table[1]`
+# does, and `cc` refuses it as no constant at all, which is what it says now.
+refuses "a global pointer initialised from another" "'q' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
 # **`static`**, since 2026-09-29, ROADMAP 6.10's first part. Reserving the
 # word is what refuses the first, which compiled until then; `cc` refuses
@@ -2324,6 +2326,46 @@ refuses "'static' twice" 'and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-twice.c"
 refuses "'static' among the words of the type" 'expected * or name, and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-among-the-words-of-the-type.c"
+# **A `static` local**, since 2026-09-29, ROADMAP 6.10's second part. Its
+# initialiser is a global's, so the `constants` pass refuses it for the same
+# reasons; `cc` refuses the first three, and the ninth to the fourteenth,
+# too. The five addresses with an offset, an array of no elements and a
+# size past 2^63 it compiles. `&a` of a local was the first address no global could be given,
+# and **it named a limit of this compiler until an attribute said whether
+# an address starts at a label**: `rooted`, in the `constants` pass.
+C6="has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be"
+refuses "a static local from a variable" "'b' is 'static', and $C6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-from-a-variable.c"
+refuses "a static local from a call" "'b' is 'static', and $C6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-from-a-call.c"
+refuses "a static local from a local's address" "'p' is 'static', and $C6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-address-of-a-local.c"
+refuses "a static local from an address with an offset" "'p' is 'static', and is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-address-with-an-offset.c"
+refuses "and from a member's address, through a struct" "'p' is 'static', and is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-member-address.c"
+refuses "and from a number plus an array" "'p' is 'static', and is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-number-plus-an-array.c"
+refuses "and from a member that is an array" "'q' is 'static', and is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-array-member.c"
+refuses "and from one through a cast" "'p' is 'static', and is initialised with an address this cannot write" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-cast-address-with-an-offset.c"
+refuses "a static local from a global pointer's value" "'p' is 'static', and $C6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-from-a-global-pointer.c"
+refuses "and from an element through one" "'p' is 'static', and $C6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-through-a-global-pointer.c"
+refuses "a static local declared twice" "'n' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-declared-twice.c"
+refuses "a static local, then a local of its name" "'n' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-then-a-local.c"
+refuses "a void static local" "'v' is declared 'void'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-void.c"
+refuses "a static struct from another" "'y' is a 'struct s' with an initialiser, which wants braces" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-struct-initialised.c"
+refuses "a static local array of no elements" "'a' is an array of no elements" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-array-of-no-elements.c"
+refuses "a static local past 2^63" "'n' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one is 'unsigned long' arithmetic past 2^63" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-sizeof-past-2-63.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

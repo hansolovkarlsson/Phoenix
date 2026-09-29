@@ -621,6 +621,24 @@ leaves out, which is the `.globl`.
    worked out before the program runs with the reason that pass now gives.
    It is written into the object file once, and never run as a statement.
    `static-locals.c` is the witness.
+   *Built 2026-09-29.* Three statement forms and three nodes, `Static`,
+   `StaticInit` and `StaticArray`, bound in the block's scope with an entry
+   that says *global*. **An entry gained a ninth part, its label**: the name
+   for a global, "" for what lives in the frame, and `f.n.K` for a `static`
+   local, `K` counted across the file, where `cc` writes `f.n` and `f.n.1`;
+   a name is reached by its label now, not by its name. **Writing the
+   refusals found a message that was not true**: `static int *p = &a;`, `a`
+   a local, was refused as *an address this cannot write*, which is what
+   `&table[1]` gets, the limit this compiler keeps, and `cc` says the
+   address of a local is no constant at all. File scope has no locals, so
+   no global could be given one. The `constants` pass now says whether an
+   address starts at a label, `rooted` of a value and `sited` of a place,
+   and only one that does gets the message about an offset; a global
+   pointer initialised from another's value, which said the same, says
+   *cannot be* now too. Of twenty-two breaks one was a control, and three
+   more passed at first: `rooted` read only the left of a `+`, and through
+   a member that is an array, and the label's counter never moved, since
+   no function had two `static`s of one name. Each has a witness now.
 3. **`const`.** The word is reserved and may stand where C puts it in the
    subset's declarations: before or after the base, after any star, in a
    typedef, a parameter, a member, a cast and `sizeof`. **A type gains a

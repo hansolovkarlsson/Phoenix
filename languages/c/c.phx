@@ -163,6 +163,7 @@ program = { item } -> Program(items: $1) .
 %names typedef-names
     declare Typedef.name
     hide    Param.name Local.name LocalInit.name LocalArray.name
+            Static.name StaticInit.name StaticArray.name
     scope   block function
     guard   typedef-name .
 
@@ -359,6 +360,17 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * count every pass has to ask about, and here the question has a
            * sharp edge. `int a[0]` is a count of zero and `int a;` is no
            * count at all, and one node would have to spell both the same. *)
+          (* **A `static` local is a local in scope and a global in storage**,
+           * C11 6.2.4p3, since 2026-09-29, ROADMAP 6.10: it is kept for the
+           * whole run and initialised once, before the program starts. The
+           * three forms are a local's, and three nodes of their own, since
+           * nothing a pass says about a local's frame is true of one. *)
+          | "static" b:base s:{ "*" } n:name "[" c:integer "]" ";"
+                   -> StaticArray(name: $n, base: $b, stars: size($s), count: int($c))
+          | "static" b:base s:{ "*" } n:name "=" e:assignment ";"
+                   -> StaticInit(name: $n, base: $b, stars: size($s), value: $e)
+          | "static" b:base s:{ "*" } n:name ";"
+                   -> Static(name: $n, base: $b, stars: size($s), count: 0)
           | b:base s:{ "*" } n:name "[" c:integer "]" ";"
                    -> LocalArray(name: $n, base: $b, stars: size($s), count: int($c))
           | b:base s:{ "*" } n:name "=" e:assignment ";"
@@ -1043,7 +1055,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
@@ -1086,7 +1098,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1106,7 +1118,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, ""])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
@@ -1127,7 +1139,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, ""])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1136,6 +1148,62 @@ arg  = e:assignment -> Arg(value: $e) .
              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
              ! defined($scope, $name) : "'{}' is declared twice" of $name .
+
+  (* **A `static` local takes no frame either**, since 2026-09-29, ROADMAP
+   * 6.10: it is bound in `env` as a local is, so that it hides and is
+   * hidden by the block's rules, and its entry says *global*, so that it is
+   * reached as a global is, by a label. The label is the ninth part of an
+   * entry, the name for a global and "" for what lives in the frame, and a
+   * `static` local's is its function, its name and a number counted across
+   * the file, because two functions may each have a `static int n` and so
+   * may two blocks of one: `cc` writes `_f.n` and `_f.n.1`, and this writes
+   * `_f.n.0` and `_f.n.1`. A dot cannot be in a C name, so no global's
+   * label is ever one of these. *)
+  thread statics = 0
+
+  Static      : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $ebytes
+              : label  = "{}.{}.{}" of $fn, $name, $statics
+              : statics = $statics + 1
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $label])
+              : scope  = bind($scope, $name, true)
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($scope, $name) : "'{}' is declared twice" of $name .
+  StaticArray : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $count * $ebytes
+              : label  = "{}.{}.{}" of $fn, $name, $statics
+              : statics = $statics + 1
+              : env    = bind($env, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $label])
+              : scope  = bind($scope, $name, true)
+              ! $count < 1
+                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
+                      of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($scope, $name) : "'{}' is declared twice" of $name .
+  (* Its initialiser is walked where it stands, with the function's names in
+   * sight, so `static int b = a;` finds a local `a` and is refused by the
+   * `constants` pass because it is not worked out before the program runs,
+   * as `cc` refuses it. The name is bound on the way out, as a local's is. *)
+  StaticInit  : ptrs   = $stars + $base.ptrs
+              : basew  = $base.basew
+              : ebytes = lookup([[0, $basew]], $ptrs, 8)
+              : galign = lookup([[0, $base.align]], $ptrs, 8)
+              : whole  = $ebytes
+              : label  = "{}.{}.{}" of $fn, $name, $statics
+              : statics = $statics + 1
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $label])
+              : scope  = bind($scope, $name, true)
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   (* **A global takes no frame**, and is bound in `globals` instead of
    * `env`, with the name its entry needs and nothing the frame counts. Its
@@ -1150,7 +1218,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name)
@@ -1164,7 +1232,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns])
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name])
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                       of $name
@@ -1185,7 +1253,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
@@ -1200,9 +1268,10 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false])
+  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, ""])
            : global  = at($means, 6)
            : vuns    = at($means, 8)
+           : label   = at($means, 9)
            : offset  = at($means, 1)
            : stars   = at($means, 2)
            : count   = at($means, 3)
@@ -1445,6 +1514,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * a value is all it can be: a struct global would need a brace-enclosed
    * initialiser, which the subset does not have, and is refused by name. *)
   GlobalInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
+                 : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
+                     of $name, $base.tagname
+             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
+                 : "'{}' is put where a number or a pointer goes" of $value.kind .
+
+  StaticInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
                  : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
                      of $name, $base.tagname
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
@@ -1990,16 +2065,36 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **An address the assembler can write**, since 2026-09-26, ROADMAP 6.8:
    * C11 6.6p9's address constant, as far as the subset takes it. A string
    * literal is one, and so is `&` of a global and a global array's name,
-   * which decays to the address of its first element; each is a label in
+   * which decays to the address of its first element, and since 2026-09-29
+   * the same of a `static` local, under its own label; each is a label in
    * the object file, and a global initialised with one is written as that
    * label. **An address with an offset is not**: `&table[1]`, `table + 2`
    * and `"hi" + 1` are each a label and a number, which `cc` writes as
    * `_table+4`, and folding one needs this pass to carry a label beside a
    * number, which nothing here has asked for yet. *)
   otherwise anchored = false
-  String   : anchored = true .
-  Variable : anchored = $global and $count > 0 .
-  Addr     : anchored = $place.global .
+
+  (* **Whether an address starts at a label at all**, since 2026-09-29,
+   * which is what tells the two refusals apart: `&table[1]` and `"hi" + 1`
+   * are a label and a number, which C works out and this does not yet, and
+   * `&a` of a local, or a global pointer's value, is no constant in C. A
+   * `static` local's initialiser was the first place both could be written,
+   * since file scope has no locals. `rooted` is said of a value, an address
+   * that starts at a label, and `sited` of a place, one that lives at one:
+   * a global or a `static` local, a `*` of a rooted address, or a member of
+   * a sited struct. An array decays to its address, so its name is rooted
+   * when it is sited, and so is a member that is one. A `+` or a `-` keeps
+   * its pointer side's, and a cast its operand's. *)
+  otherwise rooted = false
+  otherwise sited  = false
+  String   : anchored = true : rooted = true .
+  Variable : anchored = $global and $count > 0
+           : sited  = $global
+           : rooted = $global and $count > 0 .
+  Addr     : anchored = $place.global : rooted = $place.sited .
+  Deref    : sited  = $value.rooted .
+  Member   : sited  = $value.sited
+           : rooted = $value.sited and at($entry, 3) > 0 .
 
   (* Whether this `switch` compares all sixty-four bits, and the labels
    * it has seen and how many `default`s: each `switch` starts its own and
@@ -2050,7 +2145,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * To a `char` it keeps eight bits and puts the sign back; to an `int`,
    * thirty-two; to a `long`, all of them. A cast to a pointer or to `void`
    * is not an integer constant expression, and is not settled. *)
-  Cast       : low8    = $value.folded mod 256
+  Cast       : rooted  = $value.rooted
+             : low8    = $value.folded mod 256
              : low32   = $value.folded mod 4294967296
              : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
              : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 4))
@@ -2124,6 +2220,7 @@ arg  = e:assignment -> Arg(value: $e) .
                            ["/", quotient($dl, $dr)], ["%", remainder($dl, $dr)],
                            ["&", bitand($cl, $cr)], ["|", bitor($cl, $cr)], ["^", bitxor($cl, $cr)],
                            ["<<", $pl * $cpower], [">>", $cl div $cpower]], $op, 0)
+         : rooted = ($op = "+" or $op = "-") and ($left.rooted or $right.rooted)
          : clow   = bitand($craw, 4294967295)
          : fits   = lookup([["+", $fadd], ["-", $fsub], ["*", $fmul or $cu32], ["/", $fdiv], ["%", $fdiv],
                             ["<<", $fshl]], $op, true)
@@ -2208,9 +2305,19 @@ arg  = e:assignment -> Arg(value: $e) .
    * 2026-09-26, ROADMAP 6.8: C11 6.7.9p4 wants it worked out before the
    * program runs, as a `case` label is, and `cc` refuses one that cannot
    * be. The emit pass writes the folded value into the object file. *)
-  GlobalInit ! not $value.settled and $ptrs = 0
+  GlobalInit ! not $value.settled and ($ptrs = 0 or not ($value.anchored or $value.rooted))
                  : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and {}"
                      of $name, $value.because
-             ! not $value.settled and $ptrs > 0 and not $value.anchored
-                 : "'{}' is initialised with an address this cannot write: a string, '&' of a global and a global array's name can be, and one with an offset is not yet"
+             ! not $value.settled and $ptrs > 0 and not $value.anchored and $value.rooted
+                 : "'{}' is initialised with an address this cannot write: a string, '&' of a global or a 'static' local, and such an array's name can be, and one with an offset is not yet"
+                     of $name .
+
+  (* **A `static` local's initialiser is the third customer**, since
+   * 2026-09-29, ROADMAP 6.10: it is written into the object file as a
+   * global's is, and wants what a global's wants, C11 6.7.9p4. *)
+  StaticInit ! not $value.settled and ($ptrs = 0 or not ($value.anchored or $value.rooted))
+                 : "'{}' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and {}"
+                     of $name, $value.because
+             ! not $value.settled and $ptrs > 0 and not $value.anchored and $value.rooted
+                 : "'{}' is 'static', and is initialised with an address this cannot write: a string, '&' of a global or a 'static' local, and such an array's name can be, and one with an offset is not yet"
                      of $name .
