@@ -539,11 +539,24 @@ source uses most that the subset did not have. Nothing in the arc is open
 now; the next entry is written the way each of these was, with what breaks
 without it first.
 
+**The arc has a destination since 2026-09-29: C written on Ouroboros.** The
+workspace chose it, and
+[`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md#the-destination-c-on-ouroboros)
+has the order, whose last step is the one 6.10 was already steering by: the
+chain compiling CPP's own source, there. What it asks of this page first is
+**a second target for `c-arm64.phx`**. Every choice the back end makes today
+is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
+signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
+calling `printf` compiled for it would hand picolibc its arguments where
+picolibc does not look. The oracle for that target is clang with
+`--target=aarch64-unknown-none`. It is not opened here as an entry yet; it
+arrives the way the others did, with its failing program first.
+
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
 
 | | |
 | --- | --- |
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
-| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own |
+| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/CPP`](../../CPP/), not yet put in `cc -E`'s place |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |

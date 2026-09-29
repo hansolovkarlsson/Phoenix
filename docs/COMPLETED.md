@@ -483,7 +483,8 @@ anything with a `#` in it, which the first dozen constructs do not need; `cc`
 to assemble and link, and the assembler to turn a string literal's escapes
 into bytes, which the notation cannot do; the system libc, reached through a
 `puts` or a `putchar` declared in the program rather than included, until the
-preprocessor exists. *Not `printf`, since 2026-09-22*: it is variadic, and
+preprocessor exists. *It exists since 2026-09-27*, as
+[`~/Projects/CPP`](../../CPP/), and is not yet in `cc -E`'s place. *Not `printf`, since 2026-09-22*: it is variadic, and
 Apple's arm64 passes variadic arguments on the stack rather than in
 registers, which is a calling convention this subset does not have.
 
