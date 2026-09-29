@@ -6205,7 +6205,7 @@ which is not true; a message that names the reason needs an attribute
 carried up through every node, and was not built. [Postmortem 29](postmortem.md)
 scores the witnesses the roadmap named.
 
-## 2026-09-29: a refusal that says why
+## 2026-09-29: a refusal that says why, and `const` and `static`
 
 **Every refused constant said it *cannot be* worked out, and most of them
 can.** `case y:` and `case 1 / 0:` cannot, in C. `case 9223372036854775807
@@ -6257,3 +6257,82 @@ break ran: a `?:` whose condition was a variable, meant to show the
 condition's reason being read, would have printed *cannot be* whether it
 was read or not, since 0 and 4 read alike. It was replaced with a
 condition whose reason is 1.
+
+**The next entry was chosen by a program, not by the list.** The standup
+named five candidates for 6.10, the ones 6.9 had set aside: `short`, `long
+long`, `_Bool`, `extern` and an address with an offset. The workspace's
+toolchain document had changed the same morning: the chain is now meant to
+end in *hello.c compiled and run on Ouroboros*, and its first step there is
+retargeting this back end to ELF and AAPCS64 as written. So there were two
+kinds of next, and the question was put to Hans with the evidence for each.
+The evidence for the language was CPP's own source, preprocessed and run
+through the subset: every file stopped inside Apple's headers within three
+lines, and CPP's own code, counted apart from the headers, wants `const`
+278 times and `static` 129, neither of which was on the list. `bool` came
+third, at 113. Hans chose `const` and `static`.
+
+**Writing the witnesses found the subset taking what `cc` refuses.**
+Neither word was reserved, so `int static = 1; int const = 2;` compiled and
+exited 3. It is the same shape as 6.9's first finding, a thing no program
+in the oracle could show, because the oracle holds only what `cc`
+compiles; the difference is that this one was a refusal missing and not a
+wrong answer.
+
+**`static` on a function or a global changed one thing in the emit pass,
+the `.globl`**, and the risk was always in what it left out. Two files
+each with a `static int count` link and run whether the two are merged or
+not, if the zero global is written as a common symbol; the emit pass had
+never written one, which was checked in the source before the entry said
+so. The link test that holds it compiles each of two files by each
+compiler. The one break that got through was a `static` array, which
+neither file had.
+
+**A `static` local wanted a label, and the tables had no place for one.**
+An entry in the `locals` pass was eight things, and a global was reached
+by its name, which was also its label. A `static` local's name is not
+unique in a file, so an entry gained a ninth part: the label, the name for
+a global and `f.n.K` for a `static` local, where `cc` writes `f.n` and
+`f.n.1`. The counter is file-wide and the function in the label is only
+for a reader; one break showed the counter was needed and unwitnessed,
+since no function had two `static`s of one name until `main` was given
+two blocks with one each.
+
+**The morning's lesson came back the same afternoon.** A `static` local's
+initialiser is a global's, and so were its messages, and one of them was
+false for a case no global could reach: `static int *p = &a`, `a` a local,
+was refused as *an address this cannot write*, the words for
+`&table[1]`, which is a limit of this compiler and not of C. `cc` says the
+address of a local is no constant at all. Telling the two apart needed the
+`constants` pass to know whether an address starts at a label, so two more
+attributes go up the tree, `rooted` of a value and `sited` of a place, and
+the notation's rule of one rule per node in a pass folded them into the
+rules already there. `int *q = p;` at file scope had said the same untrue
+thing since 2026-09-26, and its assertion changed with it.
+
+**The break harness was wrong twice before the code was.** It read only
+assertions quoted one way, so a break the suite would have caught came
+back uncaught; and its first fix could not read an assertion with a quote
+inside, which every one naming a variable has, so two breaks that were
+caught looked as if they were not. One of them was run by hand before
+anything was changed, and failed the program as it should; the harness was
+fixed and every break run again. Reproducing a surprise by hand before
+believing it, 2026-09-27's rule, earned its place twice in an hour.
+
+**`const` was to be a number and is text.** The entry planned a bit a
+level, halved by `*` and doubled by `&`. A declaration's stars reach a pass
+as a list, and the notation has `each` and `join` to make text of a list
+and nothing to make a number of one, so the levels are a string of `0` and
+`1` with the value's own last, a `*` drops a character and a `&` adds one.
+A value the pass knows nothing about is one level, so a gap loses a
+refusal and cannot make a false one; that was chosen, not found.
+
+**Part 3's witnesses were written from how it could be wrong, before any
+break ran**, and no break got through. Reading the plan for which nodes
+carry a pointer's type to a place, eight had no witness: `*&x`, a `*` of an
+assignment, of a comma, of a `?:`, of a call, of a sum with the pointer on
+the right, of a difference, and a `const` member inside a struct named by a
+typedef. All eight were written first. Thirty-one breaks were then all
+caught, where parts 1 and 2 let one and three through; the two that looked
+uncaught were faults in the breaks. The entry's promise that `const` twice
+is accepted was the one thing the first grammar did not keep, and it was
+seen because the entry had written it down.

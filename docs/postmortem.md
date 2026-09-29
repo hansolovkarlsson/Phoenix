@@ -1453,3 +1453,51 @@ signed and a comparison was the only operator worth an exception.
 > A witness written from what a feature is for shows that it exists. The
 > program that shows it is right is written from how it could be wrong,
 > after the code, by breaking it.
+
+---
+
+## 30. "A type gains a fifth part, which of its levels are `const`"
+
+ROADMAP 6.10 was written on 2026-09-29 before any of it was built, and made
+five predictions a reader can check against [COMPLETED
+6.10](COMPLETED.md#610-const-and-static).
+
+*Failed: the fifth part as a number.* "Bit 0 the value itself, bit 1 what
+it points at, and so on, so a `*` halves it and an `&` doubles it." A declaration's
+stars reach a pass as a list, and the notation can make text of a list and
+no number, so the levels are text. The design survived and the
+representation did not; nothing in the entry had asked what the notation
+could fold.
+
+*Held: nothing in the emit pass changes for `const`.* It did not.
+
+*Held: the risk of `static` is in what it leaves out.* The entry said a
+zero global written as a common symbol would link, merge with another
+file's, and print something else, and that the emit pass writes none. The
+link test was built for exactly that, and the emit pass was checked, not
+assumed, before the sentence was written.
+
+*Failed, quietly: a `static` local's initialiser "is a global's".* It is,
+and so were its messages, and one of them was untrue of a case no global
+could reach: the address of a local, refused as a limit of this compiler
+when C says it is no constant. It was found by writing the refusals, the
+same way the morning's fix found three refusals nothing asserted: a
+message is a claim, and only a program that reaches it tests it.
+
+*Held, narrowly: `const` twice "accepted as `cc` accepts it".* The first
+grammar took one `const` on each side of a base and would have refused
+`const const int`. It was caught because the entry had said it, which is
+the case for writing an entry's promises down before the build.
+
+**And [29](#29-unsigned-constantsc-is-the-witness)'s lesson was tried
+three times in one day, with a difference.** 29 said the program that shows
+a part is right is written from how it could be wrong, *after* the code, by
+breaking it. Parts 1 and 2 did that and let one break and then three
+through, each needing a witness afterwards. Part 3 read its own plan for
+the places a pointer's type reaches a place, wrote the eight witnesses the
+plan had no program for **before** any break, and let none of thirty-one
+through.
+
+> How a part could be wrong can be read off its design before the code
+> runs. Breaking the code afterwards is how to find out whether that
+> reading missed anything, and it is cheaper when it finds nothing.
