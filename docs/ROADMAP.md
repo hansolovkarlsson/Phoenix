@@ -560,3 +560,30 @@ avoids.**
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/CPP`](../../CPP/), not yet put in `cc -E`'s place |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
+
+**What is left between the subset and C.** Counted on 2026-09-29 from
+`c.phx`, its refusals in `languages/c/tests/refused/`, and CPP's own source.
+It is a map of the ground and not a queue: none of it is an entry until it
+is opened with its failing program, and the order is chosen then, by the
+destination above. It is a careful count and not a clause-by-clause audit
+of C11, so a construct missing from it is not proof that the subset has it.
+**Bold** marks what compiling CPP's source needs.
+
+| | what the subset lacks |
+| --- | --- |
+| types | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **function pointers** (the diagnostic callback), **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `float` and `double`, bit-fields, a function returning a `char` (refused by name) |
+| qualifiers and storage | `extern`, `volatile`, `restrict`, `inline`, `_Alignas` and `_Alignof`, `_Atomic`, `_Thread_local` |
+| declarations | **initialisers in braces** (CPP's five `static` arrays; a struct global or `static` local initialised is refused), designated initialisers, compound literals, a struct defined in a function, a struct with no tag, a `typedef` in a function or of an array, a global declared and then defined, `_Static_assert` |
+| functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
+| lexical | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string |
+| expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
+| held, not lacking | an address with an offset in a global's or a `static` local's initialiser, refused by name until one folds; variable-length arrays, optional in C11 |
+
+**Outside the grammar**, three things stand between the subset and a
+complete chain, and the toolchain document has their order: the **second
+target** above (ELF and AAPCS64, the first step), CPP put in `cc -E`'s place,
+and an assembler and a linker that run on Ouroboros, the first of which waits
+on whether Futamura can describe how an arm64 instruction is encoded. Past
+correctness, the lcc route (an IR, instruction selection and a register
+allocator in place of the stack machine) is the toolchain document's last
+step and belongs to it.
