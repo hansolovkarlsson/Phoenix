@@ -6336,3 +6336,31 @@ caught, where parts 1 and 2 let one and three through; the two that looked
 uncaught were faults in the breaks. The entry's promise that `const` twice
 is accepted was the one thing the first grammar did not keep, and it was
 seen because the entry had written it down.
+
+**The C11 arc before the port.** 6.11, the second target, was opened in the
+afternoon as the destination's first step, and within the hour Hans put it
+after a different arc: `c.phx` conforming to C11 first, Ouroboros later.
+The toolchain document's argument for the retarget going first, that every
+construct added before it is done twice, still holds and was weighed; the
+answer was that the language is the goal of this repository and the port
+is the workspace's. 6.11 stays on the roadmap as written, parked, with
+its failing program and its hand-tried oracle, so the later arc starts
+from it and not from nothing.
+
+What *conforming* means was put as two questions and settled on the
+recommended answers: the mandatory language and none of C11's four
+optional features, each refused by name behind its `__STDC_NO_*__` macro;
+and the compiler proper, phases 5 to 8, with `cc -E` and the system's
+library kept. The choice that mattered is the first. Variable-length
+arrays, `_Complex` and `_Atomic` would each be an arc of their own, and
+leaving them out is what C11 itself allows.
+
+**Two dozen programs against the `check` driver changed the map.** The
+list of what was left, written that morning from the refusals and CPP's
+source, named types and qualifiers and missed that the declaration syntax
+is partial: `int a, b;`, `long int`, `int a[2][3]`, `int (*p)[3]`,
+`int f(int a[])` and `char s[] = "hi"` are all syntax errors. The subset
+grew one declaration shape at a time, each as its entry needed, and
+nothing counted the shapes C has against the ones it takes. Most of the
+rest of the map is written in those shapes, so C11 6.7 in full is the
+recommended first entry of the arc.

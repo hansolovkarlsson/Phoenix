@@ -535,24 +535,24 @@ function.** **So was the fourth, [6.9](COMPLETED.md#69-unsigned), the
 first entry in the arc with a program the subset compiled and got wrong.
 **So was the fifth, [6.10](COMPLETED.md#610-const-and-static), `const`
 and `static`, opened and closed on 2026-09-29**, chosen by what CPP's own
-source uses most that the subset did not have. **Open:
-[6.11](#611-a-second-target-elf-under-aapcs64), a second target**, the
-sixth, opened on 2026-09-29 as the destination below asks, before any
-construct.
+source uses most that the subset did not have. [6.11](#611-a-second-target-elf-under-aapcs64),
+a second target, was opened the same day and **parked** the same day, when
+the arc was put before the port: nothing is open, and the next entry is
+the first of the C11 arc, below.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
 [`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md#the-destination-c-on-ouroboros)
 has the order, whose last step is the one 6.10 was already steering by: the
-chain compiling CPP's own source, there. What it asks of this page first is
-**a second target for `c-arm64.phx`**. Every choice the back end makes today
+chain compiling CPP's own source, there. What it asks of this page, once `c.phx`
+conforms to C11, is **a second target for `c-arm64.phx`**. Every choice the back end makes today
 is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
 signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
 calling `printf` compiled for it would hand picolibc its arguments where
 picolibc does not look. The oracle for that target is clang with
-`--target=aarch64-unknown-none`. It is opened as
+`--target=aarch64-unknown-none`. It is written down as
 [6.11](#611-a-second-target-elf-under-aapcs64), with its failing program
-first.
+first, and parked until the C11 arc closes.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -563,42 +563,76 @@ avoids.**
 | `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/CPP`](../../CPP/), not yet put in `cc -E`'s place |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
 
-**What is left between the subset and C.** Counted on 2026-09-29 from
-`c.phx`, its refusals in `languages/c/tests/refused/`, and CPP's own source.
-It is a map of the ground and not a queue: none of it is an entry until it
-is opened with its failing program, and the order is chosen then, by the
-destination above. It is a careful count and not a clause-by-clause audit
-of C11, so a construct missing from it is not proof that the subset has it.
-**Bold** marks what compiling CPP's source needs.
+**The arc now: C11, before Ouroboros.** Decided by Hans on 2026-09-29,
+after 6.11 was opened: the first arc is `c.phx` conforming to C11, and the
+port to Ouroboros is a later arc, so 6.11 is parked where it stands. What
+conforming means was settled the same day:
+
+- **The mandatory language, and none of the four optional features.** C11
+  lets an implementation conform without variable-length arrays,
+  `_Complex`, `_Atomic` and `<threads.h>` by defining
+  `__STDC_NO_VLA__`, `__STDC_NO_COMPLEX__`, `__STDC_NO_ATOMICS__` and
+  `__STDC_NO_THREADS__`, 6.10.8.3. This one defines all four and refuses
+  each feature by name.
+- **The compiler proper**, translation phases 5 to 8. Phases 1 to 4 stay
+  with `cc -E` until CPP takes its place, and the library is the system's,
+  which `cc` links. The freestanding headers a program includes,
+  `<stdarg.h>`, `<stddef.h>`, `<stdbool.h>`, `<stdint.h>`, `<limits.h>`,
+  `<float.h>`, `<stdalign.h>` and `<stdnoreturn.h>`, must work with what
+  `cc -E` puts in them.
+
+**What is left between the subset and C11.** Counted on 2026-09-29 from
+`c.phx`, its refusals in `languages/c/tests/refused/`, CPP's own source,
+and two dozen programs tried against the `check` driver. It is a map of
+the ground and not a queue: none of it is an entry until it is opened
+with its failing program. It is a careful count and not a clause-by-clause
+audit, so a construct missing from it is not proof that the subset has
+it; each entry audits its own clause of the standard when it opens.
+**Bold** marks what compiling CPP's source needs, which still says where
+the arc is going after this one.
 
 | | what the subset lacks |
 | --- | --- |
-| types | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **function pointers** (the diagnostic callback), **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `float` and `double`, bit-fields, a function returning a `char` (refused by name) |
-| qualifiers and storage | `extern`, `volatile`, `restrict`, `inline`, `_Alignas` and `_Alignof`, `_Atomic`, `_Thread_local` |
-| declarations | **initialisers in braces** (CPP's five `static` arrays; a struct global or `static` local initialised is refused), designated initialisers, compound literals, a struct defined in a function, a struct with no tag, a `typedef` in a function or of an array, a global declared and then defined, `_Static_assert` |
+| declarations, 6.7 | more than one declarator in a declaration (`int a, b;`, at file scope or in a block); the words of a type in any order and all of them (`long int`, `long unsigned`); arrays of arrays (`int a[2][3]`); parenthesised declarators (`int (*p)[3]`), which **function pointers** need; abstract declarators in a cast or `sizeof` beyond base and stars (`sizeof(int *[3])`); an array parameter (`int f(int a[])`); an array whose size its initialiser gives (`char s[] = "hi"`); a struct defined inside another, in a function, or with no tag; a `typedef` in a function or of an array; a global declared and then defined; a definition with an identifier list, 6.9.1, obsolescent but still C11; `_Static_assert` |
+| initialisers, 6.7.9 | **initialisers in braces**, for a local, a global and a `static` (CPP's five `static` arrays; a struct global or `static` local initialised is refused), designated initialisers, compound literals, 6.5.2.5 |
+| types, 6.2.5 | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `signed char` as its own type, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name) |
+| qualifiers, storage and specifiers | `extern`, `register`, `auto`, `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
-| lexical | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string |
+| lexical, 6.4 | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string, the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants |
 | expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
-| held, not lacking | an address with an offset in a global's or a `static` local's initialiser, refused by name until one folds; variable-length arrays, optional in C11 |
+| refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
-**Outside the grammar**, three things stand between the subset and a
-complete chain, and the toolchain document has their order: the **second
-target** ([6.11](#611-a-second-target-elf-under-aapcs64), open), CPP put in `cc -E`'s place,
-and an assembler and a linker that run on Ouroboros, the first of which waits
-on whether Futamura can describe how an arm64 instruction is encoded. Past
-correctness, the lcc route (an IR, instruction selection and a register
-allocator in place of the stack machine) is the toolchain document's last
-step and belongs to it.
+**The declarations row comes first.** Most of the rest is written in it:
+a function pointer is a parenthesised declarator, an initialiser in braces
+needs an array whose size it gives, and `unsigned short int` is the words
+of a type in any order. So the recommendation for the arc's first entry is
+C11 6.7's declaration syntax in full, with the others following in the
+order their witnesses ask for.
+
+**Outside the grammar**, the rest of the chain belongs to the later arc,
+and the toolchain document has its order: the **second target**
+([6.11](#611-a-second-target-elf-under-aapcs64), parked), CPP put in
+`cc -E`'s place, and an assembler and a linker that run on Ouroboros, the
+first of which waits on whether Futamura can describe how an arm64
+instruction is encoded. Past correctness, the lcc route (an IR,
+instruction selection and a register allocator in place of the stack
+machine) is the toolchain document's last step and belongs to it.
 
 ### 6.11 A second target: ELF under AAPCS64
+
+*Parked on 2026-09-29, the day it was opened: the C11 arc comes first,
+and this entry is the first step of the arc after it. Nothing below has
+been built, and the oracle was tried by hand only.*
 
 The destination is C written on Ouroboros, and the first step of
 [its order](../../docs/c-compiler-toolchain.md#the-order) is this one:
 **the back end writes for Ouroboros as well as for the Mac**, checked
-against clang under QEMU. It comes before any construct because every
-construct added before it is one more thing done twice, once for each
-target, and because it is the one step that is cheap and testable on the
-Mac. `%driver arm64` stays what it is, and `cc` stays its oracle.
+against clang under QEMU. The toolchain document put it before any
+construct, because every construct added before it is one more thing done
+twice, once for each target. The C11 arc was put first anyway, knowing
+that cost: every construct it adds is one more this entry must carry to
+the second target. `%driver arm64` stays what it is, and `cc` stays its
+oracle.
 
 **What writing the witness found first: Phoenix's output is refused by the
 ELF assembler, and once that is fixed by hand, it runs and is wrong.** One
