@@ -6473,3 +6473,40 @@ redefined it; an inner struct's members leaking into the outer one changes
 no size, only whether `o.k` is refused; and one break disabled one of two
 checks that overlap. Four witnesses were written and the four breaks were
 all caught.
+
+**Part 4's representation was prototyped before it was chosen**, at
+Hans's asking, both ways, on the declarations `arrays.c` writes: a small
+description of C's declarators answering `sizeof`, `[i]`, `*` and the
+step of `+ 1` for each name, forty answers held against `cc`. A type as
+text and a type as a list, the second with `slice` taught to take one,
+both gave forty of forty. The list read better, 42 lines to 59, and text
+was settled on by ROADMAP 3.4's rule: the prototype had shown the notation
+can say it, and the library grows only for what it cannot. **The product
+the entry had feared was never needed**: each level is made with its size
+in it, and a declarator's brackets became a nested chain, so the size of
+each is an attribute of the one inside it. **What the prototype found that
+the entry had not guessed was order**: a value handed down is worked out
+as its node is entered, before its children, so the brackets of
+`(*p)[3]` reach the declarator inside the parentheses as nodes, read
+later, which works only because a node's children are walked in the order
+its fields are written. That was checked by writing them the other way
+and watching it fail.
+
+**Most of the `types` pass did not change.** It was built on two numbers,
+the pointers in front and the width they reach, and the emit pass steps a
+pointer by the second. A pointer to `int[3]` is those two numbers with the
+width twelve, so only the nodes where an array can appear, a name, a
+member, a `*`, a `&` and a cast, work them out of the text; everything
+else makes its text of them. `multidim.c` agreed with `cc` the first time
+it ran.
+
+**Two of part 4's breaks showed code that did nothing.** Decaying an array
+and then dropping its pointer level is the same text as dropping the array
+level, so `*`'s decay was taken out; `?:`'s was kept, so that its text says
+what its type says, with a note that it cannot be witnessed yet. The third
+not caught was a break that changed a table row nothing reads.
+
+**6.12 is closed**: its four programs agree with `cc`, all 44 keywords are
+reserved, and every refusal it named has its program. The map in ROADMAP 6
+puts initialisers in braces and function pointers next, both of them what
+CPP's own source needs.

@@ -2019,11 +2019,6 @@ refuses "a local in its own initialiser" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/local-in-its-own-initialiser.c"
 refuses "and a typedef hidden in its hider's initialiser" "'T' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-in-its-own-initialiser.c"
-# A typedef of an array is C `cc` compiles, and this subset's in ROADMAP
-# 6.12's fourth part; a typedef in a block and one of a struct nobody
-# defines were refused beside it until the third, and are in the oracle.
-refuses "a typedef of an array" "'v' is a typedef of an array, which C allows and this subset does not have yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-array.c"
 # **A struct returned**, since 2026-09-23. A `return` is a copy into what the
 # function returns, so it takes the assignment's rule: its own kind of struct,
 # and no struct where the function returns an `int`. A struct a call gives back
@@ -2413,7 +2408,7 @@ refuses "a struct with a const member, whole" "'struct s' has a 'const' member, 
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member.c"
 refuses "and one with it a struct further in" "'struct out' has a 'const' member, so it is not assigned whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member-inside.c"
-refuses "'const' as a name" '* or name, and found "="' \
+refuses "'const' as a name" 'or name, and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-as-a-name.c"
 refuses "a function returning const, then not" "'f' is declared twice, returning a different type each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-return-then-plain.c"
@@ -2610,6 +2605,24 @@ refuses "a struct defined twice in a block" "'struct t' is defined twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-twice-in-a-block.c"
 refuses "a typedef given two types in a block" "'T' is a typedef twice, for two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-in-a-block.c"
+# **Types built by declarators**, since ROADMAP 6.12's fourth part: arrays
+# of arrays, a pointer to an array, abstract declarators and an array
+# parameter are in the oracle, and `typedef int v[3];` moved there from
+# here. `cc` refuses the first four below as C does; the last two are C,
+# a pointer to a function, which is read so as to be refused by name until
+# a call through one arrives.
+refuses "a cast to an array" "a cast to an array is not C, C11 6.5.4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/cast-to-an-array.c"
+refuses "an assignment to a row of an array" "an array is not something a value can be put in" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-row.c"
+refuses "an element of a const array of arrays" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-element-of-a-row.c"
+refuses "an array of arrays of no elements" "an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-arrays-of-no-elements.c"
+refuses "a pointer to a function" "'f' is a pointer to a function, which C has and this subset does not have yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer.c"
+refuses "and a parameter that is one" "'f' is a pointer to a function, which C has and this subset does not have yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-parameter.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

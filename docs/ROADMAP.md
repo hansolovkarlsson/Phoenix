@@ -537,9 +537,11 @@ first entry in the arc with a program the subset compiled and got wrong.
 and `static`, opened and closed on 2026-09-29**, chosen by what CPP's own
 source uses most that the subset did not have. [6.11](#611-a-second-target-elf-under-aapcs64),
 a second target, was opened the same day and **parked** the same day, when
-the arc was put before the port. **Open:
-[6.12](#612-declarations-as-c11-67-has-them), declarations as C11 6.7 has
-them**, the first entry of the C11 arc, below.
+the arc was put before the port. **So was the sixth,
+[6.12](COMPLETED.md#612-declarations-as-c11-67-has-them), declarations as
+C11 6.7 has them, opened on 2026-09-29 and closed on 2026-09-30**, the
+first entry of the C11 arc. Nothing in the arc is open now; the next entry
+is chosen from the map below.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -594,22 +596,22 @@ the arc is going after this one.
 
 | | what the subset lacks |
 | --- | --- |
-| declarations, 6.7 | more than one declarator in a declaration (`int a, b;`, at file scope or in a block); the words of a type in any order and all of them (`long int`, `long unsigned`); arrays of arrays (`int a[2][3]`); parenthesised declarators (`int (*p)[3]`), which **function pointers** need; abstract declarators in a cast or `sizeof` beyond base and stars (`sizeof(int *[3])`); an array parameter (`int f(int a[])`); an array whose size its initialiser gives (`char s[] = "hi"`); a struct defined inside another, in a function, or with no tag; a `typedef` in a function or of an array; a global declared and then defined; a definition with an identifier list, 6.9.1, obsolescent but still C11; `_Static_assert` |
+| declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. Left: **function pointers**, read and refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
 | initialisers, 6.7.9 | **initialisers in braces**, for a local, a global and a `static` (CPP's five `static` arrays; a struct global or `static` local initialised is refused), designated initialisers, compound literals, 6.5.2.5 |
 | types, 6.2.5 | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `signed char` as its own type, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name) |
-| qualifiers, storage and specifiers | `extern`, `register`, `auto`, `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local` |
+| qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
 | lexical, 6.4 | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string, the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants |
 | expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
-**The declarations row comes first.** Most of the rest is written in it:
-a function pointer is a parenthesised declarator, an initialiser in braces
-needs an array whose size it gives, and `unsigned short int` is the words
-of a type in any order. So the arc's first entry is C11 6.7's declaration
-syntax in full, opened on 2026-09-29 as
-[6.12](#612-declarations-as-c11-67-has-them), with the others following in
-the order their witnesses ask for.
+**The declarations row came first**, because most of the rest is written
+in it, and it was [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them).
+What it left behind is the two rows CPP's source needs most: **initialisers
+in braces**, which its five `static` arrays want and which an array whose
+size its initialiser gives is part of, and **function pointers**, which its
+diagnostic callback wants and which 6.12 parses and refuses. Either is the
+next entry, chosen as the others were, by what breaks without it.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 and the toolchain document has its order: the **second target**
@@ -712,154 +714,3 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
-
-### 6.12 Declarations, as C11 6.7 has them
-
-The first entry of the C11 arc, and the one the map puts first, because
-most of the rest is written in its shapes: a function pointer is a
-parenthesised declarator, an initialiser in braces wants an array whose
-size it gives, and `unsigned short int` is the words of a type in any
-order. The subset grew one declaration shape at a time, each as its entry
-needed, and **a declaration's type is three fields on its node**: a base,
-a count of stars with their `const` levels, and one array count. C11 6.7.6
-builds a type from a declarator by nesting, so `int a[2][3]` and
-`int (*p)[3]` are types those three fields cannot hold.
-
-**What writing the witnesses found first: 21 of C11's 44 keywords are
-names.** The subset reserves a word when the entry that needs it arrives,
-so the rest are identifiers, and each of these compiles, where `cc`
-refuses every one:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `int main(void) { int float = 1; return float; }`, and the same for `auto`, `double`, `enum`, `extern`, `inline`, `register`, `restrict`, `short`, `union`, `volatile`, `_Alignas`, `_Alignof`, `_Atomic`, `_Bool`, `_Complex`, `_Generic`, `_Imaginary`, `_Noreturn`, `_Static_assert` and `_Thread_local` | refuses each | **compiles each**; the program exits 1 |
-
-It is 6.10's `int static = 1;` again, twenty-one times. C11 6.4.1 reserves
-all 44 whatever an implementation does with them, so **this entry reserves
-every one**, and a keyword whose feature is not in the subset yet is
-refused by name, as `sizeof(void)` was: *`float` is C11's, and not this
-subset's yet*. For `_Complex`, `_Atomic` and the others behind a
-`__STDC_NO_*__` macro, the refusal is permanent in this arc.
-
-**Four programs show what breaks without it**, kept in
-`languages/c/tests/pending/` until the part that makes each agree moves it
-to the oracle. Each was compiled by `cc -std=c11
--pedantic -Wall` with no warning, except the one C11 marks obsolescent:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `declarators.c`: several declarators in one declaration at file scope and in a block, one of them a pointer to the other; `long int`, `int long`, `unsigned long int`, `long unsigned`, `int unsigned` and `signed long int`; `int static` at file scope; a prototype with unnamed parameters; `register` and `auto` locals; a `for` that declares two variables | exits 11, prints `1 10 1 2 3 0 4 5 6 -7` and `8 9 25 5 7 42` | stops at the `,` of `int add(int, int);`, on line 2 |
-| `arrays.c`: `int a[2][3]` as a local and a global, a member `int cell[2][2]` and `char name[2][4]`, `typedef int row[3]` and an array of it, `int (*p)[3] = a` read as `p[1][1]` and `(*(p + 1))[0]`, `int *q[3]`, parameters `int a[]` and `int b[][3]`, and `sizeof` of each level and of `int *[3]` and `int (*)[3]` | exits 16, prints `5 4 3 5 x`, `24 12 8 12 24 8` and `24 24 4 18` | stops at the `[` of the typedef, on line 2 |
-| `tags.c`: `struct later;` declared and used through a pointer before its definition, `typedef struct { int x, y; } point`, `struct outer { struct inner { int k; } in; int z; } global, *gptr` and `struct inner` used alone after it, a struct and a typedef defined in a function, and a struct in an inner block hiding the function's of the same tag | exits 8, prints `10 8`, `1 3 2 11 7 9` and `40 4 8` | stops at the `;` of `struct later;`, on line 2 |
-| `externals.c`: `extern int counter;` then `int counter;` then `int counter = 3;`, a tentative definition twice, `_Static_assert` at file scope and in a block, an `extern` redeclared in a block, and a definition with an identifier list, `int old(a, b) int a; long b; { ... }` | exits 12, prints `12 0`; warns that the last is deprecated, which C11 6.11.7 says too | stops at `extern`, on line 2 |
-
-**Built in four parts, in this order**, each with the suite green:
-
-1. **Keywords and specifiers.** All 44 words reserved. The specifiers of a
-   declaration become what C11 6.7 has: a storage class, qualifiers and
-   type words, in any order, the type words counted against 6.7.2p2's
-   list, so `int long` is `long` and `long char` is refused. A list that
-   names a type the subset lacks, `short` or `long long`, is refused by
-   name. The storage class may stand anywhere among them, which **lifts a
-   choice held on purpose since 6.10**, that `static` is the first word or
-   not there: C11 allows `int static f(void)`, and conforming now outranks
-   it. `register` and `auto` arrive in blocks. `declarators.c`'s
-   specifiers are the witness, beside a refused program for each keyword.
-   *Built on 2026-09-29*, with `oracle/specifiers.c` as the witness, since
-   `declarators.c` needs part 2 to compile at all, and the link test
-   holding `int static` and `long static` against `cc`. The words are kept
-   spelled, one text a declaration, and counted with `split`; `static` and
-   `typedef` are each a specifier rule of their own, because the grammar
-   decides which node is built. Where it came out differently from the
-   plan: a `volatile`, `restrict` or `_Atomic` after a `*` is a syntax
-   error and not a refusal by name, since the stars carry a count of
-   `const`s and nothing else; `_Atomic(int)` alone stops at the declarator;
-   an `enum` or a `union` with its body is a syntax error, and one named by
-   its tag is refused by name; a `register` array is refused though `cc`
-   compiles the declaration, since every use but `sizeof` is undefined; and
-   `&r.m` of a `register` struct is accepted where `cc` refuses it, a
-   refusal missing and never a false one.
-2. **Lists of declarators, and the rest of a declaration's places.**
-   `int a = 1, b, *p;` at file scope, in a block and as members; a `for`
-   that declares, C11 6.8.5p3; parameters without names in a prototype;
-   `extern`, and tentative definitions, 6.9.2, which the subset refuses by
-   name today; `_Static_assert`, 6.7.10, which needs the `constants` pass
-   as its fourth customer; and a definition with an identifier list,
-   6.9.1p6. `declarators.c` whole and `externals.c` are the witnesses.
-   *Built on 2026-09-29*, with `lists.c` beside the two, for lists in a
-   struct, a typedef list, a `static` local list, a block `extern` of an
-   array and a `for`'s names ending with it, and the link test holding
-   `extern` across two files and a `static` name defined by an `extern`
-   with an initialiser. A declaration is a `Decls` node holding the
-   specifiers once, which every pass hands down to its declarators as
-   `base`, since an action cannot give one parsed node to several; a
-   `for` that declares is a block holding the declaration and a `for`
-   without one. Where it came out differently from the plan: an
-   identifier list's declarations are one name each and in the list's
-   order, and anything else is refused by name, which `cc` compiles; a
-   function declarator in a list, `int x, f(void);`, is still a syntax
-   error, and waits for part 4's declarators; and an unnamed parameter
-   is bound under the name "", which nothing can look up, because
-   `%names` binds a parameter's name while the parse runs and has to be
-   given one.
-3. **Tags**, 6.7.2.3: a struct declared without its members and completed
-   later, a pointer to one before it is complete, a definition with
-   declarators after it, one with no tag, one inside another (whose tag C
-   puts in the enclosing scope and not the member list's), and a struct
-   or a typedef in a block, with the block's scope. `tags.c` is the
-   witness.
-   *Built on 2026-09-30*, with `incomplete.c` and `scoped-tags.c` beside
-   it, and the link test holding a function that returns a pointer to a
-   struct completed after its prototype. Each definition has a **key**,
-   its tag at file scope and its tag with a number in a function or with
-   none, and a scoped table maps a tag to its key, so two definitions of
-   one tag are two types. **Writing the witnesses found a miscompile from
-   2026-09-23**: a pointer's pointee width was recorded where the pointer
-   was declared, which is 0 for `struct node *next` inside `struct node`,
-   and `p->next + 1` counted in elements of no size; `cc` answered `2 3 2`
-   and this `1 1 0`. A struct's width is looked up again where a pointer
-   to it is used, and arithmetic, `*` and `sizeof` on one still not
-   complete there are refused. Where it came out differently from the
-   plan: a struct passed whole to a prototype written before the struct
-   is complete is refused, which `cc` compiles; and a global of a struct
-   completed later in the file is refused, which C11 6.9.2 allows.
-4. **Types built by declarators**, 6.7.6: arrays of arrays, parentheses,
-   a pointer to an array, abstract declarators in a cast and `sizeof`, an
-   array parameter adjusted to a pointer, 6.7.6.3p7, and a typedef of an
-   array. **What a type is has to change first, and how is the question
-   this part settles.** A type has to lose its outer level, for the type of
-   `a[i]`, and has to give a size that is a product of counts, for
-   `sizeof`. The notation has no fold over a list and no way to take one's
-   tail: `slice` refuses a list, tried on 2026-09-29. One way stays inside
-   the notation, as `const`'s levels did in 6.10: a type as text with a
-   fixed width a level, so `slice` drops one, and each level's size worked
-   out at the declarator, where the tree gives the recursion a fold would.
-   The other is a change to the tool, a list `slice` and a product, which
-   on this page is a finding and not a shortcut. It is decided with the
-   witnesses in hand. `arrays.c` is the witness.
-
-**What `cc` refuses, and so will this**, each checked with `cc -std=c11
--pedantic-errors` on 2026-09-29: a keyword as a name; two storage
-classes, or `typedef` with one; `int int`, `long long long`, `long char`,
-`unsigned signed`; `auto` or `register` at file scope; the address of a
-`register` local; an array of functions, and a function returning an
-array or a function; `int a, a;` in one block; a tag defined twice in one
-scope; a struct with a member of its own type, or of one never completed;
-`sizeof` of an incomplete struct; an object of a struct never completed;
-an array with no size and no initialiser, and one of size zero; an
-`extern` in a block with an initialiser; `static` after `extern` for one
-name; a `_Static_assert` that fails, with its message; a declaration with
-no type; an identifier-list parameter never declared, or named twice; and
-a `for` that declares a `static`.
-
-*Not in this step:* the types themselves, `short`, `long long`, `_Bool`,
-`enum`, `union` and floating point, whose words this reserves and
-refuses by name; `volatile`, `restrict`, `inline`, `_Noreturn`,
-`_Alignas` and `_Thread_local`, likewise; initialisers in braces and a
-`char` array initialised from a string, 6.7.9, the next entry's; and
-**function pointers**: part 4 parses a declarator that derives a function
-below its top level, and refuses it by name until calling through one
-arrives. An array whose count is not a constant is refused by name, as
-`__STDC_NO_VLA__` says. **The entry closes** when the four programs agree
-with `cc`, none diverging, all 44 keywords are reserved, and every
-refusal above has its program in `refused/`.

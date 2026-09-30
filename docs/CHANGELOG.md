@@ -16,6 +16,27 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-30: C arrays of arrays and pointers to arrays; declarations done
+
+**C types can be built by declarators**, the fourth and last part of
+[ROADMAP 6.12](COMPLETED.md#612-declarations-as-c11-67-has-them), which
+closes it: `int a[2][3]`, `int (*p)[3]`, `int (*q[2])[3]`, `sizeof(int
+*[3])`, casts to a pointer to an array, a parameter declared `int b[][3]`,
+and `typedef int row[3];`. A pointer to an array steps by the array's
+size, and a row of an array of arrays decays as an array does. A pointer
+to a function, `int (*f)(int)`, is refused by name for now.
+
+**Declarations as C11 has them are done**: the words of a type in any
+order, several names in one declaration, `extern`, tentative definitions,
+`_Static_assert`, struct tags in any scope, and now types built by
+declarators.
+
+**Tests:** 572 → 577. Six refusals. Three programs join the C oracle,
+one of them a refusal until now: 288 agree with `cc`, none diverges.
+Refusals: 338.
+
+---
+
 ## 2026-09-30: C struct tags, and a miscompile fixed
 
 **A wrong answer is fixed.** Pointer arithmetic through a struct member
