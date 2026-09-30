@@ -6510,3 +6510,32 @@ not caught was a break that changed a table row nothing reads.
 reserved, and every refusal it named has its program. The map in ROADMAP 6
 puts initialisers in braces and function pointers next, both of them what
 CPP's own source needs.
+
+**6.13's first part: an initialiser walked beside a type, and three things
+about handing a value down.** A value in braces goes to the next scalar the
+type has, a list to the whole next element, and a string fills an array of
+`char`; the walk is a thread, a byte offset, and each list hands its items
+what they need. Getting that right taught three things the notation does
+that no description here had leaned on. **`down` clauses are worked out in
+the order they are written**: one that reads a name the node hands down
+later sees the parent's value, and after it the node's own, so a list that
+handed `atop = false` down before reading `atop` took itself for a nested
+one. **A check reads the node's own handed-down values**, not its parent's,
+so the parent's are copied on entry into names of their own. **A check
+reads a thread after the node's children have moved it**, so a list's
+start is kept in its own `lb` and not read back from `icur`. Each was found
+by a check giving the wrong answer on `init-arrays.c`, and each was found
+by printing what the check saw, once, and not by guessing twice.
+
+**The witness for a large array found a limit from the first day.** A local
+more than 255 bytes into its frame was loaded as `[x29, #-offset]`, and
+arm64 has no such form past 256; `int big[80]; int i = 0;` never
+assembled. No program in the oracle had had a frame that large. It is
+reached through `x16` since, the short form kept below 256 so that nothing
+else changed, and `large-frame.c` fails without the fix.
+
+**Twelve breaks, two not caught at first**, both run by hand: no global
+had a gap in the middle of its data, only locals, which are zeroed anyway,
+so one global and one `static` with short rows were written; and a break
+of the space after the last value had changed a site nothing reads. Both
+were then caught.

@@ -189,7 +189,7 @@ program = { item } -> Program(items: $1) .
 %names typedef-names
     declare Typedef.name
     hide    Param.name Local.name LocalInit.name LocalArray.name
-            Static.name StaticInit.name StaticArray.name
+            Static.name StaticInit.name StaticArray.name LocalAgg.name StaticAgg.name
     scope   block function for-declaration
     guard   typedef-name .
 
@@ -215,7 +215,12 @@ item = function
      (* **A typedef is a name for a declaration's type**, a base and some
       * stars, and like a struct it is at file scope only: C allows one in a
       * block, with the block's scope, and the `locals` pass refuses it by
-      * name. No array, `typedef int v[3];`, because a declaration's count is
+      * name.
+ *
+ * **Then initialisers in braces**, ROADMAP 6.13's first part: arrays and
+ * scalars, at file scope, in a block and `static`, with inner braces or
+ * without, strings filling arrays of `char`, and an array sized by what it
+ * is given. See `InitList`. No array, `typedef int v[3];`, because a declaration's count is
       * a field of the declaration and not of its type; that arrives with
       * ROADMAP 6.12's fourth part, and is refused by name until then. The
       * word may stand anywhere among the specifiers, `int typedef t;`, as
@@ -250,6 +255,14 @@ typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-s
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
 global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
                     -> FnPointer(name: $n)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                  | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
+                  | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
+                  | s:pointer n:name "=" i:initializer
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                     -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
@@ -274,6 +287,14 @@ member-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-su
                     -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
 static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
                     -> FnPointer(name: $n)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                  | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
+                  | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
+                  | s:pointer n:name "=" i:initializer
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                     -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
@@ -288,6 +309,14 @@ static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-su
                     -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
 local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
                    -> FnPointer(name: $n)
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                 | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
+                 | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
+                 | s:pointer n:name "=" i:initializer
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                    -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
@@ -310,6 +339,21 @@ local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suf
  * its stars and its brackets a `Paren`: the name inside is still a factor
  * of the alternative, which `%names` needs. *)
 brackets = "[" n:integer "]" r:[ brackets ] -> Dim(count: int($n), of: $r) .
+
+(* **An initialiser in braces**, C11 6.7.9, since ROADMAP 6.13's first part:
+ * a list of values and of lists, with a comma allowed after the last. A
+ * declaration whose declarator is an array and has an initialiser, or whose
+ * initialiser has braces, is an `*Agg` node, and its `init` is walked in
+ * the `locals` pass beside the declarator's level text to find where each
+ * value goes. An array's first count may be left out when there is one, and
+ * is then what the initialiser reaches. Without braces an array takes only a
+ * string, which fills an array of `char`. *)
+init-top    = initializer
+            | e:assignment -> InitExpr(value: $e) .
+initializer = "{" "}" -> InitList(items: [])
+            | "{" a:init-item r:{ "," b:init-item -> $b } [ "," ] "}" -> InitList(items: flatten([[$a], $r])) .
+init-item   = initializer
+            | e:assignment -> InitExpr(value: $e) .
 
 (* **A pointer to a function**, `int (*f)(int)`, is read so that it can be
  * refused by name, since ROADMAP 6.12's fourth part: calling through one is
@@ -1075,6 +1119,13 @@ arg  = e:assignment -> Arg(value: $e) .
                   : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
               ! not $base.stat and not $base.sext and defined($linkage, $name) and lookup($linkage, $name, false)
                   : "'{}' is declared without 'static' after a declaration with it, C11 6.2.2p7" of $name .
+  GlobalAgg   : hidden  = lookup([[true, lookup($linkage, $name, false)]], defined($linkage, $name) and not $base.stat, $base.stat)
+              : linkage = bind($linkage, $name, lookup($linkage, $name, $base.stat))
+              : ginit  = [$name]
+              ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
+                  : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
+              ! not $base.stat and not $base.sext and defined($linkage, $name) and lookup($linkage, $name, false)
+                  : "'{}' is declared without 'static' after a declaration with it, C11 6.2.2p7" of $name .
   GlobalArray : hidden  = lookup([[true, lookup($linkage, $name, false)]], defined($linkage, $name) and not $base.stat, $base.stat)
               : linkage = bind($linkage, $name, lookup($linkage, $name, $base.stat))
               ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
@@ -1154,6 +1205,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * definition is refused. A block and a function keep and restore both,
    * and the typedefs, as they do the names. *)
   thread tags   = empty
+
+  (* **Where an initialiser has got to**, since ROADMAP 6.13's first part:
+   * `icur` is the offset in the object the next value goes to, and `iend`
+   * the end of the last one written, so that the bytes between are zeros. *)
+  thread icur = 0
+  thread iend = 0
   thread tscope = empty
   thread tagn   = 0
 
@@ -1950,6 +2007,219 @@ arg  = e:assignment -> Arg(value: $e) .
                   : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
+  (* **A declaration with an initialiser in braces, or an array with one**,
+   * since ROADMAP 6.13's first part. The declarator is worked out as an
+   * array's or a scalar's is, and its initialiser is walked below, with the
+   * declarator's parts handed down to it, since the type they make is not
+   * worked out until they have been walked, after this node is entered. An
+   * array of no stated size has as many elements as the walk reached. *)
+  LocalAgg    : down abase    = $base
+              : down astars   = $stars
+              : down adims    = $dims
+              : down aparen   = $paren
+              : down acount   = $count
+              : down aunsized = $unsized
+              : down aname    = $name
+              : down atop     = true
+              : down lscalar  = false
+              : down icur     = 0
+              : down iend     = 0
+              : down lb       = 0
+              : down lc       = 0
+              : down ls       = 1
+              : down le       = "b:4:0:4"
+              : down dbase   = $base
+              : down dstars  = $stars
+              : down inparen = false
+              : down pP      = ""
+              : down pouter  = $dims
+              : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
+                                size($paren), join($paren.t))
+              : isarr  = $count > 0 or $unsized = 1
+              : ecount = lookup([[1, ($icur + lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2))) - 1) div lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2)))]], $unsized, $count)
+              : lv     = lookup([[true, "a:{}:{}:{}|{}" of $ecount * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $ecount, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin]], $isarr, $lvin)
+              : ptrs   = lookup([[true, size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) div 8]], size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) < size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)), size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)) div 8)
+              : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
+              : whole  = int(at(split(at(split($lv, "|"), 1), ":"), 2))
+              : tail   = $whole - $iend
+              : takes  = (($whole + 7) div 8) * 8
+              : offset = $bytes + $takes
+              : env    = bind($env, $name, [$offset, $ptrs, $ecount, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])
+              : scope  = bind($scope, $name, true)
+              : bytes  = $bytes + $takes
+              ! $unsized = 1 and $icur < 1
+                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                  : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and $base.sext
+                  : "'{}' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" of $name
+              ! defined($scope, $name) : "'{}' is declared twice" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
+                  : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
+  StaticAgg   : down abase    = $base
+              : down astars   = $stars
+              : down adims    = $dims
+              : down aparen   = $paren
+              : down acount   = $count
+              : down aunsized = $unsized
+              : down aname    = $name
+              : down atop     = true
+              : down lscalar  = false
+              : down icur     = 0
+              : down iend     = 0
+              : down lb       = 0
+              : down lc       = 0
+              : down ls       = 1
+              : down le       = "b:4:0:4"
+              : down dbase   = $base
+              : down dstars  = $stars
+              : down inparen = false
+              : down pP      = ""
+              : down pouter  = $dims
+              : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
+                                size($paren), join($paren.t))
+              : isarr  = $count > 0 or $unsized = 1
+              : ecount = lookup([[1, ($icur + lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2))) - 1) div lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2)))]], $unsized, $count)
+              : lv     = lookup([[true, "a:{}:{}:{}|{}" of $ecount * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $ecount, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin]], $isarr, $lvin)
+              : ptrs   = lookup([[true, size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) div 8]], size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) < size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)), size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)) div 8)
+              : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
+              : whole  = int(at(split(at(split($lv, "|"), 1), ":"), 2))
+              : tail   = $whole - $iend
+              : galign = int(at(split(at(split($lv, "|"), 1), ":"), 4))
+              : label  = "{}.{}.{}" of $fn, $name, $statics
+              : statics = $statics + 1
+              : env    = bind($env, $name, [0, $ptrs, $ecount, $basew, $base.tagname, true, true, $base.buns, $label, $dquals, false, $lv])
+              : scope  = bind($scope, $name, true)
+              ! $unsized = 1 and $icur < 1
+                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                  : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and $base.sext
+                  : "'{}' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" of $name
+              ! defined($scope, $name) : "'{}' is declared twice" of $name .
+  GlobalAgg   : down env = $globals
+              : down abase    = $base
+              : down astars   = $stars
+              : down adims    = $dims
+              : down aparen   = $paren
+              : down acount   = $count
+              : down aunsized = $unsized
+              : down aname    = $name
+              : down atop     = true
+              : down lscalar  = false
+              : down icur     = 0
+              : down iend     = 0
+              : down lb       = 0
+              : down lc       = 0
+              : down ls       = 1
+              : down le       = "b:4:0:4"
+              : down dbase   = $base
+              : down dstars  = $stars
+              : down inparen = false
+              : down pP      = ""
+              : down pouter  = $dims
+              : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
+                                size($paren), join($paren.t))
+              : isarr  = $count > 0 or $unsized = 1
+              : ecount = lookup([[1, ($icur + lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2))) - 1) div lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2)))]], $unsized, $count)
+              : lv     = lookup([[true, "a:{}:{}:{}|{}" of $ecount * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $ecount, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin]], $isarr, $lvin)
+              : ptrs   = lookup([[true, size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) div 8]], size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) < size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)), size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)) div 8)
+              : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
+              : whole  = int(at(split(at(split($lv, "|"), 1), ":"), 2))
+              : tail   = $whole - $iend
+              : galign = int(at(split(at(split($lv, "|"), 1), ":"), 4))
+              : globals = bind($globals, $name, [0, $ptrs, $ecount, $basew, $base.tagname, true, true, $base.buns, $name, $dquals, false, $lv])
+              ! $unsized = 1 and $icur < 1
+                  : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                  : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
+              ! defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 7)
+                  : "'{}' is defined twice, with an initialiser each" of $name
+              ! defined($funcs, $name)
+                  : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
+              ! defined($typedefs, $name)
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                  : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register") .
+
+  (* **A list in braces initialises one object**, since ROADMAP 6.13's
+   * first part: the declared one at the top, and below it the element the
+   * cursor has reached, whole. `le`, `lc`, `ls` and `lb` are what its items
+   * need: the type of an element, how many there are, 0 for an array of no
+   * stated size, how big one is, and where the list starts. A value with no
+   * braces of its own goes to the next scalar, which is brace elision,
+   * C11 6.7.9p20, and a list ends at its object's end, so the cursor moves
+   * past whatever it left out. *)
+  InitList : down mytop   = $atop
+           : down plscalar = $lscalar
+           : down plb     = $lb
+           : down pls     = $ls
+           : down plc     = $lc
+           : down myobj   = lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, $le)
+           : down lscalar = slice($myobj, 1, 1) <> "a"
+           : down le      = lookup([[true, slice($myobj, size(at(split($myobj, "|"), 1)) + 2, size($myobj))]], slice($myobj, 1, 1) = "a", $myobj)
+           : down lc      = lookup([[true, int(at(split(at(split($myobj, "|"), 1), ":"), 3))]], slice($myobj, 1, 1) = "a", 1)
+           : down ls      = lookup([[0, 1]], int(at(split(at(split(lookup([[true, slice($myobj, size(at(split($myobj, "|"), 1)) + 2, size($myobj))]], slice($myobj, 1, 1) = "a", $myobj), "|"), 1), ":"), 2)), int(at(split(at(split(lookup([[true, slice($myobj, size(at(split($myobj, "|"), 1)) + 2, size($myobj))]], slice($myobj, 1, 1) = "a", $myobj), "|"), 1), ":"), 2)))
+           : down lb      = $icur
+           : down atop    = false
+           : icur = lookup([[true, $icur]], $mytop, $lb + int(at(split(at(split($myobj, "|"), 1), ":"), 2)))
+           ! size($items) = 0
+               : "'{}' is initialised with '{{}}', which is C23's, not C11's" of $aname
+           ! not $mytop and $plscalar
+               : "'{}' has braces around a scalar's braces, and C11 6.7.9p11 allows one pair" of $aname
+           ! not $mytop and ($lb - $plb) mod $pls <> 0
+               : "'{}' has a list in braces that starts part-way through an element" of $aname
+           ! not $mytop and $plc > 0 and $lb >= $plb + $plc * $pls
+               : "'{}' is given more initialisers than it has room for, C11 6.7.9p2" of $aname .
+
+  (* **A value in an initialiser**: where it goes and how wide it is. A
+   * string fills an array of `char`, the whole element the cursor is at, the
+   * whole list when it is the list's only item, or, with no braces, the
+   * declared array, C11 6.7.9p14; anything else goes to the scalar at the
+   * cursor, the bottom of the element's levels. `ioff` is its offset,
+   * `iw` its width, and `igap` the bytes before it that nothing wrote. *)
+  InitExpr : top    = $atop
+           : obj    = lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, "")
+           : isstr  = $value.strlit
+           : fillo  = $top and $isstr and (slice(lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, "b:4:0:4"), 1, 1) = "a" and slice(slice(lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, "b:4:0:4"), size(at(split(lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, "b:4:0:4"), "|"), 1)) + 2, size(lookup([[true, lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)))]], $atop, "b:4:0:4"))), 1, 4) = "b:1:")
+           : fille  = not $top and $isstr and (slice($le, 1, 1) = "a" and slice(slice($le, size(at(split($le, "|"), 1)) + 2, size($le)), 1, 4) = "b:1:") and ($icur - $lb) mod $ls = 0
+           : filll  = not $top and $isstr and slice($le, 1, 4) = "b:1:" and $icur = $lb and not $lscalar
+           : fill   = $fillo or $fille or $filll
+           : iroom  = lookup([[true, lookup([[true, int(at(split(at(split(lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))), "|"), 1), ":"), 2))]], slice(lookup([[true, "a:{}:{}:{}|{}" of $acount * int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 2)), $acount, int(at(split(at(split(lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t)), "|"), 1), ":"), 4)), lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))]], $acount > 0 or $aunsized = 1, lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $astars, ""), $abase.blv)]], size($adims), join($adims.t))]], size($aparen), join($aparen.t))), 1, 1) = "a", 0)]], $fillo, lookup([[true, $ls]], $fille, $lc * $ls))
+           : iw     = lookup([[true, lookup([[0, $value.slen + 1]], $iroom, $iroom)]], $fill, int(at(split(at(split(slice($le, lookup([[true, size(at(split($le, "p:"), 1))]], size(at(split($le, "p:"), 1)) < size(at(split($le, "b:"), 1)), size(at(split($le, "b:"), 1))) + 1, size($le)), "|"), 1), ":"), 2)))
+           : leaf   = lookup([[true, "b:1:0:1"]], $fill, slice($le, lookup([[true, size(at(split($le, "p:"), 1))]], size(at(split($le, "p:"), 1)) < size(at(split($le, "b:"), 1)), size(at(split($le, "b:"), 1))) + 1, size($le)))
+           : ioff   = $icur
+           : igap   = $icur - $iend
+           : icur   = $icur + $iw
+           : iend   = $ioff + $iw
+           : iname  = $aname
+           : bounded = not $top and $lc > 0
+           : bound  = $lb + $lc * $ls .
+
+  (* A string's length in bytes, the `types` pass's `length` worked out here
+   * too, since an array of `char` a string sizes needs it before then. *)
+  otherwise strlit = false
+  otherwise slen   = 0
+  String : strlit = true
+         : sbody  = slice($text, 2, size($text) - 1)
+         : ssingle = join(split($sbody, "\\\\"), "\t")
+         : slen   = size($ssingle) - (size(split($ssingle, "\\")) - 1) .
+
   (* **A global takes no frame**, and is bound in `globals` instead of
    * `env`, with the name its entry needs and nothing the frame counts. Its
    * width and alignment are the emit pass's, to lay it out in
@@ -2128,6 +2398,19 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Decls  : down base = $spec .
   MDecls : down base = $spec .
+
+  (* **What an initialiser's values may be**, since ROADMAP 6.13's first
+   * part, from where the `locals` pass put each: an array without braces
+   * takes only a string, a string must fit, a value past the object's end
+   * is refused, and a struct is not a scalar. *)
+  InitExpr ! $top and not $fillo
+               : "'{}' is an array, initialised with a list in braces or, if it is of 'char', a string, C11 6.7.9p16" of $iname
+           ! $fill and $iroom > 0 and $value.slen > $iroom
+               : "'{}' is initialised with a string longer than it, C11 6.7.9p2" of $iname
+           ! $bounded and $ioff + $iw > $bound
+               : "'{}' is given more initialisers than it has room for, C11 6.7.9p2" of $iname
+           ! not $fill and $value.record
+               : "'{}' is given '{}' where a number or a pointer is wanted" of $iname, $value.kind .
 
   (* Zero is "not a pointer", which is what a statement is, what a program is,
    * and what every node that is not an expression is. Saying it once here is
@@ -3236,6 +3519,21 @@ arg  = e:assignment -> Arg(value: $e) .
              ! not $value.settled and $ptrs > 0 and not $value.anchored and $value.rooted
                  : "'{}' is initialised with an address this cannot write: a string, '&' of a global or a 'static' local, and such an array's name can be, and one with an offset is not yet"
                      of $name .
+
+  (* **An initialiser in braces for a global or a `static`**, since ROADMAP
+   * 6.13's first part: each value is written into the object file, so each
+   * is worked out before the program runs or is an address, as a global's
+   * one value is. A string filling an array of `char` is its bytes. *)
+  InitExpr ! $afile and not $fill and not $value.settled
+               and (lookup([[true, size(at(split($leaf, "a:"), 1)) div 8]], size(at(split($leaf, "a:"), 1)) < size(at(split($leaf, "b:"), 1)), size(at(split($leaf, "b:"), 1)) div 8) = 0 or not ($value.anchored or $value.rooted))
+                 : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and {}"
+                     of $iname, $value.because
+           ! $afile and not $fill and not $value.settled and lookup([[true, size(at(split($leaf, "a:"), 1)) div 8]], size(at(split($leaf, "a:"), 1)) < size(at(split($leaf, "b:"), 1)), size(at(split($leaf, "b:"), 1)) div 8) > 0 and not $value.anchored and $value.rooted
+                 : "'{}' is initialised with an address this cannot write: a string, '&' of a global or a 'static' local, and such an array's name can be, and one with an offset is not yet"
+                     of $iname .
+  GlobalAgg : down afile = true .
+  StaticAgg : down afile = true .
+  LocalAgg  : down afile = false .
 
   (* **A `static` local's initialiser is the third customer**, since
    * 2026-09-29, ROADMAP 6.10: it is written into the object file as a

@@ -205,7 +205,7 @@
             : addr = lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $label, $label]],
                             $global, "\tsub x0, x29, #{}\n" of $offset)
             : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
-                            "\t{}, [x29, #-{}]\n" of $ldr, $offset)
+                            "{}\t{}, {}\n" of lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset), $ldr, lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]"))
             : out  = lookup([[true, $addr]], $aggregate, $load) .
 
   (* A dereference is a load from what the value came out as, and its address
@@ -358,17 +358,46 @@
                                        of $value.out, $offset,
                                           ($copy of $basew, $n, "x0", "x1", $n)]],
                              $copies,
-                             "{}{}\t{}, [x29, #-{}]\n"
-                               of $value.out,
+                             "{}{}{}\t{}, {}\n"
+                               of $value.out, lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset),
                                   lookup([[true, "\tsxtw x0, w0\n"]],
                                          $ptrs = 0 and $base.tagname = "" and $basew = 8
                                            and $value.type = 0 and not $value.wide
                                            and not $value.uns, ""),
                                   lookup([[1, "strb w0"], [4, "str w0"]],
                                          lookup([[0, $basew]], $ptrs, 8), "str x0"),
-                                  $offset) .
+                                  lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]")) .
   Local      : out = "" .
   LocalArray : out = "" .
+
+  (* **An initialiser in braces in a block**, since ROADMAP 6.13's first
+   * part: the object is zeroed, a byte at a time, and each value is stored
+   * where the `locals` pass put it, so what the list leaves out is zero, as
+   * C11 6.7.9p21 says. A string filling an array of `char` is copied from
+   * its literal, up to its NUL or the array's end. *)
+  otherwise asm = ""
+  LocalAgg : down aoff = $offset
+           : n   = $label : label = $label + 1
+           : out = "\tsub x1, x29, #{}\n\tldr x9, ={}\nL{}.zero:\n\tsub x9, x9, #1\n\tstrb wzr, [x1, x9]\n\tcbnz x9, L{}.zero\n{}"
+                     of $offset, $whole, $n, $n, $init.out .
+  InitList : out = join($items.out)
+           : gd  = join($items.gd) .
+  InitExpr : n     = $label : label = $label + lookup([[true, 1]], $fill, 0)
+           : bytes = lookup([[true, $value.slen + 1]], $value.slen + 1 < $iw, $iw)
+           : dest  = "\tsub x1, x29, #{}\n" of $aoff - $ioff
+           : ext   = lookup([[true, "\tsxtw x0, w0\n"]],
+                            $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns, "")
+           : out   = lookup([[true, "{}{}{}" of $value.out, $dest, ($copy of $bytes, $n, "x0", "x1", $n)]], $fill,
+                            "{}{}{}\t{}, [x1]\n" of $value.out, $ext, $dest,
+                                 lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0"))
+           : gap   = lookup([[0, ""]], $igap, "\t.space {}\n" of $igap)
+           : gd    = lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
+                                     lookup([[0, ""]], $iw - $value.slen, "\t.space {}\n" of $iw - $value.slen)]],
+                            $fill,
+                            "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [4, ".long"]], $iw, ".quad"),
+                               lookup([[true, $value.sym]], $value.anchored and not $value.settled,
+                                      lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                             $iw, $value.folded))) .
   Discard   : out = $value.out .
 
   (* ---- calls ----
@@ -534,11 +563,13 @@
    * the slot. The copy uses `x9` to `x11`, so the parameters after it are
    * still in their registers when their turn comes. *)
   Param : n      = $label : label = $label + lookup([[true, 1]], $whole and $basew > 16, 0)
-        : scalar = "\t{}{}, [x29, #-{}]\n"
-                     of lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
-                        $preg, $offset
-        : pair   = "\tstp x{}, x{}, [x29, #-{}]\n" of $preg, $preg + 1, $offset
-        : one    = "\tstr x{}, [x29, #-{}]\n" of $preg, $offset
+        : pre    = lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset)
+        : at     = lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]")
+        : scalar = "{}\t{}{}, {}\n"
+                     of $pre, lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
+                        $preg, $at
+        : pair   = "{}\tstp x{}, x{}, {}\n" of $pre, $preg, $preg + 1, $at
+        : one    = "{}\tstr x{}, {}\n" of $pre, $preg, $at
         : copied = "\tsub x11, x29, #{}\n{}"
                      of $offset, ($copy of $basew, $n, ("x{}" of $preg), "x11", $n)
         : out    = lookup([[true, lookup([[2, $pair]], $regs,
@@ -879,8 +910,8 @@
   Return : n     = $label : label = $label + lookup([[0, 0]], $retsize, 1)
          : small = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}\tldp x0, x1, [sp]\n"
                      of $value.out, ($copy of $retsize, $n, "x0", "x1", $n)
-         : large = "{}\tldr x1, [x29, #-{}]\n{}"
-                     of $value.out, $x8slot, ($copy of $retsize, $n, "x0", "x1", $n)
+         : large = "{}{}\tldr x1, {}\n{}"
+                     of $value.out, lookup([[true, ""]], $x8slot <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $x8slot), lookup([[true, "[x29, #-{}]" of $x8slot]], $x8slot <= 255, "[x16]"), ($copy of $retsize, $n, "x0", "x1", $n)
          : scalar = "{}{}" of $value.out,
                       lookup([[true, "\tsxtw x0, w0\n"]],
                              $retlong and $value.type = 0 and not $value.wide and not $value.uns,
@@ -923,7 +954,7 @@
            : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
            : out = "{}\t.p2align 2\n_{}:\n\tstp x29, x30, [sp, #-16]!\n\tmov x29, sp\n\tsub sp, sp, #{}\n{}{}{}\tmov x0, #0\nL{}.ret:\n\tmov sp, x29\n\tldp x29, x30, [sp], #16\n\tret\n"
                of $globl, $name, (($frame + $temps + 15) div 16) * 16,
-                  lookup([[true, "\tstr x8, [x29, #-{}]\n" of $x8slot]], $retsize > 16, ""),
+                  lookup([[true, "{}\tstr x8, {}\n" of lookup([[true, ""]], $x8slot <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $x8slot), lookup([[true, "[x29, #-{}]" of $x8slot]], $x8slot <= 255, "[x16]")]], $retsize > 16, ""),
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .
@@ -984,6 +1015,23 @@
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
                                     lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded)) .
+  (* **An initialiser in braces at file scope or in a `static`** is data,
+   * since ROADMAP 6.13's first part: each value where the `locals` pass put
+   * it, the bytes before it that nothing wrote as `.space`, and the rest of
+   * the object after the last. It is always a definition. *)
+  GlobalAgg   : out = ""
+              : down aoff = 0
+              : emits = true
+              : written = bind($written, $name, true)
+              : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
+              : gdata = "{}{}\t.p2align {}\n_{}:\n{}{}"
+                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $init.gd,
+                             lookup([[0, ""]], $tail, "\t.space {}\n" of $tail) .
+  StaticAgg   : out = ""
+              : down aoff = 0
+              : gdata = "{}\t.p2align {}\n_{}:\n{}{}"
+                          of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label, $init.gd,
+                             lookup([[0, ""]], $tail, "\t.space {}\n" of $tail) .
   (* **A `static` local is written as a global is**, under its label, and
    * never `.globl`, since nothing outside its function can name it. Where
    * it is declared nothing runs: it was initialised before the program

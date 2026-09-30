@@ -765,6 +765,18 @@ warning:
    `static` the stores are data, each a constant the `constants` pass
    works out, and what is not given is `.space`. `init-arrays.c` is the
    witness.
+   *Built on 2026-09-30*, with `init-arrays-more.c` beside it for what
+   reading the design for how it could be wrong found no witness of, and
+   `large-frame.c`. The walk is a threaded cursor, `icur`, an offset in the
+   object, and each list hands its items the type of an element, how many
+   there are and where it starts; the object's type is worked out from the
+   declarator's nodes handed down, since it is not ready when the node is
+   entered. A value's place is final when it is walked, and in address
+   order until part 3, so the data at file scope is written as it comes.
+   **Writing the witnesses found an older limit**: a local more than 255
+   bytes into its frame was loaded and stored as `[x29, #-offset]`, which
+   arm64 does not have, so `int big[80]; int i = 0;` did not assemble. Such
+   a slot is reached through `x16` since, and `large-frame.c` holds it.
 2. **Structs.** The same walk through a struct's members, with the layout
    the `locals` pass already builds: by position, `{0}`, members that are
    arrays or structs, with their braces and without, and arrays of

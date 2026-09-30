@@ -16,6 +16,28 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-30: C initialisers in braces for arrays, and large frames
+
+**Arrays and scalars can be initialised in braces**, the first part of
+[ROADMAP 6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): `int
+primes[5] = {2, 3, 5, 7, 11};` at file scope, in a function and `static`,
+with inner braces or without, `int x = {5};`, and an array of no stated
+size taking its size from its values, `int sized[] = {10, 20, 30};`. A
+string fills an array of `char`, `char word[] = "hello";`, and so does a
+list of them, `months[][4] = {"Jan", "Feb", "Mar"}`. What is not given is
+zero. Too many values, a string too long, `{}` and a value at file scope
+that is not a constant are refused.
+
+**A compile failure is fixed.** A function whose local variables took more
+than 255 bytes of its frame produced assembly the assembler refused, for
+any variable past that point: `int big[80]; int i = 0;` did not assemble.
+Such variables are now reached through a register.
+
+**Tests:** 577 → 588. Eleven refusals. Three programs join the C oracle:
+291 agree with `cc`, none diverges. Refusals: 349.
+
+---
+
 ## 2026-09-30: C arrays of arrays and pointers to arrays; declarations done
 
 **C types can be built by declarators**, the fourth and last part of

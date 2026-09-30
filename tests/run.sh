@@ -2623,6 +2623,33 @@ refuses "a pointer to a function" "'f' is a pointer to a function, which C has a
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer.c"
 refuses "and a parameter that is one" "'f' is a pointer to a function, which C has and this subset does not have yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-parameter.c"
+# **Initialisers in braces**, since ROADMAP 6.13's first part: arrays and
+# scalars, at file scope, in a block and `static`. `cc` refuses each of
+# these, some only with `-pedantic-errors`, since it warns about what C11
+# 6.7.9p2 makes a constraint: more values than the object has room for, a
+# string longer than its array, and braces around a scalar's braces.
+refuses "more values than an array has room for" "'a' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-excess-array.c"
+refuses "and in a block, in an inner list" "'a' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-excess-in-a-block.c"
+refuses "two values for a scalar" "'x' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-excess-scalar.c"
+refuses "'{}', which is C23's" "'a' is initialised with '{}', which is C23's, not C11's" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-empty-braces.c"
+refuses "a global's element not worked out" "'a' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-global-not-constant.c"
+refuses "and a static's" "'a' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-static-not-constant.c"
+refuses "a string longer than its array" "'s' is initialised with a string longer than it, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-string-too-long.c"
+refuses "an array from another array" "'a' is an array, initialised with a list in braces or, if it is of 'char', a string, C11 6.7.9p16" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-array-from-an-array.c"
+refuses "braces around a scalar's braces" "'x' has braces around a scalar's braces, and C11 6.7.9p11 allows one pair" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-braces-around-braces.c"
+refuses "a list starting part-way through an element" "'a' has a list in braces that starts part-way through an element" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-braces-mid-element.c"
+refuses "a struct where a scalar is wanted" "'x' is given 'struct p' where a number or a pointer is wanted" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-in-a-scalar.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.
