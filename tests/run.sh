@@ -1920,7 +1920,7 @@ refuses "an array of no elements" "C11 6.7.6.2 forbids" \
 # inside a function, and one with no tag. A tag is written after `struct`
 # every time here, and a definition is an item at file scope, so each is a
 # syntax error at its `{`.
-refuses "a struct defined inside a function" 'expected const, * or name, and found "{"' \
+refuses "a struct defined inside a function" '* or name, and found "{"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-in-a-function.c"
 refuses "and a struct with no tag" 'expected name, and found "{"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-with-no-tag.c"
@@ -2032,9 +2032,9 @@ refuses "and a typedef hidden in its hider's initialiser" "'T' is not declared" 
 # than a wrong answer: a typedef in a block, as a struct is at file scope only;
 # a typedef of an array, whose count belongs to a declaration here and not to
 # a type; and a pointer to a struct nobody defines, as for a declaration.
-refuses "a typedef in a function" 'and found "typedef"' \
+refuses "a typedef in a function" 'and found "x"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-in-a-function.c"
-refuses "a typedef of an array" 'expected ;, and found "["' \
+refuses "a typedef of an array" "'v' is a typedef of an array, which C allows and this subset does not have yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-array.c"
 refuses "a typedef of a struct nobody defines" "'struct nope' is not defined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-undefined-struct.c"
@@ -2103,20 +2103,17 @@ refuses "a suffix twice" 'and found "u"' \
 refuses "long long's suffix" 'and found "l"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-long-suffix.c"
 # **`unsigned`**, since 2026-09-26, ROADMAP 6.9. `cc` refuses the first
-# three. The rest it compiles: the words of a type in any order, which here
-# come in one; and a label too wide for the `unsigned int` a `switch`
-# compares, which `cc` converts and this declines, as it declines one too
-# wide for an `int`. A negative label in such a `switch`, and a label with a
+# three. The rest it compiles: a label too wide for the `unsigned int` a
+# `switch` compares, which `cc` converts and this declines, as it declines
+# one too wide for an `int`. A negative label in such a `switch`, and a label with a
 # cast to an unsigned type, were refused until 2026-09-27, when the third
 # part taught the `constants` pass to wrap; both programs are in the oracle.
 refuses "unsigned beside struct" 'and found "struct"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-struct.c"
-refuses "unsigned beside void" 'and found "void"' \
+refuses "unsigned beside void" "'unsigned void' is not one of the types C11 6.7.2p2 lists" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-void.c"
-refuses "signed beside unsigned" 'and found "unsigned"' \
+refuses "signed beside unsigned" "'signed unsigned' is not one of the types C11 6.7.2p2 lists" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/signed-unsigned.c"
-refuses "the words of a type in another order" 'and found "unsigned"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/long-unsigned.c"
 refuses "a case too wide for an unsigned int switch" "is wider than the unsigned int this switch compares" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/case-wider-than-an-unsigned-switch.c"
 # Two labels alike once converted to the `unsigned int` compared, which `cc`
@@ -2310,22 +2307,23 @@ refuses "a global pointer initialised from another" "'q' has to be initialised w
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
 # **`static`**, since 2026-09-29, ROADMAP 6.10's first part. Reserving the
 # word is what refuses the first, which compiled until then; `cc` refuses
-# the next five as well. The last two it compiles, and they are syntax
-# errors here: the word is first or it is not there.
-refuses "'static' as a name" 'expected const, * or name, and found "static"' \
+# the rest as well. Until ROADMAP 6.12's first part the word was first or
+# not there, and `int static f(void)` was a syntax error; it is in the
+# oracle now, and a parameter, a typedef and `static` twice are refused by
+# what C11 says of storage classes. A member's specifiers have none, C11
+# 6.7.2.1, so there it is still the grammar that refuses it.
+refuses "'static' as a name" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-as-a-name.c"
 refuses "a 'static' definition after a declaration without it" "'f' is declared 'static' after a declaration without it" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-after-a-declaration-without-it.c"
-refuses "a 'static' parameter" 'and found "static"' \
+refuses "a 'static' parameter" "'x' is a parameter declared 'static', and the one storage class a parameter may have is 'register', C11 6.7.6.3p2" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-parameter.c"
 refuses "a 'static' member" 'and found "static"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-member.c"
-refuses "a 'static' typedef" 'and found "static"' \
+refuses "a 'static' typedef" "this declaration has 2 storage classes, and C11 6.7.1p2 allows one" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-typedef.c"
-refuses "'static' twice" 'and found "static"' \
+refuses "'static' twice" "this declaration has 2 storage classes, and C11 6.7.1p2 allows one" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-twice.c"
-refuses "'static' among the words of the type" 'expected const, * or name, and found "static"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/static-among-the-words-of-the-type.c"
 # **A `static` local**, since 2026-09-29, ROADMAP 6.10's second part. Its
 # initialiser is a global's, so the `constants` pass refuses it for the same
 # reasons; `cc` refuses the first three, and the ninth to the fourteenth,
@@ -2425,18 +2423,142 @@ refuses "a member through a pointer to a const struct" "'=' changes something de
         --driver check "$root/languages/c/c-arm64.phx" "$r/member-through-a-pointer-to-a-const-struct.c"
 refuses "and an element of an array member" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/element-of-a-member-of-a-const-struct.c"
+refuses "'const' among the words of a type" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-among-the-words.c"
 refuses "'const' twice is still const" "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-twice-still-const.c"
 refuses "a struct with a const member, whole" "'struct s' has a 'const' member, so it is not assigned whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member.c"
 refuses "and one with it a struct further in" "'struct out' has a 'const' member, so it is not assigned whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member-inside.c"
-refuses "'const' as a name" 'expected const, * or name, and found "="' \
+refuses "'const' as a name" '* or name, and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-as-a-name.c"
 refuses "a function returning const, then not" "'f' is declared twice, returning a different type each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-return-then-plain.c"
 refuses "a typedef, const and then not" "'t' is a typedef twice, for two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-const-and-not.c"
+# **C11's 44 keywords are all reserved**, since ROADMAP 6.12's first part.
+# Until then 21 of them were names, and `int float = 1;` compiled, where
+# `cc` refuses each; so the first twenty-one here are refusals that used to
+# be answers. A keyword whose feature is not in the subset is refused by
+# name wherever it is used, and the three behind a `__STDC_NO_*__` macro
+# say so; `auto` and `register` are in, and in the oracle.
+refuses "'auto' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-auto-as-a-name.c"
+refuses "'double' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-double-as-a-name.c"
+refuses "'enum' as a name" 'and found "enum"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-enum-as-a-name.c"
+refuses "'extern' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-extern-as-a-name.c"
+refuses "'float' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-float-as-a-name.c"
+refuses "'inline' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-inline-as-a-name.c"
+refuses "'register' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-register-as-a-name.c"
+refuses "'restrict' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-restrict-as-a-name.c"
+refuses "'short' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-short-as-a-name.c"
+refuses "'union' as a name" 'and found "union"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-union-as-a-name.c"
+refuses "'volatile' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-volatile-as-a-name.c"
+refuses "'_Alignas' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignas-as-a-name.c"
+refuses "'_Alignof' as a name" 'and found "_Alignof"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignof-as-a-name.c"
+refuses "'_Atomic' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Atomic-as-a-name.c"
+refuses "'_Bool' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Bool-as-a-name.c"
+refuses "'_Complex' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Complex-as-a-name.c"
+refuses "'_Generic' as a name" 'and found "_Generic"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Generic-as-a-name.c"
+refuses "'_Imaginary' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Imaginary-as-a-name.c"
+refuses "'_Noreturn' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Noreturn-as-a-name.c"
+refuses "'_Static_assert' as a name" 'and found "_Static_assert"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Static_assert-as-a-name.c"
+refuses "'_Thread_local' as a name" 'and found "="' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Thread_local-as-a-name.c"
+refuses "'double' in use" "'double' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-double-in-use.c"
+refuses "'float' in use" "'float' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-float-in-use.c"
+refuses "'short' in use" "'short' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-short-in-use.c"
+refuses "'_Bool' in use" "'_Bool' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Bool-in-use.c"
+refuses "'_Thread_local' in use" "'_Thread_local' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Thread_local-in-use.c"
+refuses "'volatile' in use" "'volatile' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-volatile-in-use.c"
+refuses "'restrict' in use" "'restrict' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-restrict-in-use.c"
+refuses "'inline' in use" "'inline' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-inline-in-use.c"
+refuses "'_Noreturn' in use" "'_Noreturn' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Noreturn-in-use.c"
+refuses "'_Alignas' in use" "'_Alignas' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignas-in-use.c"
+refuses "'extern' in use" "'extern' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-extern-in-use.c"
+refuses "'enum' in use" "'enum' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-enum-in-use.c"
+refuses "'union' in use" "'union' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-union-in-use.c"
+refuses "'_Alignof' in use" "'_Alignof' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignof-in-use.c"
+refuses "'_Generic' in use" "'_Generic' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Generic-in-use.c"
+refuses "'_Static_assert' in use" "'_Static_assert' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Static_assert-in-use.c"
+refuses "'_Complex' in use" "'_Complex' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Complex-in-use.c"
+refuses "'_Imaginary' in use" "'_Imaginary' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Imaginary-in-use.c"
+refuses "'_Atomic' in use" "'_Atomic' is optional in C11, and left out here, as __STDC_NO_ATOMICS__ says" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Atomic-in-use.c"
+# **The words of a type are counted, not ordered**, C11 6.7.2p2: `int long`
+# is `long`, and a list that is none of the types it names is refused with
+# the words as written. `long long` is a type and not this subset's yet. `cc`
+# refuses all but that one.
+refuses "long long" "'long long' is C11's, and not this subset's yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-long.c"
+refuses "long long long" "'long long long' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-long-long.c"
+refuses "long char" "'long char' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/long-char.c"
+refuses "int int" "'int int' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/int-int.c"
+# **Storage classes**, C11 6.7.1: one to a declaration, where the words of
+# the type are, and `typedef` counted among them. `auto` and `register` are
+# a block's, and a parameter's only one is `register`. `cc` refuses all but
+# the last three. A `register` array it compiles, and every use of one but
+# `sizeof` is undefined; a typedef of a function type and one in a block are
+# C, and this subset's in a later part or entry.
+refuses "two storage classes" "this declaration has 2 storage classes, and C11 6.7.1p2 allows one" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/two-storage-classes.c"
+refuses "'auto' at file scope" "'x' is declared 'auto' at file scope, which C11 6.9p2 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/auto-at-file-scope.c"
+refuses "'register' at file scope" "'x' is declared 'register' at file scope, which C11 6.9p2 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/register-at-file-scope.c"
+refuses "an 'auto' parameter" "'x' is a parameter declared 'auto', and the one storage class a parameter may have is 'register', C11 6.7.6.3p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/auto-parameter.c"
+refuses "the address of a 'register' local" "'r' is declared 'register', and C11 6.5.3.2p1 forbids taking its address" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-register.c"
+refuses "a typedef with an initialiser" "'T' is a typedef, and only an object has an initialiser, C11 6.7.9" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-with-an-initialiser.c"
+refuses "a 'register' array" "'a' is a 'register' array, and C11 6.3.2.1p3 makes using one undefined" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/register-array.c"
+refuses "a typedef of a function type" "'F' is a typedef of a function type, which C allows and this subset does not have yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-a-function.c"
+refuses "a typedef alone in a block" "'T' is a typedef in a block, which C allows and this subset does not have yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-alone-in-a-block.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

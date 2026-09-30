@@ -6364,3 +6364,33 @@ grew one declaration shape at a time, each as its entry needed, and
 nothing counted the shapes C has against the ones it takes. Most of the
 rest of the map is written in those shapes, so C11 6.7 in full is the
 recommended first entry of the arc.
+
+**6.12's first part: the words of a type counted, and every keyword
+reserved.** Two things the notation could not do shaped it. An action
+cannot read a child node's field, so a declaration cannot copy `static` up
+from its specifiers, and a rewrite can only test a field for equality, so
+it cannot ask whether a text *contains* `static`. And `%names` has to see a
+`Typedef` while the parse is running. So the grammar decides the node, with
+`sspecifiers` and `tdspecifiers`, each a specifier rule that has one of the
+word in it somewhere, six alternatives apiece; everything else is decided
+from the words.
+
+**The words are counted by their spellings.** `split` on `" long "` gives
+the occurrences plus one, which was tried on an empty text and on a single
+word before it was trusted, and a text with a space on each side of every
+word makes `long long` two and not one. Twelve counts in 6.7.2p2's order
+make a key into a table of twenty-one lists, and a list not in it is no
+type. The counting is done in the `functions` pass and checked in `locals`,
+because a check cannot read what its own rule computes, which the file's
+own comment on `Program` had already said.
+
+**The design was read for how it could be wrong before any break ran**, as
+2026-09-29's lesson asked, and found five shapes the witness lacked: a
+`static` local through a typedef's name, with `static` before and after it,
+a `static` local of a struct with the word after its tag, `typedef` after a
+typedef's name and after a struct, and `const` among the words of a type.
+They were written before the breaks, and so was a guard: a local whose
+words hold `static` but which the grammar read as automatic would be a
+wrong answer with nothing to refuse it, so the `locals` pass calls that a
+fault in `c.phx`. Ten breaks were then all caught, each by the witness
+written for it, and none needed running by hand.

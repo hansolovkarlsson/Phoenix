@@ -64,6 +64,13 @@
  * until the same day, when hex, octal and the suffixes arrived with C11
  * 6.4.4.1's table of types.
  *
+ * **Then the specifiers as C11 6.7 has them**, since ROADMAP 6.12's first
+ * part: the words of a type in any order and counted, `int long unsigned`,
+ * a storage class anywhere among them, `auto` and `register`, and every one
+ * of C11's 44 keywords reserved, those whose feature is not here refused by
+ * name. A list of words that is no type, two storage classes, and a storage
+ * class where C forbids it are refused.
+ *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
  * reads `#` as a line comment, which C does not, and every rule it carries
@@ -177,6 +184,9 @@ program = { item } -> Program(items: $1) .
  * outermost declarations: `int f(int a) { int a; }` is declared twice, and a
  * `Block` would open a scope the parameters are not in. *)
 item = function
+     (* **`_Static_assert`**, C11 6.7.10, is read and refused by name until
+      * ROADMAP 6.12's second part, as `_Generic` and `_Alignof` are below. *)
+     | "_Static_assert" "(" conditional "," string ")" ";" -> Unsupported(word: "_Static_assert")
      (* A struct is defined at file scope and only there, and always with a
       * tag. C allows both a definition inside a block, with the block's scope,
       * and a struct with no tag at all; neither is here yet, and a program
@@ -187,23 +197,25 @@ item = function
          -> StructDef(name: $n, members: $f)
      (* **A typedef is a name for a declaration's type**, a base and some
       * stars, and like a struct it is at file scope only: C allows one in a
-      * block, with the block's scope, and a program that writes one gets a
-      * syntax error. No array, `typedef int v[3];`, because a declaration's
-      * count is a field of the declaration and not of its type; that arrives
-      * when a program wants it. *)
-     | "typedef" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+      * block, with the block's scope, and the `locals` pass refuses it by
+      * name. No array, `typedef int v[3];`, because a declaration's count is
+      * a field of the declaration and not of its type; that arrives with
+      * ROADMAP 6.12's fourth part, and is refused by name until then. The
+      * word may stand anywhere among the specifiers, `int typedef t;`, as
+      * C11 6.7.1 lets any storage class: see `tdspecifiers`. *)
+     | b:tdspecifiers s:pointer n:name ";"
          -> Typedef(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")))
      (* **A global is a declaration at file scope**, since 2026-09-26,
       * ROADMAP 6.8, and is written as a local is: a base, stars and a name,
       * with a count in brackets or an initialiser. It is tried after a
       * function, which fails at the `;`, `[` or `=` where its `(` was
       * wanted. Three nodes, for the reason a local is three. *)
-     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
-         -> GlobalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), internal: size($k))
-     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
-         -> GlobalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e, internal: size($k))
-     | k:[ "static" ] b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
-         -> Global(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, internal: size($k)) .
+     | b:specifiers s:pointer n:name "[" c:integer "]" ";"
+         -> GlobalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+     | b:specifiers s:pointer n:name "=" e:assignment ";"
+         -> GlobalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
+     | b:specifiers s:pointer n:name ";"
+         -> Global(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -225,32 +237,30 @@ item = function
  * `item` tries this alternative first, and a struct's definition fails it at
  * the `{` after the tag, where a function's name was wanted, and moves on.
  *
- * **`static` in front says no other file can name it**, C11 6.2.2p3, since
- * 2026-09-29, ROADMAP 6.10: a list of one or of none, so that `size` is
- * the flag, as it is for `...`. A global takes it the same way, below.
- * It is the first word or it is not there: C allows it among the words of
- * the type, `int static f(void)`, and that is a syntax error here. It is
- * the word being named here that reserves it, and until then it was a name:
- * `int static = 1;` compiled, which `cc` refuses. *)
-function = k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" "void" ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
-                          internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" "void" ")" "{" s:{ statement } "}"
+ * **`static` says no other file can name it**, C11 6.2.2p3, since
+ * 2026-09-29, ROADMAP 6.10, and the `functions` pass reads it from the
+ * specifiers' words. A global takes it the same way, below. Until ROADMAP
+ * 6.12's first part it was the first word or not there, and
+ * `int static f(void)` was a syntax error; it may stand anywhere among the
+ * specifiers now, as C11 6.7 has it. *)
+function = r:specifiers t:pointer n:name "(" "void" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0)
+         | r:specifiers t:pointer n:name "(" "void" ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
-                         body: $s, internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" p:params v:dots ")" ";"
+                         body: $s)
+         | r:specifiers t:pointer n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                          variadic: size($v), internal: size($k))
-         | k:[ "static" ] r:base t:{ "*" cq:{ "const" } -> size($cq) } n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
+                          variadic: size($v))
+         | r:specifiers t:pointer n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                         variadic: size($v), body: $s, internal: size($k)) .
+                         variadic: size($v), body: $s) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
  * initialiser, because C has none for a member. *)
-member = b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+member = b:sqlist s:pointer n:name "[" c:integer "]" ";"
            -> MemberArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-       | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+       | b:sqlist s:pointer n:name ";"
            -> MemberScalar(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0) .
 
 (* A parameter is a node and not a name, because it takes a slot the way a
@@ -271,47 +281,122 @@ params = [ param { "," q:param -> $q } ] -> $1 .
  * repetition's iteration that fails gives back what it took, which is what
  * lets `params` stop at the `,` in front of the `...`. *)
 dots   = [ "," e:"..." -> $e ] -> $1 .
-param  = b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
+param  = b:specifiers s:pointer n:name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
 
 (* What is at the bottom of the stars. **A node since `struct`**, and a keyword
  * before it: `int` and `char` were two words the `locals` pass turned into a
  * width with a table written out at each of five declarations. A struct's
  * width is not in any table written here, because the program defines it, so
  * the question moved to the one node that can answer it for every
- * declaration at once. The name is the keyword or the tag, and cannot be
- * both, because `int` and `char` are reserved and no tag can be spelled so.
+ * declaration at once.
  *
- * **A typedef's name is the fourth**, and builds a node of its own rather
- * than a `Base`, because what it names is a base *and some stars*, and a
- * `Base` has no stars to give. The `locals` pass has each answer how many,
- * and a declaration adds its own.
+ * **A typedef's name builds a node of its own** rather than a `Base`,
+ * because what it names is a base *and some stars*, and a `Base` has no
+ * stars to give. The `locals` pass has each answer how many, and a
+ * declaration adds its own.
  *
- * A function's return type is one too, since a struct can be returned whole:
- * see `function` above. *)
-base   = k:{ "const" } "int" q:{ "const" }             -> Base(name: "int", konst: size($k) + size($q))
-       (* **`unsigned` and `signed`**, since 2026-09-26, ROADMAP 6.9, before
-        * `char`, `int` or `long`, or alone for an `int`, and in that order
-        * only: C11 6.7.2 allows the words of a type in any order, and
-        * `long unsigned` is a syntax error here. `signed` names the type
-        * without it, and so does `signed char`, since a plain `char` is
-        * signed on this machine. The two-word bases come first, because
-        * `unsigned` alone would take the first word of each and stop. *)
-       | k:{ "const" } "unsigned" "char" q:{ "const" } -> Base(name: "unsigned char", konst: size($k) + size($q))
-       | k:{ "const" } "unsigned" "long" q:{ "const" } -> Base(name: "unsigned long", konst: size($k) + size($q))
-       | k:{ "const" } "unsigned" [ "int" ] q:{ "const" } -> Base(name: "unsigned int", konst: size($k) + size($q))
-       | k:{ "const" } "signed" "char" q:{ "const" }   -> Base(name: "char", konst: size($k) + size($q))
-       | k:{ "const" } "signed" "long" q:{ "const" }   -> Base(name: "long", konst: size($k) + size($q))
-       | k:{ "const" } "signed" [ "int" ] q:{ "const" } -> Base(name: "int", konst: size($k) + size($q))
-       | k:{ "const" } "void" q:{ "const" }            -> Base(name: "void", konst: size($k) + size($q))
-       | k:{ "const" } "char" q:{ "const" }            -> Base(name: "char", konst: size($k) + size($q))
-       | k:{ "const" } "long" q:{ "const" }            -> Base(name: "long", konst: size($k) + size($q))
-       | k:{ "const" } "struct" t:name q:{ "const" }   -> Base(name: $t, konst: size($k) + size($q))
-       | k:{ "const" } t:typedef-name q:{ "const" }    -> Named(name: $t, konst: size($k) + size($q)) .
-
-(* A name that the declarations above have made a type, and not hidden
- * since. It is a `name` like any other to the scanner; what makes it a type
- * is `%names`, which is the only thing that can know. *)
+ * **A declaration's specifiers are what C11 6.7 says**, since ROADMAP 6.12's
+ * first part: storage classes, qualifiers, function specifiers and the words
+ * of a type, **in any order**. Until then they came in one order, with
+ * `static` first or not there, and `long unsigned` was a syntax error. Every
+ * word is kept, spelled, in `words`, each with a space on both sides, so
+ * that how many times a word was written is the pieces `split` makes of it
+ * less one, and the `functions` pass counts the words of the type against
+ * the list in 6.7.2p2 to find which type they name: `int long` is `long`,
+ * and `long char` is none. A `Base` keeps its tag in `name` when it is a
+ * struct, and "" when it is words.
+ *
+ * **All 44 of C11's keywords are here**, 6.4.1, because a word the grammar
+ * names is reserved and one it does not is a name: until this part 21 of
+ * them were, and `int float = 1;` compiled. A keyword whose feature is not
+ * in the subset is still read, where C puts it, so that the passes can
+ * refuse it by name and not a parse at whatever came after it. *)
 typedef-name = name .
+
+(* The words that are not the type's. A storage class, C11 6.7.1, is one of
+ * six, `typedef` among them for syntax's sake; a function specifier one of
+ * two, 6.7.4; a qualifier one of four, 6.7.3, and `_Alignas`, 6.7.5, reads
+ * like one. `_Atomic` with parentheses is a type specifier, 6.7.2.4, and is
+ * refused by the same name as the qualifier. *)
+qualifier = "const" | "volatile" | "restrict"
+          | "_Atomic" "(" typename ")" -> "_Atomic"
+          | "_Atomic"
+          | "_Alignas" "(" ( typename | conditional ) ")" -> "_Alignas" .
+storage   = "static" | "typedef" | "extern" | "register" | "auto" | "_Thread_local" .
+function-specifier = "inline" | "_Noreturn" .
+type-word = "void" | "char" | "short" | "int" | "long" | "float" | "double"
+          | "signed" | "unsigned" | "_Bool" | "_Complex" | "_Imaginary" .
+
+(* **The specifiers of a declaration**, 6.7: any number of the words above,
+ * and one of a struct, a union or an enum with its tag, a typedef's name,
+ * or a run of the words of a type with the others among them. The name is
+ * the one that must come alone, because C11 6.7.2p2 lets a typedef's name
+ * be the only type specifier, and is what keeps `T x` from reading `x` as a
+ * second type when it is a typedef's name too: it is taken once, and every
+ * word after it is one of the others. A union and an enum are read to be
+ * refused, and a struct's definition is an item of its own, below. *)
+specifier = qualifier | storage | function-specifier .
+specifiers = a:{ specifier } "struct" t:name b:{ specifier }
+               -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b]), "  "))
+           | a:{ specifier } k:( "union" | "enum" ) t:name b:{ specifier }
+               -> Base(name: "", words: " {} " of join(flatten([$a, [$k], $b]), "  "))
+           | a:{ specifier } t:typedef-name b:{ specifier }
+               -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
+           | a:{ specifier } w:type-word r:{ type-word | specifier }
+               -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r]), "  ")) .
+
+(* **The same, with one `static` in it**, which is what makes a local a
+ * `Static`, and **with one `typedef`**, which makes a declaration at file
+ * scope a `Typedef`. Each is a rule of its own because the grammar is what
+ * decides which node is built, and `%names` has to know a typedef while the
+ * parse is going on. The word may stand before the type or among it; a
+ * second one is left for `specifiers` to take, and a pass to refuse. *)
+not-static  = qualifier | function-specifier | "typedef" | "extern" | "register" | "auto" | "_Thread_local" .
+sspecifiers = a:{ not-static } "static" b:{ not-static } "struct" t:name c:{ not-static }
+                -> Base(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, ["struct"], $c]), "  "))
+            | a:{ not-static } "struct" t:name b:{ not-static } "static" c:{ not-static }
+                -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b, ["static"], $c]), "  "))
+            | a:{ not-static } "static" b:{ not-static } t:typedef-name c:{ not-static }
+                -> Named(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, $c]), "  "))
+            | a:{ not-static } t:typedef-name b:{ not-static } "static" c:{ not-static }
+                -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["static"], $c]), "  "))
+            | a:{ not-static } "static" b:{ not-static } w:type-word r:{ type-word | not-static }
+                -> Base(name: "", words: " {} " of join(flatten([$a, ["static"], $b, [$w], $r]), "  "))
+            | a:{ not-static } w:type-word r:{ type-word | not-static } "static" c:{ type-word | not-static }
+                -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r, ["static"], $c]), "  ")) .
+
+not-typedef  = qualifier | function-specifier | "static" | "extern" | "register" | "auto" | "_Thread_local" .
+tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } "struct" t:name c:{ not-typedef }
+                 -> Base(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, ["struct"], $c]), "  "))
+             | a:{ not-typedef } "struct" t:name b:{ not-typedef } "typedef" c:{ not-typedef }
+                 -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b, ["typedef"], $c]), "  "))
+             | a:{ not-typedef } "typedef" b:{ not-typedef } t:typedef-name c:{ not-typedef }
+                 -> Named(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, $c]), "  "))
+             | a:{ not-typedef } t:typedef-name b:{ not-typedef } "typedef" c:{ not-typedef }
+                 -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["typedef"], $c]), "  "))
+             | a:{ not-typedef } "typedef" b:{ not-typedef } w:type-word r:{ type-word | not-typedef }
+                 -> Base(name: "", words: " {} " of join(flatten([$a, ["typedef"], $b, [$w], $r]), "  "))
+             | a:{ not-typedef } w:type-word r:{ type-word | not-typedef } "typedef" c:{ type-word | not-typedef }
+                 -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r, ["typedef"], $c]), "  ")) .
+
+(* **A member's, a cast's and `sizeof`'s**, C11 6.7.2.1 and 6.7.7: the
+ * words of a type and its qualifiers, and no storage class, so `static` in
+ * a member is a syntax error and not a refusal, as it was. *)
+sqlist = a:{ qualifier } "struct" t:name b:{ qualifier }
+           -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b]), "  "))
+       | a:{ qualifier } k:( "union" | "enum" ) t:name b:{ qualifier }
+           -> Base(name: "", words: " {} " of join(flatten([$a, [$k], $b]), "  "))
+       | a:{ qualifier } t:typedef-name b:{ qualifier }
+           -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
+       | a:{ qualifier } w:type-word r:{ type-word | qualifier }
+           -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r]), "  ")) .
+
+(* A type named where no declaration is, in `_Alignas`, `_Alignof`, `_Atomic`
+ * and `_Generic`: read so that each can be refused by name. *)
+typename = sqlist pointer .
+
+(* **The stars of a declarator**, each with the `const`s after it. *)
+pointer = { "*" cq:{ "const" } -> size($cq) } -> $1 .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
@@ -364,18 +449,21 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * C11 6.2.4p3, since 2026-09-29, ROADMAP 6.10: it is kept for the
            * whole run and initialised once, before the program starts. The
            * three forms are a local's, and three nodes of their own, since
-           * nothing a pass says about a local's frame is true of one. *)
-          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+           * nothing a pass says about a local's frame is true of one. The
+           * word may stand anywhere among the specifiers since ROADMAP
+           * 6.12's first part, `int static n;`, which is `sspecifiers`'
+           * question; `auto` and `register` are a plain local's words. *)
+          | b:sspecifiers s:pointer n:name "[" c:integer "]" ";"
                    -> StaticArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
+          | b:sspecifiers s:pointer n:name "=" e:assignment ";"
                    -> StaticInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
-          | "static" b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+          | b:sspecifiers s:pointer n:name ";"
                    -> Static(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
-          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "[" c:integer "]" ";"
+          | b:specifiers s:pointer n:name "[" c:integer "]" ";"
                    -> LocalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name "=" e:assignment ";"
+          | b:specifiers s:pointer n:name "=" e:assignment ";"
                    -> LocalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
-          | b:base s:{ "*" cq:{ "const" } -> size($cq) } n:name ";"
+          | b:specifiers s:pointer n:name ";"
                    -> Local(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
@@ -404,6 +492,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | "continue" ";"                          -> Continue
           | ";"                                     -> Empty
           | block
+          | "_Static_assert" "(" conditional "," string ")" ";" -> Unsupported(word: "_Static_assert")
           | e:expression ";"                        -> Discard(value: $e) .
 
 (* C's expression grammar, all fifteen of its levels. `lib/expression.phx`
@@ -537,7 +626,7 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * `(char)x + 1` is `((char)x) + 1` and `(char)a[1]` is `(char)(a[1])`, as
  * in C. `sizeof (int) x` stays a syntax error, since the type form of
  * `sizeof` is tried before this and leaves the `x`. *)
-unary   = "(" b:base s:{ "*" cq:{ "const" } -> size($cq) } ")" u:unary
+unary   = "(" b:sqlist s:pointer ")" u:unary
             -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), value: $u)
         | "-" u:unary -> Negate(value: $u)
         | "!" u:unary -> Not(value: $u)
@@ -547,7 +636,8 @@ unary   = "(" b:base s:{ "*" cq:{ "const" } -> size($cq) } ")" u:unary
         | "--" p:place -> Update(place: $p, op: "--", value: Number(text: "1"), post: false)
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
-        | "sizeof" "(" b:base s:{ "*" cq:{ "const" } -> size($cq) } ")" -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")))
+        | "_Alignof" "(" typename ")" -> Unsupported(word: "_Alignof")
+        | "sizeof" "(" b:sqlist s:pointer ")" -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")))
         | "sizeof" u:unary                 -> SizeOfExpr(value: $u)
         | postfix .
 
@@ -603,6 +693,7 @@ primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
         | character -> Character(text: $1)
         | string    -> String(text: $1)
         | name    -> Variable(name: $1)
+        | "_Generic" "(" assignment { "," ( typename | "default" ) ":" assignment } ")" -> Unsupported(word: "_Generic")
         | "(" expression ")" -> $2 .
 
 args = [ arg { "," b:arg -> $b } ] -> $1 .   (* `-> $1` as for params *)
@@ -632,33 +723,142 @@ arg  = e:assignment -> Arg(value: $e) .
    * its own word is all it has. *)
   thread linkage = empty
 
+  (* **What a declaration's words say**, since ROADMAP 6.12's first part,
+   * worked out here so that the `locals` pass can check it: a check cannot
+   * read what its own rule computes, and the next pass can. Each is a count
+   * of one spelled word in `words`, see `specifiers`. `key` is how many
+   * times each of the twelve words of a type was written, in 6.7.2p2's
+   * order, and `tname` the type that list is, or "" for a list that is
+   * none; a struct's is its tag. `unsup` is the first word whose feature is
+   * not in the subset, the three that C11 lets an implementation leave out
+   * first, and `pword` the first storage class a parameter may not have. *)
+  Base  : stat    = size(split($words, " static ")) > 1
+        : tdef    = size(split($words, " typedef ")) > 1
+        : sauto   = size(split($words, " auto ")) > 1
+        : sreg    = size(split($words, " register ")) > 1
+        : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
+        : pword   = at(split(("{}{}{}" of lookup([[true, "static "]], size(split($words, " static ")) > 1, ""), lookup([[true, "typedef "]], size(split($words, " typedef ")) > 1, ""), lookup([[true, "auto "]], size(split($words, " auto ")) > 1, "")), " "), 1)
+        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
+                                   lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
+                                   lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
+                                   lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
+                                   lookup([[true, "short "]], size(split($words, " short ")) > 1, ""),
+                                   lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
+                                   lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
+                                   lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
+                                   lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
+                                   lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
+                                   lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
+                                   lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
+                                   lookup([[true, "extern "]], size(split($words, " extern ")) > 1, ""),
+                                   lookup([[true, "_Thread_local "]], size(split($words, " _Thread_local ")) > 1, ""),
+                                   lookup([[true, "inline "]], size(split($words, " inline ")) > 1, ""),
+                                   lookup([[true, "_Noreturn "]], size(split($words, " _Noreturn ")) > 1, ""),
+                                   lookup([[true, "_Alignas "]], size(split($words, " _Alignas ")) > 1, "")), " "), 1)
+        : key     = "{}{}{}{}{}{}{}{}{}{}{}{}" of
+                         size(split($words, " void ")) - 1,
+                         size(split($words, " char ")) - 1,
+                         size(split($words, " short ")) - 1,
+                         size(split($words, " int ")) - 1,
+                         size(split($words, " long ")) - 1,
+                         size(split($words, " float ")) - 1,
+                         size(split($words, " double ")) - 1,
+                         size(split($words, " signed ")) - 1,
+                         size(split($words, " unsigned ")) - 1,
+                         size(split($words, " _Bool ")) - 1,
+                         size(split($words, " _Complex ")) - 1,
+                         size(split($words, " _Imaginary ")) - 1
+        : tname   = lookup([[true, $name]], $name <> "", lookup([
+                                  ["100000000000", "void"],
+                                  ["010000000000", "char"],
+                                  ["010000010000", "char"],
+                                  ["010000001000", "unsigned char"],
+                                  ["000100000000", "int"],
+                                  ["000000010000", "int"],
+                                  ["000100010000", "int"],
+                                  ["000000001000", "unsigned int"],
+                                  ["000100001000", "unsigned int"],
+                                  ["000010000000", "long"],
+                                  ["000110000000", "long"],
+                                  ["000010010000", "long"],
+                                  ["000110010000", "long"],
+                                  ["000010001000", "unsigned long"],
+                                  ["000110001000", "unsigned long"],
+                                  ["000020000000", "long long"],
+                                  ["000120000000", "long long"],
+                                  ["000020010000", "long long"],
+                                  ["000120010000", "long long"],
+                                  ["000020001000", "unsigned long long"],
+                                  ["000120001000", "unsigned long long"]], $key, ""))
+        : display = join(split(slice($words, 2, size($words) - 1), "  "), " ") .
+  Named : stat    = size(split($words, " static ")) > 1
+        : tdef    = size(split($words, " typedef ")) > 1
+        : sauto   = size(split($words, " auto ")) > 1
+        : sreg    = size(split($words, " register ")) > 1
+        : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
+        : pword   = at(split(("{}{}{}" of lookup([[true, "static "]], size(split($words, " static ")) > 1, ""), lookup([[true, "typedef "]], size(split($words, " typedef ")) > 1, ""), lookup([[true, "auto "]], size(split($words, " auto ")) > 1, "")), " "), 1)
+        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
+                                   lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
+                                   lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
+                                   lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
+                                   lookup([[true, "short "]], size(split($words, " short ")) > 1, ""),
+                                   lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
+                                   lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
+                                   lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
+                                   lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
+                                   lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
+                                   lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
+                                   lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
+                                   lookup([[true, "extern "]], size(split($words, " extern ")) > 1, ""),
+                                   lookup([[true, "_Thread_local "]], size(split($words, " _Thread_local ")) > 1, ""),
+                                   lookup([[true, "inline "]], size(split($words, " inline ")) > 1, ""),
+                                   lookup([[true, "_Noreturn "]], size(split($words, " _Noreturn ")) > 1, ""),
+                                   lookup([[true, "_Alignas "]], size(split($words, " _Alignas ")) > 1, "")), " "), 1) .
+
   (* A shape is a name and an arity as one text, so that `positions` can
    * count how many distinct ones there are: more shapes than names means a
    * name with two arities. **A `dshape` is the name and whether it ends in
    * `...`**, since 2026-09-26, counted the same way and kept apart so that
    * each refusal says which of the two differs. *)
-  Prototype : shape = ["{}/{}" of $name, size($params)]
+  Prototype : internal = lookup([[true, 1]], $ret.stat, 0)
+            : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = []
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
-            ! $internal = 1 and defined($linkage, $name) and not lookup($linkage, $name, false)
+            ! $ret.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
                 : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
-                    of $name, size($params) .
-  Function  : shape = ["{}/{}" of $name, size($params)]
+                    of $name, size($params)
+            ! $ret.unsup = "" and $ret.nstore < 2 and $ret.tdef
+                : "'{}' is a typedef of a function type, which C allows and this subset does not have yet" of $name
+            ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
+                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
+  Function  : internal = lookup([[true, 1]], $ret.stat, 0)
+            : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
             : fname = [$name]
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
-            ! $internal = 1 and defined($linkage, $name) and not lookup($linkage, $name, false)
+            ! $ret.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
                 : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
-                    of $name, size($params) .
+                    of $name, size($params)
+            ! $ret.unsup = "" and $ret.nstore < 2 and $ret.tdef
+                : "'{}' is a typedef of a function type, which C allows and this subset does not have yet" of $name
+            ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
+                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
+
+  (* **A keyword read only to be refused**, since ROADMAP 6.12's first part:
+   * `_Static_assert`, which is an item or a statement, and `_Generic` and
+   * `_Alignof`, which are expressions. It is refused in the first pass so
+   * that no later one has to say what such an expression is. *)
+  Unsupported : shape = [] : dshape = [] : dname = [] : fname = []
+              ! true : "'{}' is C11's, and not this subset's yet" of $word .
 
   (* A struct is an item and not a function, and adds nothing to either count. *)
   StructDef : shape = []
@@ -669,9 +869,12 @@ arg  = e:assignment -> Arg(value: $e) .
             : dshape = []
             : dname = []
             : fname = [] .
-  Global      : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
-  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
-  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] : hidden = $internal = 1 .
+  Global      : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
+              : hidden = $base.stat .
+  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
+              : hidden = $base.stat .
+  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
+              : hidden = $base.stat .
 
   (* Written out rather than named: a check runs before the attributes its
    * rule computes, so it cannot read them, and `phx` says so. *)
@@ -781,6 +984,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * not one, which the `constants` pass reads to tell `&answer` from
    * `&table[1]`. *)
   otherwise global = false
+
+  (* **Whether a name was declared `register`**, since ROADMAP 6.12's first
+   * part, the eleventh part of an entry: C11 6.5.3.2p1 forbids its address,
+   * and only a name can be one, so every other place a `&` is asked of is
+   * not. A member of a `register` struct is not followed, and `&r.m` is a
+   * refusal `cc` makes and this does not; never a false one. *)
+  otherwise vreg = false
+  Addr ! $place.vreg
+           : "'{}' is declared 'register', and C11 6.5.3.2p1 forbids taking its address" of $place.name .
 
   (* **What each function takes**, name to a list with one entry per
    * parameter: the tag of a struct passed whole, or "". Bound on the way out,
@@ -917,29 +1129,50 @@ arg  = e:assignment -> Arg(value: $e) .
   Named : means   = lookup($typedefs, $name, [4, 4, "", 0, false, "0"])
         : tq      = at($means, 6)
         : bquals  = "{}{}" of lookup([[true, slice($tq, 1, size($tq) - 1)]], size($tq) > 1, ""),
-                              lookup([[true, "1"]], $konst > 0 or slice($tq, size($tq), size($tq)) = "1", "0")
+                              lookup([[true, "1"]], size(split($words, " const ")) > 1 or slice($tq, size($tq), size($tq)) = "1", "0")
         : hasconst = at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 4)
         : buns    = at($means, 5)
         : basew   = at($means, 1)
         : align   = at($means, 2)
         : tagname = at($means, 3)
-        : ptrs    = at($means, 4) .
+        : ptrs    = at($means, 4)
+        ! $unsup <> ""
+            : lookup([["_Atomic", "'_Atomic' is optional in C11, and left out here, as __STDC_NO_ATOMICS__ says"]],
+                     $unsup, "'{}' is C11's, and not this subset's yet" of $unsup)
+        ! $unsup = "" and $nstore > 1
+            : "this declaration has {} storage classes, and C11 6.7.1p2 allows one" of $nstore .
 
   SizeOfType : ptrs = $stars + $base.ptrs .
   Cast       : ptrs = $stars + $base.ptrs
              : dquals = "{}{}" of $base.bquals, $squals .
 
+  (* **The refusals a declaration's words make**, since ROADMAP 6.12's
+   * first part, from what the `functions` pass worked out of them: a
+   * keyword whose feature is not here, more than one storage class, and a
+   * list of the words of a type that is no type, or `long long`. Each asks
+   * that the one before it passed, so a declaration is refused once. *)
   Base : ptrs    = 0
-       : bquals  = lookup([[0, "0"]], $konst, "1")
-       : layout  = lookup($layouts, $name, [0, 1, empty, false])
+       : bquals  = lookup([[true, "1"]], size(split($words, " const ")) > 1, "0")
+       : layout  = lookup($layouts, $tname, [0, 1, empty, false])
        : hasconst = at($layout, 4)
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
-                           ["unsigned char", ""], ["unsigned long", ""]], $name, $name)
+                           ["unsigned char", ""], ["unsigned long", ""]], $tname, $tname)
        : buns    = lookup([["unsigned int", true], ["unsigned char", true],
-                           ["unsigned long", true]], $name, false)
-       ! not defined($layouts, $name) and $name <> $defining
+                           ["unsigned long", true]], $tname, false)
+       ! $unsup <> ""
+           : lookup([["_Complex", "'_Complex' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
+                     ["_Imaginary", "'_Imaginary' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
+                     ["_Atomic", "'_Atomic' is optional in C11, and left out here, as __STDC_NO_ATOMICS__ says"]],
+                    $unsup, "'{}' is C11's, and not this subset's yet" of $unsup)
+       ! $unsup = "" and $nstore > 1
+           : "this declaration has {} storage classes, and C11 6.7.1p2 allows one" of $nstore
+       ! $unsup = "" and $nstore < 2 and ($tname = "long long" or $tname = "unsigned long long")
+           : "'{}' is C11's, and not this subset's yet" of $tname
+       ! $unsup = "" and $nstore < 2 and $tname = ""
+           : "'{}' is not one of the types C11 6.7.2p2 lists" of $display
+       ! $name <> "" and not defined($layouts, $name) and $name <> $defining
            : "'struct {}' is not defined" of $name .
 
   (* A member starts at the next offset its alignment allows. An element is
@@ -1072,7 +1305,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
         : preg   = $pindex
-        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
+        : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
@@ -1082,7 +1315,10 @@ arg  = e:assignment -> Arg(value: $e) .
         ! $pindex + lookup([[true, 2]], $stars + $base.ptrs = 0 and $base.tagname <> ""
                                         and $base.basew > 8 and $base.basew <= 16, 1) > 8
             : "'{}' needs a ninth register, and only eight are compiled: the rest go on the stack, and nothing here puts them there"
-                of $name .
+                of $name
+        ! $base.unsup = "" and $base.nstore < 2 and $base.pword <> ""
+            : "'{}' is a parameter declared '{}', and the one storage class a parameter may have is 'register', C11 6.7.6.3p2"
+                of $name, $base.pword .
 
   Call ! not defined($funcs, $name)
            : "'{}' is called before it is declared" of $name
@@ -1116,12 +1352,16 @@ arg  = e:assignment -> Arg(value: $e) .
             : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-            ! defined($scope, $name) : "'{}' is declared twice" of $name .
+            ! defined($scope, $name) : "'{}' is declared twice" of $name
+            ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                : "'{}' is a typedef in a block, which C allows and this subset does not have yet" of $name
+            ! $base.unsup = "" and $base.nstore < 2 and $base.stat
+                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
   (* **The name is bound on the way out**, after its initialiser has been
    * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
    * starts the scope at the end of the declarator, before the `=`, and `cc`
@@ -1137,12 +1377,16 @@ arg  = e:assignment -> Arg(value: $e) .
             : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
+            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-            ! defined($scope, $name) : "'{}' is declared twice" of $name .
+            ! defined($scope, $name) : "'{}' is declared twice" of $name
+            ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
+            ! $base.unsup = "" and $base.nstore < 2 and $base.stat
+                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
 
   (* An element is one byte, four or eight, or a struct's size, the whole
    * thing is `count` of them, and what the frame gives it is that rounded up to eight.
@@ -1159,7 +1403,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : whole  = $count * $ebytes
              : takes  = (($whole + 7) div 8) * 8
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, "", $dquals])
+             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1167,7 +1411,13 @@ arg  = e:assignment -> Arg(value: $e) .
                      of $name
              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-             ! defined($scope, $name) : "'{}' is declared twice" of $name .
+             ! defined($scope, $name) : "'{}' is declared twice" of $name
+             ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                 : "'{}' is a typedef of an array, which C allows and this subset does not have yet" of $name
+             ! $base.unsup = "" and $base.nstore < 2 and $base.sreg
+                 : "'{}' is a 'register' array, and C11 6.3.2.1p3 makes using one undefined" of $name
+             ! $base.unsup = "" and $base.nstore < 2 and $base.stat
+                 : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
 
   (* **A `static` local takes no frame either**, since 2026-09-29, ROADMAP
    * 6.10: it is bound in `env` as a local is, so that it hides and is
@@ -1189,7 +1439,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : whole  = $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $label, $dquals])
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $label, $dquals, false])
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
@@ -1202,7 +1452,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : whole  = $count * $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $label, $dquals])
+              : env    = bind($env, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $label, $dquals, false])
               : scope  = bind($scope, $name, true)
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
@@ -1222,7 +1472,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : whole  = $ebytes
               : label  = "{}.{}.{}" of $fn, $name, $statics
               : statics = $statics + 1
-              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $label, $dquals])
+              : env    = bind($env, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $label, $dquals, false])
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
@@ -1242,7 +1492,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name)
@@ -1250,14 +1500,16 @@ arg  = e:assignment -> Arg(value: $e) .
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
-                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                  : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register") .
   GlobalArray : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
               : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name, $dquals])
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false])
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                       of $name
@@ -1268,7 +1520,11 @@ arg  = e:assignment -> Arg(value: $e) .
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
-                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                  : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register")
+              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                  : "'{}' is a typedef of an array, which C allows and this subset does not have yet" of $name .
   (* An initialiser is an expression at file scope, where the names are the
    * globals above it: `int b = a;` finds `a`, and is refused because it is
    * not constant, as `cc` refuses it, rather than as undeclared. *)
@@ -1279,7 +1535,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name, $dquals])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
               ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
@@ -1289,12 +1545,17 @@ arg  = e:assignment -> Arg(value: $e) .
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
-                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name .
+                  : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name
+              ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                  : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register")
+              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+                  : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name .
 
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0"])
+  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false])
+           : vreg    = at($means, 11)
            : global  = at($means, 6)
            : vuns    = at($means, 8)
            : label   = at($means, 9)

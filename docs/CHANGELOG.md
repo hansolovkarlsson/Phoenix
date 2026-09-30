@@ -16,6 +16,33 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: C's specifiers in any order, and every keyword reserved
+
+**The words of a C type may come in any order**, the first part of
+[ROADMAP 6.12](ROADMAP.md#612-declarations-as-c11-67-has-them), the first
+entry of the C11 arc: `int long`, `long unsigned int` and `char signed` are
+the types C11 says they are, and a list of words that is no type, `long
+char` or `int int`, is refused. A storage class may stand anywhere among
+them, `int static f(void)` and `int typedef count;`, and only one is
+allowed. `auto` and `register` arrive for locals, and a `register`
+parameter; taking a `register` local's address is refused, and so is
+either word at file scope.
+
+**All 44 of C11's keywords are reserved.** Until now 21 of them could be
+used as names, so `int float = 1;` compiled where `cc` refuses it. Those
+whose feature is not in the subset yet are refused by name wherever they
+are used: `float`, `double`, `short`, `_Bool`, `enum`, `union`, `extern`,
+`volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas`, `_Alignof`,
+`_Generic`, `_Static_assert` and `_Thread_local`, and `long long`.
+`_Complex`, `_Imaginary` and `_Atomic` are optional in C11, and the
+refusal says so.
+
+**Tests:** 500 → 552. Fifty-four refusals. Three programs join the C
+oracle, two of them refusals until now: 268 agree with `cc`, none
+diverges. Refusals: 313.
+
+---
+
 ## 2026-09-29: `const` in C
 
 **The C subset has `const`**, the third part of [ROADMAP

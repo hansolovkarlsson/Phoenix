@@ -765,6 +765,20 @@ to the oracle. Each was compiled by `cc -std=c11
    not there: C11 allows `int static f(void)`, and conforming now outranks
    it. `register` and `auto` arrive in blocks. `declarators.c`'s
    specifiers are the witness, beside a refused program for each keyword.
+   *Built on 2026-09-29*, with `oracle/specifiers.c` as the witness, since
+   `declarators.c` needs part 2 to compile at all, and the link test
+   holding `int static` and `long static` against `cc`. The words are kept
+   spelled, one text a declaration, and counted with `split`; `static` and
+   `typedef` are each a specifier rule of their own, because the grammar
+   decides which node is built. Where it came out differently from the
+   plan: a `volatile`, `restrict` or `_Atomic` after a `*` is a syntax
+   error and not a refusal by name, since the stars carry a count of
+   `const`s and nothing else; `_Atomic(int)` alone stops at the declarator;
+   an `enum` or a `union` with its body is a syntax error, and one named by
+   its tag is refused by name; a `register` array is refused though `cc`
+   compiles the declaration, since every use but `sizeof` is undefined; and
+   `&r.m` of a `register` struct is accepted where `cc` refuses it, a
+   refusal missing and never a false one.
 2. **Lists of declarators, and the rest of a declaration's places.**
    `int a = 1, b, *p;` at file scope, in a block and as members; a `for`
    that declares, C11 6.8.5p3; parameters without names in a prototype;
