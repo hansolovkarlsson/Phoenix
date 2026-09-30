@@ -6539,3 +6539,27 @@ had a gap in the middle of its data, only locals, which are zeroed anyway,
 so one global and one `static` with short rows were written; and a break
 of the space after the last value had changed a site nothing reads. Both
 were then caught.
+
+**6.13's second part: structs member by member, and a limit taken on
+purpose.** A struct's level text now carries its key, the fifth field of
+its level, and its layout its members' names in order, since `fields` is
+keyed by name and has no order to give; a list whose object is a struct
+counts members, `imem`, where an array's counts bytes. Brace elision into a
+struct is where the byte cursor stops working: the next scalar after the
+last one written is found by walking down a struct's members and carrying
+back up when one runs out, which is a loop. It was put to Hans, with the
+full walk in the notation to a fixed depth and a change to the tool beside
+it, and he took the limit for now: a member or an element that is an array
+or a struct must have its own braces, refused by name without, and the
+question goes to part 3, where designators out of order at file scope ask
+the same thing of the notation. CPP's source leaves out no such braces,
+which was checked first.
+
+**Order within a clause again**: `sover`, the check that a struct has a
+member left, read `imem` after the same clause had moved it on, and
+refused the last member of every struct. And a list inside a struct started
+its items where the struct's cursor had got to, not at its member; it now
+hands its own start down as the cursor. Ten breaks, all caught, two of
+them by witnesses written because thinking about the breaks found them
+missing: a struct defined inside another's members, and a typedef of a
+struct completed after it.

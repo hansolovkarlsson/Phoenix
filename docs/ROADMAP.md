@@ -783,6 +783,21 @@ warning:
    structs. `init-structs.c` is the witness. A struct that holds a pointer
    to a function, which CPP's `{expr_report, pp}` does, waits for function
    pointers.
+   *Built on 2026-09-30*, with `init-structs-more.c` beside it. A struct's
+   level text carries its key as a fifth field, and its layout its
+   members' names in order, so a list whose object is a struct goes
+   member by member, a struct's value copies into a struct member or
+   element, and `{0}` alone writes nothing, since what is not given is
+   zero already. **Where it came out differently: a member or an element
+   that is an array or a struct must have its own braces**, which C11
+   6.7.9p20 does not ask, and one without is refused by name. Finding the
+   scalar after the last one written, in a struct, is a walk down and back
+   up its members, a loop the notation does not have; settled with Hans on
+   2026-09-30 to wait for part 3, where designators out of order at file
+   scope want the same thing, and to be prototyped there as part 4 of 6.12
+   was. `init-structs.c`'s one struct written that way was given its
+   braces, and the form is a refusal of its own. No initialiser in CPP's
+   source leaves such braces out.
 3. **Designators**, 6.7.9p6 to p7: `.member` and `[constant]`, chains of
    them, and positional values after one going on from where it left
    off. **This is the part with a question in it.** In a block a store

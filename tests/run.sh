@@ -2650,6 +2650,20 @@ refuses "a list starting part-way through an element" "'a' has a list in braces 
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-braces-mid-element.c"
 refuses "a struct where a scalar is wanted" "'x' is given 'struct p' where a number or a pointer is wanted" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-in-a-scalar.c"
+# **Structs in braces**, since ROADMAP 6.13's second part. `cc` refuses all
+# but the first. That one is C: a value for a member that is an array or a
+# struct with the member's braces left out, which this subset refuses by
+# name until it can walk a struct's members in order without a loop.
+refuses "braces left out inside a struct" "'elided' leaves out the braces of a member or an element that is an array or a struct: C11 6.7.9p20 allows that, and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-elision-into-a-member.c"
+refuses "more values than a struct has members" "'x' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-excess.c"
+refuses "a struct member given another struct" "'x' is given 'struct q' where 'struct p' is wanted" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-of-another-kind.c"
+refuses "a struct value at file scope" "'x' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-value-at-file-scope.c"
+refuses "more structs than an array has room for" "'two' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-list-too-long.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

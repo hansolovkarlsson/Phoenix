@@ -16,6 +16,25 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-30: C structs initialised in braces
+
+**Structs can be initialised in braces**, the second part of [ROADMAP
+6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): member by member,
+`struct pair p = {1, 2};`, at file scope, in a function and `static`, with
+members that are arrays or structs in their own braces, a member of `char`
+from a string, a struct member or an array element from a struct's value,
+`{0}`, and arrays of structs, CPP's own `{{"+", 1}, {"-", 2}}` among them.
+Too many values, and a struct of the wrong kind, are refused.
+
+**One C form is refused for now**: leaving out the braces of a member that
+is itself an array or a struct, `{'e', 7, 8, 9}` for a struct whose second
+member is `int[3]`. C allows it; nothing in CPP writes it.
+
+**Tests:** 588 → 593. Five refusals. Two programs join the C oracle: 293
+agree with `cc`, none diverges. Refusals: 354.
+
+---
+
 ## 2026-09-30: C initialisers in braces for arrays, and large frames
 
 **Arrays and scalars can be initialised in braces**, the first part of

@@ -382,22 +382,23 @@
                      of $offset, $whole, $n, $n, $init.out .
   InitList : out = join($items.out)
            : gd  = join($items.gd) .
-  InitExpr : n     = $label : label = $label + lookup([[true, 1]], $fill, 0)
-           : bytes = lookup([[true, $value.slen + 1]], $value.slen + 1 < $iw, $iw)
+  InitExpr : moves = $fill or $scopy
+           : n     = $label : label = $label + lookup([[true, 1]], $moves, 0)
+           : bytes = lookup([[true, lookup([[true, $value.slen + 1]], $value.slen + 1 < $iw, $iw)]], $fill, $iw)
            : dest  = "\tsub x1, x29, #{}\n" of $aoff - $ioff
            : ext   = lookup([[true, "\tsxtw x0, w0\n"]],
                             $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns, "")
-           : out   = lookup([[true, "{}{}{}" of $value.out, $dest, ($copy of $bytes, $n, "x0", "x1", $n)]], $fill,
+           : out   = lookup([[true, ""]], $zero, lookup([[true, "{}{}{}" of $value.out, $dest, ($copy of $bytes, $n, "x0", "x1", $n)]], $moves,
                             "{}{}{}\t{}, [x1]\n" of $value.out, $ext, $dest,
-                                 lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0"))
+                                 lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0")))
            : gap   = lookup([[0, ""]], $igap, "\t.space {}\n" of $igap)
-           : gd    = lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
+           : gd    = lookup([[true, $gap]], $zero, lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
                                      lookup([[0, ""]], $iw - $value.slen, "\t.space {}\n" of $iw - $value.slen)]],
                             $fill,
                             "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [4, ".long"]], $iw, ".quad"),
                                lookup([[true, $value.sym]], $value.anchored and not $value.settled,
                                       lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
-                                             $iw, $value.folded))) .
+                                             $iw, $value.folded)))) .
   Discard   : out = $value.out .
 
   (* ---- calls ----
