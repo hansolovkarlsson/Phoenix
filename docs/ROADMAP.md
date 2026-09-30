@@ -808,6 +808,21 @@ to the oracle. Each was compiled by `cc -std=c11
    puts in the enclosing scope and not the member list's), and a struct
    or a typedef in a block, with the block's scope. `tags.c` is the
    witness.
+   *Built on 2026-09-30*, with `incomplete.c` and `scoped-tags.c` beside
+   it, and the link test holding a function that returns a pointer to a
+   struct completed after its prototype. Each definition has a **key**,
+   its tag at file scope and its tag with a number in a function or with
+   none, and a scoped table maps a tag to its key, so two definitions of
+   one tag are two types. **Writing the witnesses found a miscompile from
+   2026-09-23**: a pointer's pointee width was recorded where the pointer
+   was declared, which is 0 for `struct node *next` inside `struct node`,
+   and `p->next + 1` counted in elements of no size; `cc` answered `2 3 2`
+   and this `1 1 0`. A struct's width is looked up again where a pointer
+   to it is used, and arithmetic, `*` and `sizeof` on one still not
+   complete there are refused. Where it came out differently from the
+   plan: a struct passed whole to a prototype written before the struct
+   is complete is refused, which `cc` compiles; and a global of a struct
+   completed later in the file is refused, which C11 6.9.2 allows.
 4. **Types built by declarators**, 6.7.6: arrays of arrays, parentheses,
    a pointer to an array, abstract declarators in a cast and `sizeof`, an
    array parameter adjusted to a pointer, 6.7.6.3p7, and a typedef of an

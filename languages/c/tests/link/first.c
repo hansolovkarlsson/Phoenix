@@ -14,10 +14,12 @@ long static scale(long x) { return 2 * x; }
 int shared;
 int shared = 40;
 int from_second(void);
+struct cell *pick(void);
+struct cell { int id; long weight; };
 int bump_first(void) { count++; total += helper() + later(); seen[1] += 7; return count; }
 int main(void) {
     bump_first(); bump_first(); from_second();
     printf("%d %ld %d %d %d %ld\n", count, total, from_second(), seen[1], placed, scale(5));
-    printf("%d %d %d\n", shared, both, also);
+    printf("%d %d %d %d\n", shared, both, also, (pick() + 1)->id);
     return count;
 }

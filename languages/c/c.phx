@@ -77,6 +77,12 @@
  * 6.9.2's tentative definitions, `_Static_assert`, and a definition with an
  * identifier list, whose declarations come one name each and in its order.
  *
+ * **Then tags**, ROADMAP 6.12's third part: a struct defined in any
+ * declaration's specifiers, in a block with the block's scope, with no tag,
+ * or inside another, and `struct s;`; a typedef in a block; a pointer to a
+ * struct that is not complete yet, whose width is looked up where it is
+ * used, and an object, `*` or arithmetic of one refused until it is.
+ *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
  * reads `#` as a line comment, which C does not, and every rule it carries
@@ -194,14 +200,11 @@ item = function
       * a condition the `constants` pass works out, and a message it gives
       * when the condition is zero. It may be an item or a statement. *)
      | "_Static_assert" "(" c:conditional "," m:string ")" ";" -> StaticAssert(cond: $c, message: $m, file: true)
-     (* A struct is defined at file scope and only there, and always with a
-      * tag. C allows both a definition inside a block, with the block's scope,
-      * and a struct with no tag at all; neither is here yet, and a program
-      * that writes one gets a syntax error rather than a wrong answer. A
-      * struct with no members is **not** a syntax error, so that it can be
-      * refused by name: see the `locals` pass. *)
-     | "struct" n:name "{" f:{ member } "}" ";"
-         -> StructDef(name: $n, members: $f)
+     (* **A declaration of no names**, since ROADMAP 6.12's third part:
+      * `struct s { ... };` defines a struct and `struct s;` declares one,
+      * C11 6.7.2.3. Until then a definition was an item of its own, at file
+      * scope and with a tag; it is a specifier now, see `struct-core`. *)
+     | b:specifiers ";" -> Decls(spec: $b, items: [], kind: "file")
      (* **A typedef is a name for a declaration's type**, a base and some
       * stars, and like a struct it is at file scope only: C allows one in a
       * block, with the block's scope, and the `locals` pass refuses it by
@@ -369,6 +372,16 @@ kr-declaration = b:specifiers s:pointer n:name ";" -> Param(name: $n, base: $b, 
  * refuse it by name and not a parse at whatever came after it. *)
 typedef-name = name .
 
+(* **A struct as a specifier**, since ROADMAP 6.12's third part: its tag,
+ * its tag and its definition, or a definition with no tag, which is where C
+ * puts one, in any declaration's specifiers. The answer is the tag, "" for
+ * none, and a list holding the definition or empty, which `Base` keeps as
+ * its `def`. A struct with no members is **not** a syntax error, so that it
+ * can be refused by name: see the `locals` pass. *)
+struct-core = "struct" t:name "{" m:{ member } "}" -> [$t, [StructDef(name: $t, members: $m)]]
+            | "struct" "{" m:{ member } "}"        -> ["", [StructDef(name: "", members: $m)]]
+            | "struct" t:name                      -> [$t, []] .
+
 (* The words that are not the type's. A storage class, C11 6.7.1, is one of
  * six, `typedef` among them for syntax's sake; a function specifier one of
  * two, 6.7.4; a qualifier one of four, 6.7.3, and `_Alignas`, 6.7.5, reads
@@ -392,14 +405,14 @@ type-word = "void" | "char" | "short" | "int" | "long" | "float" | "double"
  * word after it is one of the others. A union and an enum are read to be
  * refused, and a struct's definition is an item of its own, below. *)
 specifier = qualifier | storage | function-specifier .
-specifiers = a:{ specifier } "struct" t:name b:{ specifier }
-               -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b]), "  "))
+specifiers = a:{ specifier } t:struct-core b:{ specifier }
+               -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b]), "  ")), def: at($t, 2))
            | a:{ specifier } k:( "union" | "enum" ) t:name b:{ specifier }
-               -> Base(name: "", words: " {} " of join(flatten([$a, [$k], $b]), "  "))
+               -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
            | a:{ specifier } t:typedef-name b:{ specifier }
                -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
            | a:{ specifier } w:type-word r:{ type-word | specifier }
-               -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r]), "  ")) .
+               -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r]), "  ")), def: []) .
 
 (* **The same, with one `static` in it**, which is what makes a local a
  * `Static`, and **with one `typedef`**, which makes a declaration at file
@@ -408,44 +421,44 @@ specifiers = a:{ specifier } "struct" t:name b:{ specifier }
  * parse is going on. The word may stand before the type or among it; a
  * second one is left for `specifiers` to take, and a pass to refuse. *)
 not-static  = qualifier | function-specifier | "typedef" | "extern" | "register" | "auto" | "_Thread_local" .
-sspecifiers = a:{ not-static } "static" b:{ not-static } "struct" t:name c:{ not-static }
-                -> Base(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, ["struct"], $c]), "  "))
-            | a:{ not-static } "struct" t:name b:{ not-static } "static" c:{ not-static }
-                -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b, ["static"], $c]), "  "))
+sspecifiers = a:{ not-static } "static" b:{ not-static } t:struct-core c:{ not-static }
+                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["static"], $b, ["struct"], $c]), "  ")), def: at($t, 2))
+            | a:{ not-static } t:struct-core b:{ not-static } "static" c:{ not-static }
+                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b, ["static"], $c]), "  ")), def: at($t, 2))
             | a:{ not-static } "static" b:{ not-static } t:typedef-name c:{ not-static }
                 -> Named(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, $c]), "  "))
             | a:{ not-static } t:typedef-name b:{ not-static } "static" c:{ not-static }
                 -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["static"], $c]), "  "))
             | a:{ not-static } "static" b:{ not-static } w:type-word r:{ type-word | not-static }
-                -> Base(name: "", words: " {} " of join(flatten([$a, ["static"], $b, [$w], $r]), "  "))
+                -> Base(name: "", words: (" {} " of join(flatten([$a, ["static"], $b, [$w], $r]), "  ")), def: [])
             | a:{ not-static } w:type-word r:{ type-word | not-static } "static" c:{ type-word | not-static }
-                -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r, ["static"], $c]), "  ")) .
+                -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r, ["static"], $c]), "  ")), def: []) .
 
 not-typedef  = qualifier | function-specifier | "static" | "extern" | "register" | "auto" | "_Thread_local" .
-tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } "struct" t:name c:{ not-typedef }
-                 -> Base(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, ["struct"], $c]), "  "))
-             | a:{ not-typedef } "struct" t:name b:{ not-typedef } "typedef" c:{ not-typedef }
-                 -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b, ["typedef"], $c]), "  "))
+tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } t:struct-core c:{ not-typedef }
+                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["typedef"], $b, ["struct"], $c]), "  ")), def: at($t, 2))
+             | a:{ not-typedef } t:struct-core b:{ not-typedef } "typedef" c:{ not-typedef }
+                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b, ["typedef"], $c]), "  ")), def: at($t, 2))
              | a:{ not-typedef } "typedef" b:{ not-typedef } t:typedef-name c:{ not-typedef }
                  -> Named(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, $c]), "  "))
              | a:{ not-typedef } t:typedef-name b:{ not-typedef } "typedef" c:{ not-typedef }
                  -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["typedef"], $c]), "  "))
              | a:{ not-typedef } "typedef" b:{ not-typedef } w:type-word r:{ type-word | not-typedef }
-                 -> Base(name: "", words: " {} " of join(flatten([$a, ["typedef"], $b, [$w], $r]), "  "))
+                 -> Base(name: "", words: (" {} " of join(flatten([$a, ["typedef"], $b, [$w], $r]), "  ")), def: [])
              | a:{ not-typedef } w:type-word r:{ type-word | not-typedef } "typedef" c:{ type-word | not-typedef }
-                 -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r, ["typedef"], $c]), "  ")) .
+                 -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r, ["typedef"], $c]), "  ")), def: []) .
 
 (* **A member's, a cast's and `sizeof`'s**, C11 6.7.2.1 and 6.7.7: the
  * words of a type and its qualifiers, and no storage class, so `static` in
  * a member is a syntax error and not a refusal, as it was. *)
-sqlist = a:{ qualifier } "struct" t:name b:{ qualifier }
-           -> Base(name: $t, words: " {} " of join(flatten([$a, ["struct"], $b]), "  "))
+sqlist = a:{ qualifier } t:struct-core b:{ qualifier }
+           -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b]), "  ")), def: at($t, 2))
        | a:{ qualifier } k:( "union" | "enum" ) t:name b:{ qualifier }
-           -> Base(name: "", words: " {} " of join(flatten([$a, [$k], $b]), "  "))
+           -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
        | a:{ qualifier } t:typedef-name b:{ qualifier }
            -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
        | a:{ qualifier } w:type-word r:{ type-word | qualifier }
-           -> Base(name: "", words: " {} " of join(flatten([$a, [$w], $r]), "  ")) .
+           -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r]), "  ")), def: []) .
 
 (* A type named where no declaration is, in `_Alignas`, `_Alignof`, `_Atomic`
  * and `_Generic`: read so that each can be refused by name. *)
@@ -519,6 +532,14 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * word may stand anywhere among the specifiers since ROADMAP
            * 6.12's first part, `int static n;`, which is `sspecifiers`'
            * question; `auto` and `register` are a plain local's words. *)
+          (* **A typedef in a block**, and a declaration of no names, since
+           * ROADMAP 6.12's third part: each has the block's scope, which
+           * `%names` gives the typedef and the `locals` pass gives its
+           * meaning and a struct's tag. *)
+          | b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } ";"
+                   -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
+          | b:specifiers ";"
+                   -> Decls(spec: $b, items: [], kind: "block")
           | b:sspecifiers d:static-declarator r:{ "," e:static-declarator -> $e } ";"
                    -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
           | b:specifiers d:local-declarator r:{ "," e:local-declarator -> $e } ";"
@@ -846,7 +867,7 @@ arg  = e:assignment -> Arg(value: $e) .
                          size(split($words, " _Bool ")) - 1,
                          size(split($words, " _Complex ")) - 1,
                          size(split($words, " _Imaginary ")) - 1
-        : tname   = lookup([[true, $name]], $name <> "", lookup([
+        : tname   = lookup([[true, $name]], $name <> "", lookup([[true, "(anonymous)"]], size($def) > 0, lookup([
                                   ["100000000000", "void"],
                                   ["010000000000", "char"],
                                   ["010000010000", "char"],
@@ -867,7 +888,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                   ["000020010000", "long long"],
                                   ["000120010000", "long long"],
                                   ["000020001000", "unsigned long long"],
-                                  ["000120001000", "unsigned long long"]], $key, ""))
+                                  ["000120001000", "unsigned long long"]], $key, "")))
         : display = join(split(slice($words, 2, size($words) - 1), "  "), " ") .
   Named : stat    = size(split($words, " static ")) > 1
         : tdef    = size(split($words, " typedef ")) > 1
@@ -1033,11 +1054,37 @@ arg  = e:assignment -> Arg(value: $e) .
 
 %pass locals
 
+  (* **Tags in scope**, since ROADMAP 6.12's third part, when a struct could
+   * be defined in a block: a tag's name to its **key**, the name of its
+   * layout in `layouts`. A struct defined at file scope is keyed by its tag,
+   * as every struct was before; one defined in a function, or with no tag,
+   * by the tag and a number counted across the file, `node.3` or
+   * `(anonymous).4`, which no C tag can spell, so that a block's `struct s`
+   * and the file's are two types, as C11 6.2.1 makes them. `tscope` is the
+   * tags declared in the scope being walked, which is where a second
+   * definition is refused. A block and a function keep and restore both,
+   * and the typedefs, as they do the names. *)
+  thread tags   = empty
+  thread tscope = empty
+  thread tagn   = 0
+
   (* **What a `for` may declare**, C11 6.8.5p3: objects that are `auto` or
    * `register`, and so no `static`, `extern` or `typedef`, which `cc`
    * refuses as C23's. `dkind` tells a declarator it is in one. *)
+  (* **`struct s;` declares a struct in this scope**, C11 6.7.2.3p7,
+   * since ROADMAP 6.12's third part: in a block it is a new type, which
+   * hides one of the same tag outside until it is defined here or the block
+   * ends. A declaration of no names whose specifiers are a struct's tag and
+   * no definition is one; the words say it is a struct before `def` is
+   * asked, since a typedef's name has none. *)
   Decls  : down base = $spec
          : down dkind = $kind
+         : fwd    = size($items) = 0 and size(split($spec.words, " struct ")) > 1 and size($spec.def) = 0
+         : fresh  = $fwd and not defined($tscope, $spec.name)
+         : tags   = lookup([[true, bind($tags, $spec.name, lookup([[true, "{}.{}" of $spec.name, $tagn]], $infunc, $spec.name))]],
+                           $fresh, $tags)
+         : tscope = lookup([[true, bind($tscope, $spec.name, true)]], $fwd, $tscope)
+         : tagn   = lookup([[true, $tagn + 1]], $fresh, $tagn)
          ! $kind = "for" and ($spec.stat or $spec.tdef or size(split($spec.words, " extern ")) > 1)
              : "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" .
 
@@ -1148,9 +1195,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * table of members. It starts with `int`, `char` and `long` in it, as three
    * structs with no members, and that is what lets `Base` answer a width with one
    * lookup whatever it names: the keyword and the tag are asked the same
-   * question of the same table. A struct is defined at file scope only, so
-   * this is never reset and flows from each definition to everything after
-   * it, which is C11 6.2.1's scope for a tag declared outside any block.
+   * question of the same table. It is keyed by a struct's **key**, see
+   * `tags` above, which no two definitions share, so it is never reset and
+   * flows from each definition to everything after it; which definition a
+   * tag means in a scope is `tags`' question, not this table's.
    *
    * **`void` is the fourth**, since 2026-09-26, ROADMAP 6.7, and unlike the
    * other three it keeps its name as its tag: see `Base`. So a `void` value
@@ -1171,7 +1219,8 @@ arg  = e:assignment -> Arg(value: $e) .
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
-   * already has. File scope only, like `layouts`, so never reset. The parse
+   * already has. A block keeps and restores it, since a typedef may be
+   * declared in one since ROADMAP 6.12's third part. The parse
    * has already decided which names are typedefs, with `%names`; this is what
    * each one *means*, which the parse has no way to hold. *)
   thread typedefs = empty
@@ -1189,6 +1238,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * own definition has no size and cannot be a member; a **pointer** to one
    * needs no size, and a linked list is made of exactly that. *)
   Program : down defining = ""
+          : down infunc   = false
           : allsigs = $sigs
           : alllabels = $labels
           : allrets = $rets
@@ -1200,25 +1250,44 @@ arg  = e:assignment -> Arg(value: $e) .
    * by name: C11 6.7.2.1 wants at least one, and this `cc` takes `{}` as an
    * extension with a `sizeof` of 0, so it is a program both would compile
    * and answer differently, the way `int a[0]` is. *)
-  StructDef : down defining = $name
+  (* **Its key is worked out on the way in**, since ROADMAP 6.12's third
+   * part, so that a member that points at the struct finds it: a tag this
+   * scope has declared already keeps the key it was given, `struct s;` then
+   * `struct s { ... }`; one defined in a function is numbered, and so is one
+   * with no tag. A second definition in one scope is refused; one in an
+   * inner scope is another type, and hides the first until the scope ends. *)
+  StructDef : down skey     = lookup([[true, lookup($tags, $name, $name)]], $name <> "" and defined($tscope, $name),
+                                     lookup([[true, "(anonymous).{}" of $tagn]], $name = "",
+                                            lookup([[true, "{}.{}" of $name, $tagn]], $infunc, $name)))
+            : down tagn     = $tagn + 1
+            : down tags     = bind($tags, $name, $skey)
+            : down defining = $skey
             : down fields   = empty
             : down moff     = 0
             : down malign   = 1
-            : layouts = bind($layouts, $name,
+            : mykey   = $skey
+            : tags    = bind($tags, $name, $skey)
+            : tscope  = bind($tscope, $name, true)
+            : layouts = bind($layouts, $skey,
                              [(($moff + $malign - 1) div $malign) * $malign, $malign, $fields,
                               size(flatten($members.mconst)) > 0])
-            ! defined($layouts, $name) : "'struct {}' is defined twice" of $name
+            ! $name <> "" and defined($tscope, $name)
+                and at(lookup($layouts, lookup($tags, $name, ""), [0, 1, empty, false]), 1) > 0
+                : "'struct {}' is defined twice" of $name
             ! size($members) = 0
                 : "'struct {}' has no members, which C11 6.7.2.1 forbids and this cc allows as an extension"
                     of $name .
 
   (* What a declaration's base is worth: a width, an alignment, and the tag
-   * or "". A tag nothing defined is refused, **except** the one being
-   * defined, which answers the default: a width of 0, which no complete type
-   * has and which the members below read as *not yet complete*. C allows a
-   * pointer to a struct nobody ever defines; this subset does not, yet,
-   * because the only program here that needs one is a list, and a list
-   * names its own struct. *)
+   * or "". A struct's tag is its **key**, `tkey`, found in `tags`, or the
+   * key its own definition was given when it has one; a tag nothing has
+   * declared is taken to be the file's. One that is not complete where it
+   * is named answers the default, a width of 0, which no complete type has
+   * and which everything below reads as *not complete here*: a pointer to it
+   * is C, and an object of it is refused where it is declared, since
+   * ROADMAP 6.12's third part. Until then a tag nothing defined was refused
+   * wherever it was named. A struct defined inside another leaves the outer
+   * one's members as they were, which is what `hfields` keeps. *)
   (* A typedef is its base and its stars, worked out once here and read by
    * every declaration that names it. C11 6.7p3 lets a typedef be declared
    * again **to the same type**, so a second one is refused only when it
@@ -1226,17 +1295,28 @@ arg  = e:assignment -> Arg(value: $e) .
   Typedef : means    = [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns,
                         "{}{}" of $base.bquals, $squals]
           : typedefs = bind($typedefs, $name, $means)
+          : scope    = lookup([[true, bind($scope, $name, true)]], $dkind = "block", $scope)
           (* **Not a typedef of `void` itself**, since 2026-09-26: C allows
            * one, and nothing here has needed it. `typedef void *vp;` is a
            * pointer and is allowed. *)
           ! $stars + $base.ptrs = 0 and $base.tagname = "void"
               : "'{}' is a typedef of 'void', which is C and is not here yet; a typedef of 'void *' is" of $name
-          ! defined($globals, $name)
+          ! $dkind = "file" and defined($globals, $name)
               : "'{}' is a global already, and a typedef and a global share one name space, C11 6.2.3" of $name
-          ! defined($typedefs, $name)
-              and lookup($typedefs, $name, empty)
-                  <> [$base.basew, $base.align, $base.tagname, $stars + $base.ptrs, $base.buns,
-                      "{}{}" of $base.bquals, $squals]
+          (* **A second typedef of one name** is refused when it names
+           * another type in the same scope, and hides the first in an inner
+           * one. A struct is compared by its key, since its width may have
+           * been unknown at one of the two, see `Base`. *)
+          ! $dkind = "block" and defined($scope, $name) and not defined($typedefs, $name)
+              : "'{}' is declared twice" of $name
+          ! ($dkind = "file" or defined($scope, $name)) and defined($typedefs, $name)
+              and [at(lookup($typedefs, $name, empty), 3), at(lookup($typedefs, $name, empty), 4),
+                   at(lookup($typedefs, $name, empty), 5), at(lookup($typedefs, $name, empty), 6)]
+                  <> [$base.tagname, $stars + $base.ptrs, $base.buns, "{}{}" of $base.bquals, $squals]
+              : "'{}' is a typedef twice, for two different types" of $name
+          ! ($dkind = "file" or defined($scope, $name)) and defined($typedefs, $name)
+              and (at(lookup($typedefs, $name, empty), 3) = "" or at(lookup($typedefs, $name, empty), 3) = "void")
+              and at(lookup($typedefs, $name, empty), 1) <> $base.basew
               : "'{}' is a typedef twice, for two different types" of $name .
 
   (* **A declaration's stars are its own and its typedef's**: `intp *q` with
@@ -1249,8 +1329,9 @@ arg  = e:assignment -> Arg(value: $e) .
                               lookup([[true, "1"]], size(split($words, " const ")) > 1 or slice($tq, size($tq), size($tq)) = "1", "0")
         : hasconst = at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 4)
         : buns    = at($means, 5)
-        : basew   = at($means, 1)
-        : align   = at($means, 2)
+        : sized   = at($means, 3) <> "" and at($means, 3) <> "void"
+        : basew   = lookup([[true, at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 1)]], $sized, at($means, 1))
+        : align   = lookup([[true, at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 2)]], $sized, at($means, 2))
         : tagname = at($means, 3)
         : ptrs    = at($means, 4)
         ! $unsup <> ""
@@ -1268,16 +1349,24 @@ arg  = e:assignment -> Arg(value: $e) .
    * keyword whose feature is not here, more than one storage class, and a
    * list of the words of a type that is no type, or `long long`. Each asks
    * that the one before it passed, so a declaration is refused once. *)
-  Base : ptrs    = 0
+  Base : down hfields = $fields
+       : down hmoff    = $moff
+       : down hmalign  = $malign
+       : fields  = $hfields
+       : moff    = $hmoff
+       : malign  = $hmalign
+       : tkey    = lookup([[true, $tname]], $name = "" and size($def) = 0,
+                          lookup([[true, join($def.mykey)]], size($def) > 0, lookup($tags, $name, $name)))
+       : ptrs    = 0
        : bquals  = lookup([[true, "1"]], size(split($words, " const ")) > 1, "0")
-       : layout  = lookup($layouts, $tname, [0, 1, empty, false])
+       : layout  = lookup($layouts, $tkey, [0, 1, empty, false])
        : hasconst = at($layout, 4)
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
-                           ["unsigned char", ""], ["unsigned long", ""]], $tname, $tname)
+                           ["unsigned char", ""], ["unsigned long", ""]], $tkey, $tkey)
        : buns    = lookup([["unsigned int", true], ["unsigned char", true],
-                           ["unsigned long", true]], $tname, false)
+                           ["unsigned long", true]], $tkey, false)
        ! $unsup <> ""
            : lookup([["_Complex", "'_Complex' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
                      ["_Imaginary", "'_Imaginary' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
@@ -1288,9 +1377,7 @@ arg  = e:assignment -> Arg(value: $e) .
        ! $unsup = "" and $nstore < 2 and ($tname = "long long" or $tname = "unsigned long long")
            : "'{}' is C11's, and not this subset's yet" of $tname
        ! $unsup = "" and $nstore < 2 and $tname = ""
-           : "'{}' is not one of the types C11 6.7.2p2 lists" of $display
-       ! $name <> "" and not defined($layouts, $name) and $name <> $defining
-           : "'struct {}' is not defined" of $name .
+           : "'{}' is not one of the types C11 6.7.2p2 lists" of $display .
 
   (* A member starts at the next offset its alignment allows. An element is
    * aligned as its base is, or to eight when it is a pointer, and an array as
@@ -1307,9 +1394,12 @@ arg  = e:assignment -> Arg(value: $e) .
                : moff   = $offset + $ebytes
                : malign = lookup([[true, $ealign]], $ealign > $malign, $malign)
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void"
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname = $defining
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
                        of $base.name
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void" and $base.tagname <> ""
+                 and $base.tagname <> $defining
+                   : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
                ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                    : "'{}' is a member of type 'void', and a member's type has to be complete, C11 6.7.2.1p3" of $name .
   MemberArray  : ptrs   = $stars + $base.ptrs
@@ -1327,9 +1417,12 @@ arg  = e:assignment -> Arg(value: $e) .
                    : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                        of $name
                ! defined($fields, $name) : "'{}' is a member twice" of $name
-               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void"
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname = $defining
                    : "'struct {}' is not complete inside its own definition, so it cannot be a member of itself; a pointer to it can"
                        of $base.name
+               ! $stars + $base.ptrs = 0 and $base.basew = 0 and $base.tagname <> "void" and $base.tagname <> ""
+                 and $base.tagname <> $defining
+                   : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
                ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                    : "'{}' is a member of type 'void', and a member's type has to be complete, C11 6.7.2.1p3" of $name .
 
@@ -1361,7 +1454,11 @@ arg  = e:assignment -> Arg(value: $e) .
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
+            ! defined($rets, $name)
+                and [at(lookup($rets, $name, empty), 1), lookup([[true, 0]], at(lookup($rets, $name, empty), 1) <> "" and at(lookup($rets, $name, empty), 1) <> "void", at(lookup($rets, $name, empty), 2)),
+                     at(lookup($rets, $name, empty), 3), at(lookup($rets, $name, empty), 4), at(lookup($rets, $name, empty), 5)]
+                    <> [$ret.tagname, lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void", $ret.basew),
+                        $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1369,10 +1466,18 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
-                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of $ret.tagname) .
+                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .
 
   Function  : rptrs = $stars + $ret.ptrs
             : down fn     = $name
+            : down infunc = true
+            : down fheldtags  = $tags
+            : down fheldtypes = $typedefs
+            : down fheldtscope = $tscope
+            : down tscope = empty
+            : tags     = $fheldtags
+            : typedefs = $fheldtypes
+            : tscope   = $fheldtscope
           : down env    = $globals
             : down scope  = empty
             : down bytes  = 0
@@ -1387,7 +1492,11 @@ arg  = e:assignment -> Arg(value: $e) .
                     of $name
             ! defined($globals, $name)
                 : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
-            ! defined($rets, $name) and lookup($rets, $name, empty) <> [$ret.tagname, $ret.basew, $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
+            ! defined($rets, $name)
+                and [at(lookup($rets, $name, empty), 1), lookup([[true, 0]], at(lookup($rets, $name, empty), 1) <> "" and at(lookup($rets, $name, empty), 1) <> "void", at(lookup($rets, $name, empty), 2)),
+                     at(lookup($rets, $name, empty), 3), at(lookup($rets, $name, empty), 4), at(lookup($rets, $name, empty), 5)]
+                    <> [$ret.tagname, lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void", $ret.basew),
+                        $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1395,7 +1504,7 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
-                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of $ret.tagname) .
+                    of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .
 
   Labelled : labels = bind($labels, ("{}/{}" of $fn, $name), true)
            ! defined($labels, "{}/{}" of $fn, $name)
@@ -1429,6 +1538,8 @@ arg  = e:assignment -> Arg(value: $e) .
         ! $name <> "" and defined($scope, $name) : "'{}' is a parameter twice" of $name
         ! $stars + $base.ptrs = 0 and $base.tagname = "void"
             : "'{}' is a parameter of type 'void', and only '(void)' alone, for no parameters, is C" of $name
+        ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+            : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
         ! $pindex + lookup([[true, 2]], $stars + $base.ptrs = 0 and $base.tagname <> ""
                                         and $base.basew > 8 and $base.basew <= 16, 1) > 8
             : "'{}' needs a ninth register, and only eight are compiled: the rest go on the stack, and nothing here puts them there"
@@ -1437,7 +1548,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : "'{}' is a parameter declared '{}', and the one storage class a parameter may have is 'register', C11 6.7.6.3p2"
                 of $name, $base.pword .
 
-  Call ! not defined($funcs, $name)
+  Call : known = $layouts
+       ! not defined($funcs, $name)
            : "'{}' is called before it is declared" of $name
        ! defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) = 0
            and size($args) <> at(lookup($funcs, $name, [0, 0]), 1)
@@ -1457,8 +1569,15 @@ arg  = e:assignment -> Arg(value: $e) .
   Block : down held      = $env
         : down heldscope = $scope
         : down scope     = empty
+        : down heldtags  = $tags
+        : down heldtscope = $tscope
+        : down heldtypes = $typedefs
+        : down tscope    = empty
         : env   = $held
-        : scope = $heldscope .
+        : scope = $heldscope
+        : tags  = $heldtags
+        : tscope = $heldtscope
+        : typedefs = $heldtypes .
 
   (* A scalar is eight bytes of frame whether it is a one-byte `char`, a
    * four-byte `int` or an eight-byte pointer, and binds a count of zero,
@@ -1476,12 +1595,14 @@ arg  = e:assignment -> Arg(value: $e) .
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+            ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
             ! defined($scope, $name) : "'{}' is declared twice" of $name
             ! $base.unsup = "" and $base.nstore < 2 and $base.tdef and $dkind <> "for"
                 : "'{}' is a typedef in a block, which C allows and this subset does not have yet" of $name
             ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
                 : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
-            ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+            ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                 : "'{}' is declared again with another type, C11 6.7p4" of $name .
   (* **The name is bound on the way out**, after its initialiser has been
    * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
@@ -1503,6 +1624,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+            ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
             ! defined($scope, $name) : "'{}' is declared twice" of $name
             ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
                 : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
@@ -1536,6 +1659,8 @@ arg  = e:assignment -> Arg(value: $e) .
                      of $name
              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                  : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+             ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                 : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
              ! defined($scope, $name) : "'{}' is declared twice" of $name
              ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
                  : "'{}' is a typedef of an array, which C allows and this subset does not have yet" of $name
@@ -1543,7 +1668,7 @@ arg  = e:assignment -> Arg(value: $e) .
                  : "'{}' is a 'register' array, and C11 6.3.2.1p3 makes using one undefined" of $name
              ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
                  : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
-             ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+             ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                  : "'{}' is declared again with another type, C11 6.7p4" of $name .
 
   (* **A `static` local takes no frame either**, since 2026-09-29, ROADMAP
@@ -1570,6 +1695,8 @@ arg  = e:assignment -> Arg(value: $e) .
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
   StaticArray : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
@@ -1586,6 +1713,8 @@ arg  = e:assignment -> Arg(value: $e) .
                       of $name
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
   (* Its initialiser is walked where it stands, with the function's names in
    * sight, so `static int b = a;` finds a local `a` and is refused by the
@@ -1603,6 +1732,8 @@ arg  = e:assignment -> Arg(value: $e) .
               : scope  = bind($scope, $name, true)
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
 
   (* **A global takes no frame**, and is bound in `globals` instead of
@@ -1624,7 +1755,9 @@ arg  = e:assignment -> Arg(value: $e) .
                                                  $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                   : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
@@ -1645,7 +1778,9 @@ arg  = e:assignment -> Arg(value: $e) .
                       of $name
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                   : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
@@ -1668,7 +1803,9 @@ arg  = e:assignment -> Arg(value: $e) .
               : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+                  : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                   : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
                   : "'{}' is defined twice, with an initialiser each" of $name
@@ -1685,6 +1822,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
   Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false])
+           : known   = $layouts
            : vreg    = at($means, 11)
            : global  = at($means, 6)
            : vuns    = at($means, 8)
@@ -1703,6 +1841,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * reached it, for the pass that can use it. *)
   Member : known = $layouts .
   Assign : known = $layouts .
+  (* **And at every name and call**, since ROADMAP 6.12's third part: a
+   * pointer to a struct records the struct's width where the pointer was
+   * declared, which is 0 when the struct was not complete there, `struct
+   * node *next` inside `struct node` itself. The `types` pass looks the
+   * width up again here, where it is used. *)
 
 (* ------------------------------------------------------------------ *)
 (* Pass three: how many stars, and what that makes impossible.         *)
@@ -1842,7 +1985,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * `void` value is one, see `layouts` in the `locals` pass, so every
    * refusal of a struct where C wants a number refuses it too, and says
    * `'void'` where it would have said `'struct void'`. *)
-  otherwise kind = lookup([["void", "void"]], $tag, "struct {}" of $tag)
+  otherwise kind = lookup([["void", "void"]], $tag, "struct {}" of at(split($tag, "."), 1))
 
   (* **Whether it is somewhere a value can be put**, C11 6.3.2.1's lvalue.
    * The `place` rule settled this in the grammar while the only places were
@@ -1864,7 +2007,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * the places C says the conversion does not happen, and the two attributes
    * being separate is what lets one of them answer a decayed question and the
    * other an undecayed one without either knowing about `sizeof`. *)
-  Variable : width = $basew
+  Variable : width = lookup([[true, at(lookup($known, $tagname, [0, 1, empty, false]), 1)]], $tagname <> "" and $tagname <> "void", $basew)
            : uns   = $vuns
            : tag   = $tagname
            : elem  = lookup([[0, $width]], $stars, 8)
@@ -1907,7 +2050,7 @@ arg  = e:assignment -> Arg(value: $e) .
                : "a member of an assignment or a call is a member of a value, and a value is not something another can be put in"
            ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
                : "'struct {}' is assigned {}, and a struct takes only its own kind"
-                   of $place.tag,
+                   of at(split($place.tag, "."), 1),
                       lookup([[true, "'{}'" of $value.kind]], $value.record,
                              "something that is not a struct")
            ! $value.record and not $place.record
@@ -1915,7 +2058,7 @@ arg  = e:assignment -> Arg(value: $e) .
            ! $place.readonly
                : "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may"
            ! $place.record and at(lookup($known, $place.tag, [0, 1, empty, false]), 4)
-               : "'struct {}' has a 'const' member, so it is not assigned whole, C11 6.3.2.1p1" of $place.tag .
+               : "'struct {}' has a 'const' member, so it is not assigned whole, C11 6.3.2.1p1" of at(split($place.tag, "."), 1) .
 
   (* **An update is an assignment that reads its place first**, C11
    * 6.5.16.2 and 6.5.2.4, so it is worth the place's type, and it takes what
@@ -1948,6 +2091,8 @@ arg  = e:assignment -> Arg(value: $e) .
                : "'{}' does not take a pointer" of $op
            ! $place.type = 1 and $place.tag = "void"
                : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op
+           ! ($place.type = 1 and $place.tag <> "" and $place.tag <> "void" and $place.width = 0)
+               : "'{}' counts in 'struct {}', which is not complete here, C11 6.5.6" of $op, at(split($place.tag, "."), 1)
            ! $place.readonly
                : "'{}' changes something declared 'const', and C11 6.3.2.1p1 says nothing may" of $op .
 
@@ -1957,7 +2102,7 @@ arg  = e:assignment -> Arg(value: $e) .
   LocalInit ! $ptrs = 0 and $base.tagname <> ""
                 and ($value.type <> 0 or $value.tag <> $base.tagname)
                 : "'{}' is a 'struct {}' initialised from {}, and a struct takes only its own kind"
-                    of $name, $base.tagname,
+                    of $name, at(split($base.tagname, "."), 1),
                        lookup([[true, "a '{}'" of $value.kind]], $value.record,
                               "something that is not a struct")
             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
@@ -1968,13 +2113,13 @@ arg  = e:assignment -> Arg(value: $e) .
    * initialiser, which the subset does not have, and is refused by name. *)
   GlobalInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
                  : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
-                     of $name, $base.tagname
+                     of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
                  : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   StaticInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
                  : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
-                     of $name, $base.tagname
+                     of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
                  : "'{}' is put where a number or a pointer goes" of $value.kind .
 
@@ -2007,7 +2152,7 @@ arg  = e:assignment -> Arg(value: $e) .
                    of $callee
            ! $argi >= size($sig) and $value.record and $value.tag <> "void"
                : "'{}' is given a 'struct {}' through '...', and a struct is not passed that way here"
-                   of $callee, $value.tag .
+                   of $callee, at(split($value.tag, "."), 1) .
   Program  : down callees = $allsigs
            : down labelled = $alllabels
            : down results = $allrets
@@ -2032,7 +2177,8 @@ arg  = e:assignment -> Arg(value: $e) .
            : quals     = at($returns, 5)
            : uns       = at($returns, 4)
            : tag       = at($returns, 1)
-           : width     = at($returns, 2)
+           : width     = lookup([[true, at(lookup($known, at($returns, 1), [0, 1, empty, false]), 1)]],
+                                at($returns, 1) <> "" and at($returns, 1) <> "void", at($returns, 2))
            : type      = at($returns, 3)
            : aggregate = $type = 0 and $tag <> "" and $tag <> "void" .
 
@@ -2048,7 +2194,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Return ! $value.record and $gives = ""
              : "'{}' is returned, and this function returns an int" of $value.kind
          ! $value.record and $gives <> "" and $gives <> "void" and $value.tag <> $gives
-             : "'{}' is returned, and this function returns 'struct {}'" of $value.kind, $gives
+             : "'{}' is returned, and this function returns 'struct {}'" of $value.kind, at(split($gives, "."), 1)
          ! not $value.record and $gives <> "" and $gives <> "void"
              : "a function that returns 'struct {}' returns something that is not a struct" of $gives
          (* **A `void` function returns nothing**, since 2026-09-26, and
@@ -2179,7 +2325,9 @@ arg  = e:assignment -> Arg(value: $e) .
             * statement that throws it away; here it is refused at both,
             * since there is nothing of no width to load. *)
            ! $value.type = 1 and $value.tag = "void"
-               : "'*' on a 'void *' has nothing to read: convert it to a pointer to something first" .
+               : "'*' on a 'void *' has nothing to read: convert it to a pointer to something first"
+           ! ($value.type = 1 and $value.tag <> "" and $value.tag <> "void" and $value.width = 0)
+               : "'*' reads a 'struct {}', which is not complete here" of at(split($value.tag, "."), 1) .
 
   (* **A member is the struct's layout read at the member's name.** The
    * entry is the same five things a name's is, where it is, its stars, its
@@ -2204,7 +2352,8 @@ arg  = e:assignment -> Arg(value: $e) .
                               lookup([[true, "1"]], slice($mq, size($mq), size($mq)) = "1" or $value.readonly, "0")
          : quals = lookup([[0, $mown]], at($entry, 3), "{}0" of $mown)
          : uns   = at($entry, 6)
-         : width = at($entry, 4)
+         : width = lookup([[true, at(lookup($known, at($entry, 5), [0, 1, empty, false]), 1)]],
+                          at($entry, 5) <> "" and at($entry, 5) <> "void", at($entry, 4))
          : tag   = at($entry, 5)
          : elem  = lookup([[0, $width]], at($entry, 2), 8)
          : type  = lookup([[0, at($entry, 2)]], at($entry, 3), at($entry, 2) + 1)
@@ -2259,7 +2408,9 @@ arg  = e:assignment -> Arg(value: $e) .
               * C11 6.5.3.4 wants a complete type, and `cc` answers 1, as GNU
               * C does. *)
              ! $ptrs = 0 and $base.tagname = "void"
-                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
+                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does"
+             ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+                 : "'sizeof' of 'struct {}', which is not complete here, C11 6.5.3.4" of at(split($base.tagname, "."), 1) .
   SizeOfExpr : type = 0 : width = 8 : uns = true
              ! $value.record and $value.tag = "void"
                  : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
@@ -2404,7 +2555,10 @@ arg  = e:assignment -> Arg(value: $e) .
        * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
        * `void` has no size. `cc` counts in bytes, as GNU C does. *)
       ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
-          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
+          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op
+      ! ($left.type = 1 and $left.tag <> "" and $left.tag <> "void" and $left.width = 0) or ($right.type = 1 and $right.tag <> "" and $right.tag <> "void" and $right.width = 0)
+          : "'{}' counts in 'struct {}', which is not complete here, C11 6.5.6"
+              of $op, at(split(lookup([[true, $left.tag]], ($left.type = 1 and $left.tag <> "" and $left.tag <> "void" and $left.width = 0), $right.tag), "."), 1) .
   Binary(op: "-") : type  = $left.type - $right.type
                   : quals = lookup([[0, "0"]], $type, $left.quals)
                   : uns   = lookup([[true, lookup([[true, ($left.wide and $left.puns) or ($right.wide and $right.puns)]],
@@ -2428,7 +2582,10 @@ arg  = e:assignment -> Arg(value: $e) .
        * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
        * `void` has no size. `cc` counts in bytes, as GNU C does. *)
       ! ($left.type = 1 and $left.tag = "void") or ($right.type = 1 and $right.tag = "void")
-          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op .
+          : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op
+      ! ($left.type = 1 and $left.tag <> "" and $left.tag <> "void" and $left.width = 0) or ($right.type = 1 and $right.tag <> "" and $right.tag <> "void" and $right.width = 0)
+          : "'{}' counts in 'struct {}', which is not complete here, C11 6.5.6"
+              of $op, at(split(lookup([[true, $left.tag]], ($left.type = 1 and $left.tag <> "" and $left.tag <> "void" and $left.width = 0), $right.tag), "."), 1) .
   (* **A shift is the type of its left side**, C11 6.5.7, and not of the
    * wider of the two: `1 << (long)3` is an `int`, and `shifts.c` asks its
    * `sizeof`. Both sides are integers, so a pointer or a struct on either is

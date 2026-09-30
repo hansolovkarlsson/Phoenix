@@ -6434,3 +6434,42 @@ condition that protected nothing, since nothing can look "" up. The
 condition was taken out, and the break moved to the check that does
 matter, which the `int add(int, int)` prototype catches. Twelve breaks,
 all caught.
+
+## 2026-09-30: struct tags, and a miscompile a witness found
+
+**6.12's third part gave every struct definition a key.** A struct could
+now be defined in a block, and a block's `struct s` and the file's are two
+types, so the layouts table could no longer be keyed by the tag. A
+definition at file scope is keyed by its tag, as before, and one in a
+function or with no tag by the tag and a number, `node.3` or
+`(anonymous).4`; a scoped table, saved and restored at a block and a
+function body as the names are, maps a tag to the key it means there.
+
+**The key had to be known on the way in**, so that a member pointing at
+its own struct finds it, and a probe showed why that was not free: a
+`down` value reads a counter as the node is entered, and an ordinary
+attribute reads it after the node's children have moved it on. A node can
+read its own `down` value back, so the key is worked out once, on the way
+in, and read from there everywhere.
+
+**Writing the witnesses found a wrong answer that had been there since
+2026-09-23.** The plan said a pointer to a struct completed later would
+need its width looked up where it is used, and asking how that could
+already be wrong led to the struct that is always incomplete when a
+pointer to it is written: its own definition. `struct node *next` recorded
+a pointee width of 0, and `(p->next + 1)->v` read the element it started
+at. `cc` answered `2 3 2` and Phoenix `1 1 0`. Nothing in the oracle
+did arithmetic through such a member; every list program followed
+`->next` and nothing else. The width is now looked up again at every name,
+member and call, and where it is still 0 the struct is not complete there,
+and arithmetic, `*` and `sizeof` of it are refused, as `cc` refuses them.
+
+**Fourteen breaks, and four came back not caught.** Each was run by hand
+before anything was believed, and each was a witness that could not see
+its break: a call's width is taken from a table of the whole file, so only
+a function defined in another file can return an incomplete width, which
+went into the link test; nothing used a file tag after a function body
+redefined it; an inner struct's members leaking into the outer one changes
+no size, only whether `o.k` is refused; and one break disabled one of two
+checks that overlap. Four witnesses were written and the four breaks were
+all caught.

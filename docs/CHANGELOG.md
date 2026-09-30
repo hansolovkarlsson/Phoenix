@@ -16,6 +16,29 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-30: C struct tags, and a miscompile fixed
+
+**A wrong answer is fixed.** Pointer arithmetic through a struct member
+that points at its own struct, `p->next + 1` in a `struct node`, counted
+in elements of no size, so the program ran and read the wrong element. It
+had been so since structs arrived on 2026-09-23. The width of a struct is
+now found where a pointer to it is used, not where the pointer was
+declared.
+
+**Structs can be declared where C allows**, the third part of [ROADMAP
+6.12](ROADMAP.md#612-declarations-as-c11-67-has-them): inside a function
+with the function's or the block's scope, with no tag, inside another
+struct, and before they are defined, `struct later;`. A pointer to a
+struct that is not complete yet is allowed, and an object of one, its
+`*`, `sizeof` and arithmetic are refused until it is, as `cc` refuses
+them. A typedef may be declared inside a function.
+
+**Tests:** 568 → 572. Ten refusals. Ten programs join the C oracle, six
+of them refusals until now: 285 agree with `cc`, none diverges.
+Refusals: 333.
+
+---
+
 ## 2026-09-29: C declarations of several names, `extern`, and `_Static_assert`
 
 **A C declaration may declare several names**, the second part of [ROADMAP

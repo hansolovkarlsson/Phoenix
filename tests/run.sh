@@ -1908,26 +1908,17 @@ refuses "an assignment to an array" "an array is not something a value can be pu
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-an-array.c"
 refuses "an array of no elements" "C11 6.7.6.2 forbids" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-no-elements.c"
-# `struct`. A tag is defined once, at file scope, with at least one member,
+# `struct`. A tag is defined once in a scope, with at least one member,
 # none of them twice and none of them the struct itself; `cc` refuses all of
 # those but the empty struct, which it takes as an extension with a size of
-# 0, and which is refused here as `int a[0]` is. A pointer to a struct nobody
-# defined is C, and `cc` compiles it; it is refused here as outside the
-# subset, because the only program that wanted one was a list, and a list
-# names its own struct.
+# 0, and which is refused here as `int a[0]` is. An object of a struct that
+# is not complete where it is declared is refused, as `cc` refuses it.
 #
-# Two more are the grammar's, and both are C `cc` compiles: a struct defined
-# inside a function, and one with no tag. A tag is written after `struct`
-# every time here, and a definition is an item at file scope, so each is a
-# syntax error at its `{`.
-refuses "a struct defined inside a function" '* or name, and found "{"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-in-a-function.c"
-refuses "and a struct with no tag" 'expected name, and found "{"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-with-no-tag.c"
-refuses "a struct nobody defined" "'struct nope' is not defined" \
+# Until ROADMAP 6.12's third part a struct was defined at file scope only
+# and always with a tag, and a pointer to one nobody defined was refused;
+# all three programs are in the oracle now.
+refuses "a struct nobody defined" "'x' is declared of 'struct nope', which is not complete here, C11 6.7p7" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-undefined.c"
-refuses "and a pointer to one" "'struct nope' is not defined" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-pointer-to-undefined.c"
 refuses "a struct defined twice" "'struct t' is defined twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-twice.c"
 refuses "a member declared twice" "'a' is a member twice" \
@@ -2028,16 +2019,11 @@ refuses "a local in its own initialiser" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/local-in-its-own-initialiser.c"
 refuses "and a typedef hidden in its hider's initialiser" "'T' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-in-its-own-initialiser.c"
-# Three that `cc` compiles and this subset leaves out, each a refusal rather
-# than a wrong answer: a typedef in a block, as a struct is at file scope only;
-# a typedef of an array, whose count belongs to a declaration here and not to
-# a type; and a pointer to a struct nobody defines, as for a declaration.
-refuses "a typedef in a function" 'and found "x"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-in-a-function.c"
+# A typedef of an array is C `cc` compiles, and this subset's in ROADMAP
+# 6.12's fourth part; a typedef in a block and one of a struct nobody
+# defines were refused beside it until the third, and are in the oracle.
 refuses "a typedef of an array" "'v' is a typedef of an array, which C allows and this subset does not have yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-array.c"
-refuses "a typedef of a struct nobody defines" "'struct nope' is not defined" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-an-undefined-struct.c"
 # **A struct returned**, since 2026-09-23. A `return` is a copy into what the
 # function returns, so it takes the assignment's rule: its own kind of struct,
 # and no struct where the function returns an `int`. A struct a call gives back
@@ -2551,8 +2537,6 @@ refuses "a 'register' array" "'a' is a 'register' array, and C11 6.3.2.1p3 makes
         --driver check "$root/languages/c/c-arm64.phx" "$r/register-array.c"
 refuses "a typedef of a function type" "'F' is a typedef of a function type, which C allows and this subset does not have yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-a-function.c"
-refuses "a typedef alone in a block" "'T' is a typedef in a block, which C allows and this subset does not have yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-alone-in-a-block.c"
 # **A declaration of several names, and the rest of a declaration's
 # places**, since ROADMAP 6.12's second part. A name declared twice in one
 # list is refused as it is in two, and so is a global given a second type or
@@ -2601,6 +2585,31 @@ refuses "an identifier list with two in one declaration" 'and found ","' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-two-in-one-declaration.c"
 refuses "an identifier list in a prototype" 'or {, and found ";"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-of-a-prototype.c"
+# **Tags**, since ROADMAP 6.12's third part: a struct may be defined in a
+# block, with the block's scope, or with no tag, and declared before it is
+# defined; a pointer to one that is not complete yet is C, and what needs
+# its size is refused until it is, as `cc` refuses it. A tag defined twice in
+# one block is refused as at file scope, and so is a typedef given two types.
+refuses "a local of a struct not complete" "'x' is declared of 'struct s', which is not complete here, C11 6.7p7" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-local.c"
+refuses "arithmetic on a pointer to one" "'+' counts in 'struct s', which is not complete here, C11 6.5.6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-arithmetic.c"
+refuses "and '++'" "'++' counts in 'struct s', which is not complete here, C11 6.5.6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-incremented.c"
+refuses "'*' of a pointer to one" "'*' reads a 'struct s', which is not complete here" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-dereferenced.c"
+refuses "'sizeof' of one" "'sizeof' of 'struct s', which is not complete here, C11 6.5.3.4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-sizeof.c"
+refuses "a member through a pointer to one" "'*' reads a 'struct s', which is not complete here" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/incomplete-struct-member.c"
+refuses "two structs with no tag, which are two types" "'struct (anonymous)' is assigned 'struct (anonymous)', and a struct takes only its own kind" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/untagged-structs-are-two-types.c"
+refuses "a struct's members, not those of one inside it" "'struct outer' has no member 'k'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/nested-struct-members-stay-inside.c"
+refuses "a struct defined twice in a block" "'struct t' is defined twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-defined-twice-in-a-block.c"
+refuses "a typedef given two types in a block" "'T' is a typedef twice, for two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-in-a-block.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.
