@@ -540,8 +540,9 @@ a second target, was opened the same day and **parked** the same day, when
 the arc was put before the port. **So was the sixth,
 [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them), declarations as
 C11 6.7 has them, opened on 2026-09-29 and closed on 2026-09-30**, the
-first entry of the C11 arc. Nothing in the arc is open now; the next entry
-is chosen from the map below.
+first entry of the C11 arc. **Open:
+[6.13](#613-initialisers-as-c11-679-has-them), initialisers as C11 6.7.9
+has them**, the second, opened on 2026-09-30.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -618,7 +619,9 @@ What it left behind is the two rows CPP's source needs most: **initialisers
 in braces**, which its five `static` arrays want and which an array whose
 size its initialiser gives is part of, and **function pointers**, which its
 diagnostic callback wants and which 6.12 parses and refuses. Either is the
-next entry, chosen as the others were, by what breaks without it.
+next entry, chosen as the others were, by what breaks without it:
+initialisers were, as [6.13](#613-initialisers-as-c11-679-has-them),
+because CPP's source writes thirty and function pointers need them too.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
@@ -723,3 +726,85 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
+
+### 6.13 Initialisers, as C11 6.7.9 has them
+
+The second entry of the C11 arc. An initialiser today is one expression
+after `=`: a scalar, a pointer, or a struct copied from another. Nothing in
+braces is read, so no array can be initialised, no struct can be written
+out member by member, and an array cannot take its size from what it is
+given. CPP's own source writes **thirty** initialisers in braces: structs
+by position inside functions, `{0}` to zero one, thirteen designators, a
+`static const` table of structs of no stated size, and `months[][4]`, an
+array of arrays of `char` from strings. [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)
+left arrays sized by an initialiser to this entry.
+
+**Four programs show what breaks without it**, kept in
+`languages/c/tests/pending/` until the part that makes each agree moves it
+to the oracle. Each was compiled by `cc -std=c11 -pedantic -Wall` with no
+warning:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `init-arrays.c`: arrays of `int`, `long` and `char *` in braces, whole and in part, at file scope, in a block and `static`; `int sized[]` and `char word[]` sized by what they are given; `char` arrays from strings, padded, and of exactly the string's length with no NUL; `months[][4]` from three strings; `int grid[2][3]` with inner braces and `int flat[2][2]` without; an element worked out at run time from a call; and `int x = {5}` | exits 11, and prints four lines | stops at the `=` of `primes`, on line 2 |
+| `init-structs.c`: structs by position at file scope, in a block and `static`; `{0}`; a struct with an array member and a struct member, with inner braces and without; an array of structs in braces; and CPP's own shape, `static const struct named table[] = {{"+", 1}, ...}`, an array of no stated size of a struct holding a string | exits 5, and prints four lines | stops at the `]` of `table[]`, on line 5 |
+| `init-designated.c`: `.member` and `[index]` designators, in and out of order, at file scope and in a block; a value by position after a designator, which goes to the next member; `.t.kind` and `.n[2]`, a chain; and `[2] = {.kind = 7}` and `[0].flags = 4` in an array of structs | exits 4, and prints three lines | stops at the `{` of `eof`'s initialiser, on line 3 |
+| `compound-literals.c`: C11 6.5.2.5's `(struct pair){3, 4}` assigned, `(int [3]){...}` and `(int []){...}` given to a pointer and passed to a function, `(struct pair){.a = 5, .b = 6}` passed whole, and one at file scope, which is `static` | exits 4, and prints `3 4 60 10 30 3` | stops at the `]` of `(int [])` at file scope, on line 5 |
+
+**Built in four parts, in this order**, each with the suite green:
+
+1. **Arrays and scalars in braces.** An initialiser becomes a list of
+   stores, each an offset, a width and a value, found by walking the
+   braces beside the declarator's level text: a brace opens the next
+   level, and a value with no brace of its own goes to the next scalar
+   the type has, which is C11 6.7.9p20's brace elision. A string fills an
+   array of `char`, and an array of no stated size takes the number of
+   elements its initialiser reached, which changes its level text after
+   the fact. What is not given is zero, 6.7.9p21. In a block the object
+   is zeroed and the stores run in order; at file scope and for a
+   `static` the stores are data, each a constant the `constants` pass
+   works out, and what is not given is `.space`. `init-arrays.c` is the
+   witness.
+2. **Structs.** The same walk through a struct's members, with the layout
+   the `locals` pass already builds: by position, `{0}`, members that are
+   arrays or structs, with their braces and without, and arrays of
+   structs. `init-structs.c` is the witness. A struct that holds a pointer
+   to a function, which CPP's `{expr_report, pp}` does, waits for function
+   pointers.
+3. **Designators**, 6.7.9p6 to p7: `.member` and `[constant]`, chains of
+   them, and positional values after one going on from where it left
+   off. **This is the part with a question in it.** In a block a store
+   goes wherever its offset says. At file scope the data is written in
+   address order, a designator may go backwards, `{[4] = 40, [1] = 10}`,
+   and the notation cannot sort; nor can it walk every element of a type
+   in order, since it has no loop over a count. Whether the offsets are
+   gathered into a table and read back in order by some walk the notation
+   has, or a global's designators must be in order and one out of order
+   is refused by name, is settled with the witness in hand.
+   `init-designated.c` is the witness; CPP's thirteen go in member order.
+4. **Compound literals**, 6.5.2.5: an unnamed object with an initialiser,
+   which is a place, so `&` and a subscript work on one. In a block it
+   lives in the frame for the block; at file scope it is `static` and its
+   initialiser must be worked out before the program runs.
+   `compound-literals.c` is the witness.
+
+**What `cc` refuses, and so will this**, each checked with `cc -std=c11
+-pedantic-errors` on 2026-09-30: more initialisers than an array, a scalar
+or a struct has room for, a string longer than its array, and braces
+around a scalar's braces, which `cc` only warns about and C11 6.7.9p2
+makes a constraint; `{}`, which is C23's; an element of a global's or a
+`static`'s initialiser not worked out before the program runs; a
+designator past an array's end, one naming no member, and one for a
+scalar; an array initialised from another array or from a scalar, a
+struct from a scalar; and an array with neither a size nor an
+initialiser. The two refusals of a struct initialised from another at
+file scope and as a `static` stay refused, and say what `cc` says, that
+the value is not worked out before the program runs.
+
+*Not in this step:* a `union`, whose first member an initialiser fills,
+which waits for `union`; a pointer to a function in an initialiser, which
+waits for function pointers; wide strings, `L"..."`, which wait for their
+prefix; an `enum` constant as a value, which waits for `enum`; and
+variable-length arrays, refused as `__STDC_NO_VLA__` says. **The entry
+closes** when the four programs agree with `cc`, none diverging, and
+every refusal above has its program in `refused/`.
