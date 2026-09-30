@@ -786,6 +786,22 @@ to the oracle. Each was compiled by `cc -std=c11
    name today; `_Static_assert`, 6.7.10, which needs the `constants` pass
    as its fourth customer; and a definition with an identifier list,
    6.9.1p6. `declarators.c` whole and `externals.c` are the witnesses.
+   *Built on 2026-09-29*, with `lists.c` beside the two, for lists in a
+   struct, a typedef list, a `static` local list, a block `extern` of an
+   array and a `for`'s names ending with it, and the link test holding
+   `extern` across two files and a `static` name defined by an `extern`
+   with an initialiser. A declaration is a `Decls` node holding the
+   specifiers once, which every pass hands down to its declarators as
+   `base`, since an action cannot give one parsed node to several; a
+   `for` that declares is a block holding the declaration and a `for`
+   without one. Where it came out differently from the plan: an
+   identifier list's declarations are one name each and in the list's
+   order, and anything else is refused by name, which `cc` compiles; a
+   function declarator in a list, `int x, f(void);`, is still a syntax
+   error, and waits for part 4's declarators; and an unnamed parameter
+   is bound under the name "", which nothing can look up, because
+   `%names` binds a parameter's name while the parse runs and has to be
+   given one.
 3. **Tags**, 6.7.2.3: a struct declared without its members and completed
    later, a pointer to one before it is complete, a definition with
    declarators after it, one with no tag, one inside another (whose tag C

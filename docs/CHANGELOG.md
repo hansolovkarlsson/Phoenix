@@ -16,6 +16,31 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-29: C declarations of several names, `extern`, and `_Static_assert`
+
+**A C declaration may declare several names**, the second part of [ROADMAP
+6.12](ROADMAP.md#612-declarations-as-c11-67-has-them): `int a = 1, b, *p;`
+at file scope, in a function and in a struct, and `typedef int I, *IP;`. A
+`for` may declare its own variables, which end with the loop. A prototype
+may leave its parameters unnamed, `int add(int, int);`.
+
+**`extern` works**, at file scope and in a block, and a global may be
+declared more than once, as C11 allows: `int x; int x = 5;` compiled to a
+refusal until now. Its storage is written once, and a second declaration
+with another type, or a second initialiser, is refused. A `static` name
+declared again with `extern` stays its file's own.
+
+**`_Static_assert` works**, at file scope and in a function, and a failing
+one prints its message, as `cc` does. A definition with an identifier list,
+`int old(a, b) int a; long b; { ... }`, compiles when its declarations come
+one name each and in the list's order, and is refused by name otherwise.
+
+**Tests:** 552 → 568. Twenty refusals. Seven programs join the C oracle,
+four of them refusals until now: 275 agree with `cc`, none diverges.
+Refusals: 329.
+
+---
+
 ## 2026-09-29: C's specifiers in any order, and every keyword reserved
 
 **The words of a C type may come in any order**, the first part of

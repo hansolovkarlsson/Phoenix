@@ -71,6 +71,12 @@
  * name. A list of words that is no type, two storage classes, and a storage
  * class where C forbids it are refused.
  *
+ * **Then declarations of several names**, ROADMAP 6.12's second part:
+ * `int a = 1, b, *p;` at file scope, in a block and in a struct, a `for`
+ * that declares, parameters without names in a prototype, `extern`, C11
+ * 6.9.2's tentative definitions, `_Static_assert`, and a definition with an
+ * identifier list, whose declarations come one name each and in its order.
+ *
  * ---------------------------------------------------------------------------
  * The lexical half is written here rather than imported. `lib/lexical.phx`
  * reads `#` as a line comment, which C does not, and every rule it carries
@@ -171,7 +177,7 @@ program = { item } -> Program(items: $1) .
     declare Typedef.name
     hide    Param.name Local.name LocalInit.name LocalArray.name
             Static.name StaticInit.name StaticArray.name
-    scope   block function
+    scope   block function for-declaration
     guard   typedef-name .
 
 (* A prototype or a definition, and the prototype first because it is the
@@ -184,9 +190,10 @@ program = { item } -> Program(items: $1) .
  * outermost declarations: `int f(int a) { int a; }` is declared twice, and a
  * `Block` would open a scope the parameters are not in. *)
 item = function
-     (* **`_Static_assert`**, C11 6.7.10, is read and refused by name until
-      * ROADMAP 6.12's second part, as `_Generic` and `_Alignof` are below. *)
-     | "_Static_assert" "(" conditional "," string ")" ";" -> Unsupported(word: "_Static_assert")
+     (* **`_Static_assert`**, C11 6.7.10, since ROADMAP 6.12's second part:
+      * a condition the `constants` pass works out, and a message it gives
+      * when the condition is zero. It may be an item or a statement. *)
+     | "_Static_assert" "(" c:conditional "," m:string ")" ";" -> StaticAssert(cond: $c, message: $m, file: true)
      (* A struct is defined at file scope and only there, and always with a
       * tag. C allows both a definition inside a block, with the block's scope,
       * and a struct with no tag at all; neither is here yet, and a program
@@ -203,19 +210,48 @@ item = function
       * ROADMAP 6.12's fourth part, and is refused by name until then. The
       * word may stand anywhere among the specifiers, `int typedef t;`, as
       * C11 6.7.1 lets any storage class: see `tdspecifiers`. *)
-     | b:tdspecifiers s:pointer n:name ";"
-         -> Typedef(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")))
+     | b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } ";"
+         -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "file")
      (* **A global is a declaration at file scope**, since 2026-09-26,
       * ROADMAP 6.8, and is written as a local is: a base, stars and a name,
       * with a count in brackets or an initialiser. It is tried after a
       * function, which fails at the `;`, `[` or `=` where its `(` was
       * wanted. Three nodes, for the reason a local is three. *)
-     | b:specifiers s:pointer n:name "[" c:integer "]" ";"
-         -> GlobalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-     | b:specifiers s:pointer n:name "=" e:assignment ";"
-         -> GlobalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
-     | b:specifiers s:pointer n:name ";"
-         -> Global(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0) .
+     | b:specifiers d:global-declarator r:{ "," e:global-declarator -> $e } ";"
+         -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "file") .
+
+(* **One declarator**, since ROADMAP 6.12's second part, when a declaration
+ * became a `Decls`: the specifiers once, as `spec`, and each name after
+ * them a node of its own in `items`, `int a = 1, b, *p;` three. Every pass
+ * hands the specifiers down to the declarators as `base`, which is the name
+ * the field had when each declaration was one name, so no clause that
+ * reads `$base` changed. A declarator is the stars, the name, and a count
+ * in brackets or an initialiser, as a declaration was; the three forms are
+ * three nodes for the reason given for a local's, below. *)
+typedef-declarator = s:pointer n:name
+                       -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}"))) .
+global-declarator  = s:pointer n:name "[" c:integer "]"
+                       -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+                   | s:pointer n:name "=" e:assignment
+                       -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), value: $e)
+                   | s:pointer n:name
+                       -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0) .
+member-declarator  = s:pointer n:name "[" c:integer "]"
+                       -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+                   | s:pointer n:name
+                       -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0) .
+static-declarator  = s:pointer n:name "[" c:integer "]"
+                       -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+                   | s:pointer n:name "=" e:assignment
+                       -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), value: $e)
+                   | s:pointer n:name
+                       -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0) .
+local-declarator   = s:pointer n:name "[" c:integer "]"
+                       -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c))
+                   | s:pointer n:name "=" e:assignment
+                       -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), value: $e)
+                   | s:pointer n:name
+                       -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -247,21 +283,22 @@ function = r:specifiers t:pointer n:name "(" "void" ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0)
          | r:specifiers t:pointer n:name "(" "void" ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
-                         body: $s)
+                         body: $s, ids: [])
          | r:specifiers t:pointer n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
                           variadic: size($v))
          | r:specifiers t:pointer n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                         variadic: size($v), body: $s) .
+                         variadic: size($v), body: $s, ids: [])
+         | r:specifiers t:pointer n:name "(" i:name j:{ "," x:name -> $x } ")" p:{ kr-declaration } "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
+                         variadic: 0, body: $s, ids: flatten([[$i], $j])) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
  * initialiser, because C has none for a member. *)
-member = b:sqlist s:pointer n:name "[" c:integer "]" ";"
-           -> MemberArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-       | b:sqlist s:pointer n:name ";"
-           -> MemberScalar(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0) .
+member = b:sqlist d:member-declarator r:{ "," e:member-declarator -> $e } ";"
+           -> MDecls(spec: $b, items: flatten([[$d], $r])) .
 
 (* A parameter is a node and not a name, because it takes a slot the way a
  * local does and the emit pass has to store a register into it. The
@@ -281,7 +318,26 @@ params = [ param { "," q:param -> $q } ] -> $1 .
  * repetition's iteration that fails gives back what it took, which is what
  * lets `params` stop at the `,` in front of the `...`. *)
 dots   = [ "," e:"..." -> $e ] -> $1 .
-param  = b:specifiers s:pointer n:name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
+(* **A parameter may have no name**, since ROADMAP 6.12's second part:
+ * `int add(int, int);` is a prototype of two. One without a name is bound
+ * as "", which nothing can look up, and is not "a parameter twice". A definition's parameters are named, C11 6.9.1p5, which the
+ * `functions` pass asks. *)
+param  = b:specifiers s:pointer n:name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")))
+       | b:specifiers s:pointer n:no-name -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
+
+(* **The name of a parameter that has none**: nothing, answering "". It is
+ * a factor so that `%names` has one to bind, and what it hides is a
+ * typedef named "", which no program can write. The option inside it is
+ * never taken, since two `...` in a row are no C; the notation has no rule
+ * that matches nothing, and this is one that does. *)
+no-name = [ "..." "..." ] -> "" .
+
+(* **A definition with an identifier list**, C11 6.9.1p6, obsolescent and
+ * still C: the names in the parentheses and a declaration for each before
+ * the body. Each declaration is a parameter's, one name to one, and the
+ * `functions` pass asks that they come in the list's order, which C does
+ * not: this subset's limit, and a refusal by name. *)
+kr-declaration = b:specifiers s:pointer n:name ";" -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}"))) .
 
 (* What is at the bottom of the stars. **A node since `struct`**, and a keyword
  * before it: `int` and `char` were two words the `locals` pass turned into a
@@ -400,6 +456,16 @@ pointer = { "*" cq:{ "const" } -> size($cq) } -> $1 .
 
 block = "{" { statement } "}" -> Block(body: $2) .
 
+(* **A `for` that declares**, C99 6.8.5p3, since ROADMAP 6.12's second part,
+ * is a block holding the declaration and a `for` without one, which is the
+ * scope C gives it: the names reach the end of the loop and no further. It
+ * is a rule of its own so that `%names` ends a typedef's hiding there, as a
+ * block's end does. What it may declare is refused in the `locals` pass. *)
+for-declaration = "for" "(" b:specifiers d:local-declarator r:{ "," e:local-declarator -> $e } ";"
+                    c:[ expression ] ";" t:[ expression ] ")" x:statement
+                    -> Block(body: [Decls(spec: $b, items: flatten([[$d], $r]), kind: "for"),
+                                    For(init: [], cond: $c, step: $t, body: $x)]) .
+
 (* A declaration is two nodes rather than one with an optional initialiser,
  * because a node whose field is sometimes there is a node every pass has to
  * ask about. `int x = e;` is `int x; x = e;` and the emit pass says so.
@@ -453,18 +519,10 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * word may stand anywhere among the specifiers since ROADMAP
            * 6.12's first part, `int static n;`, which is `sspecifiers`'
            * question; `auto` and `register` are a plain local's words. *)
-          | b:sspecifiers s:pointer n:name "[" c:integer "]" ";"
-                   -> StaticArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-          | b:sspecifiers s:pointer n:name "=" e:assignment ";"
-                   -> StaticInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
-          | b:sspecifiers s:pointer n:name ";"
-                   -> Static(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
-          | b:specifiers s:pointer n:name "[" c:integer "]" ";"
-                   -> LocalArray(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c))
-          | b:specifiers s:pointer n:name "=" e:assignment ";"
-                   -> LocalInit(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), value: $e)
-          | b:specifiers s:pointer n:name ";"
-                   -> Local(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0)
+          | b:sspecifiers d:static-declarator r:{ "," e:static-declarator -> $e } ";"
+                   -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
+          | b:specifiers d:local-declarator r:{ "," e:local-declarator -> $e } ";"
+                   -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
            * before the outer one does, which is what C11 6.8.4 says. *)
@@ -477,6 +535,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
            * that is empty when it did not match, so the node carries three
            * lists of at most one. That is the same shape as a block's body,
            * and the emit pass joins them the same way. *)
+          | for-declaration
           | "for" "(" i:[ expression ] ";" c:[ expression ] ";" s:[ expression ] ")"
                 b:statement                         -> For(init: $i, cond: $c, step: $s, body: $b)
           (* **A `do` runs its body before it tests**, C11 6.8.5.2, so once
@@ -492,7 +551,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | "continue" ";"                          -> Continue
           | ";"                                     -> Empty
           | block
-          | "_Static_assert" "(" conditional "," string ")" ";" -> Unsupported(word: "_Static_assert")
+          | "_Static_assert" "(" c:conditional "," m:string ")" ";" -> StaticAssert(cond: $c, message: $m, file: false)
           | e:expression ";"                        -> Discard(value: $e) .
 
 (* C's expression grammar, all fifteen of its levels. `lib/expression.phx`
@@ -712,6 +771,25 @@ arg  = e:assignment -> Arg(value: $e) .
 
 %pass functions
 
+  (* **A declaration hands its specifiers down**, since ROADMAP 6.12's
+   * second part: `base` in every pass is the `spec` of the `Decls` above,
+   * so a declarator reads its words and its type as it did when they were
+   * its own field. A struct's members do the same through `MDecls`. The
+   * lists this pass gathers at the top are its items' lists joined, and
+   * a node with none gives none. *)
+  Decls  : down base = $spec
+         : shape  = flatten($items.shape)
+         : dshape = flatten($items.dshape)
+         : dname  = flatten($items.dname)
+         : fdefs  = flatten($items.fdefs)
+         : ginit  = flatten($items.ginit) .
+  MDecls : down base = $spec .
+  otherwise shape  = []
+  otherwise dshape = []
+  otherwise dname  = []
+  otherwise fdefs  = []
+  otherwise ginit  = []
+
   (* **Whether each function is its file's own**, since 2026-09-29, ROADMAP
    * 6.10, in document order, because C11 6.2.2p4 decides it by what came
    * first: a declaration without `static` takes the linkage of one above
@@ -736,9 +814,10 @@ arg  = e:assignment -> Arg(value: $e) .
         : tdef    = size(split($words, " typedef ")) > 1
         : sauto   = size(split($words, " auto ")) > 1
         : sreg    = size(split($words, " register ")) > 1
+        : sext    = size(split($words, " extern ")) > 1
         : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
         : pword   = at(split(("{}{}{}" of lookup([[true, "static "]], size(split($words, " static ")) > 1, ""), lookup([[true, "typedef "]], size(split($words, " typedef ")) > 1, ""), lookup([[true, "auto "]], size(split($words, " auto ")) > 1, "")), " "), 1)
-        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
+        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
                                    lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
                                    lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
                                    lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
@@ -750,7 +829,6 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
                                    lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
-                                   lookup([[true, "extern "]], size(split($words, " extern ")) > 1, ""),
                                    lookup([[true, "_Thread_local "]], size(split($words, " _Thread_local ")) > 1, ""),
                                    lookup([[true, "inline "]], size(split($words, " inline ")) > 1, ""),
                                    lookup([[true, "_Noreturn "]], size(split($words, " _Noreturn ")) > 1, ""),
@@ -795,9 +873,10 @@ arg  = e:assignment -> Arg(value: $e) .
         : tdef    = size(split($words, " typedef ")) > 1
         : sauto   = size(split($words, " auto ")) > 1
         : sreg    = size(split($words, " register ")) > 1
+        : sext    = size(split($words, " extern ")) > 1
         : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
         : pword   = at(split(("{}{}{}" of lookup([[true, "static "]], size(split($words, " static ")) > 1, ""), lookup([[true, "typedef "]], size(split($words, " typedef ")) > 1, ""), lookup([[true, "auto "]], size(split($words, " auto ")) > 1, "")), " "), 1)
-        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
+        : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
                                    lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
                                    lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
                                    lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
@@ -809,7 +888,6 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
                                    lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
-                                   lookup([[true, "extern "]], size(split($words, " extern ")) > 1, ""),
                                    lookup([[true, "_Thread_local "]], size(split($words, " _Thread_local ")) > 1, ""),
                                    lookup([[true, "inline "]], size(split($words, " inline ")) > 1, ""),
                                    lookup([[true, "_Noreturn "]], size(split($words, " _Noreturn ")) > 1, ""),
@@ -824,7 +902,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
-            : fname = []
+            : fdefs = []
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
             ! $ret.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
@@ -840,7 +918,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
             : dname = [$name]
-            : fname = [$name]
+            : fdefs = [$name]
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
             ! $ret.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
@@ -851,34 +929,59 @@ arg  = e:assignment -> Arg(value: $e) .
             ! $ret.unsup = "" and $ret.nstore < 2 and $ret.tdef
                 : "'{}' is a typedef of a function type, which C allows and this subset does not have yet" of $name
             ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
-                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
+                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register")
+            ! size($params) > 0 and size(split((",{}," of join($params.name, ",")), ",,")) > 1
+                : "a parameter of a function's definition has a name, C11 6.9.1p5"
+            ! size(positions($ids)) < size($ids)
+                : "'{}' has a name twice in its list of parameters, C11 6.9.1p6" of $name
+            ! size(positions($ids)) = size($ids) and size($ids) > 0 and join($ids, ",") <> join($params.name, ",")
+                : "'{}' does not declare one parameter for each name in its list, in the list's order: C11 6.9.1p6 asks for one each, and this subset for the order too" of $name .
 
   (* **A keyword read only to be refused**, since ROADMAP 6.12's first part:
-   * `_Static_assert`, which is an item or a statement, and `_Generic` and
-   * `_Alignof`, which are expressions. It is refused in the first pass so
-   * that no later one has to say what such an expression is. *)
-  Unsupported : shape = [] : dshape = [] : dname = [] : fname = []
-              ! true : "'{}' is C11's, and not this subset's yet" of $word .
+   * `_Generic` and `_Alignof`, which are expressions; `_Static_assert` was
+   * one too, until the second part. It is refused in the first pass so that
+   * no later one has to say what such an expression is. *)
+  Unsupported ! true : "'{}' is C11's, and not this subset's yet" of $word .
 
   (* A struct is an item and not a function, and adds nothing to either count. *)
   StructDef : shape = []
             : dshape = []
             : dname = []
-            : fname = [] .
+            : fdefs = [] .
   Typedef   : shape = []
             : dshape = []
             : dname = []
-            : fname = [] .
-  Global      : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
-              : hidden = $base.stat .
-  GlobalInit  : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
-              : hidden = $base.stat .
-  GlobalArray : shape = [] : dshape = [] : dname = [] : fname = [] : internal = lookup([[true, 1]], $base.stat, 0)
-              : hidden = $base.stat .
+            : fdefs = [] .
+  Global      : hidden  = lookup([[true, lookup($linkage, $name, false)]], defined($linkage, $name) and not $base.stat, $base.stat)
+              : linkage = bind($linkage, $name, lookup($linkage, $name, $base.stat))
+              ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
+                  : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
+              ! not $base.stat and not $base.sext and defined($linkage, $name) and lookup($linkage, $name, false)
+                  : "'{}' is declared without 'static' after a declaration with it, C11 6.2.2p7" of $name .
+  GlobalInit  : hidden  = lookup([[true, lookup($linkage, $name, false)]], defined($linkage, $name) and not $base.stat, $base.stat)
+              : linkage = bind($linkage, $name, lookup($linkage, $name, $base.stat))
+              : ginit  = [$name]
+              ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
+                  : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
+              ! not $base.stat and not $base.sext and defined($linkage, $name) and lookup($linkage, $name, false)
+                  : "'{}' is declared without 'static' after a declaration with it, C11 6.2.2p7" of $name .
+  GlobalArray : hidden  = lookup([[true, lookup($linkage, $name, false)]], defined($linkage, $name) and not $base.stat, $base.stat)
+              : linkage = bind($linkage, $name, lookup($linkage, $name, $base.stat))
+              ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
+                  : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
+              ! not $base.stat and not $base.sext and defined($linkage, $name) and lookup($linkage, $name, false)
+                  : "'{}' is declared without 'static' after a declaration with it, C11 6.2.2p7" of $name .
 
   (* Written out rather than named: a check runs before the attributes its
    * rule computes, so it cannot read them, and `phx` says so. *)
-  Program ! size(positions(flatten($items.fname))) < size(flatten($items.fname))
+  (* **Which globals are initialised somewhere in the file**, since ROADMAP
+   * 6.12's second part: C11 6.9.2 makes a declaration without an
+   * initialiser a tentative definition, which is the definition only when
+   * no other is, and the emit pass writes a global's storage once, at its
+   * initialiser if it has one and at its first tentative definition if not.
+   * A question about the whole file, so it is gathered here and asked there. *)
+  Program : inits = flatten($items.ginit)
+          ! size(positions(flatten($items.fdefs))) < size(flatten($items.fdefs))
               : "a function is defined twice"
           ! size(positions(flatten($items.shape))) > size(positions(flatten($items.dname)))
               : "a function is declared with two different numbers of parameters"
@@ -929,6 +1032,20 @@ arg  = e:assignment -> Arg(value: $e) .
 (* thing a program can measure, with `sizeof` and with `&`.             *)
 
 %pass locals
+
+  (* **What a `for` may declare**, C11 6.8.5p3: objects that are `auto` or
+   * `register`, and so no `static`, `extern` or `typedef`, which `cc`
+   * refuses as C23's. `dkind` tells a declarator it is in one. *)
+  Decls  : down base = $spec
+         : down dkind = $kind
+         ! $kind = "for" and ($spec.stat or $spec.tdef or size(split($spec.words, " extern ")) > 1)
+             : "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" .
+
+  (* **A static assertion's names** are the file's when it is an item, as a
+   * global's initialiser's are, and the block's when it is a statement. *)
+  StaticAssert : down env = lookup([[true, $globals]], $file, $env) .
+  MDecls : down base = $spec
+         : mconst = flatten($items.mconst) .
 
   (* **What a constant's text says**, since 2026-09-27: its suffix, its
    * base and its digits, read here and not in `types`, because a check
@@ -1309,7 +1426,7 @@ arg  = e:assignment -> Arg(value: $e) .
         : scope  = bind($scope, $name, true)
         : bytes  = $bytes + $takes
         : pindex = $pindex + $regs
-        ! defined($scope, $name) : "'{}' is a parameter twice" of $name
+        ! $name <> "" and defined($scope, $name) : "'{}' is a parameter twice" of $name
         ! $stars + $base.ptrs = 0 and $base.tagname = "void"
             : "'{}' is a parameter of type 'void', and only '(void)' alone, for no parameters, is C" of $name
         ! $pindex + lookup([[true, 2]], $stars + $base.ptrs = 0 and $base.tagname <> ""
@@ -1350,18 +1467,22 @@ arg  = e:assignment -> Arg(value: $e) .
   Local     : ptrs   = $stars + $base.ptrs
             : basew  = $base.basew
             : dquals = "{}{}" of $base.bquals, $squals
-            : takes  = ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8
+            : takes  = lookup([[true, 0]], $base.sext, ((lookup([[0, $basew]], $ptrs, 8) + 7) div 8) * 8)
             : offset = $bytes + $takes
-            : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
+            : env    = bind($env, $name, lookup([[true, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false]]],
+                                               $base.sext,
+                                               [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg]))
             : scope  = bind($scope, $name, true)
             : bytes  = $bytes + $takes
             ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
             ! defined($scope, $name) : "'{}' is declared twice" of $name
-            ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
+            ! $base.unsup = "" and $base.nstore < 2 and $base.tdef and $dkind <> "for"
                 : "'{}' is a typedef in a block, which C allows and this subset does not have yet" of $name
-            ! $base.unsup = "" and $base.nstore < 2 and $base.stat
-                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
+            ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
+                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
+            ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+                : "'{}' is declared again with another type, C11 6.7p4" of $name .
   (* **The name is bound on the way out**, after its initialiser has been
    * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
    * starts the scope at the end of the declarator, before the `=`, and `cc`
@@ -1385,8 +1506,10 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($scope, $name) : "'{}' is declared twice" of $name
             ! $base.unsup = "" and $base.nstore < 2 and $base.tdef
                 : "'{}' is a typedef, and only an object has an initialiser, C11 6.7.9" of $name
-            ! $base.unsup = "" and $base.nstore < 2 and $base.stat
-                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
+            ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
+                : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
+            ! $base.sext
+                : "'{}' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" of $name .
 
   (* An element is one byte, four or eight, or a struct's size, the whole
    * thing is `count` of them, and what the frame gives it is that rounded up to eight.
@@ -1401,9 +1524,11 @@ arg  = e:assignment -> Arg(value: $e) .
              : dquals = "{}{}" of $base.bquals, $squals
              : ebytes = lookup([[0, $basew]], $ptrs, 8)
              : whole  = $count * $ebytes
-             : takes  = (($whole + 7) div 8) * 8
+             : takes  = lookup([[true, 0]], $base.sext, (($whole + 7) div 8) * 8)
              : offset = $bytes + $takes
-             : env    = bind($env, $name, [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg])
+             : env    = bind($env, $name, lookup([[true, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false]]],
+                                                $base.sext,
+                                                [$offset, $ptrs, $count, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg]))
              : scope  = bind($scope, $name, true)
              : bytes  = $bytes + $takes
              ! $count < 1
@@ -1416,8 +1541,10 @@ arg  = e:assignment -> Arg(value: $e) .
                  : "'{}' is a typedef of an array, which C allows and this subset does not have yet" of $name
              ! $base.unsup = "" and $base.nstore < 2 and $base.sreg
                  : "'{}' is a 'register' array, and C11 6.3.2.1p3 makes using one undefined" of $name
-             ! $base.unsup = "" and $base.nstore < 2 and $base.stat
-                 : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
+             ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
+                 : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
+             ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+                 : "'{}' is declared again with another type, C11 6.7p4" of $name .
 
   (* **A `static` local takes no frame either**, since 2026-09-29, ROADMAP
    * 6.10: it is bound in `env` as a local is, so that it hides and is
@@ -1482,21 +1609,23 @@ arg  = e:assignment -> Arg(value: $e) .
    * `env`, with the name its entry needs and nothing the frame counts. Its
    * width and alignment are the emit pass's, to lay it out in
    * `__DATA,__data`. The refusals are a local's, and three of file scope's
-   * own: a name a function or a typedef already has, and a global declared
-   * twice. `cc` refuses two initialisers; it takes a second declaration
-   * when one of the two has none, C11 6.9.2's tentative definition, which
-   * is what a common symbol is for and is refused here by name. *)
+   * own: a name a function or a typedef already has, a global declared
+   * again with another type, and two initialisers. A second declaration
+   * with the same type is C11 6.9.2's tentative definition, since ROADMAP
+   * 6.12's second part, and was refused by name until then; the entry
+   * keeps whether any declaration so far had an initialiser. *)
   Global      : ptrs   = $stars + $base.ptrs
               : basew  = $base.basew
               : dquals = "{}{}" of $base.bquals, $squals
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false])
+              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 7),
+                                                 $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name)
-                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+                  : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
@@ -1509,14 +1638,15 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = lookup([[0, $basew]], $ptrs, 8)
               : galign = lookup([[0, $base.align]], $ptrs, 8)
               : whole  = $count * $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false])
+              : globals = bind($globals, $name, [0, $ptrs, $count, $basew, $base.tagname, true, defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 7),
+                                                 $base.buns, $name, $dquals, false])
               ! $count < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
                       of $name
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name)
-                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, $count, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+                  : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($funcs, $name)
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
@@ -1538,8 +1668,8 @@ arg  = e:assignment -> Arg(value: $e) .
               : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, true, $base.buns, $name, $dquals, false])
               ! $stars + $base.ptrs = 0 and $base.tagname = "void"
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! defined($globals, $name) and not at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
-                  : "'{}' is declared twice at file scope; C11 6.9.2 allows it when one has no initialiser, and nothing here needs it" of $name
+              ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 3), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 4), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false]), 10)] <> [$stars + $base.ptrs, 0, $base.basew, $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
+                  : "'{}' is declared again with another type, C11 6.7p4" of $name
               ! defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false]), 7)
                   : "'{}' is defined twice, with an initialiser each" of $name
               ! defined($funcs, $name)
@@ -1612,6 +1742,9 @@ arg  = e:assignment -> Arg(value: $e) .
 (* 2026-09-22.                                                          *)
 
 %pass types
+
+  Decls  : down base = $spec .
+  MDecls : down base = $spec .
 
   (* Zero is "not a pointer", which is what a statement is, what a program is,
    * and what every node that is not an expression is. Saying it once here is
@@ -2365,6 +2498,8 @@ arg  = e:assignment -> Arg(value: $e) .
 
 %pass constants
 
+  Decls  : down base = $spec .
+
   otherwise settled  = false
   otherwise folded = 0
 
@@ -2435,6 +2570,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * puts the outer one back, which is how a thread nests. *)
   thread seen     = empty
   thread defaults = 0
+
+  (* **A static assertion is this pass's fourth customer**, since ROADMAP
+   * 6.12's second part, after a `case`, a global's initialiser and a
+   * `static` local's: its condition is worked out here, and a zero is
+   * refused with the message the program gave, as `cc` gives it. *)
+  StaticAssert ! not $cond.settled
+                   : "'_Static_assert' has to be worked out before the program runs, C11 6.7.10p3, and this cannot be"
+               ! $cond.settled and $cond.folded = 0
+                   : "static assertion failed: {}" of slice($message, 2, size($message) - 1) .
 
   Number     : settled = true : folded = $bits .
   Character  : settled = true : folded = $code .

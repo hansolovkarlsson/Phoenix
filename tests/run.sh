@@ -2283,10 +2283,6 @@ refuses "a global used above its declaration" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-used-above.c"
 refuses "a struct global with an initialiser" 'which wants braces, and they are not here yet' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-struct-initialised.c"
-refuses "a global declared twice" "'x' is declared twice at file scope" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/global-declared-twice.c"
-refuses "a global declared, then defined" "'x' is declared twice at file scope" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/global-declared-then-defined.c"
 refuses "a global array of no elements" "'a' is an array of no elements" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-of-no-elements.c"
 # An address initialiser is written as its label: a string, `&` of a
@@ -2442,7 +2438,9 @@ refuses "a typedef, const and then not" "'t' is a typedef twice, for two differe
 # `cc` refuses each; so the first twenty-one here are refusals that used to
 # be answers. A keyword whose feature is not in the subset is refused by
 # name wherever it is used, and the three behind a `__STDC_NO_*__` macro
-# say so; `auto` and `register` are in, and in the oracle.
+# say so; `auto` and `register` are in, and in the oracle, and `extern` and
+# `_Static_assert` have been since the second part, when their programs
+# moved there.
 refuses "'auto' as a name" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-auto-as-a-name.c"
 refuses "'double' as a name" 'and found "="' \
@@ -2505,8 +2503,6 @@ refuses "'_Noreturn' in use" "'_Noreturn' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Noreturn-in-use.c"
 refuses "'_Alignas' in use" "'_Alignas' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignas-in-use.c"
-refuses "'extern' in use" "'extern' is C11's, and not this subset's yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-extern-in-use.c"
 refuses "'enum' in use" "'enum' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-enum-in-use.c"
 refuses "'union' in use" "'union' is C11's, and not this subset's yet" \
@@ -2515,8 +2511,6 @@ refuses "'_Alignof' in use" "'_Alignof' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignof-in-use.c"
 refuses "'_Generic' in use" "'_Generic' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Generic-in-use.c"
-refuses "'_Static_assert' in use" "'_Static_assert' is C11's, and not this subset's yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Static_assert-in-use.c"
 refuses "'_Complex' in use" "'_Complex' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Complex-in-use.c"
 refuses "'_Imaginary' in use" "'_Imaginary' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says" \
@@ -2559,6 +2553,54 @@ refuses "a typedef of a function type" "'F' is a typedef of a function type, whi
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-a-function.c"
 refuses "a typedef alone in a block" "'T' is a typedef in a block, which C allows and this subset does not have yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-alone-in-a-block.c"
+# **A declaration of several names, and the rest of a declaration's
+# places**, since ROADMAP 6.12's second part. A name declared twice in one
+# list is refused as it is in two, and so is a global given a second type or
+# a second initialiser; a second declaration without one is C11 6.9.2's
+# tentative definition, and `int x; int x;` is in the oracle, where until
+# then it was refused. `cc` refuses all of these but the last two, which are
+# this subset's: an identifier list's declarations are one name each and in
+# the list's order.
+refuses "one name twice in a list" "'a' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/two-declarators-one-name.c"
+refuses "a global with two types" "'x' is declared again with another type, C11 6.7p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-list-one-name-two-types.c"
+refuses "a global array, then not" "'a' is declared again with another type, C11 6.7p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-then-scalar.c"
+refuses "a global initialised twice in one list" "'x' is defined twice, with an initialiser each" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-list-defined-twice.c"
+refuses "a global initialised, declared, and initialised again" "'x' is defined twice, with an initialiser each" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-defined-around-a-tentative.c"
+refuses "an 'extern' in a block with an initialiser" "'x' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/extern-initialised-in-a-block.c"
+refuses "'static' after 'extern'" "'x' is declared 'static' after a declaration without it, C11 6.2.2p7" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-after-extern.c"
+refuses "an 'extern' in a block of another type" "'x' is declared again with another type, C11 6.7p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/extern-in-a-block-of-another-type.c"
+refuses "a static assertion that fails" "static assertion failed: int is eight bytes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-fails.c"
+refuses "and one in a block" "static assertion failed: zero" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-fails-in-a-block.c"
+refuses "a static assertion of a variable" "'_Static_assert' has to be worked out before the program runs, C11 6.7.10p3, and this cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-not-constant.c"
+refuses "a 'for' declaring a static" "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/for-declares-a-static.c"
+refuses "a 'for' declaring a typedef" "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/for-declares-a-typedef.c"
+refuses "an unnamed parameter in a definition" "a parameter of a function's definition has a name, C11 6.9.1p5" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/unnamed-parameter-in-a-definition.c"
+refuses "an identifier list with a name undeclared" "'f' does not declare one parameter for each name in its list, in the list's order: C11 6.9.1p6 asks for one each, and this subset for the order too" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-undeclared.c"
+refuses "an identifier list with a name twice" "'f' has a name twice in its list of parameters, C11 6.9.1p6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-named-twice.c"
+refuses "an identifier list with a name it lacks declared" "'f' does not declare one parameter for each name in its list, in the list's order: C11 6.9.1p6 asks for one each, and this subset for the order too" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-declares-another.c"
+refuses "an identifier list declared in another order" "'f' does not declare one parameter for each name in its list, in the list's order: C11 6.9.1p6 asks for one each, and this subset for the order too" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-in-another-order.c"
+refuses "an identifier list with two in one declaration" 'and found ","' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-two-in-one-declaration.c"
+refuses "an identifier list in a prototype" 'or {, and found ";"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/identifier-list-of-a-prototype.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

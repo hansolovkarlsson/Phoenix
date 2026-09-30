@@ -58,6 +58,12 @@
 
 %pass emit-arm64
 
+  (* A declaration of several names is each of them in turn, since ROADMAP
+   * 6.12's second part; see `Decls` in `c.phx`. *)
+  Decls  : down base = $spec
+         : out = join($items.out) .
+  StaticAssert : out = "" .
+
   (* Every branch needs a label the program never wrote. A thread, counted on
    * leaving, so the number a node takes is one no node before it in the walk
    * took, its own children included. The names are local to the assembler
@@ -948,14 +954,29 @@
    * their other clauses above. *)
   otherwise sym = ""
 
+  (* **A global's storage is written once**, since ROADMAP 6.12's second
+   * part, when a name could be declared more than once: at its initialiser
+   * if any declaration in the file has one, which the `functions` pass
+   * gathered, and otherwise at its first declaration that is not `extern`,
+   * C11 6.9.2's tentative definition. An `extern` declaration writes
+   * nothing, and a name no declaration here defines is the linker's to
+   * find. `written` is the names written so far. *)
+  thread written = empty
+
   Global      : out = ""
+              : emits = not $base.sext and not defined($initialised, $name) and not defined($written, $name)
+              : written = lookup([[true, bind($written, $name, true)]], $emits, $written)
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
-              : gdata = "{}{}\t.p2align {}\n_{}:\n\t.space {}\n"
-                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+              : gdata = "{}{}" of $gdata,
+                          lookup([[true, "{}\t.p2align {}\n_{}:\n\t.space {}\n"
+                                           of $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole]], $emits, "") .
   GlobalArray : out = ""
+              : emits = not $base.sext and not defined($initialised, $name) and not defined($written, $name)
+              : written = lookup([[true, bind($written, $name, true)]], $emits, $written)
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
-              : gdata = "{}{}\t.p2align {}\n_{}:\n\t.space {}\n"
-                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole .
+              : gdata = "{}{}" of $gdata,
+                          lookup([[true, "{}\t.p2align {}\n_{}:\n\t.space {}\n"
+                                           of $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $whole]], $emits, "") .
   GlobalInit  : out = ""
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
               : gdata = "{}{}\t.p2align {}\n_{}:\n\t{} {}\n"
@@ -981,7 +1002,8 @@
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
                                     lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded)) .
-  Program   : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
+  Program   : down initialised = bind(empty, $inits, true)
+            : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
             : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}"
                       of join($items.out, "\n"), $data, $gdata .
 

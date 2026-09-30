@@ -6394,3 +6394,43 @@ words hold `static` but which the grammar read as automatic would be a
 wrong answer with nothing to refuse it, so the `locals` pass calls that a
 fault in `c.phx`. Ten breaks were then all caught, each by the witness
 written for it, and none needed running by hand.
+
+**6.12's second part: one node for a declaration, handing its specifiers
+down.** `int a = 1, b;` is two declarators and one set of specifiers, and
+the first design gave each declarator its own copy. The notation could not
+build that: an action inside a repetition cannot read a label outside it,
+and nothing maps a list to nodes. So a declaration became a `Decls` node
+with the specifiers in `spec`, and every pass hands them down as `base`,
+the name the field had. The probe that settled it also found that a value
+handed down belongs to its pass alone, so the `down` is written in all
+five, and that a field and a handed-down attribute of one name draw a
+warning, which is why the field is `spec`.
+
+**Two collisions with names already in use.** The `functions` pass gives
+every node a list of the functions it defines, now through `otherwise`,
+and called it `fname`; the emit pass hands the function's name down as
+`fname`, and the first run compiled nothing. It is `fdefs` now. And
+`%names` must bind a parameter's name from one factor, so a parameter with
+no name has a rule that matches nothing and answers "", since the notation
+has no empty rule.
+
+**Tentative definitions are a question about the whole file**: a global's
+storage is written at its initialiser if the file has one anywhere, and
+otherwise at its first declaration that is not `extern`. The `functions`
+pass gathers the initialised names at the top and the emit pass reads
+them, with a thread of the names written so far.
+
+**The design was read for how it could be wrong first, again**, and four
+shapes had no witness: a block `extern` of an array, `static` then
+`extern` for one name, a `for`'s name declared again after it, and a
+typedef's name hidden by a `for` and back after it. Writing the breaks
+found two more. The linkage witness could not fail, because the `extern`
+declaration writes nothing, so a `static` name defined by an `extern` with
+an initialiser was added to both link files. And nothing held an
+initialiser carried past a tentative definition, so `int x = 1; int x;
+int x = 2;` joined the refusals. One break came back *not caught*, and
+it was right: an unnamed parameter's binding under "" was guarded by a
+condition that protected nothing, since nothing can look "" up. The
+condition was taken out, and the break moved to the check that does
+matter, which the `int add(int, int)` prototype catches. Twelve breaks,
+all caught.
