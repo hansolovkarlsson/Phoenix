@@ -547,15 +547,15 @@ is chosen from the map below.
 workspace chose it, and
 [`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md#the-destination-c-on-ouroboros)
 has the order, whose last step is the one 6.10 was already steering by: the
-chain compiling CPP's own source, there. What it asks of this page, once `c.phx`
-conforms to C11, is **a second target for `c-arm64.phx`**. Every choice the back end makes today
+chain compiling CPP's own source, there. What it asks of this page, once the
+C compiler is complete, is **a second target for `c-arm64.phx`**. Every choice the back end makes today
 is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
 signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
 calling `printf` compiled for it would hand picolibc its arguments where
 picolibc does not look. The oracle for that target is clang with
 `--target=aarch64-unknown-none`. It is written down as
 [6.11](#611-a-second-target-elf-under-aapcs64), with its failing program
-first, and parked until the C11 arc closes.
+first, and parked until then.
 
 **What Phoenix cannot say today, so that the step is honest about what it
 avoids.**
@@ -568,8 +568,15 @@ avoids.**
 
 **The arc now: C11, before Ouroboros.** Decided by Hans on 2026-09-29,
 after 6.11 was opened: the first arc is `c.phx` conforming to C11, and the
-port to Ouroboros is a later arc, so 6.11 is parked where it stands. What
-conforming means was settled the same day:
+port to Ouroboros is a later arc, so 6.11 is parked where it stands.
+**The C compiler is completed before the port begins**, and Hans made the
+rule exact on 2026-09-30: nothing whose only purpose is Ouroboros starts
+until he is satisfied with the compiler itself. That is 6.11, and after it
+cross-compiling onto Ouroboros, an assembler and a linker there, and
+anything else that exists for the port alone. The gate is his judgement
+of the compiler, not the close of any one entry: conforming to C11 is the
+arc that is to get it there. What conforming means was settled on
+2026-09-29:
 
 - **The mandatory language, and none of the four optional features.** C11
   lets an implementation conform without variable-length arrays,
@@ -614,7 +621,8 @@ diagnostic callback wants and which 6.12 parses and refuses. Either is the
 next entry, chosen as the others were, by what breaks without it.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
-and the toolchain document has its order: the **second target**
+which waits for the compiler as above, and the toolchain document has its
+order: the **second target**
 ([6.11](#611-a-second-target-elf-under-aapcs64), parked), CPP put in
 `cc -E`'s place, and an assembler and a linker that run on Ouroboros, the
 first of which waits on whether Futamura can describe how an arm64
@@ -624,8 +632,9 @@ machine) is the toolchain document's last step and belongs to it.
 
 ### 6.11 A second target: ELF under AAPCS64
 
-*Parked on 2026-09-29, the day it was opened: the C11 arc comes first,
-and this entry is the first step of the arc after it. Nothing below has
+*Parked on 2026-09-29, the day it was opened: the C compiler is completed
+first, and this entry is the first step of the arc after it, which starts
+only when Hans is satisfied with the compiler itself. Nothing below has
 been built, and the oracle was tried by hand only.*
 
 The destination is C written on Ouroboros, and the first step of
