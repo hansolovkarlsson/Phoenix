@@ -741,8 +741,9 @@ refused by name, as `sizeof(void)` was: *`float` is C11's, and not this
 subset's yet*. For `_Complex`, `_Atomic` and the others behind a
 `__STDC_NO_*__` macro, the refusal is permanent in this arc.
 
-**Four programs show what breaks without it**, and join the oracle with
-the part that makes each agree. Each was compiled by `cc -std=c11
+**Four programs show what breaks without it**, kept in
+`languages/c/tests/pending/` until the part that makes each agree moves it
+to the oracle. Each was compiled by `cc -std=c11
 -pedantic -Wall` with no warning, except the one C11 marks obsolescent:
 
 | program | `cc` | Phoenix today |
