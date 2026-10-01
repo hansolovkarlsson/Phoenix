@@ -2758,6 +2758,13 @@ refuses "an undeclared name in an argument" "'y' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/undeclared-in-an-argument.c"
 refuses "and in a callee's subscript" "'i' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/undeclared-in-a-callee-subscript.c"
+# **A function's address as data**, since ROADMAP 6.14's third part: its
+# name is worked out before the program runs, and a pointer's value is
+# not, alone or in braces, as `cc` says.
+refuses "a global from another's pointer to a function" "'b' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-function-pointer.c"
+refuses "and a table of them" "'t' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-table-from-a-function-pointer.c"
 # **A call by name is still a call by name**, since ROADMAP 6.14's second
 # part made every call one node: `bl _apply`, and a call through a
 # pointer is a `blr`. Both ways the program says the same, so only the

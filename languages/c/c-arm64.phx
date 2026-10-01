@@ -229,7 +229,8 @@
                             "{}\t{}, [x0]\n"
                               of $value.out,
                                  lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0"))
-            : addr = $value.out .
+            : addr = $value.out
+            : sym  = $value.sym .
 
   (* **A member is its struct's address plus its offset**, and then a load
    * like any other scalar's, or no load when it is an array or a struct in

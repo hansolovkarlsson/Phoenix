@@ -6736,3 +6736,18 @@ program's answer, only its code, so a check now reads the assembly for a
 `bl` and a `blr`; and telling an argument it was being called changed
 only a refusal's words, for a name not declared, so two refusals hold
 those. 619 → 626 checks.
+
+**6.14's third part was one clause.** Proem's shape, a struct with a
+function pointer member set by position and by designator, tested
+against 0 and called through `d->report(...)`, needed nothing the first
+two parts had not built but this: a function's name counted as an
+address worked out before the program runs, so that it can be written
+into a global's data as `.quad _twice`. The witness agreed once it was.
+**Reading the clause for how it could be wrong found a false refusal**
+beside it: `*twice` is the function, and was no address to the
+`constants` pass, so a global initialised with it was refused and `cc`
+compiles it. And of the clause's two halves, `rooted` did nothing: it
+tells an address with an offset from none, and arithmetic on a function
+is refused before that is asked. It was taken out, since a break of it
+changed nothing a program could show. Four breaks, three caught, the
+fourth that half. 626 → 628 checks.

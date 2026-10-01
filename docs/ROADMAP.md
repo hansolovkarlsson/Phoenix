@@ -856,6 +856,21 @@ see part 2.
    and by designator, which the `constants` pass counts as an address
    worked out before the program runs. `fnptr-structs.c` is the witness,
    and it is Proem's shape.
+   *Built on 2026-10-01*, with `fnptr-data-more.c` beside it. **It was
+   one clause**: members and calls through them had come with parts 1 and
+   2, and the witness stopped only at `{"twice", twice}`, a function's
+   name not counted as an address worked out before the program runs. It
+   is now, as an array's name is, written `.quad _twice`, which the
+   linker fills from this file or from libc; a global whose designators
+   go back stores it from the start-up routine, through the GOT. **Reading
+   the design found one false refusal**: `*twice`, which is the function,
+   was not an address to the `constants` pass, so `int (*g)(int) =
+   *twice;` was refused, which `cc` compiles. Of four breaks, three were
+   caught; the fourth, a function's name counted `rooted`, changed
+   nothing, since `rooted` tells an address with an offset from none and
+   arithmetic on a function is refused before that is asked, and it was
+   taken out. Refused as `cc` refuses them: a global initialised from
+   another global's pointer to a function, alone and in braces.
 4. **The types around it**: a typedef of a function type, and a function
    declared through one; a function returning a pointer to a function,
    `int (*pick2(int))(int, int)`, and a call of a call; a pointer to a

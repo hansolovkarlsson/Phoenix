@@ -16,6 +16,29 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C pointers to functions in structs and in data
+
+**A function's address is data**, the third part of [ROADMAP
+6.14](ROADMAP.md#614-pointers-to-functions): a global, a `static` and a
+table of them initialised with functions' names, in braces, by position
+and by designator, as Proem's `{expr_report, pp}` and `.skip =
+already_included` are, and libc's functions as much as this file's. A
+struct member that points at a function is called as `d->report(...)`,
+and tested against 0 first, which the earlier parts had already made
+work.
+
+**A false refusal is fixed**: `int (*g)(int) = *twice;`, where `*` of a
+function is the function, was refused as not worked out before the
+program runs.
+
+Refused, as `cc` refuses them: a global initialised from another global's
+pointer to a function, alone or in braces.
+
+**Tests:** 626 → 628. Two refusals. Two programs join the C oracle: 307
+agree with `cc`, none diverges. Refusals: 388.
+
+---
+
 ## 2026-10-01: C calls through pointers to functions
 
 **A call may be through a pointer**, the second part of [ROADMAP

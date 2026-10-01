@@ -3690,11 +3690,18 @@ arg  = e:assignment -> Arg(value: $e) .
   otherwise rooted = false
   otherwise sited  = false
   String   : anchored = true : rooted = true .
-  Variable : anchored = $global and $count > 0
+  (* **A function's name is an address too**, since ROADMAP 6.14's third
+   * part, and its label is its name: `.quad _twice`, which the linker fills,
+   * from libc as well as from this file. Only `anchored` says so: `rooted`
+   * tells an address with an offset from none, and arithmetic on a
+   * function is refused before that is asked. *)
+  Variable : anchored = $global and ($count > 0 or $fnk <> "")
            : sited  = $global
            : rooted = $global and $count > 0 .
   Addr     : anchored = $place.global : rooted = $place.sited .
-  Deref    : sited  = $value.rooted .
+  (* `*` of a function is the function, `*twice`, and so its address. *)
+  Deref    : sited  = $value.rooted
+           : anchored = $fnk <> "" and $value.anchored .
   Member   : sited  = $value.sited
            : rooted = $value.sited and at($entry, 3) > 0 .
 
