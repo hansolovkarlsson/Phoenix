@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C `long long`
+
+**`long long` works**, the first part of [ROADMAP
+6.15](ROADMAP.md#615-the-integer-types): `long long`, `long long int` and
+`unsigned long long`, eight bytes as `long` is on this machine, and the
+suffixes `LL`, `ll`, `ULL` and `LLU` in a constant, in hex too. `signed
+char` already worked, as `char`, which is signed here.
+
+Refused, as `cc` refuses it: `1lL`, whose letters are in two cases. Two
+programs refused until now compile.
+
+**Tests:** 639 → 638, two refusals by name replaced by one. Four programs
+join the C oracle, two of them refusals until now: 314 agree with `cc`,
+none diverges. Refusals: 398.
+
+---
+
 ## 2026-10-01: C pointers to functions closed: typedefs, returns, and types checked
 
 **The types around pointers to functions work**, the fourth and last part

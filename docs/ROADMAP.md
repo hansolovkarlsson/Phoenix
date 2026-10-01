@@ -775,6 +775,14 @@ warning:
    here, `long` and `char`, and a type of its own in name: the words
    counted as the types 6.7.2p2 lists, the suffixes `LL` and `ULL` in a
    constant, with 6.4.4.1's table for them. `long-long.c` is the witness.
+   *Built on 2026-10-01*, with `long-long-more.c` beside it, and the two
+   refusals of `long long` since 6.9 and 6.12 moved to the oracle. **It
+   was smaller than planned**: `signed char` already counted to `char`'s
+   entry, and `long long` now counts to `long`'s, since the two are the
+   same eight bytes here in every way a type is asked about; the suffix
+   takes `ll` or `LL` before one `l`, and a constant's digits are its text
+   less as many letters as it has. Three breaks, all caught. Refused as
+   `cc` refuses it: `lL`, which is no suffix.
 2. **`short`**, two bytes, signed and not: a load that sign- or
    zero-extends a half-word, a store of one, `.short` in data, the
    `constants` pass wrapping at sixteen bits, and a struct's layout

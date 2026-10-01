@@ -6774,3 +6774,19 @@ case the check does. It is made at an assignment and at an initialiser,
 alone or in braces, and not yet at an argument or a `return`, which is
 recorded as left. Nine breaks, all caught. 628 → 639 checks, and
 `pending/` is empty again.
+
+**6.15 opened, for the integer types, and its first part was smaller
+than planned.** Proem's source was counted again, since the map's count
+was CPP's: `bool` 143 times, `enum` nine, `long long` four, and no
+`union`, `short` or floating point, so the entry is the integer types and
+not the whole row. Probing `cc` for the witnesses found one choice worth
+holding: an `enum` with no negative constant is an `unsigned int` here,
+so `enum pos up = -1; up < 0` is 0, while its constants are `int`s. The
+witness asks it. **Part 1 was `long long` and `signed char`**, and
+`signed char` turned out to be done already, its words counting to
+`char`'s entry since 6.12. `long long` counts to `long`'s now, the same
+eight bytes, and its suffix is the old one with two letters. **One slip
+of mine, caught by the count of refusals**: a refusal program I wrote
+for `long long long` overwrote one of the same name from 6.12, and its
+assertion was there twice; the old program is back and the second
+assertion gone. Three breaks, all caught. 639 → 638 checks.

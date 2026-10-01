@@ -110,11 +110,12 @@ name    = letter { letter | digit } .
  * 2026-09-27, ROADMAP 6.9: `u`, `l`, or both in either order and either
  * case, C11 6.4.4.1. The scanner takes the longest match, so what C
  * refuses is a syntax error at the letters left over: `0x` with no digits
- * stops at the `x`, `1uu` at its second `u`, and `1ll`, `long long`'s
- * suffix, which is not here, at its second `l`. An octal constant with an
+ * stops at the `x` and `1uu` at its second `u`. **`ll` and `LL`**, `long
+ * long`'s suffix, since ROADMAP 6.15's first part, are tried before one
+ * `l`, and `lL` is no suffix, as C11 6.4.4.1 has it. An octal constant with an
  * 8 or a 9 in it is scanned whole and refused by the `types` pass, which
  * reads the digits. *)
-isuffix = ( "u" | "U" ) [ "l" | "L" ] | ( "l" | "L" ) [ "u" | "U" ] .
+isuffix = ( "u" | "U" ) [ "ll" | "LL" | "l" | "L" ] | ( "ll" | "LL" | "l" | "L" ) [ "u" | "U" ] .
 integer = ( "0" ( "x" | "X" ) hexdigit { hexdigit } | digit { digit } ) [ isuffix ] .
 
 (* A character constant is one character between single quotes, or one
@@ -1071,7 +1072,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * order, and `tname` the type that list is, or "" for a list that is
    * none; a struct's is its tag. `unsup` is the first word whose feature is
    * not in the subset, the three that C11 lets an implementation leave out
-   * first, and `pword` the first storage class a parameter may not have. *)
+   * first, and `pword` the first storage class a parameter may not have.
+   * **`long long` is `long`**, since ROADMAP 6.15's first part: eight bytes
+   * on this machine, as `long` is, and the same in every place a type is
+   * asked about here; `signed char` was `char` already, which is signed on
+   * this machine, and stays so. *)
   Base  : stat    = size(split($words, " static ")) > 1
         : tdef    = size(split($words, " typedef ")) > 1
         : sauto   = size(split($words, " auto ")) > 1
@@ -1124,12 +1129,12 @@ arg  = e:assignment -> Arg(value: $e) .
                                   ["000110010000", "long"],
                                   ["000010001000", "unsigned long"],
                                   ["000110001000", "unsigned long"],
-                                  ["000020000000", "long long"],
-                                  ["000120000000", "long long"],
-                                  ["000020010000", "long long"],
-                                  ["000120010000", "long long"],
-                                  ["000020001000", "unsigned long long"],
-                                  ["000120001000", "unsigned long long"]], $key, "")))
+                                  ["000020000000", "long"],
+                                  ["000120000000", "long"],
+                                  ["000020010000", "long"],
+                                  ["000120010000", "long"],
+                                  ["000020001000", "unsigned long"],
+                                  ["000120001000", "unsigned long"]], $key, "")))
         : display = join(split(slice($words, 2, size($words) - 1), "  "), " ") .
   Named : stat    = size(split($words, " static ")) > 1
         : tdef    = size(split($words, " typedef ")) > 1
@@ -1365,7 +1370,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Number : iszero  = $text = "0"
          : ihasu   = size(split($text, "u")) > 1 or size(split($text, "U")) > 1
          : ihasl   = size(split($text, "l")) > 1 or size(split($text, "L")) > 1
-         : ibody   = slice($text, 1, size($text) - lookup([[true, 1]], $ihasu, 0) - lookup([[true, 1]], $ihasl, 0))
+         : ibody   = slice($text, 1, size($text) - lookup([[true, 1]], $ihasu, 0) - (size(split($text, "l")) - 1) - (size(split($text, "L")) - 1))
          : ihex    = slice($ibody, 1, 2) = "0x" or slice($ibody, 1, 2) = "0X"
          : ioct    = not $ihex and slice($ibody, 1, 1) = "0" and size($ibody) > 1
          : idec    = not $ihex and not $ioct
@@ -1752,8 +1757,6 @@ arg  = e:assignment -> Arg(value: $e) .
                     $unsup, "'{}' is C11's, and not this subset's yet" of $unsup)
        ! $unsup = "" and $nstore > 1
            : "this declaration has {} storage classes, and C11 6.7.1p2 allows one" of $nstore
-       ! $unsup = "" and $nstore < 2 and ($tname = "long long" or $tname = "unsigned long long")
-           : "'{}' is C11's, and not this subset's yet" of $tname
        ! $unsup = "" and $nstore < 2 and $tname = ""
            : "'{}' is not one of the types C11 6.7.2p2 lists" of $display .
 

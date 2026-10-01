@@ -2081,8 +2081,11 @@ refuses "0x with no digits" 'and found "x"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/hex-with-no-digits.c"
 refuses "a suffix twice" 'and found "u"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/suffix-twice.c"
-refuses "long long's suffix" 'and found "l"' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/long-long-suffix.c"
+# `long long`'s suffix was refused here at its second `l` until ROADMAP
+# 6.15's first part; that program is in the oracle, and the suffix with
+# its letters in two cases is the refusal now.
+refuses "'lL', which is no suffix" 'and found "L"' \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/suffix-lL.c"
 # **`unsigned`**, since 2026-09-26, ROADMAP 6.9. `cc` refuses the first
 # three. The rest it compiles: a label too wide for the `unsigned int` a
 # `switch` compares, which `cc` converts and this declines, as it declines
@@ -2502,10 +2505,8 @@ refuses "'_Atomic' in use" "'_Atomic' is optional in C11, and left out here, as 
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Atomic-in-use.c"
 # **The words of a type are counted, not ordered**, C11 6.7.2p2: `int long`
 # is `long`, and a list that is none of the types it names is refused with
-# the words as written. `long long` is a type and not this subset's yet. `cc`
-# refuses all but that one.
-refuses "long long" "'long long' is C11's, and not this subset's yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/long-long.c"
+# the words as written. `cc` refuses each. `long long` was refused here by
+# name until ROADMAP 6.15's first part, and is in the oracle.
 refuses "long long long" "'long long long' is not one of the types C11 6.7.2p2 lists" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/long-long-long.c"
 refuses "long char" "'long char' is not one of the types C11 6.7.2p2 lists" \
