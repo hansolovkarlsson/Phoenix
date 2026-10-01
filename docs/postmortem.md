@@ -1501,3 +1501,54 @@ through.
 > How a part could be wrong can be read off its design before the code
 > runs. Breaking the code afterwards is how to find out whether that
 > reading missed anything, and it is cheaper when it finds nothing.
+
+## 31. "The notation has no fold over a list and no way to take one's tail"
+
+ROADMAP 6.12 was written on 2026-09-29 and 6.13 on 2026-09-30, each before
+its hard part was built, and both named a capability the notation lacks as
+the thing their hard part would turn on. Four claims can be checked against
+[COMPLETED 6.12](COMPLETED.md#612-declarations-as-c11-67-has-them) and
+[ROADMAP 6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them).
+
+*Held: the way that stays inside the notation, "where the tree gives the
+recursion a fold would".* Part 4's entry named two ways and guessed the
+first, and both were prototyped on `arrays.c` before either was built:
+forty of forty each, and text was kept. The tree did more than the entry
+said. A declarator's brackets had been read as a list, and became a nested
+chain of nodes, so the size of each is an attribute of the one inside it
+and no size is ever a product.
+
+*Missed: what it would cost.* The entry asked how a type is spelled; the
+work was in **when** it is known. A value handed down is worked out as its
+node is entered, so `(*p)[3]`'s brackets had to reach the declarator inside
+the parentheses as nodes read later, which works only because a node's
+children are walked in the order its fields are written. Nothing in the
+entry looked there.
+
+*Held: "the notation cannot sort."* It cannot, and nothing needed it to. A
+global whose designators go back is written as zeros and filled by a
+routine run before `main`, in the order the values are written, which is
+also the order C says the last of two wins. The question assumed the data
+had to be written in address order by the compiler; only the bytes at
+start-up have to be in place.
+
+*Failed, then held: a struct's members "with their braces and without".*
+Part 2 could not do without: finding the scalar after the last one in a
+struct looked like a walk down and back up its members, a loop, and it was
+refused by name and put off. Part 3 found it is a lookup if each struct
+carries a map of its bytes, one letter a byte naming its member, padding
+counted as the next one's; the descent is then a fixed number of steps.
+Twenty answers of twenty against `cc`'s offsets, before anything was built.
+
+*Not a prediction, and worth recording beside them:* nothing in 6.1 said that a
+local is always reachable as `[x29, #-offset]` or a member as an immediate
+`add`, and both were believed by every program the oracle held. A 320-byte
+array and a 20,000-byte struct, each written to witness something else,
+showed that arm64 has neither form past 255 and 4095.
+
+> Three times in two days a part looked as if it needed iteration the
+> notation deliberately lacks, and three times it did not: the tree was the
+> fold, start-up was the sort, and a map of bytes was the walk. ROADMAP
+> 3.4's line held because each question was asked again in the terms the
+> notation does have before the tool was changed, and asking it again was
+> cheaper each time than the change would have been.

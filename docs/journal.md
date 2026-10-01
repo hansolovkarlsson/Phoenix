@@ -6435,7 +6435,7 @@ condition was taken out, and the break moved to the check that does
 matter, which the `int add(int, int)` prototype catches. Twelve breaks,
 all caught.
 
-## 2026-09-30: struct tags, and a miscompile a witness found
+## 2026-09-30: declarations closed, initialisers in braces, and three old limits
 
 **6.12's third part gave every struct definition a key.** A struct could
 now be defined in a block, and a block's `struct s` and the file's are two
@@ -6510,6 +6510,17 @@ not caught was a break that changed a table row nothing reads.
 reserved, and every refusal it named has its program. The map in ROADMAP 6
 puts initialisers in braces and function pointers next, both of them what
 CPP's own source needs.
+
+**The port waits for Hans's judgement of the compiler.** With 6.12 closed,
+the order the day before had set, the C11 arc and then the port, was made
+exact: nothing whose only purpose is Ouroboros starts until Hans is
+satisfied with the compiler itself, and the gate is his judgement and not
+the close of an entry. ROADMAP 6 and the workspace's toolchain document
+were reworded to say so; step 0 of the latter, making a C program a command
+on Ouroboros, belongs to Ouroboros's own roadmap and was left for him to
+decide. **6.13, initialisers, was opened next** because CPP's source writes
+thirty in braces and function pointers, the other candidate, need them too;
+its part 3 was written down with the question of order in it from the start.
 
 **6.13's first part: an initialiser walked beside a type, and three things
 about handing a value down.** A value in braces goes to the next scalar the
