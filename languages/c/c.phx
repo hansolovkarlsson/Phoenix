@@ -185,12 +185,16 @@ program = { item } -> Program(items: $1) .
  * name space of their own, 6.2.3. A block and a function each end what was
  * bound inside them, which is what makes the hiding end, and `function`
  * covers a prototype's parameters as much as a definition's, since C11 gives
- * a prototype a scope of its own. `typedef-name` is the one rule that asks. *)
+ * a prototype a scope of its own. **So does `fn-suffix`**, since ROADMAP
+ * 6.14's first part: the parameters of a pointer to a function are in a
+ * prototype's scope too, C11 6.2.1p4, and `int (*f)(int T);` in a block
+ * hid a typedef `T` to the block's end until it was one. `typedef-name` is
+ * the one rule that asks. *)
 %names typedef-names
     declare Typedef.name
     hide    Param.name Local.name LocalInit.name LocalArray.name
             Static.name StaticInit.name StaticArray.name LocalAgg.name StaticAgg.name
-    scope   block function for-declaration
+    scope   block function for-declaration fn-suffix
     guard   typedef-name .
 
 (* A prototype or a definition, and the prototype first because it is the
@@ -246,20 +250,30 @@ item = function
  * reads `$base` changed. A declarator is the stars, the name, and a count
  * in brackets or an initialiser, as a declaration was; the three forms are
  * three nodes for the reason given for a local's, below. *)
-typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
-                     -> FnPointer(name: $n)
+typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
                    | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
-                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
+                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                    | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                    | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                    | s:pointer n:name
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
-                    -> FnPointer(name: $n)
+global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                    -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                    -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                    -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
-                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                    -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
                   | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
                   | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
@@ -267,31 +281,41 @@ global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-su
                   | s:pointer n:name "=" i:initializer
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
-                    -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
+                    -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
-                    -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], value: $v)
+                    -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-                    -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                    -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                   | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                     -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                   | s:pointer n:name "=" v:assignment
                     -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [], value: $v)
                   | s:pointer n:name
                     -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-member-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
-                    -> FnPointer(name: $n)
+member-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                    -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                    -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
-                    -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
+                    -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-                    -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                    -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                   | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                     -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                   | s:pointer n:name
                     -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
-                    -> FnPointer(name: $n)
+static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                    -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                    -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                    -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
-                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                    -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
                   | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
                   | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
@@ -299,21 +323,29 @@ static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-su
                   | s:pointer n:name "=" i:initializer
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
-                    -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
+                    -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
-                    -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], value: $v)
+                    -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-                    -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                    -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                   | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                     -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                   | s:pointer n:name "=" v:assignment
                     -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [], value: $v)
                   | s:pointer n:name
                     -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
-                   -> FnPointer(name: $n)
+local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                   -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                   -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                   -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
-                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)], unsized: 0, init: $i)
+                   -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
                  | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
                  | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
@@ -321,11 +353,11 @@ local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suf
                  | s:pointer n:name "=" i:initializer
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
-                   -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e)])
+                   -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
-                   -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], value: $v)
+                   -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-                   -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                   -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                  | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                    -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                  | s:pointer n:name "=" v:assignment
@@ -369,11 +401,14 @@ designator  = "." n:name -> Step(kind: ".", n: 0, name: $n)
             | "[" i:integer "]" -> Step(kind: "[", n: int($i), name: "")
             | "[" conditional "]" -> Step(kind: "e", n: 0, name: "") .
 
-(* **A pointer to a function**, `int (*f)(int)`, is read so that it can be
- * refused by name, since ROADMAP 6.12's fourth part: calling through one is
- * an entry of its own. Its parameters are read and nothing is kept. *)
-fn-suffix = "(" "void" ")" -> 0
-          | "(" p:params v:dots ")" -> 0 .
+(* **A function's parameters**, after a declarator in parentheses, which
+ * is a pointer to a function, `int (*f)(int)`. Read and refused by name
+ * from ROADMAP 6.12's fourth part, and a type since ROADMAP 6.14's first:
+ * a `Sig` is a function's parameters and whether it ends in `...`, held in
+ * the `Paren` whose stars point at it, see `Paren` and `Sig` in the
+ * `locals` pass. *)
+fn-suffix = "(" "void" ")" -> Sig(params: [], variadic: 0)
+          | "(" p:params v:dots ")" -> Sig(params: $p, variadic: size($v)) .
 
 (* **`(void)` is a list of no parameters**, C11 6.7.6.3p10, since
  * 2026-09-26. It is two alternatives of its own, tried first, because the
@@ -447,9 +482,12 @@ dots   = [ "," e:"..." -> $e ] -> $1 .
 (* **A parameter declared an array is a pointer to its element**, C11
  * 6.7.6.3p7, since ROADMAP 6.12's fourth part: `adj` says so, and the
  * first bracket's count, which may be left out, is dropped. *)
-param  = b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix -> FnPointer(name: $n)
+param  = b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+           -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
+       | b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:no-name ")" f:fn-suffix
+           -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
        | b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
-           -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+           -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
        | b:specifiers s:pointer n:name "[" [ integer ] "]" d:[ brackets ]
            -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 1, dims: $d, paren: [])
        | b:specifiers s:pointer n:name
@@ -472,7 +510,7 @@ no-name = [ "..." "..." ] -> "" .
  * `functions` pass asks that they come in the list's order, which C does
  * not: this subset's limit, and a refusal by name. *)
 kr-declaration = b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] ";"
-                   -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+                   -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
                | b:specifiers s:pointer n:name "[" [ integer ] "]" d:[ brackets ] ";"
                    -> Param(name: $n, base: $b, stars: size($s), squals: join(each($s, "{}")), adj: 1, dims: $d, paren: [])
                | b:specifiers s:pointer n:name ";"
@@ -843,8 +881,10 @@ multiplicative = unary          { ( "*" | "/" | "%" ) unary
  * `(char)x + 1` is `((char)x) + 1` and `(char)a[1]` is `(char)(a[1])`, as
  * in C. `sizeof (int) x` stays a syntax error, since the type form of
  * `sizeof` is tried before this and leaves the `x`. *)
-unary   = "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ brackets ] ")" u:unary
-            -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], value: $u)
+unary   = "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" f:fn-suffix ")" u:unary
+            -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $u)
+        | "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ brackets ] ")" u:unary
+            -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $u)
         | "(" b:sqlist s:pointer "[" c:integer "]" d:[ brackets ] ")" u:unary
             -> Cast(base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], value: $u)
         | "(" b:sqlist s:pointer ")" u:unary
@@ -858,8 +898,10 @@ unary   = "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ bracket
         | "&" p:place -> Addr(place: $p)
         | "*" u:unary -> Deref(value: $u)
         | "_Alignof" "(" typename ")" -> Unsupported(word: "_Alignof")
+        | "sizeof" "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" f:fn-suffix ")"
+            -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
         | "sizeof" "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ brackets ] ")"
-            -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])])
+            -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
         | "sizeof" "(" b:sqlist s:pointer "[" c:integer "]" d:[ brackets ] ")"
             -> SizeOfType(base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
         | "sizeof" "(" b:sqlist s:pointer ")"
@@ -937,7 +979,7 @@ primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
  * was wanted. The type is a cast's, and an array's first count may be left
  * out, to be what the initialiser reaches. *)
 literal = "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ brackets ] ")" i:initializer
-            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], unsized: 0, init: $i)])
+            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], unsized: 0, init: $i)])
         | "(" b:sqlist s:pointer "[" c:integer "]" d:[ brackets ] ")" i:initializer
             -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)])
         | "(" b:sqlist s:pointer "[" "]" d:[ brackets ] ")" i:initializer
@@ -1132,8 +1174,6 @@ arg  = e:assignment -> Arg(value: $e) .
    * one too, until the second part. It is refused in the first pass so that
    * no later one has to say what such an expression is. *)
   Unsupported ! true : "'{}' is C11's, and not this subset's yet" of $word .
-  FnPointer ! true
-                : "'{}' is a pointer to a function, which C has and this subset does not have yet" of $name .
 
   (* A struct is an item and not a function, and adds nothing to either count. *)
   StructDef : shape = []
@@ -1589,9 +1629,41 @@ arg  = e:assignment -> Arg(value: $e) .
         ! $count < 1
             : "an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" .
   Paren : down inparen = true
+        : down sigkey  = "fn.{}.{}" of $pos.line, $pos.column
         : down pP = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""),
-                              lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $dstars, ""), $dbase.blv)]], size($pouter), join($pouter.t))
+                              lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $dstars, ""), $dbase.blv)]], size($pouter), join($pouter.t))]], size($fn), ("b:1:0:1::fn.{}.{}" of $pos.line, $pos.column))
         : t = lookup([[0, $pP]], size($dims), join($dims.t)) .
+
+  (* **A pointer to a function**, since ROADMAP 6.14's first part: the
+   * `Paren` it is written in points at a level of its own, the function,
+   * which is a base, `b:1:0:1::KEY`, a sixth field holding a key and the
+   * fifth, a struct's, empty. Being a base is what lets every clause that
+   * counts a type's levels count this one's, and the key is what a call
+   * through it will read: the function's parameters and what it returns,
+   * bound under the key in the four tables a call by name reads under the
+   * callee's name. A function declared by name is its own key, see
+   * `Variable`; one a declarator writes is keyed by where it is written,
+   * `fn.8.25`, which no C name can spell. What it returns is the
+   * declarator's base and stars. Its parameters are walked as a
+   * prototype's are, and take no slot and no name in the scope they are
+   * written in, so what they change is put back. *The frame's byte count
+   * has no witness*: not put back, it makes a frame larger and every offset
+   * still right, and no program can tell. *)
+  Sig : down hsenv    = $env
+      : down hsscope  = $scope
+      : down hsbytes  = $bytes
+      : down hspindex = $pindex
+      : down scope    = empty
+      : down pindex   = 0
+      : env     = $hsenv
+      : scope   = $hsscope
+      : bytes   = $hsbytes
+      : pindex  = $hspindex
+      : funcs   = bind($funcs, $sigkey, [size($params), $variadic])
+      : sigs    = bind($sigs, $sigkey, $params.passes)
+      : rets    = bind($rets, $sigkey, [$dbase.tagname, $dbase.basew, $dstars + $dbase.ptrs, $dbase.buns,
+                                         "{}{}" of $dbase.bquals, slice("000000000000", 1, $dstars)])
+      : pwidths = bind($pwidths, $sigkey, $params.pwide) .
 
   SizeOfType : down dbase   = $base
              : down dstars  = $stars
@@ -2566,7 +2638,8 @@ arg  = e:assignment -> Arg(value: $e) .
            : iend    = $hiend
            : iback   = $hiback
            : vkey    = lookup([[0, $name]], size($lit), join($lit.lname))
-           : means   = lookup($env, $vkey, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4"])
+           : means   = lookup($env, $vkey, lookup([[true, [0, 0, 0, 1, "", true, false, false, $vkey, "0", false, "b:1:0:1::{}" of $vkey]]],
+                                                  defined($funcs, $vkey), [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4"]))
            : known   = $layouts
            : vreg    = at($means, 11)
            : vlv     = at($means, 12)
@@ -2580,7 +2653,8 @@ arg  = e:assignment -> Arg(value: $e) .
            : count   = at($means, 3)
            : basew   = at($means, 4)
            : tagname = at($means, 5)
-           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) : "'{}' is not declared" of $name .
+           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name)
+               : "'{}' is not declared" of $name .
 
   (* A member cannot be looked up here, because which struct it is in is the
    * `types` pass's to work out, and a thread is not something a later pass
@@ -2777,6 +2851,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * compiled here into a write to `x`. *)
   otherwise lvalue = false
 
+  (* **Whether it is a function**, since ROADMAP 6.14's first part, and
+   * which: the key in the sixth field of its type's first level, see `Sig`
+   * in the `locals` pass, or "". Only a name and a `*` can be one. A
+   * function is its own address, C11 6.3.2.1p4, and decays to a pointer to
+   * itself, as an array decays to a pointer to its first element. *)
+  otherwise fnk = ""
   (* And a size falls out of the type for everything except a name, because a
    * name is the only thing that can be an array: no operator here answers
    * one. `Variable` therefore says its own and this covers the rest. *)
@@ -2801,13 +2881,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * other an undecayed one without either knowing about `sizeof`. *)
   Variable : xlv    = $vlv
            : tag   = $tagname
-           : dec   = lookup([[true, "p:8:0:8|{}" of slice($xlv, size(at(split($xlv, "|"), 1)) + 2, size($xlv))]], slice($xlv, 1, 1) = "a", $xlv)
+           : fnk   = at(split(("{}::::::" of at(split($xlv, "|"), 1)), ":"), 6)
+           : dec   = lookup([[true, "p:8:0:8|{}" of $xlv]], $fnk <> "",
+                            lookup([[true, "p:8:0:8|{}" of slice($xlv, size(at(split($xlv, "|"), 1)) + 2, size($xlv))]], slice($xlv, 1, 1) = "a", $xlv))
            : type  = lookup([[true, size(at(split($dec, "a:"), 1)) div 8]], size(at(split($dec, "a:"), 1)) < size(at(split($dec, "b:"), 1)), size(at(split($dec, "b:"), 1)) div 8)
            : bot   = slice($dec, $type * 8 + 1, size($dec))
            : width = lookup([[true, at(lookup($known, $tagname, [0, 1, empty, false]), 1)]],
                             $tagname <> "" and $tagname <> "void" and slice($bot, 1, 1) = "b", int(at(split(at(split($bot, "|"), 1), ":"), 2)))
            : size  = lookup([[true, $width]], $type = 0 and slice($xlv, 1, 1) = "b", int(at(split(at(split($xlv, "|"), 1), ":"), 2)))
-           : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "")
+           : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "") or $fnk <> ""
            : uns   = $vuns
            : quals = lookup([[true, "{}0" of $vquals]], slice($xlv, 1, 1) = "a", $vquals)
            : lvalue = true .
@@ -2846,8 +2928,12 @@ arg  = e:assignment -> Arg(value: $e) .
            : width = $place.width
            : tag   = $place.tag
            : aggregate = $place.aggregate and $place.type = 0
-           ! $place.aggregate and $place.type > 0
+           ! $place.aggregate and $place.type > 0 and $place.fnk = ""
                : "an array is not something a value can be put in"
+           (* **Nor is a function**, since ROADMAP 6.14's first part, a name
+            * or a `*` of a pointer to one, C11 6.3.2.1p1. *)
+           ! $place.fnk <> ""
+               : "a function is not something a value can be put in, C11 6.3.2.1p1"
            ! not $place.lvalue
                : "a member of an assignment or a call is a member of a value, and a value is not something another can be put in"
            ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
@@ -2880,7 +2966,7 @@ arg  = e:assignment -> Arg(value: $e) .
                              ["*=", "*"], ["/=", "/"], ["%=", "%"], ["&=", "&"],
                              ["|=", "|"], ["^=", "^"], ["<<=", "<<"], [">>=", ">>"]],
                             $op, "?")
-           ! $place.aggregate and $place.type > 0
+           ! $place.aggregate and $place.type > 0 and $place.fnk = ""
                : "'{}' is given an array, and an array is not something a value can be put in" of $op
            ! not $place.lvalue
                : "'{}' wants somewhere a value is kept, and an assignment, a call or an update is a value" of $op
@@ -2894,6 +2980,10 @@ arg  = e:assignment -> Arg(value: $e) .
                : "'{}' does not take a pointer" of $op
            ! $place.type = 1 and $place.tag = "void"
                : "'{}' on a 'void *' counts in something of no size; this cc counts in bytes, as GNU C does" of $op
+           ! ((slice($place.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "") and $place.fnk = ""
+               : "'{}' on a pointer to a function counts in something of no size, C11 6.5.6; this cc counts in bytes, as GNU C does" of $op
+           ! $place.fnk <> ""
+               : "'{}' is given a function, and a function is not something a value can be put in" of $op
            ! ($place.type = 1 and $place.tag <> "" and $place.tag <> "void" and $place.width = 0)
                : "'{}' counts in 'struct {}', which is not complete here, C11 6.5.6" of $op, at(split($place.tag, "."), 1)
            ! $place.readonly
@@ -3056,7 +3146,11 @@ arg  = e:assignment -> Arg(value: $e) .
                           $left.wide or $right.wide, $left.puns or $right.puns)
           ! $left.record or $right.record
               : "'{}' compares numbers and pointers, and this is '{}'"
-                  of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
+                  of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
+          (* **Two pointers to functions are equal or not**, and have no
+           * order, C11 6.5.8p2, since ROADMAP 6.14's first part. *)
+          ! $op <> "==" and $op <> "!=" and (((slice($left.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $left.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($left.xlv, "|"), 1)), ":"), 6) <> "") or ((slice($right.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $right.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($right.xlv, "|"), 1)), ":"), 6) <> ""))
+              : "'{}' orders pointers to functions, and C11 6.5.8 orders only pointers to objects" of $op .
   (* `!`, `&&` and `||` test their operands the way a condition does, C11
    * 6.5.3.3 and 6.5.13 to 6.5.14, so a struct is refused in them for the same
    * reason. Each is an `int`, 0 or 1, which is what `type` and `width` say
@@ -3123,15 +3217,17 @@ arg  = e:assignment -> Arg(value: $e) .
   Logical ! $left.record or $right.record
               : "'{}' tests numbers and pointers, and this is '{}'"
                   of $op, lookup([[true, $left.kind]], $left.record, $right.kind) .
-  Deref    : xlv    = slice($value.xlv, size(at(split($value.xlv, "|"), 1)) + 2, size($value.xlv))
+  Deref    : xlv    = lookup([[true, $value.xlv]], $value.fnk <> "", slice($value.xlv, size(at(split($value.xlv, "|"), 1)) + 2, size($value.xlv)))
            : tag   = $value.tag
-           : dec   = lookup([[true, "p:8:0:8|{}" of slice($xlv, size(at(split($xlv, "|"), 1)) + 2, size($xlv))]], slice($xlv, 1, 1) = "a", $xlv)
+           : fnk   = at(split(("{}::::::" of at(split($xlv, "|"), 1)), ":"), 6)
+           : dec   = lookup([[true, "p:8:0:8|{}" of $xlv]], $fnk <> "",
+                            lookup([[true, "p:8:0:8|{}" of slice($xlv, size(at(split($xlv, "|"), 1)) + 2, size($xlv))]], slice($xlv, 1, 1) = "a", $xlv))
            : type  = lookup([[true, size(at(split($dec, "a:"), 1)) div 8]], size(at(split($dec, "a:"), 1)) < size(at(split($dec, "b:"), 1)), size(at(split($dec, "b:"), 1)) div 8)
            : bot   = slice($dec, $type * 8 + 1, size($dec))
            : width = lookup([[true, at(lookup($known, $value.tag, [0, 1, empty, false]), 1)]],
                             $value.tag <> "" and $value.tag <> "void" and slice($bot, 1, 1) = "b", int(at(split(at(split($bot, "|"), 1), ":"), 2)))
            : size  = lookup([[true, $width]], $type = 0 and slice($xlv, 1, 1) = "b", int(at(split(at(split($xlv, "|"), 1), ":"), 2)))
-           : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "")
+           : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "") or $fnk <> ""
            : q     = lookup([[true, slice($value.quals, 1, size($value.quals) - 1)]], size($value.quals) > 1, "")
            : quals = lookup([[true, "{}0" of $q]], slice($xlv, 1, 1) = "a", $q)
            : uns   = $value.uns
@@ -3242,7 +3338,9 @@ arg  = e:assignment -> Arg(value: $e) .
                  : "'sizeof' of 'struct {}', which is not complete here, C11 6.5.3.4" of at(split($base.tagname, "."), 1) .
   SizeOfExpr : type = 0 : width = 8 : uns = true
              ! $value.record and $value.tag = "void"
-                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
+                 : "'sizeof' of 'void' has no size, C11 6.5.3.4; this cc says 1, as GNU C does"
+             ! $value.fnk <> ""
+                 : "'sizeof' of a function has no size, C11 6.5.3.4; this cc says 1, as GNU C does" .
 
   (* **A constant's type is C11 6.4.4.1's table**, since 2026-09-27,
    * ROADMAP 6.9: the first of a list that can hold it, and the list
@@ -3382,6 +3480,10 @@ arg  = e:assignment -> Arg(value: $e) .
               of $op, lookup([[true, $left.kind]], $left.record, $right.kind)
       ! $left.type > 0 and $right.type > 0
           : "'+' does not add two pointers"
+      (* **Nor on a pointer to a function**, since ROADMAP 6.14's first
+       * part: a function has no size either, C11 6.5.6. *)
+      ! ((slice($left.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $left.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($left.xlv, "|"), 1)), ":"), 6) <> "") or ((slice($right.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $right.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($right.xlv, "|"), 1)), ":"), 6) <> "")
+          : "'{}' on a pointer to a function counts in something of no size, C11 6.5.6; this cc counts in bytes, as GNU C does" of $op
       (* **Arithmetic on a `void *` is refused by name**, since
        * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
        * `void` has no size. `cc` counts in bytes, as GNU C does. *)
@@ -3410,6 +3512,8 @@ arg  = e:assignment -> Arg(value: $e) .
             and ($left.type <> $right.type or $left.width <> $right.width
                  or $left.tag <> $right.tag)
           : "'-' takes two pointers only when they point at the same type"
+      ! ((slice($left.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $left.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($left.xlv, "|"), 1)), ":"), 6) <> "") or ((slice($right.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $right.xlv), "|"), 2)), ":"), 6) <> "") or at(split(("{}::::::" of at(split($right.xlv, "|"), 1)), ":"), 6) <> "")
+          : "'{}' on a pointer to a function counts in something of no size, C11 6.5.6; this cc counts in bytes, as GNU C does" of $op
       (* **Arithmetic on a `void *` is refused by name**, since
        * 2026-09-26: C11 6.5.6 counts in what the pointer points at, and a
        * `void` has no size. `cc` counts in bytes, as GNU C does. *)

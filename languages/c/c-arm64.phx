@@ -200,6 +200,10 @@
    * directly. **It is reached by its label**, since 2026-09-29, which is
    * its name for a global and its function, name and a number for a
    * `static` local, ROADMAP 6.10; the `locals` pass gives both. *)
+  (* **A function's address is in the GOT**, since ROADMAP 6.14's first
+   * part: one defined in another file, `printf` or `qsort`, has no address
+   * an `adrp` and an `add` can reach, and the linker says so, and one
+   * defined in this file is reached the same way, which it relaxes. *)
   (* **A compound literal fills its object first**, since ROADMAP 6.13's
    * fourth part, every time it is reached, as C11 6.5.2.5p5 asks of one in
    * a block, and is then the name of it. Its `Literal` writes nothing in
@@ -207,8 +211,9 @@
   Variable  : sym  = "_{}" of $label
             : pre  = join($lit.out)
             : ldr  = lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0")
-            : addr = "{}{}" of $pre, lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $label, $label]],
-                            $global, "\tsub x0, x29, #{}\n" of $offset)
+            : addr = "{}{}" of $pre, lookup([[true, "\tadrp x0, _{}@GOTPAGE\n\tldr x0, [x0, _{}@GOTPAGEOFF]\n" of $label, $label]], $fnk <> "",
+                            lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $label, $label]],
+                                   $global, "\tsub x0, x29, #{}\n" of $offset))
             : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
                             "{}{}\t{}, {}\n" of $pre, lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset), $ldr, lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]"))
             : out  = lookup([[true, $addr]], $aggregate, $load) .

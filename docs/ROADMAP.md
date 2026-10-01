@@ -794,6 +794,30 @@ in hand, by what each costs in the passes.
    a pointer again at once. `=`, `==`, `!=`, a test against 0, passing
    one, `sizeof` of one. `fnptr-qsort.c` is the witness: libc does the
    calling.
+   *Built on 2026-10-01*, with `fnptr-values-more.c` beside it, and the
+   two refusals by name since 6.12, `function-pointer.c` and
+   `function-pointer-parameter.c`, moved to the oracle. **A function is a
+   base**, `b:1:0:1::KEY`, its key in a sixth field, and not a level kind
+   of its own: every clause that counts a type's levels finds the first
+   `a:` or `b:`, and an `f:` would have been counted as a pointer in all
+   of them. A `Sig` binds the parameters under its key in the four
+   tables, walked as a prototype's are, with the names, the scope, the
+   frame and the register count put back after. A function's name not in
+   scope as an object is the function, its own key. **Its address is in
+   the GOT**: one in libc has no address an `adrp` reaches, and the
+   linker says so, so every function is reached that way, which the
+   linker relaxes for one in this file. Refused, as `cc
+   -pedantic-errors` refuses them: arithmetic and `++` on a pointer to a
+   function, `sizeof` of a function, an assignment to a function or
+   through `*` of a pointer to one, and two pointers to functions
+   ordered. **Reading the design found one false refusal**, and a
+   witness for it: a parameter named in a declarator's parentheses hid a
+   typedef of its name until the block ended, where C ends it at the `)`,
+   so `int (*f)(int T); T x;` was a syntax error. `fn-suffix` is a scope
+   to `%names` since, as a function is. Of thirteen breaks, twelve were
+   caught; the thirteenth, the frame's byte count not put back after a
+   `Sig`'s parameters, only makes a frame larger, which no program can
+   see, and the putting back is kept with a note that it has no witness.
 2. **Calls through a pointer**, C11 6.5.2.2: `op(5, 3)`, `(*op)(5, 3)`,
    `table[i](7, 2)`, `apply(sub, 9, 4)` calling its parameter, by `blr`,
    with the arguments converted, counted and passed as the pointer's

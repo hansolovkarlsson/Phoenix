@@ -6666,3 +6666,42 @@ in a block. All three are there now, and `pending/` is empty.
 Thirteen breaks, all caught; one was first skipped by the script that
 made them, its text matching four clauses, and was made by hand on the
 `Literal`'s own. 601 → 614 checks.
+
+**6.14 opened, for pointers to functions, and its first part built.** A
+call today is a name, its callee looked up in four tables keyed by the
+function's name, and Proem's three callback members are what the arc
+needs next. The witnesses came from Proem's own shapes and the plain C
+around them, and each was checked clean under `cc -pedantic -Wall`;
+`cc -pedantic-errors` was asked what it refuses, and two of its answers
+were unexpected: a pointer to a function given one of another type is an
+error in this `cc` and not a warning, and so is `void *` from a function.
+
+**A function became a base, not a level of its own.** The plan written
+into the ROADMAP had `f:` as a new kind of level. Reading the clauses
+that work a type's stars out of its text showed every one of them finds
+the first `a:` or `b:` and divides what is before it by eight, so an
+`f:` would have been counted as a pointer everywhere. A function is
+`b:1:0:1::KEY` instead, a base whose sixth field is a key and whose fifth,
+a struct's, is empty, and every one of those clauses was right about it
+unchanged. The key names the function's parameters in the four tables a
+call reads, as a struct's key names its layout: a function declared by
+name is its own key, and a declarator's `(int, int)` is bound under
+`fn.8.25`, from where it is written. **A probe found the second thing**:
+a function's address cannot be an `adrp` and an `add` when the function
+is in libc, and the linker says so; through the GOT it can, and a
+function in this file reached the GOT's way is relaxed by the linker. So
+every function is reached that way.
+
+**The witness agreed on its first run once a function was its own
+address**; before that, each comparator was loaded through and `qsort`
+called into its first instruction's bits. **Reading the design for how
+it could be wrong found two missing witnesses and one false refusal.**
+Nothing took a libc function's address, which is the reason for the GOT,
+so the second witness does, and the break that took the GOT out was then
+caught. A declarator's parameter names must be in no scope after it, so a
+refusal holds that. And a parameter's name hid a typedef of the same name
+to the end of the block, since `%names` ends a hiding at a rule it is told
+is a scope: `int (*f)(int T); T x;` was a syntax error that `cc` compiles.
+`fn-suffix` is a scope now. Thirteen breaks, twelve caught; the frame's
+byte count not put back after a pointer to a function's parameters makes a
+frame larger and nothing else, and is kept with a note. 614 → 619 checks.

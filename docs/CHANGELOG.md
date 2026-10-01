@@ -16,6 +16,31 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C pointers to functions, as values
+
+**A function is a value**, the first part of [ROADMAP
+6.14](ROADMAP.md#614-pointers-to-functions): `int (*op)(int, int) = add;`,
+`&add`, `*op`, arrays of them, `static` ones, typedefs of them, casts and
+`sizeof` with `int (*)(int)` written out, and `==`, `!=` and a test
+against 0 between them. One can be passed to a function that calls it,
+so `qsort` and `bsearch` from libc sort and search with comparators
+written in C. Calling through one yourself is the next part.
+
+Refused, as `cc -pedantic-errors` refuses them: arithmetic, `++` or an
+order on pointers to functions, `sizeof` of a function, and an assignment
+to a function or through `*` of a pointer to one. Two programs refused by
+name until now compile.
+
+**A false refusal is fixed**: a parameter named in a pointer to a
+function's parentheses, `int (*f)(int T);`, hid a typedef `T` until the
+end of the block, so a declaration of `T x;` after it was a syntax error.
+
+**Tests:** 614 → 619. Seven refusals. Five programs join the C oracle,
+two of them refusals until now: 303 agree with `cc`, none diverges.
+Refusals: 380.
+
+---
+
 ## 2026-10-01: C compound literals, and initialisers closed
 
 **Compound literals work**, the fourth and last part of [ROADMAP

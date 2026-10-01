@@ -2610,9 +2610,9 @@ refuses "a typedef given two types in a block" "'T' is a typedef twice, for two 
 # **Types built by declarators**, since ROADMAP 6.12's fourth part: arrays
 # of arrays, a pointer to an array, abstract declarators and an array
 # parameter are in the oracle, and `typedef int v[3];` moved there from
-# here. `cc` refuses the first four below as C does; the last two are C,
-# a pointer to a function, which is read so as to be refused by name until
-# a call through one arrives.
+# here. `cc` refuses the four below as C does. Two more were C, a pointer
+# to a function, read so as to be refused by name; they are in the oracle
+# since ROADMAP 6.14's first part.
 refuses "a cast to an array" "a cast to an array is not C, C11 6.5.4" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/cast-to-an-array.c"
 refuses "an assignment to a row of an array" "an array is not something a value can be put in" \
@@ -2621,10 +2621,6 @@ refuses "an element of a const array of arrays" "'=' changes something declared 
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-a-const-element-of-a-row.c"
 refuses "an array of arrays of no elements" "an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-arrays-of-no-elements.c"
-refuses "a pointer to a function" "'f' is a pointer to a function, which C has and this subset does not have yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer.c"
-refuses "and a parameter that is one" "'f' is a pointer to a function, which C has and this subset does not have yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-parameter.c"
 # **Initialisers in braces**, since ROADMAP 6.13's first part: arrays and
 # scalars, at file scope, in a block and `static`. `cc` refuses each of
 # these, some only with `-pedantic-errors`, since it warns about what C11
@@ -2725,6 +2721,26 @@ refuses "a compound literal of void" "a compound literal is of 'void', and an ob
         --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-void.c"
 refuses "a compound literal of variable length" "expected integer or ], and found \"n\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-variable-length.c"
+# **Pointers to functions**, since ROADMAP 6.14's first part: a function
+# is a value, its own address, and has no size, no order and no place a
+# value can be put. `cc -pedantic-errors` refuses each; it counts in bytes
+# without the flag, as GNU C does.
+refuses "arithmetic on a pointer to a function" "'+' on a pointer to a function counts in something of no size, C11 6.5.6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-arithmetic.c"
+refuses "and '++' on one" "'++' on a pointer to a function counts in something of no size, C11 6.5.6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-incremented.c"
+refuses "sizeof a function" "'sizeof' of a function has no size, C11 6.5.3.4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/sizeof-a-function.c"
+refuses "an assignment to a function" "a function is not something a value can be put in, C11 6.3.2.1p1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-function.c"
+refuses "and through a pointer to one" "a function is not something a value can be put in, C11 6.3.2.1p1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-through-a-function-pointer.c"
+refuses "two pointers to functions ordered" "'<' orders pointers to functions, and C11 6.5.8 orders only pointers to objects" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointers-ordered.c"
+# And a parameter's name in a pointer to a function's parentheses is in no
+# scope after them, C11 6.2.1p4's function prototype scope.
+refuses "a pointer to a function's parameter, out of scope" "'x' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-parameter-out-of-scope.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.
