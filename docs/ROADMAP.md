@@ -780,7 +780,9 @@ expression, or becomes one, a call of whatever is before the `(`, with a
 function's name being one more expression that decays. One node is C11
 6.5.2.2 as written; two keep every direct call's emitted code unchanged,
 `bl _f` and not a load and a `blr`. It is settled with the first witness
-in hand, by what each costs in the passes.
+in hand, by what each costs in the passes. *Settled with Hans on
+2026-10-01, for one node*, after both were prototyped on `fnptr-calls.c`;
+see part 2.
 
 **Built in four parts, in this order**, each with the suite green:
 
@@ -822,6 +824,32 @@ in hand, by what each costs in the passes.
    `table[i](7, 2)`, `apply(sub, 9, 4)` calling its parameter, by `blr`,
    with the arguments converted, counted and passed as the pointer's
    parameters say. `fnptr-calls.c` is the witness.
+   *Built on 2026-10-01*, with `fnptr-calls-more.c` beside it. **Both
+   ways were prototyped first**, and both ran the witness and left all
+   303 oracle programs' assembly byte for byte as it was, since a callee
+   that is a function by its own name is still `bl _f`. Two nodes kept
+   `Call` by name and added `CallVia` for every other callee: 143 lines,
+   and since the parse cannot tell `add(1, 2)` from `op(5, 3)`, a call by
+   name had to find and load a pointer itself. One node, `Call(fn, args)`
+   with the callee a suffix's expression, was 97, and **it made the parse
+   faster**: a call by name had been a `primary`, parsed again by every
+   alternative of `suffix` that began with it, so nested calls multiplied.
+   `struct-return-as-argument.c`, four deep, took nine of the oracle's
+   twenty seconds; it takes four hundredths, and the oracle nine seconds,
+   where two nodes made it thirty-four. **What both needed**: a call's
+   count and each argument's struct are checked in the `constants` pass
+   now, not the `types` pass, since a pointer's key is the `types` pass's
+   to work out and was wanted as the call was entered. A callee by name
+   is told it is called, so a function not declared yet is still refused
+   in a call's words. **Writing the second witness found two old
+   assumptions**: a pointer to a function returning `void` was refused as
+   an object declared `void`, since the check counted only the stars
+   before the parentheses, in thirty-six places; and such a pointer kept
+   its return type's tag, so `(*v)(&n)` was `*` of a `void *`. A value
+   whose type ends in a function has no tag now. Refused as `cc` refuses
+   them: a call of something that is neither a function nor a pointer to
+   one, the wrong count through a pointer, and a struct's parameter given
+   a number through one.
 3. **In structs and in initialisers**: a member that is one, called as
    `d->report(...)`; a function's address as data, `.quad _f`, in a
    global's or a `static`'s initialiser, alone and in braces, by position

@@ -16,6 +16,33 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C calls through pointers to functions
+
+**A call may be through a pointer**, the second part of [ROADMAP
+6.14](ROADMAP.md#614-pointers-to-functions): `op(5, 3)`, `(*op)(5, 3)`,
+`table[i](7, 2)`, `(**pp)(5, 6)`, and a parameter called inside the
+function it was passed to. Arguments are converted, structs passed and
+returned, small and large, and `long`s widened, as in a call by name.
+
+**Compiling is faster**: a call nested in another call's arguments was
+read again for every way the grammar tried to go on after it, so four
+levels deep took nine seconds. It takes a few hundredths.
+
+**Two false refusals are fixed**: a pointer to a function returning
+`void` was refused as an object declared `void`, and calling through one
+with `*` was refused as `*` of a `void *`.
+
+Refused, as `cc` refuses them: a call of something that is neither a
+function nor a pointer to one, the wrong number of arguments through a
+pointer, and a number given where a pointer's parameter is a struct. An
+undeclared name inside a call's arguments is refused as a name, not as a
+call.
+
+**Tests:** 619 → 626. Six refusals. Two programs join the C oracle: 305
+agree with `cc`, none diverges. Refusals: 386.
+
+---
+
 ## 2026-10-01: C pointers to functions, as values
 
 **A function is a value**, the first part of [ROADMAP

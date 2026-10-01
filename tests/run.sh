@@ -1733,7 +1733,7 @@ refuses "a ninth parameter, which is outside the subset" "only eight are compile
 # the refusal is only certain at the token after the `1`, and names all five.
 # `address-of-a-subscripted-number` in the oracle is the program that makes
 # the message true.
-refuses "the address of something that is not a place" 'expected [, ., ->, ++ or --, and found ";"' \
+refuses "the address of something that is not a place" 'expected [, ., ->, ++, -- or (, and found ";"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-number.c"
 refuses "and an assignment to one" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-number.c"
@@ -2741,6 +2741,33 @@ refuses "two pointers to functions ordered" "'<' orders pointers to functions, a
 # scope after them, C11 6.2.1p4's function prototype scope.
 refuses "a pointer to a function's parameter, out of scope" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-parameter-out-of-scope.c"
+# **Calls through a pointer**, since ROADMAP 6.14's second part, are
+# counted and checked against the pointer's parameters as a call by name
+# is against the function's. `cc` refuses each.
+refuses "a call of a number" "'x' is called, and it is neither a function nor a pointer to one, C11 6.5.2.2p1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/call-a-number.c"
+refuses "too few arguments through a pointer" "'f' takes 2 arguments, and this gives 1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/call-through-a-pointer-too-few.c"
+refuses "too many through '*' of one" "a pointer to a function takes 2 arguments, and this gives 3" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/call-through-a-pointer-too-many.c"
+refuses "a number where a pointer's parameter is a struct" "'f' is given a struct where its parameter is not that struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/call-through-a-pointer-number-for-a-struct.c"
+# A name in a call's arguments or its callee's subscript is not being
+# called, and is refused in the words of a name, not of a call.
+refuses "an undeclared name in an argument" "'y' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/undeclared-in-an-argument.c"
+refuses "and in a callee's subscript" "'i' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/undeclared-in-a-callee-subscript.c"
+# **A call by name is still a call by name**, since ROADMAP 6.14's second
+# part made every call one node: `bl _apply`, and a call through a
+# pointer is a `blr`. Both ways the program says the same, so only the
+# assembly can show which it was.
+fncalls=$(bounded "$phx" --driver arm64 "$root/languages/c/c-arm64.phx" "$root/languages/c/tests/oracle/fnptr-calls.c" 2>&1)
+if printf '%s\n' "$fncalls" | grep -q '	bl _apply$' && printf '%s\n' "$fncalls" | grep -q '	blr x17$'; then
+    report pass "a call by name is 'bl', and one through a pointer 'blr'"
+else
+    report fail "a call by name is 'bl', and one through a pointer 'blr'" "the assembly for fnptr-calls.c has not both"
+fi
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

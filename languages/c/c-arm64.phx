@@ -564,12 +564,19 @@
        : temps  = $temps + lookup([[true, $room]], $aggregate, 0)
        : extras = size($args) - size($argwide)
        : below  = ((8 * $extras + 15) div 16) * 16
-       : out = "{}{}{}{}\tbl _{}\n{}{}"
-           of join($args.out), join($args.load),
+       (* **A call through a pointer**, since ROADMAP 6.14's second part:
+        * the callee is worked out after the arguments are pushed, into
+        * `x17`, which nothing between it and the `blr` uses, and the rest
+        * of the call is the same. A callee whose type is a function by its
+        * own name, a key with no `.` in it, is called by name as before,
+        * `bl _f`, and nothing of it is worked out. *)
+       : direct = $fn.fnk <> "" and size(split($fn.fnk, ".")) = 1
+       : out = "{}{}{}{}{}\t{}\n{}{}"
+           of join($args.out), lookup([[true, ""]], $direct, "{}\tmov x17, x0\n" of $fn.out), join($args.load),
               lookup([[0, "\tadd sp, sp, #{}\n" of 16 * size($args)]], $extras,
                      "\tsub sp, sp, #{}\n{}" of $below, join($args.copy)),
               lookup([[true, "\tsub x8, x29, #{}\n" of $tpos]], $large, ""),
-              $name,
+              lookup([[true, "bl _{}" of $fn.fnk]], $direct, "blr x17"),
               lookup([[0, ""]], $extras, "\tadd sp, sp, #{}\n" of 16 * size($args) + $below),
               lookup([[true, "\tsub x9, x29, #{}\n\tstp x0, x1, [x9]\n\tmov x0, x9\n" of $tpos]], $small,
                      lookup([[true, "\tsub x0, x29, #{}\n" of $tpos]], $large,

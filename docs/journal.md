@@ -6705,3 +6705,34 @@ is a scope: `int (*f)(int T); T x;` was a syntax error that `cc` compiles.
 `fn-suffix` is a scope now. Thirteen breaks, twelve caught; the frame's
 byte count not put back after a pointer to a function's parameters makes a
 frame larger and nothing else, and is kept with a note. 614 → 619 checks.
+
+**6.14's second part, and the question it carried, settled by building
+both answers.** A call through a pointer could be a second node beside
+`Call` by name, or `Call` could become a call of any expression. Both
+were written in scratch copies of the description and run against the
+witness and the whole suite, and the assembly of all 303 oracle programs
+was compared with today's: both left every byte where it was. **What
+told them apart was not in the plan.** The parser cannot tell `add(1, 2)`
+from `op(5, 3)`, so two nodes meant a call by name that loads a pointer
+itself, and every call clause twice: 143 lines to 97. And the oracle
+compiled in thirty-four seconds with two nodes, twenty today, and nine
+with one, because a call by name had been a `primary`, which each of
+`suffix`'s alternatives parsed again before failing after it, so calls
+nested in calls' arguments multiplied: `struct-return-as-argument.c` had
+been taking nine seconds alone, near the suite's limit, and with a sixth
+alternative went past it. Hans chose one node.
+
+**Both needed one thing moved**: a pointer's key is the `types` pass's
+to work out, after a call is entered, and an argument's checks had read
+the callee's parameters as the call was entered. They are the `constants`
+pass's now, with the count. **The second witness found two assumptions
+from before pointers to functions**, both in one declaration, `void
+(*v)(int *) = bump;`: thirty-six checks counted the stars before the
+parentheses and refused it as an object of `void`, and the name kept its
+base's tag, `void`, so `(*v)(&n)` read as `*` of a `void *`.
+Eleven breaks; two were missed at first, each for want of a witness, and
+caught once it was written. Making every call indirect changed no
+program's answer, only its code, so a check now reads the assembly for a
+`bl` and a `blr`; and telling an argument it was being called changed
+only a refusal's words, for a name not declared, so two refusals hold
+those. 619 → 626 checks.
