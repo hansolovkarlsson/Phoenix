@@ -787,6 +787,20 @@ warning:
    zero-extends a half-word, a store of one, `.short` in data, the
    `constants` pass wrapping at sixteen bits, and a struct's layout
    aligning one at two. `shorts.c` is the witness.
+   *Built on 2026-10-01*, with `shorts-more.c` beside it, and `short`'s
+   refusal by name since 6.12 moved to the oracle. Every table the emit
+   pass picks an instruction from by width took a row for two: a load, a
+   store, the narrowing after a store, an initialiser, data and a cast;
+   and a function returning a `short` narrows it at `return`, as Apple's
+   arm64 has a callee do. **`tests/abi/` took `short` too**, both ways,
+   since only a caller or a callee `cc` compiled can tell which side
+   narrows: a callee here that did not was caught there, and a caller
+   here narrowing what a callee returned changed nothing, since `cc`'s
+   callee narrows, and was taken out. Of eleven breaks, eight were caught,
+   two once their witness was written; two have no witness and cannot,
+   noted where they are, and the third was that caller's narrowing.
+   Refused as `cc -pedantic-errors` refuses them: `short long` and `short
+   short`.
 3. **`_Bool`**, one byte, unsigned, and **0 or 1 whatever it is given**,
    C11 6.3.1.2: every conversion into one, an assignment, an
    initialiser, an argument, a `return`, a cast and an update, is a test

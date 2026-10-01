@@ -16,6 +16,22 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C `short`
+
+**`short` works**, the second part of [ROADMAP
+6.15](ROADMAP.md#615-the-integer-types): `short`, `short int` and
+`unsigned short`, two bytes, wrapping at sixteen bits, in arrays, structs,
+globals and `static`s, as parameters and return values, and through
+`...`. A function returning one hands it back as `cc` expects.
+
+Refused, as `cc -pedantic-errors` refuses them: `short long` and `short
+short`. One program refused by name until now compiles.
+
+**Tests:** 638 → 639. Two refusals. Three programs join the C oracle, one
+a refusal until now: 317 agree with `cc`, none diverges. Refusals: 399.
+
+---
+
 ## 2026-10-01: C `long long`
 
 **`long long` works**, the first part of [ROADMAP

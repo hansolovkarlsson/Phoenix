@@ -1088,7 +1088,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
                                    lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
                                    lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
-                                   lookup([[true, "short "]], size(split($words, " short ")) > 1, ""),
+                                   "",
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
                                    lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
@@ -1118,6 +1118,12 @@ arg  = e:assignment -> Arg(value: $e) .
                                   ["010000000000", "char"],
                                   ["010000010000", "char"],
                                   ["010000001000", "unsigned char"],
+                                  ["001000000000", "short"],
+                                  ["001100000000", "short"],
+                                  ["001000010000", "short"],
+                                  ["001100010000", "short"],
+                                  ["001000001000", "unsigned short"],
+                                  ["001100001000", "unsigned short"],
                                   ["000100000000", "int"],
                                   ["000000010000", "int"],
                                   ["000100010000", "int"],
@@ -1147,7 +1153,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "_Complex "]], size(split($words, " _Complex ")) > 1, ""),
                                    lookup([[true, "_Imaginary "]], size(split($words, " _Imaginary ")) > 1, ""),
                                    lookup([[true, "_Atomic "]], size(split($words, " _Atomic ")) > 1, ""),
-                                   lookup([[true, "short "]], size(split($words, " short ")) > 1, ""),
+                                   "",
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
                                    lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
@@ -1486,7 +1492,8 @@ arg  = e:assignment -> Arg(value: $e) .
   thread layouts = [["int", [4, 4, empty, false]], ["char", [1, 1, empty, false]],
                     ["long", [8, 8, empty, false]], ["void", [0, 1, empty, false]],
                     ["unsigned int", [4, 4, empty, false]], ["unsigned char", [1, 1, empty, false]],
-                    ["unsigned long", [8, 8, empty, false]]]
+                    ["unsigned long", [8, 8, empty, false]],
+                    ["short", [2, 2, empty, false]], ["unsigned short", [2, 2, empty, false]]]
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
@@ -1745,9 +1752,9 @@ arg  = e:assignment -> Arg(value: $e) .
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
-                           ["unsigned char", ""], ["unsigned long", ""]], $tkey, $tkey)
+                           ["unsigned char", ""], ["unsigned long", ""], ["short", ""], ["unsigned short", ""]], $tkey, $tkey)
        : buns    = lookup([["unsigned int", true], ["unsigned char", true],
-                           ["unsigned long", true]], $tkey, false)
+                           ["unsigned long", true], ["unsigned short", true]], $tkey, false)
        : blv     = lookup([[true, "b:{}:0:{}:{}" of $basew, $align, $tkey]], $tagname <> "" and $tagname <> "void",
                           "b:{}:0:{}" of $basew, $align)
        ! $unsup <> ""
@@ -3871,15 +3878,18 @@ arg  = e:assignment -> Arg(value: $e) .
    * A cast cannot trap, so unlike an operator it does not ask that its
    * operand fit in thirty-two bits, and `(int)4294967341` is 45, which is
    * the one way a constant wider than an `int` legally reaches a `case`.
-   * To a `char` it keeps eight bits and puts the sign back; to an `int`,
+   * To a `char` it keeps eight bits and puts the sign back, to a `short`
+   * sixteen, since ROADMAP 6.15's second part; to an `int`,
    * thirty-two; to a `long`, all of them. A cast to a pointer or to `void`
    * is not an integer constant expression, and is not settled. *)
   Cast       : rooted  = $value.rooted
              : low8    = $value.folded mod 256
+             : low16   = $value.folded mod 65536
              : low32   = $value.folded mod 4294967296
              : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
              : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 4))
              : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128 and not $base.buns, 0)],
+                                 [2, $low16 - lookup([[true, 65536]], $low16 >= 32768 and not $base.buns, 0)],
                                  [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648 and not $base.buns, 0)]],
                                 $base.basew, $value.folded) .
   Invert     : settled = $value.settled and not ($uns and $wide)

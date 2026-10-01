@@ -2473,8 +2473,12 @@ refuses "'double' in use" "'double' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-double-in-use.c"
 refuses "'float' in use" "'float' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-float-in-use.c"
-refuses "'short' in use" "'short' is C11's, and not this subset's yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-short-in-use.c"
+# `short` was refused here by name until ROADMAP 6.15's second part, and
+# is in the oracle; what `cc` refuses of it is a second word with it.
+refuses "short long" "'short long' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/short-long.c"
+refuses "short short" "'short short' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/short-short.c"
 refuses "'_Bool' in use" "'_Bool' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Bool-in-use.c"
 refuses "'_Thread_local' in use" "'_Thread_local' is C11's, and not this subset's yet" \

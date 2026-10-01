@@ -6790,3 +6790,20 @@ of mine, caught by the count of refusals**: a refusal program I wrote
 for `long long long` overwrote one of the same name from 6.12, and its
 assertion was there twice; the old program is back and the second
 assertion gone. Three breaks, all caught. 639 → 638 checks.
+
+**6.15's second part, `short`, was a row in every table**, and the breaks
+were what said which rows mattered. Every place the emit pass picks an
+instruction by a value's width had rows for one, four and eight bytes,
+and took one for two. Eleven breaks, each taking a row out, found six
+caught by the two witnesses and five not, and each of the five was a
+different kind of answer. **The value of an assignment**, `(t = big)`,
+had no witness, and has one. **Which side of a call narrows** cannot be
+seen in a program Phoenix compiled whole, since both sides are its own,
+so `tests/abi/` took `short` in both directions: a callee here that did
+not narrow at `return` was caught by a caller `cc` compiled, and a caller
+here narrowing what came back changed nothing, since a callee `cc`
+compiled narrows, as Apple's arm64 says it does; that was taken out.
+**Two have no witness and cannot**: a parameter stored as four bytes and
+read as two, and data wrapped to sixteen bits, which only a constant out
+of range needs and `cc` warns of every one; each is kept with a note.
+638 → 639 checks.

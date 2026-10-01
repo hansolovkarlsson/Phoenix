@@ -17,3 +17,7 @@ int lnarrow(long x) { return x; }
 long lwiden(int x) { return x; }
 struct pl mkpl(long a, int b) { struct pl p; p.a = a; p.b = b; return p; }
 long sumpl(struct pl p) { return p.a + p.b; }
+short sdouble(short x) { return x * 2; }
+unsigned short udouble(unsigned short x) { return x * 2; }
+int takeshort(short x) { return x; }
+int takeushort(unsigned short x) { return x; }

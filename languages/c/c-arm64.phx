@@ -210,7 +210,7 @@
    * the code at file scope, where it is data. *)
   Variable  : sym  = "_{}" of $label
             : pre  = join($lit.out)
-            : ldr  = lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0")
+            : ldr  = lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [2, lookup([[true, "ldrh w0"]], $uns, "ldrsh w0")], [4, "ldr w0"]], $size, "ldr x0")
             : addr = "{}{}" of $pre, lookup([[true, "\tadrp x0, _{}@GOTPAGE\n\tldr x0, [x0, _{}@GOTPAGEOFF]\n" of $label, $label]], $fnk <> "",
                             lookup([[true, "\tadrp x0, _{}@PAGE\n\tadd x0, x0, _{}@PAGEOFF\n" of $label, $label]],
                                    $global, "\tsub x0, x29, #{}\n" of $offset))
@@ -228,7 +228,7 @@
   Deref     : out  = lookup([[true, $value.out]], $aggregate,
                             "{}\t{}, [x0]\n"
                               of $value.out,
-                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0"))
+                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [2, lookup([[true, "ldrh w0"]], $uns, "ldrsh w0")], [4, "ldr w0"]], $size, "ldr x0"))
             : addr = $value.out
             : sym  = $value.sym .
 
@@ -247,7 +247,7 @@
             : out  = lookup([[true, $addr]], $aggregate,
                             "{}\t{}, [x0]\n"
                               of $addr,
-                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [4, "ldr w0"]], $size, "ldr x0")) .
+                                 lookup([[1, lookup([[true, "ldrb w0"]], $uns, "ldrsb w0")], [2, lookup([[true, "ldrh w0"]], $uns, "ldrsh w0")], [4, "ldr w0"]], $size, "ldr x0")) .
 
   (* `&` is the address and nothing more. *)
   Addr      : out  = $place.addr
@@ -297,13 +297,13 @@
             : widen  = lookup([[true, "\tsxtw x0, w0\n"]],
                               $place.wide and $value.type = 0 and not $value.wide
                                 and not $value.record and not $value.uns, "")
-            : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")]],
+            : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")], [2, lookup([[true, "\tuxth w0, w0\n"]], $place.uns, "\tsxth w0, w0\n")]],
                               $place.size,
                               lookup([[true, "\tmov w0, w0\n"]],
                                      $place.size = 4 and $value.wide, ""))
             : store = "{}\tstr x0, [sp, #-16]!\n{}{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
                         of $place.addr, $value.out, $widen,
-                           lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0"),
+                           lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $place.size, "str x0"),
                            $narrow
             : copied = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n{}\tmov x0, x1\n"
                         of $place.addr, $value.out,
@@ -331,7 +331,7 @@
    * can use any register it likes. *)
   Update : wideop = $place.type = 0 and ($place.wide or $value.wide)
          : r      = lookup([[true, "x"]], $wideop, "w")
-         : load   = lookup([[1, lookup([[true, "ldrb w0"]], $place.uns, "ldrsb w0")], [4, "ldr w0"]],
+         : load   = lookup([[1, lookup([[true, "ldrb w0"]], $place.uns, "ldrsb w0")], [2, lookup([[true, "ldrh w0"]], $place.uns, "ldrsh w0")], [4, "ldr w0"]],
                            $place.size, "ldr x0")
          : lwiden = lookup([[true, "\tsxtw x0, w0\n"]], $wideop and not $place.wide and not $place.uns, "")
          : vwiden = lookup([[true, "\tsxtw x1, w1\n"]], $wideop and not $value.wide and not $value.uns, "")
@@ -354,8 +354,8 @@
                                         ["&", "and"], ["|", "orr"], ["^", "eor"],
                                         ["<<", "lsl"], [">>", lookup([[true, "lsr"]], $opuns, "asr")]],
                                        $arith, "?"), $r, $r, $r)
-         : store  = lookup([[1, "strb w0"], [4, "str w0"]], $place.size, "str x0")
-         : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")]],
+         : store  = lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $place.size, "str x0")
+         : narrow = lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $place.uns, "\tsxtb w0, w0\n")], [2, lookup([[true, "\tuxth w0, w0\n"]], $place.uns, "\tsxth w0, w0\n")]],
                            $place.size,
                            lookup([[true, "\tmov w0, w0\n"]], $place.size = 4 and $wideop, ""))
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x2, [sp], #16\n\t{}, [x2]\n\tmov x4, x0\n{}{}{}\t{}, [x2]\n{}{}"
@@ -377,7 +377,7 @@
                                          $ptrs = 0 and $base.tagname = "" and $basew = 8
                                            and $value.type = 0 and not $value.wide
                                            and not $value.uns, ""),
-                                  lookup([[1, "strb w0"], [4, "str w0"]],
+                                  lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]],
                                          lookup([[0, $basew]], $ptrs, 8), "str x0"),
                                   lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]")) .
   Local      : out = "" .
@@ -407,7 +407,7 @@
            : ext   = lookup([[true, "\tsxtw x0, w0\n"]],
                             $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns, "")
            : act   = lookup([[true, $copy of $bytes, $n, "x0", "x1", $n]], $moves,
-                            "{}\t{}, [x1]\n" of $ext, lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0"))
+                            "{}\t{}, [x1]\n" of $ext, lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $iw, "str x0"))
            : out   = "{}{}{}" of $value.out, $dest, $act
            (* A store made at start-up, for a global whose values are not in
             * address order: its address and the offset, then the same. *)
@@ -420,9 +420,9 @@
            : gd    = lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
                                      lookup([[0, ""]], $iw - $value.slen, "\t.space {}\n" of $iw - $value.slen)]],
                             $fill,
-                            "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [4, ".long"]], $iw, ".quad"),
+                            "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $iw, ".quad"),
                                lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                      lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                      lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                              $iw, $value.folded))) .
   Discard   : out = $value.out .
 
@@ -594,12 +594,14 @@
    * into a slot of eight; in two, stored with an `stp` into a slot of
    * sixteen; or as the address of the caller's copy, copied from there into
    * the slot. The copy uses `x9` to `x11`, so the parameters after it are
-   * still in their registers when their turn comes. *)
+   * still in their registers when their turn comes. *A `short`'s store of
+   * two bytes has no witness, and cannot have one*: four would leave the
+   * same two at the slot's start, which is all a `short` is read as. *)
   Param : n      = $label : label = $label + lookup([[true, 1]], $whole and $basew > 16, 0)
         : pre    = lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset)
         : at     = lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]")
         : scalar = "{}\t{}{}, {}\n"
-                     of $pre, lookup([[1, "strb w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
+                     of $pre, lookup([[1, "strb w"], [2, "strh w"], [4, "str w"]], lookup([[0, $basew]], $ptrs, 8), "str x"),
                         $preg, $at
         : pair   = "{}\tstp x{}, x{}, {}\n" of $pre, $preg, $preg + 1, $at
         : one    = "{}\tstr x{}, {}\n" of $pre, $preg, $at
@@ -861,7 +863,7 @@
          : out = "{}{}" of $value.out,
                    lookup([[true, ""]], $tovoid,
                      lookup([[true, lookup([[true, ""]], $from8 or $value.uns, "\tsxtw x0, w0\n")]], $eight,
-                       lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $base.buns, "\tsxtb w0, w0\n")]],
+                       lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $base.buns, "\tsxtb w0, w0\n")], [2, lookup([[true, "\tuxth w0, w0\n"]], $base.buns, "\tsxth w0, w0\n")]],
                               $base.basew,
                               lookup([[true, "\tmov w0, w0\n"]], $from8, "")))) .
 
@@ -945,7 +947,7 @@
                      of $value.out, ($copy of $retsize, $n, "x0", "x1", $n)
          : large = "{}{}\tldr x1, {}\n{}"
                      of $value.out, lookup([[true, ""]], $x8slot <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $x8slot), lookup([[true, "[x29, #-{}]" of $x8slot]], $x8slot <= 255, "[x16]"), ($copy of $retsize, $n, "x0", "x1", $n)
-         : scalar = "{}{}" of $value.out,
+         : scalar = "{}{}{}" of $value.out, $retshort,
                       lookup([[true, "\tsxtw x0, w0\n"]],
                              $retlong and $value.type = 0 and not $value.wide and not $value.uns,
                              lookup([[true, "\tmov w0, w0\n"]],
@@ -982,6 +984,13 @@
            : down framebase = $frame
            : down retsize   = lookup([[true, $ret.basew]], $rptrs = 0 and $ret.tagname <> "", 0)
            : down retlong   = $rptrs = 0 and $ret.tagname = "" and $ret.basew = 8
+           (* **A `short` is returned narrowed**, since ROADMAP 6.15's second
+            * part: its sixteen bits sign- or zero-extended into `w0`, as
+            * Apple's arm64 has a callee do, and as `tests/abi/` holds against
+            * a caller `cc` compiled, which reads `w0` as it is. A callee `cc`
+            * compiled does the same, so a caller here does nothing more. *)
+           : down retshort  = lookup([[true, lookup([[true, "\tuxth w0, w0\n"]], $ret.buns, "\tsxth w0, w0\n")]],
+                                     $rptrs = 0 and $ret.tagname = "" and $ret.basew = 2, "")
            : down x8slot    = $frame + 8
            : down temps     = lookup([[true, 16]], $retsize > 16, 0)
            : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
@@ -1046,10 +1055,14 @@
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
               : gdata = "{}{}\t.p2align {}\n_{}:\n\t{} {}\n"
                           of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
-                             lookup([[1, ".byte"], [4, ".long"]], $ebytes, ".quad"),
+                             lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                    lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                    lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded)) .
+  (* *A `short`'s data wrapped to sixteen bits has no witness*, since
+   * ROADMAP 6.15's second part: only a constant out of its range needs it,
+   * and `cc` warns of every one, so no program the oracle may hold has one.
+   * It is kept so that the assembler is never handed one. *)
   (* **An initialiser in braces at file scope or in a `static`** is data,
    * since ROADMAP 6.13's first part: each value where the `locals` pass put
    * it, the bytes before it that nothing wrote as `.space`, and the rest of
@@ -1109,9 +1122,9 @@
   StaticInit  : out = ""
               : gdata = "{}\t.p2align {}\n_{}:\n\t{} {}\n"
                           of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label,
-                             lookup([[1, ".byte"], [4, ".long"]], $ebytes, ".quad"),
+                             lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                    lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
+                                    lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded)) .
   Program   : down initialised = bind(empty, $inits, true)
             : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
