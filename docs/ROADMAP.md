@@ -545,8 +545,9 @@ first entry of the C11 arc. **So was the seventh,
 as C11 6.7.9 has them, opened on 2026-09-30 and closed on 2026-10-01**,
 the second. **So was the eighth,
 [6.14](COMPLETED.md#614-pointers-to-functions), pointers to functions,
-opened and closed on 2026-10-01**, the third. Nothing in the arc is open
-now; the next entry is chosen from the map below.
+opened and closed on 2026-10-01**, the third. **Open:
+[6.15](#615-the-integer-types), the integer types**, the fourth, opened on
+2026-10-01.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -634,7 +635,10 @@ because CPP's source writes thirty and function pointers need them too.
 initialiser in CPP's source still stops. They were the next entry,
 [6.14](COMPLETED.md#614-pointers-to-functions), opened and closed on
 2026-10-01. **What Proem's source wants next is the types row**: `_Bool`
-113 times, then `enum`, `union` and `long long`.
+113 times, then `enum`, `union` and `long long`. Counted again on
+2026-10-01 in `~/Projects/Proem`, `lib/` and `driver/`: `bool` 143 times,
+`enum` 9, `long long` 4, and no `union`, `short` or floating point; the
+integer types are the next entry, [6.15](#615-the-integer-types).
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
@@ -739,3 +743,66 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
+
+### 6.15 The integer types
+
+The fourth entry of the C11 arc, and the types row of the map, cut to
+what is integer: **`_Bool`, `enum`, `long long`, `short` and `signed
+char`**, the integer types of C11 6.2.5 the subset does not have. Proem's
+source writes `bool` 143 times, which `<stdbool.h>` makes `_Bool`, `enum`
+nine times and `long long` four, behind its file identities; `short` and
+`signed char` are what is left of C's integers and share the machinery.
+Floating point and `union` are entries of their own, and Proem needs
+neither. Today `short` and `_Bool` are refused by name as C11's and not
+the subset's, `long long` likewise, its `LL` suffix is a syntax error, and
+`enum` is read only after `enum` and a tag, to be refused.
+
+**Four programs show what breaks without it**, kept in
+`languages/c/tests/pending/` until the part that makes each agree moves it
+to the oracle. Each was compiled by `cc -std=c11 -pedantic -Wall` with no
+warning:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `long-long.c`: `long long`, `long long int` and `unsigned long long`, the suffixes `LL`, `ll` and `ULL`, the largest `unsigned long long`, a `long long` parameter and return, Proem's `struct { unsigned long long dev, ino; }`, and `signed char` from 200, beside `unsigned char` | exits 177, prints three lines | stops at the `L` of `9000000000LL`, on line 5 |
+| `shorts.c`: `short` and `unsigned short` wrapping at sixteen bits, an array of `short` and a pointer stepping through it, a struct laid out with a `short` and an `unsigned short`, a `short` parameter and return, and a cast to `short` | exits 8, prints three lines | refuses `short` by name, on line 2 |
+| `bools.c`: `_Bool` from 256, from -3, from a pointer and from a cast, `b++`, an array of `_Bool` in braces, a struct of them, a function returning one from `x % 2`, and one tested in `&&` | exits 4, prints three lines | refuses `_Bool` by name, on line 2 |
+| `enums.c`: constants counted on from 0 and from a value written, one negative, one worked out from another, `LARGE = SMALL + 9`; an `enum` with a tag, a typedef of one with none, one in a block; constants as `case` labels, as indices and in an initialiser; an `enum` as a member and a parameter; and **its type**: an `enum` with no negative constant is `unsigned int` in this `cc` and one with a negative constant is `int`, which C11 6.7.2.2p4 leaves to the implementation, while the constants are always `int` | exits 9, prints three lines | stops at `{` after `enum color`, on line 2 |
+
+**Built in four parts, in this order**, each with the suite green:
+
+1. **`long long` and `signed char`**, each the width of a type already
+   here, `long` and `char`, and a type of its own in name: the words
+   counted as the types 6.7.2p2 lists, the suffixes `LL` and `ULL` in a
+   constant, with 6.4.4.1's table for them. `long-long.c` is the witness.
+2. **`short`**, two bytes, signed and not: a load that sign- or
+   zero-extends a half-word, a store of one, `.short` in data, the
+   `constants` pass wrapping at sixteen bits, and a struct's layout
+   aligning one at two. `shorts.c` is the witness.
+3. **`_Bool`**, one byte, unsigned, and **0 or 1 whatever it is given**,
+   C11 6.3.1.2: every conversion into one, an assignment, an
+   initialiser, an argument, a `return`, a cast and an update, is a test
+   against zero and not a truncation, which is the part's question: each
+   of those places converts today by narrowing, and each must learn the
+   one conversion that does not. `bools.c` is the witness.
+4. **`enum`**, C11 6.7.2.2: a tag and its constants as a specifier, as a
+   struct's are since 6.12, each constant an `int` the `constants` pass
+   works out, in the ordinary name space and the scope it is written in,
+   so a `case` label and an initialiser take one; and an `enum` object an
+   `unsigned int` or an `int` as this `cc` chooses. `enums.c` is the
+   witness.
+
+**What `cc` refuses, and so will this**, each checked with `cc -std=c11
+-pedantic-errors` on 2026-10-01: an enumerator declared twice, or named
+as something else already is; one past an `int`'s range, which is C23's;
+an `enum` defined twice in one scope, and one declared without its list,
+which C11 does not forward-declare; an assignment to a constant, or `&`
+of one; one worked out from what is not a constant; `long long long`,
+`unsigned _Bool` and `short long`.
+
+*Not in this step:* an array's size worked out from a constant expression
+rather than written as a number, `int t[BLUE]`, which every declarator
+here reads as a number and which waits for an entry of its own; bit-fields;
+`union`; and floating point. **The entry closes** when the four programs
+agree with `cc`, none diverging, and every refusal above has its program
+in `refused/`.
