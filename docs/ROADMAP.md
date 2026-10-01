@@ -797,7 +797,7 @@ warning:
    scope want the same thing, and to be prototyped there as part 4 of 6.12
    was. `init-structs.c`'s one struct written that way was given its
    braces, and the form is a refusal of its own. No initialiser in CPP's
-   source leaves such braces out.
+   source leaves such braces out. *Lifted by part 3.*
 3. **Designators**, 6.7.9p6 to p7: `.member` and `[constant]`, chains of
    them, and positional values after one going on from where it left
    off. **This is the part with a question in it.** In a block a store
@@ -809,6 +809,30 @@ warning:
    has, or a global's designators must be in order and one out of order
    is refused by name, is settled with the witness in hand.
    `init-designated.c` is the witness; CPP's thirteen go in member order.
+   *Built on 2026-09-30*, with `init-designated-more.c` beside it.
+   **The question was settled with Hans for the notation, after both
+   ways were prototyped**: a startup routine for a global whose values go
+   back, tested by hand on Mach-O, and a map of each struct's bytes, one
+   letter a byte naming its member, padding counting as the next one's,
+   which gave twenty answers of twenty against `cc`'s offsets on two
+   nested layouts. Neither needs a loop, so ROADMAP 3.4's line is kept and
+   the library did not grow. **Every value is now placed by one walk**: a
+   byte offset and the scalar at or after it, found by going down the
+   object's levels, into an array by division and into a struct through
+   its map, written out eight levels deep. A string stops at an array of
+   `char` it starts, a struct value at a struct it starts. That lifted
+   part 2's limit: braces may be left out inside a struct, and
+   `init-elision-into-a-member.c` moved from the refusals to the oracle.
+   A designator moves the cursor; its index is a number written out, since
+   values are placed before the `constants` pass works any out, and one
+   that is an expression is refused by name. A global or a `static` whose
+   values go back is zeros, filled by a routine in `__mod_init_func` before
+   `main`; one in order is data as before. **Writing the witnesses found
+   one more old limit**: a struct member more than 4095 bytes in was
+   reached with an `add` the assembler refuses, and is reached through
+   `x16` now. What is still refused, this subset's: an index that is an
+   expression; an object nested more than eight levels deep; a struct over
+   32767 bytes or 86 members, whose map is not made.
 4. **Compound literals**, 6.5.2.5: an unnamed object with an initialiser,
    which is a place, so `&` and a subscript work on one. In a block it
    lives in the frame for the block; at file scope it is `static` and its

@@ -2650,12 +2650,10 @@ refuses "a list starting part-way through an element" "'a' has a list in braces 
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-braces-mid-element.c"
 refuses "a struct where a scalar is wanted" "'x' is given 'struct p' where a number or a pointer is wanted" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-in-a-scalar.c"
-# **Structs in braces**, since ROADMAP 6.13's second part. `cc` refuses all
-# but the first. That one is C: a value for a member that is an array or a
-# struct with the member's braces left out, which this subset refuses by
-# name until it can walk a struct's members in order without a loop.
-refuses "braces left out inside a struct" "'elided' leaves out the braces of a member or an element that is an array or a struct: C11 6.7.9p20 allows that, and this subset does not yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/init-elision-into-a-member.c"
+# **Structs in braces**, since ROADMAP 6.13's second part. `cc` refuses
+# each. Leaving out the braces of a member that is an array or a struct was
+# refused here too, until the third part's walk could find the scalar after
+# the last one in a struct; that program is in the oracle now.
 refuses "more values than a struct has members" "'x' is given more initialisers than it has room for, C11 6.7.9p2" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-excess.c"
 refuses "a struct member given another struct" "'x' is given 'struct q' where 'struct p' is wanted" \
@@ -2664,6 +2662,30 @@ refuses "a struct value at file scope" "'x' has to be initialised with something
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-value-at-file-scope.c"
 refuses "more structs than an array has room for" "'two' is given more initialisers than it has room for, C11 6.7.9p2" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-list-too-long.c"
+# **Designators**, since ROADMAP 6.13's third part. `cc` refuses all but the
+# last three. Those are this subset's: an index that is an expression and
+# not a number written out, since a value is placed before the `constants`
+# pass works any out; a struct too big for the map of its bytes the walk
+# reads; and an object nested more than eight levels deep, which is as far
+# down as the walk that places a value is written out.
+refuses "a designator past an array's end" "'a' has a designator past the end of an array, C11 6.7.9p6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-past-the-end.c"
+refuses "a designator naming no member" "'x' has a designator naming no member of the struct, C11 6.7.9p7" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-no-member.c"
+refuses "'.' for an array" "'a' has a '.' designator for something that is not a struct, C11 6.7.9p7" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-dot-on-an-array.c"
+refuses "'[ ]' for a struct" "'x' has a '[ ]' designator for something that is not an array, C11 6.7.9p6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-index-on-a-struct.c"
+refuses "a designator for a scalar" "'x' has a '.' designator for something that is not a struct, C11 6.7.9p7" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-on-a-scalar.c"
+refuses "an index that is not a constant" "'a' has an array designator that is not a number written out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-not-constant.c"
+refuses "an index that is worked out" "'a' has an array designator that is not a number written out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-designator-worked-out.c"
+refuses "a struct too big for its byte map" "'g' is initialised through a struct too big for this subset's map of its bytes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-too-big-for-its-map.c"
+refuses "an object nested nine deep" "'a' is initialised through more levels of arrays and structs than this subset walks, which is eight" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-nested-too-deep.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

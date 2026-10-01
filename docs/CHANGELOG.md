@@ -16,6 +16,33 @@ entry below that changes it says so.
 
 ---
 
+## 2026-09-30: C designated initialisers, and braces left out
+
+**Designated initialisers work**, the third part of [ROADMAP
+6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): `.member = ` and
+`[index] = `, chains of them, `{.t.kind = 5, .n[2] = 7}`, in any order,
+with values after one going on from where it left off. The last value
+given for a place is the one kept. An array of no stated size is sized by
+its furthest designator.
+
+**Braces may be left out wherever C allows**, inside structs too, which
+the previous part refused: `{'e', 7, 8, 9, 10, 11}` fills a struct whose
+second member is an array and whose third a struct.
+
+**A compile failure is fixed**: a struct member more than 4095 bytes in
+produced assembly the assembler refused.
+
+Refused: a designator past an array's end, naming no member, or of the
+wrong kind; an index that is an expression and not a number, for now; a
+struct over 32767 bytes or 86 members, and an object nested more than
+eight levels deep, in an initialiser.
+
+**Tests:** 593 → 601. Nine refusals. Three programs join the C oracle,
+one of them a refusal until now: 296 agree with `cc`, none diverges.
+Refusals: 362.
+
+---
+
 ## 2026-09-30: C structs initialised in braces
 
 **Structs can be initialised in braces**, the second part of [ROADMAP

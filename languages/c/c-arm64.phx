@@ -230,7 +230,9 @@
    *
    * The offset is an immediate, which `add` takes up to 4095. A member
    * further in than that would not assemble, and no program here has one. *)
-  Member    : addr = "{}\tadd x0, x0, #{}\n" of $value.addr, at($entry, 1)
+  Member    : addr = "{}{}" of $value.addr,
+                            lookup([[true, "\tadd x0, x0, #{}\n" of at($entry, 1)]], at($entry, 1) < 4096,
+                                   "\tmov x16, #{}\n\tadd x0, x0, x16\n" of at($entry, 1))
             : out  = lookup([[true, $addr]], $aggregate,
                             "{}\t{}, [x0]\n"
                               of $addr,
@@ -377,28 +379,40 @@
    * its literal, up to its NUL or the array's end. *)
   otherwise asm = ""
   LocalAgg : down aoff = $offset
+           : down asym = ""
            : n   = $label : label = $label + 1
            : out = "\tsub x1, x29, #{}\n\tldr x9, ={}\nL{}.zero:\n\tsub x9, x9, #1\n\tstrb wzr, [x1, x9]\n\tcbnz x9, L{}.zero\n{}"
                      of $offset, $whole, $n, $n, $init.out .
-  InitList : out = join($items.out)
-           : gd  = join($items.gd) .
+  InitList : out  = join($items.out)
+           : gd   = join($items.gd)
+           : rout = join($items.rout) .
+  Desig    : out  = $item.out
+           : gd   = $item.gd
+           : rout = $item.rout .
   InitExpr : moves = $fill or $scopy
            : n     = $label : label = $label + lookup([[true, 1]], $moves, 0)
            : bytes = lookup([[true, lookup([[true, $value.slen + 1]], $value.slen + 1 < $iw, $iw)]], $fill, $iw)
            : dest  = "\tsub x1, x29, #{}\n" of $aoff - $ioff
            : ext   = lookup([[true, "\tsxtw x0, w0\n"]],
                             $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns, "")
-           : out   = lookup([[true, ""]], $zero, lookup([[true, "{}{}{}" of $value.out, $dest, ($copy of $bytes, $n, "x0", "x1", $n)]], $moves,
-                            "{}{}{}\t{}, [x1]\n" of $value.out, $ext, $dest,
-                                 lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0")))
+           : act   = lookup([[true, $copy of $bytes, $n, "x0", "x1", $n]], $moves,
+                            "{}\t{}, [x1]\n" of $ext, lookup([[1, "strb w0"], [4, "str w0"]], $iw, "str x0"))
+           : out   = "{}{}{}" of $value.out, $dest, $act
+           (* A store made at start-up, for a global whose values are not in
+            * address order: its address and the offset, then the same. *)
+           : sdest = "\tadrp x1, {}@PAGE\n\tadd x1, x1, {}@PAGEOFF\n{}"
+                       of $asym, $asym, lookup([[0, ""]], $ioff,
+                                               lookup([[true, "\tadd x1, x1, #{}\n" of $ioff]], $ioff < 4096,
+                                                      "\tmov x16, #{}\n\tadd x1, x1, x16\n" of $ioff))
+           : rout  = "{}{}{}" of $value.out, $sdest, $act
            : gap   = lookup([[0, ""]], $igap, "\t.space {}\n" of $igap)
-           : gd    = lookup([[true, $gap]], $zero, lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
+           : gd    = lookup([[true, "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
                                      lookup([[0, ""]], $iw - $value.slen, "\t.space {}\n" of $iw - $value.slen)]],
                             $fill,
                             "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [4, ".long"]], $iw, ".quad"),
                                lookup([[true, $value.sym]], $value.anchored and not $value.settled,
                                       lookup([[1, $value.folded mod 256], [4, $value.folded mod 4294967296]],
-                                             $iw, $value.folded)))) .
+                                             $iw, $value.folded))) .
   Discard   : out = $value.out .
 
   (* ---- calls ----
@@ -977,6 +991,8 @@
    * from 0 to 255, which is how it wants one. A pointer initialised with 0
    * is eight bytes of 0. *)
   thread gdata = ""
+  thread ctors = ""
+  thread ctorptrs = ""
 
   (* **An address initialiser is written as its label**, since 2026-09-26:
    * `.quad Lstr3` for a string and `.quad _answer` for `&answer`, which the
@@ -1020,19 +1036,33 @@
    * since ROADMAP 6.13's first part: each value where the `locals` pass put
    * it, the bytes before it that nothing wrote as `.space`, and the rest of
    * the object after the last. It is always a definition. *)
+  (* **A global whose values go back**, since ROADMAP 6.13's third part,
+   * `{[4] = 40, [1] = 10}`, is written as zeros, and a routine run before
+   * `main`, from `__mod_init_func`, stores its values in the order they
+   * are written, so the last of two for one place is the one kept, as
+   * C11 6.7.9p19 says. Data has to be written in address order and the
+   * notation cannot sort; one written in order is data, as before. *)
   GlobalAgg   : out = ""
               : down aoff = 0
+              : down asym = "_{}" of $name
               : emits = true
               : written = bind($written, $name, true)
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
-              : gdata = "{}{}\t.p2align {}\n_{}:\n{}{}"
-                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $init.gd,
-                             lookup([[0, ""]], $tail, "\t.space {}\n" of $tail) .
+              : abody = lookup([[true, "\t.space {}\n" of $whole]], $back,
+                               "{}{}" of $init.gd, lookup([[0, ""]], $tail, "\t.space {}\n" of $tail))
+              : gdata = "{}{}\t.p2align {}\n_{}:\n{}"
+                          of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name, $abody
+              : ctors = lookup([[true, "{}\t.p2align 2\nLinit.{}:\n{}\tret\n" of $ctors, $asym, $init.rout]], $back, $ctors)
+              : ctorptrs = lookup([[true, "{}\t.quad Linit.{}\n" of $ctorptrs, $asym]], $back, $ctorptrs) .
   StaticAgg   : out = ""
               : down aoff = 0
-              : gdata = "{}\t.p2align {}\n_{}:\n{}{}"
-                          of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label, $init.gd,
-                             lookup([[0, ""]], $tail, "\t.space {}\n" of $tail) .
+              : down asym = "_{}" of $label
+              : abody = lookup([[true, "\t.space {}\n" of $whole]], $back,
+                               "{}{}" of $init.gd, lookup([[0, ""]], $tail, "\t.space {}\n" of $tail))
+              : gdata = "{}\t.p2align {}\n_{}:\n{}"
+                          of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label, $abody
+              : ctors = lookup([[true, "{}\t.p2align 2\nLinit.{}:\n{}\tret\n" of $ctors, $asym, $init.rout]], $back, $ctors)
+              : ctorptrs = lookup([[true, "{}\t.quad Linit.{}\n" of $ctorptrs, $asym]], $back, $ctorptrs) .
   (* **A `static` local is written as a global is**, under its label, and
    * never `.globl`, since nothing outside its function can name it. Where
    * it is declared nothing runs: it was initialised before the program
@@ -1052,8 +1082,9 @@
                                            $ebytes, $value.folded)) .
   Program   : down initialised = bind(empty, $inits, true)
             : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
-            : out = "\t.text\n{}\n\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}"
-                      of join($items.out, "\n"), $data, $gdata .
+            : out = "\t.text\n{}\n{}\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}{}"
+                      of join($items.out, "\n"), $ctors, $data, $gdata,
+                         lookup([[0, ""]], size($ctorptrs), "\t.section __DATA,__mod_init_func,mod_init_funcs\n\t.p2align 3\n{}" of $ctorptrs) .
 
 %driver arm64 = functions, locals, types, constants, emit-arm64 -> out .
 %driver check = functions, locals, types, constants .

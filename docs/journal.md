@@ -6563,3 +6563,38 @@ hands its own start down as the cursor. Ten breaks, all caught, two of
 them by witnesses written because thinking about the breaks found them
 missing: a struct defined inside another's members, and a typedef of a
 struct completed after it.
+
+**6.13's third part: the iteration question, answered without iterating.**
+Both needs that had been put off to here, a global's designators going
+back and braces left out inside a struct, looked like loops: a sort, and a
+walk down and up a struct's members. Each turned out to have an answer the
+notation can already write. **Order** is not needed if the data is not
+written in order at all: a global whose values go back is zeros, and a
+routine run from `__mod_init_func` before `main` stores the values in the
+order written, so the last one for a place wins, which is what C asks. It
+was tried by hand on Mach-O before anything was built. **The walk** is a
+lookup if each struct carries a map of its bytes, one letter a byte saying
+which member it belongs to, with padding counted as the next member's:
+the scalar at or after any offset is then a fixed number of steps down,
+by division in an array and through the map in a struct. A run of one
+letter n long is a slice of a long run of dots, split at the dots and
+joined with the letter, and the run of dots is made once by doubling. The
+prototype gave twenty answers of twenty against `cc`'s offsets, and Hans
+settled it for the notation. ROADMAP 3.4's line holds: the library did
+not grow, and nothing iterates.
+
+**The new walk replaced the old two**, the byte cursor of part 1 and the
+member counter of part 2, and every witness of both stayed green through
+it. Getting it right took the usual ordering lessons and two of C's: a
+value in braces never takes the braces' own object, so a struct value
+stops one level down, as `cc` says; and a value past the end of a scalar
+is past the end of the object, which is how `int x = {1, 2}` is refused.
+`iback`, whether a value went back, was first written as an attribute and
+not a thread, and every global looked in order; the witness's first
+backward global wrote a negative `.space` and said so.
+
+**A third old limit came out of the witnesses**: a struct member more than
+4095 bytes in was added with an immediate the assembler refuses, found by a
+twenty-thousand-byte struct written to test the run of dots. Twelve
+breaks, all caught, three of them by witnesses written because thinking
+about the breaks found them missing.
