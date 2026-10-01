@@ -6609,3 +6609,60 @@ backward global wrote a negative `.space` and said so.
 twenty-thousand-byte struct written to test the run of dots. Twelve
 breaks, all caught, three of them by witnesses written because thinking
 about the breaks found them missing.
+
+## 2026-10-01: compound literals, and initialisers closed
+
+**The Proem rename first**, a note from the workspace: CPP is Proem since
+today, `~/Projects/CPP` is gone, and the two links to it in ROADMAP 6 and
+COMPLETED were dead. Both point at `~/Projects/Proem` now, and ROADMAP 6
+says that every mention of CPP on that page means Proem. The journal and
+the changelog keep the old name, as history.
+
+**6.13's fourth part: a compound literal is a name with its object inside
+it.** C11 6.5.2.5 makes `(struct pair){3, 4}` an object with no name, and
+an lvalue: everything a name is, `&`, `=`, a subscript, a member, decay,
+`sizeof`, a struct passed whole. The question was how to get all of that
+without writing it again, and the answer was to build the literal as a
+`Variable` and give `Variable` a field, `lit`, empty for every name and
+holding the object, a `Literal`, for a literal. The `Literal` is worked out
+as a declaration's initialiser in braces is, a `LocalAgg`'s in a function
+and a `StaticAgg`'s at file scope, and binds itself in `env`; the
+`Variable` looks it up there. Every clause a name had then applies, and
+the emit pass only had to put the `Literal`'s code in front of the
+`Variable`'s, so that a literal in a block is filled each time it is
+reached, which C11 6.5.2.5p5 asks.
+
+**The key was the one thing that did not come free.** Two literals must
+not share an entry, and the obvious key is where each is written. A probe
+showed that **a grammar action cannot read `$pos`**: only a pass can. So
+the parse gives the `Variable` the name "", the `Literal` works out
+`lit.5.14` from its own position in the `locals` pass, and the `Variable`
+looks up its `Literal`'s key in place of its name. The key is also the
+label of a literal at file scope, `_lit.5.14`, since `.` is no C name's
+and is an assembler's. **And one cursor had to be kept**: the
+initialiser's walk is a thread, and a `down` on a thread does not put it
+back, so a literal inside another initialiser, `{(int []){1, 2}, 2}`,
+left the outer walk at the inner one's end. The `Variable` keeps the
+three and restores them on the way out. The second witness, written from
+reading the design for how it could be wrong, has that shape, and the
+break that took the restoring out was caught by it.
+
+**The witness agreed on its first run**, and so did the second. What went
+wrong was elsewhere: `&(long)x`, refused as a syntax error since 6.7, was
+now refused one token later, at the `x` where a literal's `{` was wanted,
+which is the same refusal said from further in. And trying the refusals
+against `cc` found **two messages out of date since 6.13's second part**:
+a struct global or `static` initialised from another struct's value said
+braces were "not here yet". ROADMAP 6.13 had said they would come to say
+what `cc` says, and they do now: the value is not worked out before the
+program runs. A struct's compound literal at file scope meets the same
+refusal, which `cc` takes as an extension.
+
+**6.13 closed with it**, and three of its listed refusals turned out to
+have no program in `refused/`: an array from a scalar, a struct from a
+scalar, and an array with neither a size nor an initialiser, which `cc`
+takes at file scope as a tentative definition of one element and refuses
+in a block. All three are there now, and `pending/` is empty.
+Thirteen breaks, all caught; one was first skipped by the script that
+made them, its text matching four clauses, and was made by hand on the
+`Literal`'s own. 601 → 614 checks.

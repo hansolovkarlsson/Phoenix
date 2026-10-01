@@ -2157,7 +2157,9 @@ refuses "a typedef of void" "is a typedef of 'void', which is C and is not here 
 # **Casts**, since 2026-09-26, ROADMAP 6.7. `cc` refuses all but the third,
 # a cast to a struct, which it allows as GNU C does. A cast is a value and
 # not a place, and the `place` rule has no cast in it, so assigning to one
-# and taking its address are syntax errors, as `f() = 3` is.
+# and taking its address are syntax errors, as `f() = 3` is. Since ROADMAP
+# 6.13's fourth part a type in parentheses after `&` may begin a compound
+# literal, so `&(long)x` is refused at the `x`, where its `{` was wanted.
 refuses "a struct cast to a number" "'struct s' is cast to something other than 'void'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/cast-a-struct-to-a-number.c"
 refuses "a void value cast to an int" "'void' is cast to something other than 'void'" \
@@ -2166,7 +2168,7 @@ refuses "a cast to a struct" "a cast to 'struct s' is not C" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/cast-to-a-struct.c"
 refuses "an assignment to a cast" 'and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-a-cast.c"
-refuses "the address of a cast" 'and found "long"' \
+refuses "the address of a cast" 'expected {, and found "x"' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-a-cast.c"
 refuses "a cast to void read as a value" "'void' is put where a number or a pointer goes" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/use-a-void-cast.c"
@@ -2262,7 +2264,7 @@ refuses "a global initialised from another" "'b' has to be initialised with some
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-another.c"
 refuses "a global used above its declaration" "'x' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-used-above.c"
-refuses "a struct global with an initialiser" 'which wants braces, and they are not here yet' \
+refuses "a struct global with an initialiser" "'b' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct pt' is not" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-struct-initialised.c"
 refuses "a global array of no elements" "'a' is an array of no elements" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-array-of-no-elements.c"
@@ -2335,7 +2337,7 @@ refuses "a static local, then a local of its name" "'n' is declared twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-then-a-local.c"
 refuses "a void static local" "'v' is declared 'void'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-void.c"
-refuses "a static struct from another" "'y' is a 'struct s' with an initialiser, which wants braces" \
+refuses "a static struct from another" "'y' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct s' is not" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-struct-initialised.c"
 refuses "a static local array of no elements" "'a' is an array of no elements" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-local-array-of-no-elements.c"
@@ -2686,6 +2688,43 @@ refuses "a struct too big for its byte map" "'g' is initialised through a struct
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-too-big-for-its-map.c"
 refuses "an object nested nine deep" "'a' is initialised through more levels of arrays and structs than this subset walks, which is eight" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/init-nested-too-deep.c"
+# **The rest of ROADMAP 6.13's list**, which closed with its fourth part:
+# an array from a scalar, a struct from a scalar, and an array with neither
+# a size nor an initialiser, in a block; at file scope `cc` takes that one
+# as a tentative definition of one element.
+refuses "an array from a scalar" "'a' is an array, initialised with a list in braces or, if it is of 'char', a string, C11 6.7.9p16" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-array-from-a-scalar.c"
+refuses "a struct from a scalar" "'x' is a 'struct s' initialised from something that is not a struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/init-struct-from-a-scalar.c"
+refuses "an array with neither a size nor an initialiser" "expected [ or =, and found \";\"" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-no-size-in-a-block.c"
+# **Compound literals**, since ROADMAP 6.13's fourth part. Their object is
+# initialised as a declaration's is, so what a declaration's initialiser is
+# refused for, a compound literal's is, under a name of its own. `cc`
+# refuses all but one: a struct's compound literal initialising a global,
+# which it takes as an extension and C11 6.7.9p4 does not, since a struct's
+# value is no constant. A variable-length array is no compound literal's
+# type, C11 6.5.2.5p1, and a count here is a number written out.
+refuses "a compound literal of '{}'" "'(compound literal)' is initialised with '{}', which is C23's, not C11's" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-empty-braces.c"
+refuses "more values than a compound literal has room for" "'(compound literal)' is given more initialisers than it has room for, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-excess.c"
+refuses "a string longer than a compound literal" "'(compound literal)' is initialised with a string longer than it, C11 6.7.9p2" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-string-too-long.c"
+refuses "a compound literal at file scope not worked out" "'(compound literal)' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-not-constant-at-file-scope.c"
+refuses "a block's compound literal in a static" "'p' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-in-a-static.c"
+refuses "and its address" "'p' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-address-in-a-static.c"
+refuses "a struct's compound literal initialising a global" "'g' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct pair' is not" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-struct-at-file-scope.c"
+refuses "a compound literal of an incomplete struct" "a compound literal is of 'struct nope', which is not complete here, C11 6.5.2.5p1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-incomplete.c"
+refuses "a compound literal of void" "a compound literal is of 'void', and an object's type has to be complete, C11 6.5.2.5p1" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-void.c"
+refuses "a compound literal of variable length" "expected integer or ], and found \"n\"" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/compound-literal-variable-length.c"
 # **Every program in refused/ is asserted by name**, since 2026-09-29, when
 # three from ROADMAP 6.9's second part were found asserted by nothing: a
 # file there that no line names is refused for whatever reason it likes.

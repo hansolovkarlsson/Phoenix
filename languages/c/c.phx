@@ -802,8 +802,9 @@ bit-and = equality { "&" equality -> Binary(op: $1, left: $$, right: $2) } .
  * it and the choice moves on. *)
 place = suffixed
       | "*" u:unary   -> Deref(value: $u)
+      | literal
       | "(" p:place ")" -> $p
-      | n:name        -> Variable(name: $n) .
+      | n:name        -> Variable(name: $n, lit: []) .
 
 (* A comparison is an `int`, 0 or 1, and it chains: `3 > 2 > 1` is
  * `(3 > 2) > 1`, which is 0, and C means that. So these are repetitions
@@ -917,9 +918,32 @@ primary = n:name "(" a:args ")" -> Call(name: $n, args: $a)
         | integer -> Number(text: $1)
         | character -> Character(text: $1)
         | string    -> String(text: $1)
-        | name    -> Variable(name: $1)
+        | name    -> Variable(name: $1, lit: [])
         | "_Generic" "(" assignment { "," ( typename | "default" ) ":" assignment } ")" -> Unsupported(word: "_Generic")
+        | literal
         | "(" expression ")" -> $2 .
+
+(* **A compound literal**, C11 6.5.2.5, since ROADMAP 6.13's fourth part: a
+ * type in parentheses and an initialiser in braces, which is an object with
+ * no name. It is built as a `Variable` holding its object, a `Literal`, in
+ * `lit`, so that everything a name is it is too, by the clauses a name
+ * already has: a place, so `&` and an assignment take it, an array that
+ * decays, a struct copied whole, its `sizeof`. Every other name has `lit`
+ * empty. The object is a declaration's with an initialiser in braces, as a
+ * `LocalAgg` in a function and a `StaticAgg` at file scope are, and the
+ * `locals` pass binds it under a key no C name can spell, worked out from
+ * where it is written, which the `Variable` looks up in place of its name.
+ * A cast is tried first, in `unary`, and fails at the `{`, where its operand
+ * was wanted. The type is a cast's, and an array's first count may be left
+ * out, to be what the initialiser reaches. *)
+literal = "(" b:sqlist s:pointer "(" "*" q:{ "const" } t:pointer ")" d:[ brackets ] ")" i:initializer
+            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [])], unsized: 0, init: $i)])
+        | "(" b:sqlist s:pointer "[" c:integer "]" d:[ brackets ] ")" i:initializer
+            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)])
+        | "(" b:sqlist s:pointer "[" "]" d:[ brackets ] ")" i:initializer
+            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)])
+        | "(" b:sqlist s:pointer ")" i:initializer
+            -> Variable(name: "", lit: [Literal(base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)]) .
 
 args = [ arg { "," b:arg -> $b } ] -> $1 .   (* `-> $1` as for params *)
 arg  = e:assignment -> Arg(value: $e) .
@@ -2119,6 +2143,59 @@ arg  = e:assignment -> Arg(value: $e) .
               ! defined($scope, $name) : "'{}' is declared twice" of $name
               ! $base.unsup = "" and $base.nstore < 2 and $base.stat and $dkind <> "for"
                   : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name .
+  (* **A compound literal's object**, since ROADMAP 6.13's fourth part, is
+   * worked out as a declaration's with an initialiser in braces is, and its
+   * initialiser walked the same way. In a function it is a `LocalAgg`'s, a
+   * slot in the frame, C11 6.5.2.5p5's automatic storage; at file scope a
+   * `StaticAgg`'s, data under a label, which is its key. The key is where
+   * it is written, `lit.5.14`, which no C name can spell, and the `Variable`
+   * around it looks it up. *)
+  Literal     : down abase    = $base
+              : down astars   = $stars
+              : down adims    = $dims
+              : down aparen   = $paren
+              : down acount   = $count
+              : down aunsized = $unsized
+              : down aname    = "(compound literal)"
+              : down atop     = true
+              : down myobj    = ""
+              : down lb       = 0
+              : down dset     = false
+              : down dobj     = ""
+              : down iback    = false
+              : down icur     = 0
+              : down iend     = 0
+              : down dbase   = $base
+              : down dstars  = $stars
+              : down inparen = false
+              : down pP      = ""
+              : down pouter  = $dims
+              : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
+                                size($paren), join($paren.t))
+              : isarr  = $count > 0 or $unsized = 1
+              : maxend = lookup([[true, $iend]], $iend > $icur, $icur)
+              : ecount = lookup([[1, ($maxend + lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2))) - 1) div lookup([[0, 1]], int(at(split(at(split($lvin, "|"), 1), ":"), 2)), int(at(split(at(split($lvin, "|"), 1), ":"), 2)))]], $unsized, $count)
+              : lv     = lookup([[true, "a:{}:{}:{}|{}" of $ecount * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $ecount, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin]], $isarr, $lvin)
+              : ptrs   = lookup([[true, size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) div 8]], size(at(split(lookup([[true, $lvin]], $isarr, $lv), "a:"), 1)) < size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)), size(at(split(lookup([[true, $lvin]], $isarr, $lv), "b:"), 1)) div 8)
+              : basew  = $base.basew
+              : dquals = "{}{}" of $base.bquals, $squals
+              : whole  = int(at(split(at(split($lv, "|"), 1), ":"), 2))
+              : tail   = $whole - $iend
+              : back   = $iback
+              : takes  = lookup([[true, (($whole + 7) div 8) * 8]], $infunc, 0)
+              : offset = $bytes + $takes
+              : lfile  = not $infunc
+              : lname  = "lit.{}.{}" of $pos.line, $pos.column
+              : galign = int(at(split(at(split($lv, "|"), 1), ":"), 4))
+              : env    = bind($env, $lname, lookup([[true, [$offset, $ptrs, $ecount, $basew, $base.tagname, false, false, $base.buns, "", $dquals, false, $lv]]], $infunc,
+                                                   [0, $ptrs, $ecount, $basew, $base.tagname, true, true, $base.buns, $lname, $dquals, false, $lv]))
+              : bytes  = $bytes + $takes
+              ! $unsized = 1 and $icur < 1
+                  : "a compound literal is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension"
+              ! $stars + $base.ptrs = 0 and $base.tagname = "void"
+                  : "a compound literal is of 'void', and an object's type has to be complete, C11 6.5.2.5p1"
+              ! $stars + $base.ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
+                  : "a compound literal is of 'struct {}', which is not complete here, C11 6.5.2.5p1" of at(split($base.tagname, "."), 1) .
   StaticAgg   : down abase    = $base
               : down astars   = $stars
               : down adims    = $dims
@@ -2477,7 +2554,19 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The five once, and their parts named from them. `Assign` has no clause
    * here: what it assigns to is a place, and the question is asked where the
    * name is rather than twice. *)
-  Variable : means   = lookup($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4"])
+  (* **A compound literal is looked up by its key**, since ROADMAP 6.13's
+   * fourth part, which its `Literal` bound just before, and a name by its
+   * name. Its initialiser may be inside another's, `{(int []){1, 2}}`, and
+   * walks with the cursor of its own, so the outer one's is kept here and
+   * put back. *)
+  Variable : down hicur  = $icur
+           : down hiend  = $iend
+           : down hiback = $iback
+           : icur    = $hicur
+           : iend    = $hiend
+           : iback   = $hiback
+           : vkey    = lookup([[0, $name]], size($lit), join($lit.lname))
+           : means   = lookup($env, $vkey, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4"])
            : known   = $layouts
            : vreg    = at($means, 11)
            : vlv     = at($means, 12)
@@ -2491,7 +2580,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : count   = at($means, 3)
            : basew   = at($means, 4)
            : tagname = at($means, 5)
-           ! not defined($env, $name) : "'{}' is not declared" of $name .
+           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) : "'{}' is not declared" of $name .
 
   (* A member cannot be looked up here, because which struct it is in is the
    * `types` pass's to work out, and a thread is not something a later pass
@@ -2823,16 +2912,20 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   (* **A global's initialiser** is an assignment too, since 2026-09-26, and
-   * a value is all it can be: a struct global would need a brace-enclosed
-   * initialiser, which the subset does not have, and is refused by name. *)
+   * a value is all it can be. A struct global's value is never worked out
+   * before the program runs, C11 6.7.9p4, which is what `cc` says of
+   * another struct's; its members in braces are, since ROADMAP 6.13. `cc`
+   * takes a compound literal's as an extension, and this refuses it too,
+   * since ROADMAP 6.13's fourth part, which said so. The message said
+   * until then that braces were not here yet. *)
   GlobalInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
-                 : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
+                 : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct {}' is not: its members in braces are"
                      of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
                  : "'{}' is put where a number or a pointer goes" of $value.kind .
 
   StaticInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
-                 : "'{}' is a 'struct {}' with an initialiser, which wants braces, and they are not here yet"
+                 : "'{}' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct {}' is not: its members in braces are"
                      of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
                  : "'{}' is put where a number or a pointer goes" of $value.kind .
@@ -3703,6 +3796,8 @@ arg  = e:assignment -> Arg(value: $e) .
   GlobalAgg : down afile = true .
   StaticAgg : down afile = true .
   LocalAgg  : down afile = false .
+  (* A compound literal's at file scope is data too, C11 6.5.2.5p5. *)
+  Literal   : down afile = $lfile .
 
   (* **A `static` local's initialiser is the third customer**, since
    * 2026-09-29, ROADMAP 6.10: it is written into the object file as a

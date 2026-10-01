@@ -1508,7 +1508,7 @@ ROADMAP 6.12 was written on 2026-09-29 and 6.13 on 2026-09-30, each before
 its hard part was built, and both named a capability the notation lacks as
 the thing their hard part would turn on. Four claims can be checked against
 [COMPLETED 6.12](COMPLETED.md#612-declarations-as-c11-67-has-them) and
-[ROADMAP 6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them).
+[ROADMAP 6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them).
 
 *Held: the way that stays inside the notation, "where the tree gives the
 recursion a fold would".* Part 4's entry named two ways and guessed the

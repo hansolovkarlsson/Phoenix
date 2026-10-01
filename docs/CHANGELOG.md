@@ -16,10 +16,37 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C compound literals, and initialisers closed
+
+**Compound literals work**, the fourth and last part of [ROADMAP
+6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them), which closes it:
+`(struct pair){3, 4}`, `(int []){1, 2, 3}`, `(int){5}`, with designators
+and strings as any initialiser has them. In a block one is filled each
+time it is reached; at file scope it is data, so `int *p = &(int){42};`
+works. One is used as a name is: `&`, `=`, a subscript, a member,
+`sizeof`, passed whole, or decaying to a pointer.
+
+**Two messages are corrected**: a struct global or `static` initialised
+from another struct's value says, as `cc` does, that its value is not
+worked out before the program runs. It said braces were not here yet.
+
+Refused: a compound literal given more values than it has room for, `{}`,
+or a string longer than it; one of `void`, of a struct not complete, or of
+variable length; a block's compound literal in a `static`'s initialiser;
+and a struct's compound literal initialising a global, which `cc` takes as
+an extension and C11 does not. Three refusals 6.13 listed are now tested
+too: an array or a struct from a scalar, and an array with neither a size
+nor an initialiser.
+
+**Tests:** 601 → 614. Thirteen refusals. Two programs join the C oracle:
+298 agree with `cc`, none diverges. Refusals: 375.
+
+---
+
 ## 2026-09-30: C designated initialisers, and braces left out
 
 **Designated initialisers work**, the third part of [ROADMAP
-6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): `.member = ` and
+6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them): `.member = ` and
 `[index] = `, chains of them, `{.t.kind = 5, .n[2] = 7}`, in any order,
 with values after one going on from where it left off. The last value
 given for a place is the one kept. An array of no stated size is sized by
@@ -46,7 +73,7 @@ Refusals: 362.
 ## 2026-09-30: C structs initialised in braces
 
 **Structs can be initialised in braces**, the second part of [ROADMAP
-6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): member by member,
+6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them): member by member,
 `struct pair p = {1, 2};`, at file scope, in a function and `static`, with
 members that are arrays or structs in their own braces, a member of `char`
 from a string, a struct member or an array element from a struct's value,
@@ -65,7 +92,7 @@ agree with `cc`, none diverges. Refusals: 354.
 ## 2026-09-30: C initialisers in braces for arrays, and large frames
 
 **Arrays and scalars can be initialised in braces**, the first part of
-[ROADMAP 6.13](ROADMAP.md#613-initialisers-as-c11-679-has-them): `int
+[ROADMAP 6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them): `int
 primes[5] = {2, 3, 5, 7, 11};` at file scope, in a function and `static`,
 with inner braces or without, `int x = {5};`, and an array of no stated
 size taking its size from its values, `int sized[] = {10, 20, 30};`. A
@@ -115,7 +142,7 @@ now found where a pointer to it is used, not where the pointer was
 declared.
 
 **Structs can be declared where C allows**, the third part of [ROADMAP
-6.12](ROADMAP.md#612-declarations-as-c11-67-has-them): inside a function
+6.12](COMPLETED.md#612-declarations-as-c11-67-has-them): inside a function
 with the function's or the block's scope, with no tag, inside another
 struct, and before they are defined, `struct later;`. A pointer to a
 struct that is not complete yet is allowed, and an object of one, its
@@ -131,7 +158,7 @@ Refusals: 333.
 ## 2026-09-29: C declarations of several names, `extern`, and `_Static_assert`
 
 **A C declaration may declare several names**, the second part of [ROADMAP
-6.12](ROADMAP.md#612-declarations-as-c11-67-has-them): `int a = 1, b, *p;`
+6.12](COMPLETED.md#612-declarations-as-c11-67-has-them): `int a = 1, b, *p;`
 at file scope, in a function and in a struct, and `typedef int I, *IP;`. A
 `for` may declare its own variables, which end with the loop. A prototype
 may leave its parameters unnamed, `int add(int, int);`.
@@ -156,7 +183,7 @@ Refusals: 329.
 ## 2026-09-29: C's specifiers in any order, and every keyword reserved
 
 **The words of a C type may come in any order**, the first part of
-[ROADMAP 6.12](ROADMAP.md#612-declarations-as-c11-67-has-them), the first
+[ROADMAP 6.12](COMPLETED.md#612-declarations-as-c11-67-has-them), the first
 entry of the C11 arc: `int long`, `long unsigned int` and `char signed` are
 the types C11 says they are, and a list of words that is no type, `long
 char` or `int int`, is refused. A storage class may stand anywhere among
