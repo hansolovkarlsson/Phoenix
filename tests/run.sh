@@ -2532,8 +2532,8 @@ refuses "a typedef with an initialiser" "'T' is a typedef, and only an object ha
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-with-an-initialiser.c"
 refuses "a 'register' array" "'a' is a 'register' array, and C11 6.3.2.1p3 makes using one undefined" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/register-array.c"
-refuses "a typedef of a function type" "'F' is a typedef of a function type, which C allows and this subset does not have yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-of-a-function.c"
+refuses "a definition declared typedef" "'f' is a function's definition declared 'typedef', which C11 6.9.1p2 forbids" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/definition-declared-typedef.c"
 # **A declaration of several names, and the rest of a declaration's
 # places**, since ROADMAP 6.12's second part. A name declared twice in one
 # list is refused as it is in two, and so is a global given a second type or
@@ -2765,6 +2765,33 @@ refuses "a global from another's pointer to a function" "'b' has to be initialis
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-function-pointer.c"
 refuses "and a table of them" "'t' has to be initialised with something worked out before the program runs, C11 6.7.9p4" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-table-from-a-function-pointer.c"
+# **The types around pointers to functions**, since ROADMAP 6.14's
+# fourth part. `cc` refuses all but one: a function declared through a
+# typedef of its type, which C allows and this subset refuses by name.
+# The last three are shapes C forbids, which reach this subset as
+# syntax errors, since no declarator here can write one.
+refuses "a pointer to a function given another type" "'f' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-of-another-type.c"
+refuses "and assigned one" "'=' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-assigned-another-type.c"
+refuses "and a global" "'g' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-global-of-another-type.c"
+refuses "and a member in braces" "'x' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-pointer-member-of-another-type.c"
+refuses "a function to a 'void *'" "'p' is given a pointer to a function, where a pointer to something else goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-to-void-pointer.c"
+refuses "a pointer to an int to a pointer to a function" "'f' is given a pointer to something that is not a function, where a pointer to a function goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/object-pointer-to-function-pointer.c"
+refuses "a function to a number" "'n' is given a pointer to a function, where a number goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-to-a-number.c"
+refuses "a function declared through a typedef" "'add' is declared through a typedef of a function's type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef.c"
+refuses "a function returning a function" "expected ; or {, and found \"(\"" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
+refuses "a function returning an array" "expected *, and found \"f\"" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-an-array.c"
+refuses "an array of functions" "expected [, =, , or ;, and found \"(\"" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-functions.c"
 # **A call by name is still a call by name**, since ROADMAP 6.14's second
 # part made every call one node: `bl _apply`, and a call through a
 # pointer is a `blr`. Both ways the program says the same, so only the

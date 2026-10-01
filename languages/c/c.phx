@@ -206,7 +206,13 @@ program = { item } -> Program(items: $1) .
  * because C11 6.2.1 puts the parameters in the same scope as the body's
  * outermost declarations: `int f(int a) { int a; }` is declared twice, and a
  * `Block` would open a scope the parameters are not in. *)
-item = function
+(* **A typedef first**, since ROADMAP 6.14's fourth part, when one could
+ * name a function's type, `typedef int binop(int, int);`: tried after
+ * `function`, it was read as a prototype with `typedef` among its
+ * specifiers. It needs the word, so nothing else is taken by it. *)
+item = b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } ";"
+         -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "file")
+     | function
      (* **`_Static_assert`**, C11 6.7.10, since ROADMAP 6.12's second part:
       * a condition the `constants` pass works out, and a message it gives
       * when the condition is zero. It may be an item or a statement. *)
@@ -232,8 +238,8 @@ item = function
       * ROADMAP 6.12's fourth part, and is refused by name until then. The
       * word may stand anywhere among the specifiers, `int typedef t;`, as
       * C11 6.7.1 lets any storage class: see `tdspecifiers`. *)
-     | b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } ";"
-         -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "file")
+     (* The typedef alternative is tried first, since ROADMAP 6.14's fourth
+      * part, see `item`'s first alternative. *)
      (* **A global is a declaration at file scope**, since 2026-09-26,
       * ROADMAP 6.8, and is written as a local is: a base, stars and a name,
       * with a count in brackets or an initialiser. It is tried after a
@@ -258,6 +264,8 @@ typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:inte
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
                    | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
+                   | s:pointer n:name f:fn-suffix
+                     -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 0, dims: [], fn: [$f])])
                    | s:pointer n:name "[" c:integer "]" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
                    | s:pointer n:name
@@ -436,20 +444,30 @@ fn-suffix = "(" "void" ")" -> Sig(params: [], variadic: 0)
  * 6.12's first part it was the first word or not there, and
  * `int static f(void)` was a syntax error; it may stand anywhere among the
  * specifiers now, as C11 6.7 has it. *)
-function = r:specifiers t:pointer n:name "(" "void" ")" ";"
-             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0)
+function = r:specifiers t:pointer "(" "*" q:{ "const" } u:pointer n:name "(" "void" ")" ")" f:fn-suffix ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [Paren(stars: 1 + size($u), dims: [], fn: [$f])])
+         | r:specifiers t:pointer "(" "*" q:{ "const" } u:pointer n:name "(" "void" ")" ")" f:fn-suffix "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [Paren(stars: 1 + size($u), dims: [], fn: [$f])],
+                         body: $s, ids: [])
+         | r:specifiers t:pointer "(" "*" q:{ "const" } u:pointer n:name "(" p:params v:dots ")" ")" f:fn-suffix ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p, variadic: size($v), rparen: [Paren(stars: 1 + size($u), dims: [], fn: [$f])])
+         | r:specifiers t:pointer "(" "*" q:{ "const" } u:pointer n:name "(" p:params v:dots ")" ")" f:fn-suffix "{" s:{ statement } "}"
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p, variadic: size($v), rparen: [Paren(stars: 1 + size($u), dims: [], fn: [$f])],
+                         body: $s, ids: [])
+         | r:specifiers t:pointer n:name "(" "void" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [])
          | r:specifiers t:pointer n:name "(" "void" ")" "{" s:{ statement } "}"
-             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0,
+             -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [],
                          body: $s, ids: [])
          | r:specifiers t:pointer n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                          variadic: size($v))
+                          variadic: size($v), rparen: [])
          | r:specifiers t:pointer n:name "(" p:params v:dots ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                         variadic: size($v), body: $s, ids: [])
+                         variadic: size($v), rparen: [], body: $s, ids: [])
          | r:specifiers t:pointer n:name "(" i:name j:{ "," x:name -> $x } ")" p:{ kr-declaration } "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
-                         variadic: 0, body: $s, ids: flatten([[$i], $j])) .
+                         variadic: 0, rparen: [], body: $s, ids: flatten([[$i], $j])) .
 
 (* A member is declared the way a local is, and is two nodes for the reason a
  * local is: `int a[0];` and `int a;` must not be spelled the same. There is no
@@ -1154,8 +1172,6 @@ arg  = e:assignment -> Arg(value: $e) .
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params)
-            ! $ret.unsup = "" and $ret.nstore < 2 and $ret.tdef
-                : "'{}' is a typedef of a function type, which C allows and this subset does not have yet" of $name
             ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
                 : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
   Function  : internal = lookup([[true, 1]], $ret.stat, 0)
@@ -1170,8 +1186,11 @@ arg  = e:assignment -> Arg(value: $e) .
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params)
+            (* **A definition declared `typedef`** is no C, 6.9.1p2; a
+             * typedef of a function's type is, and is read as a typedef
+             * before a function is tried, since ROADMAP 6.14's fourth part. *)
             ! $ret.unsup = "" and $ret.nstore < 2 and $ret.tdef
-                : "'{}' is a typedef of a function type, which C allows and this subset does not have yet" of $name
+                : "'{}' is a function's definition declared 'typedef', which C11 6.9.1p2 forbids" of $name
             ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
                 : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register")
             ! size($params) > 0 and size(split((",{}," of join($params.name, ",")), ",,")) > 1
@@ -1676,7 +1695,8 @@ arg  = e:assignment -> Arg(value: $e) .
       : funcs   = bind($funcs, $sigkey, [size($params), $variadic])
       : sigs    = bind($sigs, $sigkey, $params.passes)
       : rets    = bind($rets, $sigkey, [$dbase.tagname, $dbase.basew, $dstars + $dbase.ptrs, $dbase.buns,
-                                         "{}{}" of $dbase.bquals, slice("000000000000", 1, $dstars)])
+                                         ("{}{}" of $dbase.bquals, slice("000000000000", 1, $dstars)),
+                                         ("{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $dstars), $dbase.blv)])
       : pwidths = bind($pwidths, $sigkey, $params.pwide) .
 
   SizeOfType : down dbase   = $base
@@ -1741,6 +1761,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * aligned as its base is, or to eight when it is a pointer, and an array as
    * its element is. *)
   MemberScalar : down dbase   = $base
+               ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+                   : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
                : down dstars  = $stars
                : down inparen = false
                : down pP      = ""
@@ -1820,14 +1842,20 @@ arg  = e:assignment -> Arg(value: $e) .
    *
    * A second declaration has to say the same thing as the first, which is
    * C11 6.7p4. *)
-  Prototype : rptrs = $stars + $ret.ptrs
+  Prototype : rlv   = lookup([[0, "{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $stars), $ret.blv]], size($rparen), join($rparen.t))
+            : rptrs = lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1))
+            : down dbase   = $ret
+            : down dstars  = $stars
+            : down inparen = false
+            : down pP      = ""
+            : down pouter  = []
           : down env    = empty
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
             : funcs = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns, "{}{}" of $ret.bquals, $squals])
+            : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
             : pwidths = bind($pwidths, $name, $params.pwide)
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
@@ -1837,8 +1865,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($rets, $name)
                 and [at(lookup($rets, $name, empty), 1), lookup([[true, 0]], at(lookup($rets, $name, empty), 1) <> "" and at(lookup($rets, $name, empty), 1) <> "void", at(lookup($rets, $name, empty), 2)),
                      at(lookup($rets, $name, empty), 3), at(lookup($rets, $name, empty), 4), at(lookup($rets, $name, empty), 5)]
-                    <> [$ret.tagname, lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void", $ret.basew),
-                        $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
+                    <> [lookup([[0, $ret.tagname]], size($rparen), ""), lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void" and size($rparen) = 0, $ret.basew),
+                        lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1848,7 +1876,13 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
                     of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .
 
-  Function  : rptrs = $stars + $ret.ptrs
+  Function  : rlv   = lookup([[0, "{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $stars), $ret.blv]], size($rparen), join($rparen.t))
+            : rptrs = lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1))
+            : down dbase   = $ret
+            : down dstars  = $stars
+            : down inparen = false
+            : down pP      = ""
+            : down pouter  = []
             : down fn     = $name
             : down infunc = true
             : down fheldtags  = $tags
@@ -1864,7 +1898,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pindex = 0
             : down funcs  = bind($funcs, $name, [size($params), $variadic])
             : sigs  = bind($sigs, $name, $params.passes)
-            : rets  = bind($rets, $name, [$ret.tagname, $ret.basew, $rptrs, $ret.buns, "{}{}" of $ret.bquals, $squals])
+            : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
             : pwidths = bind($pwidths, $name, $params.pwide)
             : frame = $bytes
             ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
@@ -1875,8 +1909,8 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($rets, $name)
                 and [at(lookup($rets, $name, empty), 1), lookup([[true, 0]], at(lookup($rets, $name, empty), 1) <> "" and at(lookup($rets, $name, empty), 1) <> "void", at(lookup($rets, $name, empty), 2)),
                      at(lookup($rets, $name, empty), 3), at(lookup($rets, $name, empty), 4), at(lookup($rets, $name, empty), 5)]
-                    <> [$ret.tagname, lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void", $ret.basew),
-                        $stars + $ret.ptrs, $ret.buns, "{}{}" of $ret.bquals, $squals]
+                    <> [lookup([[0, $ret.tagname]], size($rparen), ""), lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void" and size($rparen) = 0, $ret.basew),
+                        lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
@@ -1902,6 +1936,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * and the ninth is refused as the ninth parameter is: it would be on the
    * stack, and nothing puts it there. *)
   Param : down dbase   = $base
+        ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+            : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
         : down dstars  = $stars
         : down inparen = false
         : down pP      = ""
@@ -1975,6 +2011,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * which is what *not an array* is spelled as everywhere below. A struct is
    * its size rounded up to eight, the way an array is. *)
   Local     : down dbase   = $base
+            ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+                : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
             : down dstars  = $stars
             : down inparen = false
             : down pP      = ""
@@ -2099,6 +2137,8 @@ arg  = e:assignment -> Arg(value: $e) .
   thread statics = 0
 
   Static      : down dbase   = $base
+              ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+                  : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2542,7 +2582,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * with the same type is C11 6.9.2's tentative definition, since ROADMAP
    * 6.12's second part, and was refused by name until then; the entry
    * keeps whether any declaration so far had an initialiser. *)
+  (* **A name declared through a typedef of a function's type** declares a
+   * function, `binop add;`, C11 6.7.6.3, since ROADMAP 6.14's fourth part,
+   * when such a typedef could be written: refused by name in each
+   * declarator below, `Global`, `Local`, `Static`, `Param` and
+   * `MemberScalar`, since what it declares has no body and no storage. As
+   * a parameter it would be a pointer to the function, 6.7.6.3p8. *)
   Global      : down dbase   = $base
+              ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+                  : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2729,11 +2777,20 @@ arg  = e:assignment -> Arg(value: $e) .
   Decls  : down base = $spec .
   MDecls : down base = $spec .
 
+
   (* **What an initialiser's values may be**, since ROADMAP 6.13's first
    * part, from where the `locals` pass put each: an array without braces
    * takes only a string, a string must fit, a value past the object's end
    * is refused, and a struct is not a scalar. *)
   InitExpr : scopy = $trec and $value.record
+           ! (slice($leaf, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5)) <> ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5))
+               : "{} is given a pointer to a function of another type, and a call through it would pass and return what the wrong type says" of ("'{}'" of $iname)
+           ! (slice($leaf, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6) <> "") and not (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and $value.type > 0
+               : "{} is given a pointer to something that is not a function, where a pointer to a function goes" of ("'{}'" of $iname)
+           ! slice($leaf, 1, 1) = "p" and not (slice($leaf, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $leaf), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+               : "{} is given a pointer to a function, where a pointer to something else goes, which C11 6.3.2.3 does not convert" of ("'{}'" of $iname)
+           ! slice($leaf, 1, 1) = "b" and at(split(("{}::::::" of at(split($leaf, "|"), 1)), ":"), 6) = "" and not $value.record and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+               : "{} is given a pointer to a function, where a number goes" of ("'{}'" of $iname)
            ! $top and not $fillo
                : "'{}' is an array, initialised with a list in braces or, if it is of 'char', a string, C11 6.7.9p16" of $iname
            ! $fill and $iroom > 0 and $value.slen > $iroom
@@ -2965,6 +3022,14 @@ arg  = e:assignment -> Arg(value: $e) .
                              "something that is not a struct")
            ! $value.record and not $place.record
                : "'{}' is put where a number or a pointer goes" of $value.kind
+           ! (slice($place.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5)) <> ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5))
+               : "{} is given a pointer to a function of another type, and a call through it would pass and return what the wrong type says" of "'='"
+           ! (slice($place.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6) <> "") and not (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and $value.type > 0
+               : "{} is given a pointer to something that is not a function, where a pointer to a function goes" of "'='"
+           ! slice($place.xlv, 1, 1) = "p" and not (slice($place.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $place.xlv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+               : "{} is given a pointer to a function, where a pointer to something else goes, which C11 6.3.2.3 does not convert" of "'='"
+           ! slice($place.xlv, 1, 1) = "b" and at(split(("{}::::::" of at(split($place.xlv, "|"), 1)), ":"), 6) = "" and not $value.record and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+               : "{} is given a pointer to a function, where a number goes" of "'='"
            ! $place.readonly
                : "'=' changes something declared 'const', and C11 6.3.2.1p1 says nothing may"
            ! $place.record and at(lookup($known, $place.tag, [0, 1, empty, false]), 4)
@@ -3014,6 +3079,15 @@ arg  = e:assignment -> Arg(value: $e) .
   (* The same rule for a declaration's initialiser, which is an assignment to
    * a place the declaration names. `ptrs` and the base are the `locals`
    * pass's. *)
+  (* **A pointer to a function is given only its own type**, since ROADMAP
+   * 6.14's fourth part, here and at an initialiser, which this pass checks
+   * of no other pointer: a call through one passes its arguments and
+   * reads what it returns as its type says, so the function it reaches
+   * must take and give the same. Two types are the same here when the four
+   * things a call reads of each are, its count, which parameters are
+   * structs and which are `long`s, and what it returns. A pointer to a
+   * function is no pointer to an object, nor a number, C11 6.3.2.3, and
+   * `cc` refuses each. A `0` is the null pointer, and allowed. *)
   LocalInit ! $ptrs = 0 and $base.tagname <> ""
                 and ($value.type <> 0 or $value.tag <> $base.tagname)
                 : "'{}' is a 'struct {}' initialised from {}, and a struct takes only its own kind"
@@ -3021,7 +3095,15 @@ arg  = e:assignment -> Arg(value: $e) .
                        lookup([[true, "a '{}'" of $value.kind]], $value.record,
                               "something that is not a struct")
             ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
-                : "'{}' is put where a number or a pointer goes" of $value.kind .
+                : "'{}' is put where a number or a pointer goes" of $value.kind
+            ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5)) <> ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5))
+                : "{} is given a pointer to a function of another type, and a call through it would pass and return what the wrong type says" of ("'{}'" of $name)
+            ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and not (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and $value.type > 0
+                : "{} is given a pointer to something that is not a function, where a pointer to a function goes" of ("'{}'" of $name)
+            ! slice($lv, 1, 1) = "p" and not (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                : "{} is given a pointer to a function, where a pointer to something else goes, which C11 6.3.2.3 does not convert" of ("'{}'" of $name)
+            ! slice($lv, 1, 1) = "b" and at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) = "" and not $value.record and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                : "{} is given a pointer to a function, where a number goes" of ("'{}'" of $name) .
 
   (* **A global's initialiser** is an assignment too, since 2026-09-26, and
    * a value is all it can be. A struct global's value is never worked out
@@ -3034,13 +3116,29 @@ arg  = e:assignment -> Arg(value: $e) .
                  : "'{}' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct {}' is not: its members in braces are"
                      of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
-                 : "'{}' is put where a number or a pointer goes" of $value.kind .
+                 : "'{}' is put where a number or a pointer goes" of $value.kind
+             ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5)) <> ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5))
+                 : "{} is given a pointer to a function of another type, and a call through it would pass and return what the wrong type says" of ("'{}'" of $name)
+             ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and not (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and $value.type > 0
+                 : "{} is given a pointer to something that is not a function, where a pointer to a function goes" of ("'{}'" of $name)
+             ! slice($lv, 1, 1) = "p" and not (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                 : "{} is given a pointer to a function, where a pointer to something else goes, which C11 6.3.2.3 does not convert" of ("'{}'" of $name)
+             ! slice($lv, 1, 1) = "b" and at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) = "" and not $value.record and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                 : "{} is given a pointer to a function, where a number goes" of ("'{}'" of $name) .
 
   StaticInit ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
                  : "'{}' is 'static', and has to be initialised with something worked out before the program runs, C11 6.7.9p4, and the value of a 'struct {}' is not: its members in braces are"
                      of $name, at(split($base.tagname, "."), 1)
              ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
-                 : "'{}' is put where a number or a pointer goes" of $value.kind .
+                 : "'{}' is put where a number or a pointer goes" of $value.kind
+             ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5)) <> ("{}/{}/{}/{}:{}:{}:{}:{}" of join(each(lookup($arities, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($callees, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), join(each(lookup($wides, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), []), "{}"), ","), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 1), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 2), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 3), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 4), at(lookup($results, lookup([[true, at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6)]], at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "", at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6)), ["", 4, 0, false, "0"]), 5))
+                 : "{} is given a pointer to a function of another type, and a call through it would pass and return what the wrong type says" of ("'{}'" of $name)
+             ! (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and not (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> "")) and $value.type > 0
+                 : "{} is given a pointer to something that is not a function, where a pointer to a function goes" of ("'{}'" of $name)
+             ! slice($lv, 1, 1) = "p" and not (slice($lv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $lv), "|"), 2)), ":"), 6) <> "") and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                 : "{} is given a pointer to a function, where a pointer to something else goes, which C11 6.3.2.3 does not convert" of ("'{}'" of $name)
+             ! slice($lv, 1, 1) = "b" and at(split(("{}::::::" of at(split($lv, "|"), 1)), ":"), 6) = "" and not $value.record and (at(split(("{}::::::" of at(split($value.xlv, "|"), 1)), ":"), 6) <> "" or (slice($value.xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $value.xlv), "|"), 2)), ":"), 6) <> ""))
+                 : "{} is given a pointer to a function, where a number goes" of ("'{}'" of $name) .
 
   (* An argument is a copy into the parameter, so the same rule again, asked
    * of each argument where both sides are known: `$sig` is the callee's
@@ -3063,6 +3161,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Arg      : type = $value.type
            : carries = lookup([[true, $value.tag]], $value.record, "") .
   Program  : down callees = $allsigs
+           : down arities = $allfuncs
            : down labelled = $alllabels
            : down results = $allrets
            : down wides   = $allpwidths .
@@ -3081,10 +3180,16 @@ arg  = e:assignment -> Arg(value: $e) .
            : returns   = lookup($results, $ckey, ["", 4, 0, false, "0"])
            : quals     = at($returns, 5)
            : uns       = at($returns, 4)
-           : tag       = at($returns, 1)
-           : width     = lookup([[true, at(lookup($known, at($returns, 1), [0, 1, empty, false]), 1)]],
-                                at($returns, 1) <> "" and at($returns, 1) <> "void", at($returns, 2))
+           (* **A call of a function that returns a pointer to a function**,
+            * since ROADMAP 6.14's fourth part, is that pointer, and its type
+            * is the text `rets` keeps for it, with the key a call of the call
+            * reads; every other call's type is the three numbers, as before. *)
+           : rfn       = at(split(("{}::::::" of at(split(at(flatten([$returns, [""]]), 6), "|"), size(split(at(flatten([$returns, [""]]), 6), "|")))), ":"), 6) <> ""
+           : tag       = lookup([[true, ""]], $rfn, at($returns, 1))
+           : width     = lookup([[true, 1]], $rfn, lookup([[true, at(lookup($known, at($returns, 1), [0, 1, empty, false]), 1)]],
+                                at($returns, 1) <> "" and at($returns, 1) <> "void", at($returns, 2)))
            : type      = at($returns, 3)
+           : xlv       = lookup([[true, at(flatten([$returns, [""]]), 6)]], $rfn, "{}b:{}:0:{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $type, ""), $width, $width)
            : aggregate = $type = 0 and $tag <> "" and $tag <> "void"
            ! $fn.fnk = "" and at(split(("{}::::::" of at(split(("{}||" of $fn.xlv), "|"), 2)), ":"), 6) = ""
                : "{} is called, and it is neither a function nor a pointer to one, C11 6.5.2.2p1" of lookup([["", "what is before the '('"]], $fn.vname, "'{}'" of $fn.vname) .
@@ -3180,7 +3285,7 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **A comma is worth its right side**, C11 6.5.17, and is not a place.
    * An array on the right has decayed already, so `sizeof((0, a))` is a
    * pointer's 8 and not the array's, which `comma.c` asks. *)
-  Comma   : xlv    = lookup([[true, "p:8:0:8|{}" of slice($right.xlv, size(at(split($right.xlv, "|"), 1)) + 2, size($right.xlv))]], slice($right.xlv, 1, 1) = "a", $right.xlv)
+  Comma   : xlv    = lookup([[true, "p:8:0:8|{}" of $right.xlv]], $right.fnk <> "", lookup([[true, "p:8:0:8|{}" of slice($right.xlv, size(at(split($right.xlv, "|"), 1)) + 2, size($right.xlv))]], slice($right.xlv, 1, 1) = "a", $right.xlv))
           : type  = $right.type
           : quals = $right.quals
           : uns   = $right.uns
@@ -3200,7 +3305,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * no witness, and cannot have one yet*: a `*` of the answer drops the
    * array's level whether it decayed or not, and nothing else here reads a
    * `?:`'s text. Left out, the oracle and every refusal stayed green. *)
-  Choose  : xlv    = lookup([[true, "p:8:0:8|{}" of slice($then.xlv, size(at(split($then.xlv, "|"), 1)) + 2, size($then.xlv))]], slice($then.xlv, 1, 1) = "a", $then.xlv)
+  Choose  : xlv    = lookup([[true, "p:8:0:8|{}" of $then.xlv]], $then.fnk <> "", lookup([[true, "p:8:0:8|{}" of slice($then.xlv, size(at(split($then.xlv, "|"), 1)) + 2, size($then.xlv))]], slice($then.xlv, 1, 1) = "a", $then.xlv))
           : type  = $then.type
           : quals = $then.quals
           : uns   = lookup([[0, lookup([[true, ($then.wide and $then.puns) or ($other.wide and $other.puns)]],

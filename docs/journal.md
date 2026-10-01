@@ -6751,3 +6751,26 @@ tells an address with an offset from none, and arithmetic on a function
 is refused before that is asked. It was taken out, since a break of it
 changed nothing a program could show. Four breaks, three caught, the
 fourth that half. 626 → 628 checks.
+
+**6.14's fourth part closed the entry, and each thing it needed was a
+thing an earlier part had assumed.** `typedef int binop(int, int);` had
+been read as a prototype with `typedef` among its specifiers, since
+`function` is tried first, so a typedef is tried first now. A call's type
+was three numbers, so a call of a function returning a pointer to a
+function lost the key a call of that call needs; `rets` keeps the
+returned type's text, and a `Sig` keeps its own, which the second
+witness's `meta(1)(2)(9, 4)` asked for when the first had not. `?:` and
+the comma decayed an array and not a function. And the redeclaration
+check worked out a function's returned pointers from the stars before its
+name, which a return type in parentheses of its own does not have, so a
+prototype and its definition were refused as two return types.
+
+**The one type check this pass makes of a pointer** is the part's new
+thing: a pointer to a function is given only its own type, since a call
+through the wrong one passes and reads what the wrong type says. Two
+types are the same here when the four things a call reads of them are,
+which is as far as a call can tell them apart, and `cc` refuses every
+case the check does. It is made at an assignment and at an initialiser,
+alone or in braces, and not yet at an argument or a `return`, which is
+recorded as left. Nine breaks, all caught. 628 → 639 checks, and
+`pending/` is empty again.

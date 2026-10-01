@@ -16,10 +16,38 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C pointers to functions closed: typedefs, returns, and types checked
+
+**The types around pointers to functions work**, the fourth and last part
+of [ROADMAP 6.14](COMPLETED.md#614-pointers-to-functions), which closes
+it: a typedef of a function's type, `typedef int binop(int, int);` and
+`binop *f`, a function returning a pointer to a function, written out,
+`int (*pick2(int))(int, int)`, or through a typedef, and called at once,
+`meta(1)(2)(9, 4)`; `printf` called through a pointer; and casts between
+two such types. `?:` and the comma give a function as a pointer to it.
+
+**A pointer to a function is given only its own type**, as `cc` insists:
+one of another type, a pointer to an object, a `void *` or a number is
+refused, either way, at an assignment and an initialiser.
+
+**Two old messages are corrected**: a typedef of a function's type is no
+longer refused, and a function's definition declared `typedef` says that
+C forbids it. A function declared before its definition, returning a
+pointer to a function, was refused as declared twice, and is not.
+
+Refused by name, though `cc` compiles it: a function declared through a
+typedef of its type, `binop add;`.
+
+**Tests:** 628 → 639. Eleven refusals. Three programs join the C oracle,
+one of them a refusal until now: 310 agree with `cc`, none diverges.
+Refusals: 399.
+
+---
+
 ## 2026-10-01: C pointers to functions in structs and in data
 
 **A function's address is data**, the third part of [ROADMAP
-6.14](ROADMAP.md#614-pointers-to-functions): a global, a `static` and a
+6.14](COMPLETED.md#614-pointers-to-functions): a global, a `static` and a
 table of them initialised with functions' names, in braces, by position
 and by designator, as Proem's `{expr_report, pp}` and `.skip =
 already_included` are, and libc's functions as much as this file's. A
@@ -42,7 +70,7 @@ agree with `cc`, none diverges. Refusals: 388.
 ## 2026-10-01: C calls through pointers to functions
 
 **A call may be through a pointer**, the second part of [ROADMAP
-6.14](ROADMAP.md#614-pointers-to-functions): `op(5, 3)`, `(*op)(5, 3)`,
+6.14](COMPLETED.md#614-pointers-to-functions): `op(5, 3)`, `(*op)(5, 3)`,
 `table[i](7, 2)`, `(**pp)(5, 6)`, and a parameter called inside the
 function it was passed to. Arguments are converted, structs passed and
 returned, small and large, and `long`s widened, as in a call by name.
@@ -69,7 +97,7 @@ agree with `cc`, none diverges. Refusals: 386.
 ## 2026-10-01: C pointers to functions, as values
 
 **A function is a value**, the first part of [ROADMAP
-6.14](ROADMAP.md#614-pointers-to-functions): `int (*op)(int, int) = add;`,
+6.14](COMPLETED.md#614-pointers-to-functions): `int (*op)(int, int) = add;`,
 `&add`, `*op`, arrays of them, `static` ones, typedefs of them, casts and
 `sizeof` with `int (*)(int)` written out, and `==`, `!=` and a test
 against 0 between them. One can be passed to a function that calls it,
