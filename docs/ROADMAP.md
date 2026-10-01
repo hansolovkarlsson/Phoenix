@@ -543,8 +543,9 @@ C11 6.7 has them, opened on 2026-09-29 and closed on 2026-09-30**, the
 first entry of the C11 arc. **So was the seventh,
 [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them), initialisers
 as C11 6.7.9 has them, opened on 2026-09-30 and closed on 2026-10-01**,
-the second. Nothing in the arc is open now; the next entry is chosen from
-the map below.
+the second. **Open:
+[6.14](#614-pointers-to-functions), pointers to functions**, the third,
+opened on 2026-10-01.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -610,7 +611,7 @@ the arc is going after this one.
 
 | | what the subset lacks |
 | --- | --- |
-| declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. Left: **function pointers**, read and refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
+| declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. Left: **function pointers**, read and refused by name, and the open entry, [6.14](#614-pointers-to-functions); parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
 | initialisers, 6.7.9 | *all of it since [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them)*, but for what waits on other rows: a `union`'s, a **pointer to a function** in one, which CPP's `{expr_report, pp}` is, a wide string, an `enum` constant as a value. Refused by name: an array designator that is an expression and not a number written out; an object nested more than eight levels deep; a struct over 32767 bytes or 86 members, in an initialiser; a struct's compound literal initialising a global, which `cc` takes as an extension |
 | types, 6.2.5 | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `signed char` as its own type, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name) |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
@@ -629,7 +630,8 @@ next entry, chosen as the others were, by what breaks without it:
 initialisers were, as [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them),
 because CPP's source writes thirty and function pointers need them too.
 **Function pointers are what is left of the two**, and the one place an
-initialiser in CPP's source still stops.
+initialiser in CPP's source still stops. They are the next entry,
+[6.14](#614-pointers-to-functions), opened on 2026-10-01.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
@@ -734,3 +736,98 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
+
+### 6.14 Pointers to functions
+
+The third entry of the C11 arc, and the one the map left next. A pointer
+to a function is read today only so that it can be refused by name, since
+6.12's fourth part, and **a call is a name**: `Call(name, args)` looks its
+callee's arity, which arguments are structs, which parameters are `long`s
+and what it returns up in four tables keyed by the function's name. So
+nothing can be called that is not a function declared by name, and no
+function can be a value. Proem's source, CPP that was, has three structs
+with a function pointer member, `report` twice and `skip` once; it
+initialises them by position, `{expr_report, pp}`, and by designator,
+`.skip = already_included`; it tests one for null, `if (d && d->report)`;
+and it calls through a member, `d->report(d->ctx, sev, loc, msg)`.
+
+**Four programs show what breaks without it**, kept in
+`languages/c/tests/pending/` until the part that makes each agree moves it
+to the oracle. Each was compiled by `cc -std=c11 -pedantic -Wall` with no
+warning:
+
+| program | `cc` | Phoenix today |
+| --- | --- | --- |
+| `fnptr-qsort.c`: libc's `qsort` declared with its comparator parameter, `int (*compare)(const void *, const void *)`, and given two `static` functions, one by its name and one as `&by_key_down`, to sort six `int`s and three structs | exits 9, prints `1 2 3 5 7 9` and `nine four two` | refuses `compare` by name, on line 2 |
+| `fnptr-calls.c`: `int (*op)(int, int) = add`, called as `op(5, 3)` and `(*op)(5, 3)`, assigned `sub` and `&mul`; an array of three, `int (*table[3])(int, int)`, called as `table[i](7, 2)`; one as a parameter, `apply(sub, 9, 4)`; a global assigned in `main`; `==` and `!=` between them and with 0 | exits 3, prints `82 28 5 42` and `1 1 1` | stops at the `=` of `op`'s declaration, on line 8 |
+| `fnptr-structs.c`: Proem's shape, `struct diag { void (*report)(void *, int, const char *); void *ctx; }`, by position, `{0, 0}` and by designator, tested for null and called through `d->report(...)`; and a `static const` table of `{name, fn}` pairs, `table[i].fn(i + 3)` | exits 3, prints three lines | stops at the `(` of `d->report(`, on line 14 |
+| `fnptr-types.c`: a typedef of a function type, `typedef int binop(int, int)`, and of a pointer to one; functions returning a pointer to a function, through the typedef and written out, `int (*pick2(int))(int, int)`, and called at once, `pick(1)(10, 4)`; pointers to functions returning a `long`, a `char *`, a struct, `void`; `printf` called through `int (*pf)(const char *, ...)`; `sizeof` of one; and a cast between two | exits 7, prints `5 14 6 hello 4` and `-4294967296 8 2` | stops at `binop_p` on line 11, since the typedef before it was read and not declared |
+
+**What it changes, and the question in it.** A type is text since 6.12's
+fourth part, a level a field, so a function becomes **a level of its
+own**: `f:1:0:1:KEY`, followed by the levels of what it returns, so that
+`int (*)(int, int)` is `p:8:0:8|f:1:0:1:KEY|b:4:0:4`. **KEY names its
+parameters in the tables a call already reads**, as a struct's key names
+its layout: a function declared by name is its own key, and the
+parameters a declarator writes, `(*op)(int, int)`, are bound under a key
+of their own, which no C name can spell. A call through a pointer then
+reads the four tables with the pointer's key where a direct call reads
+them with the callee's name, and everything a call does today, structs
+in registers or through `x8`, `long` arguments, a variadic call's stack,
+it does through the pointer by the same clauses. **The question** is
+whether a call stays two nodes, `Call` by name and one through any
+expression, or becomes one, a call of whatever is before the `(`, with a
+function's name being one more expression that decays. One node is C11
+6.5.2.2 as written; two keep every direct call's emitted code unchanged,
+`bl _f` and not a load and a `blr`. It is settled with the first witness
+in hand, by what each costs in the passes.
+
+**Built in four parts, in this order**, each with the suite green:
+
+1. **The type, and a function as a value.** The `f:` level and its key;
+   every declarator that reads a pointer to a function today and refuses
+   it, a local's, a global's, a `static`'s, a member's, a parameter's and
+   a typedef's, building one instead, an array of them too; and the
+   abstract one, in a prototype's parameters, a cast and `sizeof`. A
+   function's name is a pointer to it wherever it is not called, C11
+   6.3.2.1p4, and `&f` is the same; `*` of one is the function, which is
+   a pointer again at once. `=`, `==`, `!=`, a test against 0, passing
+   one, `sizeof` of one. `fnptr-qsort.c` is the witness: libc does the
+   calling.
+2. **Calls through a pointer**, C11 6.5.2.2: `op(5, 3)`, `(*op)(5, 3)`,
+   `table[i](7, 2)`, `apply(sub, 9, 4)` calling its parameter, by `blr`,
+   with the arguments converted, counted and passed as the pointer's
+   parameters say. `fnptr-calls.c` is the witness.
+3. **In structs and in initialisers**: a member that is one, called as
+   `d->report(...)`; a function's address as data, `.quad _f`, in a
+   global's or a `static`'s initialiser, alone and in braces, by position
+   and by designator, which the `constants` pass counts as an address
+   worked out before the program runs. `fnptr-structs.c` is the witness,
+   and it is Proem's shape.
+4. **The types around it**: a typedef of a function type, and a function
+   declared through one; a function returning a pointer to a function,
+   `int (*pick2(int))(int, int)`, and a call of a call; a pointer to a
+   variadic function, which calls as Apple's arm64 calls one, the extra
+   arguments on the stack; returns of a `long`, a pointer, a struct and
+   `void` through one; and casts between two. `fnptr-types.c` is the
+   witness.
+
+**What `cc` refuses, and so will this**, each checked with `cc -std=c11
+-pedantic-errors` on 2026-10-01: a call of something that is neither a
+function nor a pointer to one; too few or too many arguments through a
+pointer; a pointer to a function given one of another type, which this
+`cc` makes an error and not a warning, and which the `types` pass, which
+otherwise checks no assignment's type, checks here because a call through
+it would pass its arguments as the wrong type says; arithmetic on one, an
+ordered comparison of two, and `sizeof` of a function; an assignment to a
+function or through `*` of a pointer to one; a function returning a
+function or an array, and an array of functions; a pointer to a function
+converted to or from `void *`, or given where a number is wanted.
+
+*Not in this step:* a function declared with `()`, no prototype, which
+this subset reads as no parameters and C11 6.7.6.3p14 does not, and which
+a pointer to one inherits; parentheses more than one deep beyond what the
+witnesses ask; `_Noreturn` and `inline`, still refused by name; and a
+struct passed whole through `...`, refused as it is in a direct call.
+**The entry closes** when the four programs agree with `cc`, none
+diverging, and every refusal above has its program in `refused/`.
