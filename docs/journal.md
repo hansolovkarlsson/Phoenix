@@ -6977,3 +6977,10 @@ struct, and the one program that reaches it reads an uninitialised local.
 nothing, with Solveig untouched since 2026-09-18; the leg run alone agreed
 on all 82, and the cause was not found. The next full run is what the
 count stands on. 656 → 659 checks.
+
+**The probe was run again with the fix in.** Of the four files the
+own-initialiser stopped, three are accepted whole, and `source.c` stops
+at `has_id ? &id : NULL`, the same `?:` with a null pointer constant that
+stops `output.c`. Five of Proem's ten files are accepted now, and what
+stops the other five was already on the list: `?:` in two, `va_start` in
+two, a function returning a `char` in one.

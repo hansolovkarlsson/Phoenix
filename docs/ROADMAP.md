@@ -670,7 +670,15 @@ the end of the declaration. [COMPLETED](COMPLETED.md) has said so since
 2026-09-23 and `refused/local-in-its-own-initialiser.c` holds it, but it
 was on no list here until the probe found it the commonest stop. It was
 fixed the same day, for a plain local, which is every case Proem writes;
-the other forms are refused by name. A probe finds only the first stop in each file, so what is
+the other forms are refused by name.
+
+**Run again with the fix in**, the same day, with the same stubs: five
+files are accepted whole, `diag.c`, `token.c`, `expand.c`, `macro.c` and
+`driver/proem.c`, and the other five stop at three things. **`?:` with a
+null pointer constant** stops two, `output.c` at `c ? "2" : NULL` and
+`source.c` at `has_id ? &id : NULL`, which C11 6.5.15p6 gives the other
+arm's type; defining a variadic function stops `expr.c` and `pp.c`; and
+a function returning an `unsigned char` stops `lexer.c`. A probe finds only the first stop in each file, so what is
 behind each is found when it is lifted.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,

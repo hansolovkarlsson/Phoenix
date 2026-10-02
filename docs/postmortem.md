@@ -1661,3 +1661,37 @@ stage missing one digit went unseen until the witness was generated, as
 > links, and a hand-written witness tests the links its author thought
 > of. Where the description enumerates, the witness should enumerate the
 > same thing, generated, so that `cc` judges every link and not a sample.
+
+## 34. "A refusal and not a wrong answer, and so left"
+
+On the afternoon of 2026-10-02 Proem's source was run through the `check`
+driver for the first time, where every entry before had been chosen by
+counting words in it. Three things written earlier met that run.
+
+*Held: "CPP's `lexer.c` and `source.c` stop there"*, the map's line for
+the escapes, written on 2026-09-29. Phoenix as it stood before
+[6.16](COMPLETED.md#616-escapes-and-joined-strings), run on the same
+preprocessed files, stops `lexer.c` at `'\v'` and `source.c` at `'\r'`.
+It held for a reason the line did not give: both files have stops
+earlier in their text, an `unsigned char` return and a name in its own
+initialiser, and neither is reached first, because the lexer reads the
+whole file before any pass runs. **A probe's first stop is the first in
+the earliest phase that refuses, not the first by line**, so a lexical
+stop hides every later one in its file, and a table of first stops says
+less about the passes than it seems to.
+
+*Failed, as a judgement of what could wait: a name in its own
+initialiser, "a refusal and not a wrong answer, and so left"* (`c.phx`,
+2026-09-23, and COMPLETED the same day). It was the commonest first stop
+in Proem, four files of ten and thirteen uses, and it was on no list,
+because a refusal that costs nothing in the oracle costs nothing in any
+count the project kept. It cost the first real program it met.
+
+*Held: "It is fixed first"* (ROADMAP, the same afternoon). It was fixed
+the same day for a plain local, every form Proem writes, and three of
+the four files it stopped are accepted whole; the fourth stops at `?:`
+with a null pointer constant, already listed.
+
+> A count of words in a program says what it uses; a run says what it
+> stops at, in the order the compiler meets it. Where the target is a
+> real program, run it, and read each stop knowing which phase made it.
