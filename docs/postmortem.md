@@ -1610,3 +1610,54 @@ works out had to be found by the suite, since it runs at every `Binary`.
 > clauses that read a type's text, alternatives that re-parse a primary,
 > a pass that runs before the one that knows. What the entry says about a
 > new representation is checked by asking what already reads the old one.
+
+## 33. "Each is worked down to one marker by substitution, a digit at a time"
+
+ROADMAP 6.16 was written on the morning of 2026-10-02 and closed the same
+day, and the journal of 2026-09-22 had said two things about it in
+advance. Five claims can be checked against [COMPLETED
+6.16](COMPLETED.md#616-escapes-and-joined-strings).
+
+*Held: `\0` in a string "is refused rather than miscounted, and arrives
+with the octal escapes"* (journal, 2026-09-22). It arrived with them and
+not before, and `"\01"` is one byte.
+
+*Held, and not as framed: "whether this wants a library function is not
+settled by one use"* (journal, 2026-09-22), with `ord` as the candidate
+and octal and hex escapes, the morning of this entry, called the stronger
+argument for it. No library function was added. A character constant's
+code from its digits is `int(text, 8)` or `int(text, 16)`, which the
+library had; a string's length is a chain of substitutions, which works
+only because the digits are bounded, octal at three by C and hex at two
+by a refusal by name. So the second use did not come, and the bound is
+what kept it away: a hex escape C allows, zeros before two digits, is
+refused to keep the chain finite. The argument for an `ord`, or for a
+loop over text, is unchanged by this entry rather than strengthened.
+
+*Held: part 1 "as small as planned", and the assembler as the entry
+found it.* `as` was asked one escape at a time before anything relied on
+it, and refused `\v`, `\a` and `\?` as the entry wrote; three rewrites
+covered them.
+
+*Held, and larger: part 2, "each piece written as an `.ascii` of its
+own".* The pieces did need to stay apart, and the witness's `"\1" "2"`
+showed it once part 3 was in. Two things the entry did not name: the
+NUL had to move from `.asciz` to a `.byte` after the last piece, and the
+quote of a `\"` before a join had to be set aside so a join is not found
+inside it, which the emit pass needs and, as a break showed, the length
+does not. `_Static_assert`'s message is a string too, and stopped on a
+joined one until it took them.
+
+*Held in mechanism, failed in the first writing: "the most an escape can
+have being three".* The substitution worked, and the `__TEXT,__const`
+placement it planned was right, as a break that undid it showed with
+`"\08"[1]` reading 1. But the first hex stage counted from `\x`, so the
+marker taken for a third digit stood for the second and the witness's
+own `\x41` was refused. And the breaks found digits no witness wrote: a
+stage missing one digit went unseen until the witness was generated, as
+`char-constant-every-one.c` had been for the table of codes.
+
+> A chain of substitutions has as many places to be wrong as it has
+> links, and a hand-written witness tests the links its author thought
+> of. Where the description enumerates, the witness should enumerate the
+> same thing, generated, so that `cc` judges every link and not a sample.
