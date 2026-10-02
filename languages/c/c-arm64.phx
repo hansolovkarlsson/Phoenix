@@ -162,7 +162,14 @@
    * text of two could make an escape neither had, `"\1" "2"` becoming
    * `\12`. So the `\"` escapes are set aside too, as newlines, before the
    * joins are found, or the quote of `\"` just before a join would be
-   * taken for half of it. *)
+   * taken for half of it.
+   *
+   * **The octal and hex escapes**, since its third part, are handed over as
+   * written: `as` reads three octal digits at most and every hex digit, as
+   * C does, and the `types` pass has refused what C refuses. A literal with
+   * one goes in `__TEXT,__const` and not `__TEXT,__cstring`, because the
+   * linker cuts that section at each NUL and may share or move what follows
+   * one, which is what `cc` does with a NUL inside a literal too. *)
   thread data = ""
 
   String : n    = $label : label = $label + 1
@@ -175,7 +182,8 @@
                                                    "\n"), "\\\""),
                                         "\t"), "\\\\"),
                              "\r"), "\", \"")
-         : data = "{}Lstr{}:\n\t.ascii \"{}\"\n\t.byte 0\n" of $data, $n, $asm
+         : data = (lookup([[true, "{}\t.section __TEXT,__const\nLstr{}:\n\t.ascii \"{}\"\n\t.byte 0\n\t.section __TEXT,__cstring\n"]], $snum,
+                         "{}Lstr{}:\n\t.ascii \"{}\"\n\t.byte 0\n")) of $data, $n, $asm
          : out  = "\tadrp x0, Lstr{}@PAGE\n\tadd x0, x0, Lstr{}@PAGEOFF\n" of $n, $n .
 
   (* ---- places, and the two questions a node can be asked ----

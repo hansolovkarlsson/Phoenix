@@ -16,10 +16,29 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-02: C octal and hex escapes, and escapes closed
+
+**Octal and hex escapes work**, the third and last part of [ROADMAP
+6.16](COMPLETED.md#616-escapes-and-joined-strings), which closes it: in a
+character constant, worth the `char` they name, so `'\377'` is -1 as `char`
+is signed here, and in a string, where a `\0` may now stand anywhere.
+
+Refused, as `cc` refuses them: an octal or a hex escape past 255, `\x`
+with no digit, and an escape C does not have. Refused by name, though `cc`
+compiles it: a hex escape of more than two digits whose others are zeros,
+`'\x041'`.
+
+**Tests:** 649 → 656. Nine refusals, two of the old ones gone to the
+oracle. Four programs join the C oracle: 330 agree with `cc`, none
+diverges. Refusals: 416.
+
+---
+
 ## 2026-10-02: C string literals side by side
 
 **Two string literals or more, side by side, are one**, the second part
-of [ROADMAP 6.16](ROADMAP.md#616-escapes-and-joined-strings), as C11
+of [ROADMAP
+6.16](COMPLETED.md#616-escapes-and-joined-strings), as C11
 6.4.5p5 has it: anywhere a string is, in an initialiser, under `sizeof`,
 and as a `_Static_assert`'s message. Proem writes most of its messages
 that way.
@@ -33,7 +52,8 @@ one in and one out.
 ## 2026-10-02: C escapes `\a` `\b` `\f` `\r` `\v` `\?`
 
 **The six simple escapes C has and the subset did not**, the first part
-of [ROADMAP 6.16](ROADMAP.md#616-escapes-and-joined-strings): each is a
+of [ROADMAP
+6.16](COMPLETED.md#616-escapes-and-joined-strings): each is a
 character constant worth its code, and each may be written in a string,
 whose length counts it as one byte. Proem's lexer tests for `'\v'` and
 `'\f'`, and its reader for `'\r'`.

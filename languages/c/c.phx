@@ -98,7 +98,7 @@
  * strings with escapes -- arrive with the constructs that need them.
  *)
 
-%fragment letter digit hexdigit isuffix escape plain sescape splain .
+%fragment letter digit hexdigit odigit isuffix escape plain splain .
 
 letter   = "a" .. "z" | "A" .. "Z" | "_" .
 digit    = "0" .. "9" .
@@ -122,14 +122,18 @@ integer = ( "0" ( "x" | "X" ) hexdigit { hexdigit } | digit { digit } ) [ isuffi
  * escape. **Printable ASCII only**, and the three ranges are that and nothing
  * else: a space to `~`, less the quote at 39 and the backslash at 92, which
  * are what an escape is for. A tab typed between the quotes is C and is
- * refused here, as are `'ab'`, which C leaves to the implementation, and the
- * octal and hex escapes, which arrive when a program wants one.
+ * refused here, as is `'ab'`, which C leaves to the implementation.
  *
  * The lexer saying exactly this is what lets the `types` pass work out a
  * code without asking whether it can: anything that reaches it is one of the
  * ninety-five characters in its table, or one of its escapes: six until
- * ROADMAP 6.16's first part, and twelve since, with `\a \b \f \r \v \?`. *)
-escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" | "a" | "b" | "f" | "r" | "v" | "?" ) .
+ * ROADMAP 6.16's first part, and twelve since, with `\a \b \f \r \v \?`;
+ * or, since its third part, an octal escape of one to three digits or a hex
+ * escape of one or more, which C11 6.4.4.4 reads as far as the digits go,
+ * as a longest match does. *)
+odigit    = "0" .. "7" .
+escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "a" | "b" | "f" | "r" | "v" | "?"
+                 | odigit [ odigit [ odigit ] ] | "x" hexdigit { hexdigit } ) .
 plain     = " " .. "&" | "(" .. "[" | "]" .. "~" .
 character = "'" ( escape | plain ) "'" .
 
@@ -143,9 +147,8 @@ character = "'" ( escape | plain ) "'" .
  * it, because the closing quote ends it there. Two literals side by side,
  * which C joins, are two tokens, and the grammar joins them, since ROADMAP
  * 6.16's second part. *)
-sescape = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "a" | "b" | "f" | "r" | "v" | "?" ) .
 splain  = " " .. "!" | "#" .. "[" | "]" .. "~" .
-string  = "\"" { sescape | splain } "\"" .
+string  = "\"" { escape | splain } "\"" .
 
 space         = ( " " | "\t" | "\n" | "\r" ) { " " | "\t" | "\n" | "\r" } .
 line-comment  = "//" { ! "\n" } .
@@ -2681,8 +2684,27 @@ arg  = e:assignment -> Arg(value: $e) .
            : tbad   = lookup([[true, $target]], $target = "END" or $target = "DEEP" or $target = "BIG", "")
            : iname  = $aname .
 
-  (* A string's length in bytes, the `types` pass's `length` worked out here
-   * too, since an array of `char` a string sizes needs it before then. *)
+  (* **A string's length in bytes**, worked out here for the `types` pass's
+   * `length` too, since an array of `char` a string sizes needs it before
+   * then. The way it is counted is said at that clause, and what this adds
+   * to it, since ROADMAP 6.16's third part, is the **numeric escapes**,
+   * which are two to four characters and still one byte, and longer than
+   * that in hex. The notation cannot walk the text, so each is worked
+   * down to one character by substitution, a digit at a time, with
+   * markers the lexer guarantees are not in a literal, control characters
+   * below 32 that are not the tab already standing for `\\`.
+   *
+   * Hex first: `\x` becomes 01, 01 and a hex digit 02, 02 and one 03, and
+   * 03 and one 0c, so 0c is a third digit, which is refused by name; C
+   * reads every digit, and allows more than two only as zeros before the
+   * last two. Then octal: `\` and a digit becomes 04, or 07 if the digit
+   * is 4 to 7, and each takes up to two digits more, 05 and 06, 08 and 0b.
+   * 0b is three digits led by a 4 or more, past 255, refused. After that,
+   * every escape is one character or begins with the one backslash it has
+   * left, and the old count holds. `snum` says whether there was a numeric
+   * escape at all, by whether a backslash went, since only those strings
+   * can hold a NUL. `numeric-escapes-every-digit.c` writes each digit in
+   * each place the substitutions look for one. *)
   otherwise strlit = false
   (* Whether a value is a struct, where this pass can tell: a name and a
    * call. Anything else is not, here, and the `types` pass refuses a struct
@@ -2694,7 +2716,10 @@ arg  = e:assignment -> Arg(value: $e) .
          : swhole = join(flatten([[$text], $more]))
          : sbody  = slice($swhole, 2, size($swhole) - 1)
          : ssingle = join(split($sbody, "\\\\"), "\t")
-         : slen   = size($ssingle) - (size(split($ssingle, "\\")) - 1) - 2 * (size(split($ssingle, "\"\"")) - 1) .
+         : shex   = join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split($ssingle, "\\x"), "\x01"), "\x010"), "\x02"), "\x011"), "\x02"), "\x012"), "\x02"), "\x013"), "\x02"), "\x014"), "\x02"), "\x015"), "\x02"), "\x016"), "\x02"), "\x017"), "\x02"), "\x018"), "\x02"), "\x019"), "\x02"), "\x01a"), "\x02"), "\x01b"), "\x02"), "\x01c"), "\x02"), "\x01d"), "\x02"), "\x01e"), "\x02"), "\x01f"), "\x02"), "\x01A"), "\x02"), "\x01B"), "\x02"), "\x01C"), "\x02"), "\x01D"), "\x02"), "\x01E"), "\x02"), "\x01F"), "\x02"), "\x020"), "\x03"), "\x021"), "\x03"), "\x022"), "\x03"), "\x023"), "\x03"), "\x024"), "\x03"), "\x025"), "\x03"), "\x026"), "\x03"), "\x027"), "\x03"), "\x028"), "\x03"), "\x029"), "\x03"), "\x02a"), "\x03"), "\x02b"), "\x03"), "\x02c"), "\x03"), "\x02d"), "\x03"), "\x02e"), "\x03"), "\x02f"), "\x03"), "\x02A"), "\x03"), "\x02B"), "\x03"), "\x02C"), "\x03"), "\x02D"), "\x03"), "\x02E"), "\x03"), "\x02F"), "\x03"), "\x030"), "\x0c"), "\x031"), "\x0c"), "\x032"), "\x0c"), "\x033"), "\x0c"), "\x034"), "\x0c"), "\x035"), "\x0c"), "\x036"), "\x0c"), "\x037"), "\x0c"), "\x038"), "\x0c"), "\x039"), "\x0c"), "\x03a"), "\x0c"), "\x03b"), "\x0c"), "\x03c"), "\x0c"), "\x03d"), "\x0c"), "\x03e"), "\x0c"), "\x03f"), "\x0c"), "\x03A"), "\x0c"), "\x03B"), "\x0c"), "\x03C"), "\x0c"), "\x03D"), "\x0c"), "\x03E"), "\x0c"), "\x03F"), "\x0c")
+         : sone   = join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split($shex, "\\0"), "\x04"), "\\1"), "\x04"), "\\2"), "\x04"), "\\3"), "\x04"), "\\4"), "\x07"), "\\5"), "\x07"), "\\6"), "\x07"), "\\7"), "\x07"), "\x040"), "\x05"), "\x041"), "\x05"), "\x042"), "\x05"), "\x043"), "\x05"), "\x044"), "\x05"), "\x045"), "\x05"), "\x046"), "\x05"), "\x047"), "\x05"), "\x050"), "\x06"), "\x051"), "\x06"), "\x052"), "\x06"), "\x053"), "\x06"), "\x054"), "\x06"), "\x055"), "\x06"), "\x056"), "\x06"), "\x057"), "\x06"), "\x070"), "\x08"), "\x071"), "\x08"), "\x072"), "\x08"), "\x073"), "\x08"), "\x074"), "\x08"), "\x075"), "\x08"), "\x076"), "\x08"), "\x077"), "\x08"), "\x080"), "\x0b"), "\x081"), "\x0b"), "\x082"), "\x0b"), "\x083"), "\x0b"), "\x084"), "\x0b"), "\x085"), "\x0b"), "\x086"), "\x0b"), "\x087"), "\x0b")
+         : snum   = size(split($ssingle, "\\")) <> size(split($sone, "\\"))
+         : slen   = size($sone) - (size(split($sone, "\\")) - 1) - 2 * (size(split($sone, "\"\"")) - 1) .
 
   (* **A global takes no frame**, and is bound in `globals` instead of
    * `env`, with the name its entry needs and nothing the frame counts. Its
@@ -3688,18 +3713,31 @@ arg  = e:assignment -> Arg(value: $e) .
    * wrote, counted by walking them. *)
   String : joined = join(flatten([[$text], $more]))
          : body   = slice($joined, 2, size($joined) - 1)
-         : single = join(split($body, "\\\\"), "\t")
-         : length = size($single) - (size(split($single, "\\")) - 1) - 2 * (size(split($single, "\"\"")) - 1)
+         : length = $slen
+         (* Worked out in `locals`, numeric escapes and all; the two
+          * substitutions that find what C refuses are read here. *)
+         ! size(split($sone, "\x0c")) > 1
+             : "a hex escape in this string has more than two digits, which this subset does not take; C11 6.4.4.4p9 allows more only as zeros before the two"
+         ! size(split($sone, "\x0b")) > 1
+             : "an octal escape in this string is past 255, the largest an unsigned char holds, C11 6.4.4.4p9"
          : type   = 1
          : width  = 1
          : size   = $length + 1 .
 
   Character : inner = slice($text, 2, size($text) - 1)
-            : code  = lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
-                              ["\\\"", 34], ["\\0", 0], ["\\a", 7], ["\\b", 8],
+            : chex  = slice($inner, 1, 2) = "\\x"
+            : coct  = slice($inner, 1, 1) = "\\" and slice($inner, 2, 2) >= "0" and slice($inner, 2, 2) <= "7"
+            : cdig  = lookup([[true, slice($inner, 3, size($inner))]], $chex,
+                             lookup([[true, slice($inner, 2, size($inner))]], $coct, "0"))
+            : cnum  = lookup([[true, int(lookup([[true, $cdig]], size($cdig) <= 2, "0"), 16)]], $chex,
+                             lookup([[true, int(lookup([[true, $cdig]], $coct, "0"), 8)]], $coct, 0))
+            : cval  = lookup([[true, $cnum]], $chex or $coct,
+                       lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
+                              ["\\\"", 34], ["\\a", 7], ["\\b", 8],
                               ["\\f", 12], ["\\r", 13], ["\\v", 11], ["\\?", 63]], $inner,
                              size(at(split(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
-                                           $inner), 1)) + 32) .
+                                           $inner), 1)) + 32))
+            : code  = lookup([[true, $cval - 256]], $cval > 127, $cval) .
 
   (* C11 6.5.6 lets `+` take a pointer and an integer in either order, and `-`
    * a pointer and then an integer, and counts the integer in what the pointer
@@ -3977,7 +4015,11 @@ arg  = e:assignment -> Arg(value: $e) .
                                                                        size(join(flatten([[$message], $more]))) - 1), "\"\"")) .
 
   Number     : settled = true : folded = $bits .
-  Character  : settled = true : folded = $code .
+  Character  : settled = true : folded = $code
+             ! $chex and size($cdig) > 2
+                 : "{} is a hex escape of more than two digits, which this subset does not take; C11 6.4.4.4p9 allows more only as zeros before the two" of $text
+             ! $coct and $cnum > 255
+                 : "{} is an octal escape past 255, the largest an unsigned char holds, C11 6.4.4.4p9" of $text .
   (* The size of a type is its level text's, since ROADMAP 6.12's fourth
    * part: `sizeof(int *[3])` is twenty-four, and the size of a pointer to
    * three `int`s is eight. *)

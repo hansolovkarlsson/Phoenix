@@ -6894,3 +6894,42 @@ which two are taken decides where the text is cut. `_Static_assert` took
 a joined message as well, since `cc` does and the parse stopped on one.
 Six breaks, four caught, one a step removed, and one that needs part 3's
 witness.
+
+**Part 3 was the octal and hex escapes, and the entry's question.** An
+escape had always been one byte less than its spelling; these are two to
+four characters, and more in hex, and the notation still cannot walk a
+string. So the `locals` pass works each down to one marker by
+substitution, a digit at a time: `\x` to one control character, it and a
+hex digit to the next, and so on, and the octal ones likewise, from a
+`\` and a digit, with a separate line of markers for a first digit of 4
+to 7 so that three digits from there, past 255, show as a marker of their
+own. After that every escape is one character or one backslash, and the
+old count holds. It is about a hundred `join(split(...))` deep, generated
+by a script and pasted, which is the notation saying again that it has no
+loop over text. **A hex escape of more than two digits is refused by
+name**, because C reads every digit and allows more only as zeros, and a
+bound on the substitutions needs a bound on the digits.
+
+*Three mistakes of mine, each caught by running something.* The first hex
+stage counted from `\x`, so the marker I took for a third digit was the
+second, and the witness's own `\x41` was refused. A check in the `types`
+pass read the attributes of its own clause, which a check runs before,
+and `phx` said so; the character constant's checks moved to `constants`.
+And a hex digit fed to `int(..., 8)`, because `lookup` evaluates every
+argument, so each conversion is guarded by what it converts. **Breaks
+found what the witness did not hold**: a digit dropped from a stage went
+unseen where the witness never wrote that digit there, so
+`numeric-escapes-every-digit.c` is generated, as `char-constant-every-one.c`
+was, every digit in every place a stage looks for one; it had to be
+extended once, for a first octal digit with a second after it. The two
+stages that only find refusals are held by the digits their refusal
+programs write, not by every digit. Twenty-seven breaks over the three
+parts, twenty-four caught.
+
+**A literal with a numeric escape goes in `__TEXT,__const`**, since the
+linker cuts `__TEXT,__cstring` at each NUL and may share what follows one;
+`cc` moves a literal with a NUL there too. A break that left them in
+`__cstring` was caught, and showed it: `"\08"[1]` read 1 and not `'8'`,
+the bytes after the NUL being some other literal's once linked. **6.16 closed with it**,
+its three witnesses agreeing and every refusal it listed held, and
+`pending/` is empty again. 649 → 656 checks.

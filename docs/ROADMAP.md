@@ -547,9 +547,10 @@ the second. **So was the eighth,
 [6.14](COMPLETED.md#614-pointers-to-functions), pointers to functions,
 opened and closed on 2026-10-01**, the third. **So was the ninth,
 [6.15](COMPLETED.md#615-the-integer-types), the integer types, opened and
-closed on 2026-10-01**, the fourth. **Open:
-[6.16](#616-escapes-and-joined-strings), escapes and joined strings**, the
-fifth, opened on 2026-10-02.
+closed on 2026-10-01**, the fourth. **So was the tenth,
+[6.16](COMPLETED.md#616-escapes-and-joined-strings), escapes and joined
+strings, opened and closed on 2026-10-02**, the fifth. Nothing in the arc
+is open now; the next entry is chosen from the map below.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -620,7 +621,7 @@ the arc is going after this one.
 | types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name), an enumerator's value from a character constant (refused by name), and an array's size from a constant expression, `int t[BLUE]` |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
-| lexical, 6.4 | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string, the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants |
+| lexical, 6.4 | *the escapes, octal and hex escapes and joined strings since [6.16](COMPLETED.md#616-escapes-and-joined-strings)*. Left: the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants, a character constant of more than one character; refused by name, a hex escape of more than two digits whose others are zeros |
 | expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
@@ -642,8 +643,9 @@ initialiser in CPP's source still stops. They were the next entry,
 `enum` 9, `long long` 4, and no `union`, `short` or floating point; the
 integer types were the next entry, [6.15](COMPLETED.md#615-the-integer-types), closed the same day. **What Proem's source stops at after them is the lexical row**: `'\r'`,
 `'\v'` and `'\f'` in `source.c` and `lexer.c`, and a message written as
-two literals side by side in every file that reports one. That is the next
-entry, [6.16](#616-escapes-and-joined-strings), opened on 2026-10-02.
+two literals side by side in every file that reports one. That was the next
+entry, [6.16](COMPLETED.md#616-escapes-and-joined-strings), opened and
+closed on 2026-10-02.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
@@ -748,88 +750,3 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
-
-### 6.16 Escapes and joined strings
-
-The fifth entry of the C11 arc, and the lexical row of the map, cut to
-what a string literal and a character constant are made of: **the simple
-escapes the subset does not have, `\a` `\b` `\f` `\r` `\v` and `\?`; two
-string literals or more side by side, joined, C11 6.4.5p5; and the octal
-and hex escapes, which put a `\0` inside a string**, C11 6.4.4.4. Proem's
-source is what stops on it, counted on 2026-10-02 in `~/Projects/Proem`,
-`lib/` and `driver/`: `'\r'`, `'\v'` and `'\f'` once each, in `source.c`
-and `lexer.c`; a message split over two lines, `"unterminated argument
-list " "invoking macro"`, in every file that reports one; and `'\0'`,
-which the subset has, as its only octal escape. It writes no hex escape,
-and the octal and hex escapes are in the entry because they are one
-question with `\0` in a string, which is how many bytes a literal is. The
-prefixes `L`, `u`, `U` and `u8`, universal character names and floating
-constants stay in the map; Proem uses none.
-
-**Three programs show what breaks without it**, kept in
-`languages/c/tests/pending/` until the part that makes each agree moves it
-to the oracle. Each was compiled by `cc -std=c11 -pedantic -Wall` with no
-warning:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `escapes.c`: each of the six as a character constant, all of them in a string filling an array, `sizeof "\v\v"`, Proem's whitespace test `' ' '\t' '\v' '\f' '\r'` read back out of a string, and `\?` keeping `??-` from being a trigraph | exits 25, prints four lines | stops at the `"` of `"\a\b...`, on line 3 |
-| `joined-strings.c`: two and three literals joined, in an array's initialiser, an array sized by one, `sizeof` of a joined pair, a `static` table of them, empty literals joined, a joined format string, escapes on both sides of a join, and Proem's message over two lines | exits 12, prints four lines | stops at `"two"`, on line 3 |
-| `numeric-escapes.c`: `'\0'`, `'\101'`, `'\x41'`, and `'\377'` and `'\x80'`, which are -1 and -128 where `char` is signed, as here; a string of octal and hex escapes with a `\0` inside it, its `sizeof` and every byte; `"\1" "2"` and `"\x1" "f"`, where joining must not make one escape of two; `"\0\00\000"`; `"\08"`, a NUL and an `8`; a global array filled from `"a\0b"` | exits 65, prints five lines | stops at the `"` of `"a\0b"`, on line 2 |
-
-**Built in three parts, in this order**, each with the suite green:
-
-1. **The simple escapes**, in the lexer, in the `types` pass's table of
-   codes, and in the emit pass, which hands a string's text to the
-   assembler: this machine's `as` refuses `\v`, `\a` and `\?`, checked
-   on 2026-10-02, as it refuses `\'`, so each is rewritten, `\v` as
-   `\013`, which `as` reads as C does, three octal digits at most.
-   `escapes.c` is the witness.
-   *Built on 2026-10-02*, and as small as planned: six alternatives in
-   each of the two escape rules, six rows in the table of codes, and
-   three rewrites beside the one for `\'`, made after the escaped
-   backslashes are set aside so that `\\v` is left alone. The length
-   needed nothing, each escape being two characters and one byte. Four
-   breaks, all caught.
-2. **Joined strings**: one `String` node from one literal or more, its
-   length the sum of theirs, and each piece written as an `.ascii` of
-   its own, so that the text of two never runs together into an escape
-   neither had. `joined-strings.c` is the witness.
-   *Built on 2026-10-02*: `string { string }` in the grammar, the node
-   holding the first literal and the rest, and the length less two for
-   each `""` where two meet. The emit pass sets `\"` aside before it
-   finds the joins, which the length does not need, since three quotes
-   in a row hold one pair whichever two are taken. `_Static_assert` takes
-   a joined message too, as `cc` does, and gives it back joined when it
-   fails. Two strings side by side, refused since 2026-09-22, moved to
-   the oracle. Six breaks, four caught; a fifth showed a step the length
-   did not need, which is gone. The sixth, the pieces written as one
-   text, needs a numeric escape to show, and `numeric-escapes.c` holds it
-   once part 3 is in.
-3. **Octal and hex escapes.** A character constant's code is `int` of
-   its digits in base 8 or 16, less 256 above 127, since `char` is
-   signed here, C11 6.4.4.4p13. A string's length is the question: every
-   escape has been one byte less than its spelling, and these are two to
-   four characters. The notation cannot walk the text, so each escape is
-   worked down to one marker by substitution, a digit at a time, the
-   most an escape can have being three. **A hex escape of more than two
-   digits is refused by name**, which `cc` compiles when the digits
-   before the last two are zeros, `'\x041'`; without the limit the
-   substitutions would be unbounded. A string holding a NUL is not a C
-   string to the linker, which splits `__TEXT,__cstring` at each one, so
-   a literal with a numeric escape goes in `__TEXT,__const`, as `cc`'s
-   own does with a NUL. `numeric-escapes.c` is the witness.
-
-**What `cc` refuses, and so will this**, each checked with `cc -std=c11
--pedantic-errors` on 2026-10-02, in a character constant and in a string:
-an octal escape past 255, `'\400'`; a hex escape past 255, `'\x100'`; `\x`
-with no digit after it; and an escape C does not have, `'\q'`, and `'\e'`,
-which `cc` has only as an extension. The last two are refused today, by
-the lexer, and stay so.
-
-*Not in this step:* the prefixes and universal character names; a
-character constant of more than one character, `'ab'`, which C leaves to
-the implementation; an enumerator's value from a character constant,
-refused by name since 6.15, which is the `constants` pass's and not the
-lexer's. **The entry closes** when the three programs agree with `cc`,
-none diverging, and every refusal above has its program in `refused/`.

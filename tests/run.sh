@@ -1868,22 +1868,39 @@ refuses "a difference of two pointers to different types" \
 # `char`: a type is two numbers now, and both have to agree.
 refuses "and a 'char *' less an 'int *'" "only when they point at the same type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/subtract-char-from-int-pointer.c"
-# Character constants are printable ASCII or one of six escapes, and the lexer
+# Character constants are printable ASCII or one of C's escapes, and the lexer
 # says so, which is what lets the `types` pass find every code in its table.
-# All three below are C, and `cc` compiles them; they are refused here as
-# outside the subset, at the quote, by the lexer.
-refuses "a hex escape in a character constant" "nothing here matches any token rule" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-hex-escape.c"
+# Both below are C, and `cc` compiles them; they are refused here as outside
+# the subset, at the quote, by the lexer. A hex escape was the third until
+# ROADMAP 6.16's third part, and is in the oracle now.
 refuses "two characters in one" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-two-characters.c"
 refuses "and a tab typed between the quotes" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-a-tab.c"
-# A string literal takes the character constant's escapes but `\0`, because C
-# reads up to three octal digits after it and a lexer that knew only `\0`
-# would miscount `"\01"`. `cc` compiles it. Two literals side by side are
-# joined since ROADMAP 6.16's second part, and that program is in the oracle.
-refuses "a NUL written into a string" "nothing here matches any token rule" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/string-with-a-nul.c"
+# Since ROADMAP 6.16's third part a string takes the octal and hex escapes,
+# and `\0` with them, so `string-with-a-nul.c` is in the oracle. What `cc`
+# refuses is refused here, an escape past 255 in a constant and in a string,
+# `\x` with no digit, and an escape C does not have; and one thing `cc`
+# compiles is refused by name, a hex escape of more than two digits, which C
+# allows when the others are zeros.
+refuses "an octal escape past 255" "'\\400' is an octal escape past 255" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-octal-past-255.c"
+refuses "and one in a string" "an octal escape in this string is past 255" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-octal-past-255.c"
+refuses "a hex escape past 255" "'\\x100' is a hex escape of more than two digits" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-hex-past-255.c"
+refuses "and one in a string" "a hex escape in this string has more than two digits" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-hex-past-255.c"
+refuses "a hex escape with zeros before its two digits, by name" "'\\x041' is a hex escape of more than two digits" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-hex-zeros-before.c"
+refuses "'\\x' with no digit" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-hex-with-no-digits.c"
+refuses "and in a string" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-hex-with-no-digits.c"
+refuses "an escape C does not have" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-unknown-escape.c"
+refuses "and one in a string" "nothing here matches any token rule" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/string-unknown-escape.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the
