@@ -1552,3 +1552,61 @@ showed that arm64 has neither form past 255 and 4095.
 > 3.4's line held because each question was asked again in the terms the
 > notation does have before the tool was changed, and asking it again was
 > cheaper each time than the change would have been.
+
+## 32. "It is settled with the first witness in hand, by what each costs in the passes"
+
+ROADMAP 6.14 and 6.15 were written on 2026-10-01, each in the morning of
+the day it closed, and each named its hard part before building it. Six
+claims can be checked against [COMPLETED
+6.14](COMPLETED.md#614-pointers-to-functions) and [COMPLETED
+6.15](COMPLETED.md#615-the-integer-types).
+
+*Failed: "a function becomes a level of its own", `f:1:0:1:KEY`.* Every
+clause that works a type's stars out of its text finds the first `a:` or
+`b:` and divides by eight, so a new kind of level would have been counted
+as a pointer in all of them. A function became a base with its key in a
+sixth field, and those clauses were right about it unchanged. The entry
+had asked how a function is spelled and not what already reads the
+spelling, which is [31](#31-the-notation-has-no-fold-over-a-list-and-no-way-to-take-ones-tail)'s
+miss again: there it was when a type is known, here it was who counts it.
+
+*Held: "KEY names its parameters in the tables a call already reads."* A
+call through a pointer reads the four tables with the pointer's key where
+a direct call reads them with the callee's name, and every struct, `long`
+and variadic rule a call had came with it.
+
+*Held, and measured by something it did not name: one call node or two,
+"by what each costs in the passes".* Both were prototyped, and the passes
+did tell them apart, 143 lines to 97. What decided it was not in the
+passes: a call by name had been parsed again by each alternative of
+`suffix` that started with it, so nested calls multiplied, and one node
+took the oracle from twenty seconds to nine where two took it to
+thirty-four. Prototyping both was what found it; reasoning about the
+passes would not have.
+
+*Held, and smaller: part 3, "a function's address as data", was one
+clause.* The entry gave Proem's shape a part of its own. Members and
+calls through them had come with parts 1 and 2; what was left was
+counting a function's name as an address worked out before the program
+runs.
+
+*Held: `_Bool`'s question, "each of those places converts today by
+narrowing, and each must learn the one conversion that does not".* Nine
+places did. The entry did not say how a place would know, and that was
+the work: a `_Bool`'s text was an `unsigned char`'s, and a seventh field
+was added that no other type has.
+
+*Failed: an enumeration constant is "an `int` the `constants` pass works
+out".* The same entry, a paragraph above, had recorded from probing `cc`
+that an `enum` with no negative constant is an `unsigned int`. That makes
+an object's type depend on its constants' values, and the `types` pass,
+which needs the type, runs before the `constants` pass. Settled with Hans:
+enumerators are worked out where they are declared, the one place a
+constant expression is worked out early, and a narrow bound on what it
+works out had to be found by the suite, since it runs at every `Binary`.
+
+> A plan here names the right mechanism and misses where it costs, and
+> every miss today was a reader of the same data the plan did not count:
+> clauses that read a type's text, alternatives that re-parse a primary,
+> a pass that runs before the one that knows. What the entry says about a
+> new representation is checked by asking what already reads the old one.
