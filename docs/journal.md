@@ -6855,3 +6855,28 @@ overflowed the notation's sixty-four bits until an operand past 2^31 was
 not worked out. Fourteen breaks, all caught. **6.15 closed with it**, its
 four witnesses agreeing and every refusal it listed held, and `pending/`
 is empty again. 639 → 649 checks.
+
+## 2026-10-02: escapes, and strings side by side
+
+**6.16 opened for the lexical row, cut to what Proem stops at and what
+shares its question.** Proem's `lib/` and `driver/` were read for every
+escape they write: `'\r'`, `'\v'` and `'\f'` once each, `'\0'` as the only
+octal escape, no hex escape at all, and a diagnostic written as two
+literals side by side in every file that reports one. The octal and hex
+escapes are in the entry anyway, because they and `\0` in a string are one
+question, how many bytes a literal is, and answering it for `\0` alone
+would answer it wrongly for `"\01"`, as the journal said on 2026-09-22.
+
+**The assembler was asked before it was relied on**, as it was for `\'`:
+one escape at a time in an `.asciz`. It refuses `\v`, `\a` and `\?`. It
+reads at most three octal digits, as C does, so `\0135` is `\013` and a
+`5`. It reads every hex digit after `\x`, as C does, and keeps the low
+byte where C refuses the value. So the octal escapes can be handed over
+as they are written, and a hex escape can once its value is checked.
+
+**Part 1 was the six simple escapes**, two characters and one byte each,
+so the length rule held and only the lexer, the table of codes and the
+emit pass changed. `\v` and `\a` go to the assembler as `\013` and
+`\007`, and `\?` as a question mark; each rewrite is made with the
+escaped backslashes set aside, as `\'`'s is, or `"\\v"` would become a
+backslash and a vertical tab. Four breaks, all caught.

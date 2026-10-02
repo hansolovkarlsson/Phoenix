@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-02: C escapes `\a` `\b` `\f` `\r` `\v` `\?`
+
+**The six simple escapes C has and the subset did not**, the first part
+of [ROADMAP 6.16](ROADMAP.md#616-escapes-and-joined-strings): each is a
+character constant worth its code, and each may be written in a string,
+whose length counts it as one byte. Proem's lexer tests for `'\v'` and
+`'\f'`, and its reader for `'\r'`.
+
+**Tests:** 649 → 649. One program joins the C oracle: 323 agree
+with `cc`, none diverges. Refusals: 409.
+
+---
+
 ## 2026-10-01: C `enum`, and the integer types closed
 
 **Enumerations work**, the fourth and last part of [ROADMAP

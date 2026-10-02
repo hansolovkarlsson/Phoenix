@@ -128,7 +128,7 @@ integer = ( "0" ( "x" | "X" ) hexdigit { hexdigit } | digit { digit } ) [ isuffi
  * The lexer saying exactly this is what lets the `types` pass work out a
  * code without asking whether it can: anything that reaches it is one of the
  * ninety-five characters in its table, or one of six escapes. *)
-escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" ) .
+escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" | "a" | "b" | "f" | "r" | "v" | "?" ) .
 plain     = " " .. "&" | "(" .. "[" | "]" .. "~" .
 character = "'" ( escape | plain ) "'" .
 
@@ -141,7 +141,7 @@ character = "'" ( escape | plain ) "'" .
  * miscounted, and arrives with the octal escapes. A character constant keeps
  * it, because the closing quote ends it there. Two literals side by side,
  * which C joins, are a syntax error here. *)
-sescape = "\\" ( "n" | "t" | "\\" | "'" | "\"" ) .
+sescape = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "a" | "b" | "f" | "r" | "v" | "?" ) .
 splain  = " " .. "!" | "#" .. "[" | "]" .. "~" .
 string  = "\"" { sescape | splain } "\"" .
 
@@ -3683,7 +3683,8 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Character : inner = slice($text, 2, size($text) - 1)
             : code  = lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
-                              ["\\\"", 34], ["\\0", 0]], $inner,
+                              ["\\\"", 34], ["\\0", 0], ["\\a", 7], ["\\b", 8],
+                              ["\\f", 12], ["\\r", 13], ["\\v", 11], ["\\?", 63]], $inner,
                              size(at(split(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
                                            $inner), 1)) + 32) .
 

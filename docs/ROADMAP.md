@@ -785,6 +785,12 @@ warning:
    on 2026-10-02, as it refuses `\'`, so each is rewritten, `\v` as
    `\013`, which `as` reads as C does, three octal digits at most.
    `escapes.c` is the witness.
+   *Built on 2026-10-02*, and as small as planned: six alternatives in
+   each of the two escape rules, six rows in the table of codes, and
+   three rewrites beside the one for `\'`, made after the escaped
+   backslashes are set aside so that `\\v` is left alone. The length
+   needed nothing, each escape being two characters and one byte. Four
+   breaks, all caught.
 2. **Joined strings**: one `String` node from one literal or more, its
    length the sum of theirs, and each piece written as an `.ascii` of
    its own, so that the text of two never runs together into an escape

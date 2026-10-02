@@ -147,16 +147,24 @@
    * turned into numbers here; the assembler reads `\n \t \\ \"` as C does.
    * It does **not** read `\'`, which this machine's `as` refuses as an
    * unrecognised escape and C allows, so that one is rewritten as the quote
-   * it stands for. A `\'` has to be told apart from the end of `\\'`,
-   * which is an escaped backslash and then a plain quote, so the escaped
-   * backslashes are set aside as tabs first, the way the `types` pass counts
-   * the length, and put back after. *)
+   * it stands for. Nor `\v`, `\a` or `\?`, since ROADMAP 6.16's first
+   * part: the first two are rewritten as the octal escapes `\013` and
+   * `\007`, which `as` reads as C does, three digits at most, so a digit
+   * after one is not taken into it; `\?` is the question mark. A `\'` has
+   * to be told apart from the end of `\\'`, which is an escaped backslash
+   * and then a plain quote, and a `\v` from the end of `\\v`, so the
+   * escaped backslashes are set aside as tabs first, the way the `types`
+   * pass counts the length, and put back after. *)
   thread data = ""
 
   String : n    = $label : label = $label + 1
          : sym  = "Lstr{}" of $n
-         : asm  = join(split(join(split(join(split($body, "\\\\"), "\t"), "\\'"), "'"),
-                             "\t"), "\\\\")
+         : bare = join(split($body, "\\\\"), "\t")
+         : asm  = join(split(join(split(join(split(join(split(join(split($bare, "\\'"), "'"),
+                                                          "\\v"), "\\013"),
+                                               "\\a"), "\\007"),
+                                    "\\?"), "?"),
+                         "\t"), "\\\\")
          : data = "{}Lstr{}:\n\t.asciz \"{}\"\n" of $data, $n, $asm
          : out  = "\tadrp x0, Lstr{}@PAGE\n\tadd x0, x0, Lstr{}@PAGEOFF\n" of $n, $n .
 
