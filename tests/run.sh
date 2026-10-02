@@ -2479,8 +2479,10 @@ refuses "short long" "'short long' is not one of the types C11 6.7.2p2 lists" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/short-long.c"
 refuses "short short" "'short short' is not one of the types C11 6.7.2p2 lists" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/short-short.c"
-refuses "'_Bool' in use" "'_Bool' is C11's, and not this subset's yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Bool-in-use.c"
+# `_Bool` was refused here by name until ROADMAP 6.15's third part, and is
+# in the oracle; `cc` refuses it signed or unsigned.
+refuses "unsigned _Bool" "'unsigned _Bool' is not one of the types C11 6.7.2p2 lists" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/unsigned-bool.c"
 refuses "'_Thread_local' in use" "'_Thread_local' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Thread_local-in-use.c"
 refuses "'volatile' in use" "'volatile' is C11's, and not this subset's yet" \

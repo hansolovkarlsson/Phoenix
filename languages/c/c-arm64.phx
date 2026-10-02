@@ -301,8 +301,8 @@
                               $place.size,
                               lookup([[true, "\tmov w0, w0\n"]],
                                      $place.size = 4 and $value.wide, ""))
-            : store = "{}\tstr x0, [sp, #-16]!\n{}{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
-                        of $place.addr, $value.out, $widen,
+            : store = "{}\tstr x0, [sp, #-16]!\n{}{}{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
+                        of $place.addr, $value.out, $widen, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], (at(split(("{}:::::::" of at(split($place.xlv, "|"), 1)), ":"), 7) = "B"), ""),
                            lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $place.size, "str x0"),
                            $narrow
             : copied = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n{}\tmov x0, x1\n"
@@ -360,7 +360,7 @@
                            lookup([[true, "\tmov w0, w0\n"]], $place.size = 4 and $wideop, ""))
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x2, [sp], #16\n\t{}, [x2]\n\tmov x4, x0\n{}{}{}\t{}, [x2]\n{}{}"
              of $place.addr, $value.out, $load, $lwiden, $vwiden,
-                lookup([[0, $number]], $place.type, $pointer),
+                ("{}{}" of lookup([[0, $number]], $place.type, $pointer), lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], (at(split(("{}:::::::" of at(split($place.xlv, "|"), 1)), ":"), 7) = "B"), "")),
                 $store, $narrow, lookup([[true, "\tmov x0, x4\n"]], $post, "") .
 
   (* A declaration with an initialiser knows its own slot, so it stores
@@ -371,8 +371,8 @@
                                        of $value.out, $offset,
                                           ($copy of $basew, $n, "x0", "x1", $n)]],
                              $copies,
-                             "{}{}{}\t{}, {}\n"
-                               of $value.out, lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset),
+                             "{}{}{}{}\t{}, {}\n"
+                               of $value.out, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"), ""), lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset),
                                   lookup([[true, "\tsxtw x0, w0\n"]],
                                          $ptrs = 0 and $base.tagname = "" and $basew = 8
                                            and $value.type = 0 and not $value.wide
@@ -407,7 +407,7 @@
            : ext   = lookup([[true, "\tsxtw x0, w0\n"]],
                             $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns, "")
            : act   = lookup([[true, $copy of $bytes, $n, "x0", "x1", $n]], $moves,
-                            "{}\t{}, [x1]\n" of $ext, lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $iw, "str x0"))
+                            "{}{}\t{}, [x1]\n" of $ext, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], (at(split(("{}:::::::" of at(split($leaf, "|"), 1)), ":"), 7) = "B"), ""), lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $iw, "str x0"))
            : out   = "{}{}{}" of $value.out, $dest, $act
            (* A store made at start-up, for a global whose values are not in
             * address order: its address and the offset, then the same. *)
@@ -422,8 +422,8 @@
                             $fill,
                             "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $iw, ".quad"),
                                lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                      lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
-                                             $iw, $value.folded))) .
+                                      lookup([[true, lookup([[0, 0]], $value.folded, 1)]], (at(split(("{}:::::::" of at(split($leaf, "|"), 1)), ":"), 7) = "B"), lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                                             $iw, $value.folded)))) .
   Discard   : out = $value.out .
 
   (* ---- calls ----
@@ -510,9 +510,10 @@
        : n      = $label : label = $label + lookup([[true, 1]], $value.record, 0)
        : extra  = $index >= size($wantwide)
        : widen  = lookup([[true, "\tsxtw x0, w0\n"]],
-                         not $extra and at($wantwide, $index + 1)
+                         not $extra and at($wantwide, $index + 1) = "l"
                          and $value.type = 0 and not $value.wide and not $value.uns, "")
-       : scalar = "{}{}\tstr x0, [sp, #-16]!\n" of $value.out, $widen
+       : scalar = "{}{}{}\tstr x0, [sp, #-16]!\n" of $value.out, $widen,
+                    lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], not $extra and at(flatten([$wantwide, [""]]), $index + 1) = "b", "")
        : packed = "{}\tsub sp, sp, #16\n\tstp xzr, xzr, [sp]\n\tmov x1, sp\n{}"
                     of $value.out, ($copy of $value.size, $n, "x0", "x1", $n)
        : copied = "{}\tsub x1, x29, #{}\n{}\tstr x1, [sp, #-16]!\n"
@@ -861,11 +862,12 @@
          : eight  = $ptrs > 0 or $base.basew = 8
          : from8  = $value.type > 0 or $value.wide
          : out = "{}{}" of $value.out,
+                   lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"),
                    lookup([[true, ""]], $tovoid,
                      lookup([[true, lookup([[true, ""]], $from8 or $value.uns, "\tsxtw x0, w0\n")]], $eight,
                        lookup([[1, lookup([[true, "\tand w0, w0, #255\n"]], $base.buns, "\tsxtb w0, w0\n")], [2, lookup([[true, "\tuxth w0, w0\n"]], $base.buns, "\tsxth w0, w0\n")]],
                               $base.basew,
-                              lookup([[true, "\tmov w0, w0\n"]], $from8, "")))) .
+                              lookup([[true, "\tmov w0, w0\n"]], $from8, ""))))) .
 
   (* **A comma runs its left side and keeps its right.** The left's value is
    * left in `x0` and overwritten, which is all throwing it away takes. *)
@@ -947,7 +949,7 @@
                      of $value.out, ($copy of $retsize, $n, "x0", "x1", $n)
          : large = "{}{}\tldr x1, {}\n{}"
                      of $value.out, lookup([[true, ""]], $x8slot <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $x8slot), lookup([[true, "[x29, #-{}]" of $x8slot]], $x8slot <= 255, "[x16]"), ($copy of $retsize, $n, "x0", "x1", $n)
-         : scalar = "{}{}{}" of $value.out, $retshort,
+         : scalar = "{}{}{}{}" of $value.out, $retshort, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], $retbool, ""),
                       lookup([[true, "\tsxtw x0, w0\n"]],
                              $retlong and $value.type = 0 and not $value.wide and not $value.uns,
                              lookup([[true, "\tmov w0, w0\n"]],
@@ -989,6 +991,7 @@
             * Apple's arm64 has a callee do, and as `tests/abi/` holds against
             * a caller `cc` compiled, which reads `w0` as it is. A callee `cc`
             * compiled does the same, so a caller here does nothing more. *)
+           : down retbool   = (at(split(("{}:::::::" of at(split($rlv, "|"), 1)), ":"), 7) = "B")
            : down retshort  = lookup([[true, lookup([[true, "\tuxth w0, w0\n"]], $ret.buns, "\tsxth w0, w0\n")]],
                                      $rptrs = 0 and $ret.tagname = "" and $ret.basew = 2, "")
            : down x8slot    = $frame + 8
@@ -1057,8 +1060,8 @@
                           of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
                              lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                    lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
-                                           $ebytes, $value.folded)) .
+                                    lookup([[true, lookup([[0, 0]], $value.folded, 1)]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"), lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                                           $ebytes, $value.folded))) .
   (* *A `short`'s data wrapped to sixteen bits has no witness*, since
    * ROADMAP 6.15's second part: only a constant out of its range needs it,
    * and `cc` warns of every one, so no program the oracle may hold has one.
@@ -1124,8 +1127,8 @@
                           of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label,
                              lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
                              lookup([[true, $value.sym]], $value.anchored and not $value.settled,
-                                    lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
-                                           $ebytes, $value.folded)) .
+                                    lookup([[true, lookup([[0, 0]], $value.folded, 1)]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"), lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                                           $ebytes, $value.folded))) .
   Program   : down initialised = bind(empty, $inits, true)
             : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"
             : out = "\t.text\n{}\n{}\t.section __TEXT,__cstring\n{}\t.section __DATA,__data\n{}{}"

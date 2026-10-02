@@ -6807,3 +6807,19 @@ compiled narrows, as Apple's arm64 says it does; that was taken out.
 read as two, and data wrapped to sixteen bits, which only a constant out
 of range needs and `cc` warns of every one; each is kept with a note.
 638 → 639 checks.
+
+**6.15's third part, `_Bool`, and its question answered by a mark.** A
+`_Bool` is a byte that is 0 or 1 whatever it is given, so each place a
+value becomes one has to test it rather than cut it, and its type text
+was an `unsigned char`'s, so no place could tell. **The text took a
+seventh field**, `B`, which no other type has and which leaves the fifth
+and sixth, a struct's and a function's, empty, so nothing that reads
+those changed. Nine places ask it. **The one that needed more was an
+argument**: a callee `cc` compiled counts on being handed 0 or 1, so the
+caller converts, and the list a call reads of its parameters, which said
+only which were `long`s, says `l`, `b` or nothing now; the one clause that
+read it as a boolean reads a letter. The witnesses gave every conversion
+a value whose low byte is zero, 256 and 2^32, so that a narrowing where a
+test belongs prints 0 where `cc` prints 1, and the breaks bore it out:
+each conversion point taken out failed a witness, once a `static` `_Bool`
+initialised alone was added for the one that did not. 639 checks.

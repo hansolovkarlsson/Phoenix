@@ -16,6 +16,25 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C `_Bool`
+
+**`_Bool` works**, the third part of [ROADMAP
+6.15](ROADMAP.md#615-the-integer-types), and so does `bool` from
+`<stdbool.h>` once `cc -E` has made it `_Bool`: one byte, and **always 0
+or 1**, whatever it is given, a `long` of 2^32 or an `int` of 256 among
+them, in an assignment, `+=`, `--`, an initialiser, a global, a cast, a
+`return` and an argument. A function may return one, and `cc`'s code and
+this one's agree on how one is passed and returned.
+
+Refused, as `cc` refuses it: `unsigned _Bool`. One program refused by
+name until now compiles.
+
+**Tests:** 639 → 639, one refusal replaced by another. Three programs join the
+C oracle, one a refusal until now: 320 agree with `cc`, none diverges.
+Refusals: 399.
+
+---
+
 ## 2026-10-01: C `short`
 
 **`short` works**, the second part of [ROADMAP

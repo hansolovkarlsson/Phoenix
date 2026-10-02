@@ -21,3 +21,5 @@ short sdouble(short x) { return x * 2; }
 unsigned short udouble(unsigned short x) { return x * 2; }
 int takeshort(short x) { return x; }
 int takeushort(unsigned short x) { return x; }
+int takebool(_Bool b) { return b * 10; }
+_Bool mkbool(int x) { return x; }

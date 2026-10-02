@@ -807,6 +807,21 @@ warning:
    against zero and not a truncation, which is the part's question: each
    of those places converts today by narrowing, and each must learn the
    one conversion that does not. `bools.c` is the witness.
+   *Built on 2026-10-01*, with `bools-more.c` beside it, and `_Bool`'s
+   refusal by name since 6.12 moved to the oracle. **The question was
+   how a place knows it is a `_Bool`**, since its text was an `unsigned
+   char`'s: it is `b:1:0:1:::B` now, a seventh field no other type has,
+   and each of the nine places a value becomes one asks it and makes the
+   value 0 or 1 with a `cmp` and a `cset` before it is stored: an
+   assignment, an update, an initialiser alone and in braces, data, a
+   `static`'s, a cast, a `return`, and an argument. **An argument is
+   the caller's to convert**, as a callee `cc` compiled counts on, so
+   the flags a call reads of each parameter, which said whether it was a
+   `long`, say `l`, `b` or nothing now. `tests/abi/` took `_Bool` both
+   ways. A function returning a `_Bool` is not refused as one returning
+   a `char` is. Thirteen breaks, all caught, one once a `static` `_Bool`
+   initialised alone was written into the witness. Refused as `cc`
+   refuses it: `unsigned _Bool`.
 4. **`enum`**, C11 6.7.2.2: a tag and its constants as a specifier, as a
    struct's are since 6.12, each constant an `int` the `constants` pass
    works out, in the ordinary name space and the scope it is written in,

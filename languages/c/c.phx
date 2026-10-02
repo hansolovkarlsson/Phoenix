@@ -1091,7 +1091,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    "",
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
-                                   lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
+                                   "",
                                    lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
@@ -1118,6 +1118,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                   ["010000000000", "char"],
                                   ["010000010000", "char"],
                                   ["010000001000", "unsigned char"],
+                                  ["000000000100", "_Bool"],
                                   ["001000000000", "short"],
                                   ["001100000000", "short"],
                                   ["001000010000", "short"],
@@ -1156,7 +1157,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    "",
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
-                                   lookup([[true, "_Bool "]], size(split($words, " _Bool ")) > 1, ""),
+                                   "",
                                    lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
@@ -1493,7 +1494,8 @@ arg  = e:assignment -> Arg(value: $e) .
                     ["long", [8, 8, empty, false]], ["void", [0, 1, empty, false]],
                     ["unsigned int", [4, 4, empty, false]], ["unsigned char", [1, 1, empty, false]],
                     ["unsigned long", [8, 8, empty, false]],
-                    ["short", [2, 2, empty, false]], ["unsigned short", [2, 2, empty, false]]]
+                    ["short", [2, 2, empty, false]], ["unsigned short", [2, 2, empty, false]],
+                    ["_Bool", [1, 1, empty, false]]]
 
   (* **The typedefs so far**, name to the four things a declaration asks
    * of its base: a width, an alignment, a tag, and how many stars the typedef
@@ -1752,11 +1754,17 @@ arg  = e:assignment -> Arg(value: $e) .
        : basew   = at($layout, 1)
        : align   = at($layout, 2)
        : tagname = lookup([["int", ""], ["char", ""], ["long", ""], ["unsigned int", ""],
-                           ["unsigned char", ""], ["unsigned long", ""], ["short", ""], ["unsigned short", ""]], $tkey, $tkey)
+                           ["unsigned char", ""], ["unsigned long", ""], ["short", ""], ["unsigned short", ""], ["_Bool", ""]], $tkey, $tkey)
        : buns    = lookup([["unsigned int", true], ["unsigned char", true],
-                           ["unsigned long", true], ["unsigned short", true]], $tkey, false)
-       : blv     = lookup([[true, "b:{}:0:{}:{}" of $basew, $align, $tkey]], $tagname <> "" and $tagname <> "void",
-                          "b:{}:0:{}" of $basew, $align)
+                           ["unsigned long", true], ["unsigned short", true], ["_Bool", true]], $tkey, false)
+       (* **A `_Bool` is a byte with a mark**, since ROADMAP 6.15's third
+        * part: `b:1:0:1:::B`, its seventh field `B`, which no other type's
+        * text has, since every conversion into one is a test against zero
+        * and not a narrowing, C11 6.3.1.2, and the places that convert ask
+        * the text. The fifth and sixth fields, a struct's and a
+        * function's, are empty. *)
+       : blv     = lookup([[true, "b:1:0:1:::B"]], $tkey = "_Bool", lookup([[true, "b:{}:0:{}:{}" of $basew, $align, $tkey]], $tagname <> "" and $tagname <> "void",
+                          "b:{}:0:{}" of $basew, $align))
        ! $unsup <> ""
            : lookup([["_Complex", "'_Complex' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
                      ["_Imaginary", "'_Imaginary' is optional in C11, and left out here, as __STDC_NO_COMPLEX__ says"],
@@ -1881,6 +1889,7 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
             ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
+                and at(split(("{}:::::::" of at(split($ret.blv, "|"), 1)), ":"), 7) <> "B"
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
@@ -1925,6 +1934,7 @@ arg  = e:assignment -> Arg(value: $e) .
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
             ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
+                and at(split(("{}:::::::" of at(split($ret.blv, "|"), 1)), ":"), 7) <> "B"
                 : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
@@ -1960,7 +1970,11 @@ arg  = e:assignment -> Arg(value: $e) .
         : dquals = "{}{}" of $base.bquals, $squals
         : whole  = $ptrs = 0 and $base.tagname <> ""
         : passes = lookup([[true, $base.tagname]], $whole, "")
-        : pwide  = $ptrs = 0 and $base.tagname = "" and $basew = 8
+        (* What a caller converts an argument for: `l`, a `long`, which it
+         * sign-extends, and since ROADMAP 6.15's third part `b`, a `_Bool`,
+         * which it makes 0 or 1, as a callee `cc` compiled counts on. *)
+        : pwide  = lookup([[true, "l"]], $ptrs = 0 and $base.tagname = "" and $basew = 8,
+                          lookup([[true, "b"]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"), ""))
         : regs   = lookup([[true, 2]], $whole and $basew > 8 and $basew <= 16, 1)
         : takes  = lookup([[true, (($basew + 7) div 8) * 8]], $whole, 8)
         : offset = $bytes + $takes
@@ -3879,7 +3893,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * operand fit in thirty-two bits, and `(int)4294967341` is 45, which is
    * the one way a constant wider than an `int` legally reaches a `case`.
    * To a `char` it keeps eight bits and puts the sign back, to a `short`
-   * sixteen, since ROADMAP 6.15's second part; to an `int`,
+   * sixteen, since ROADMAP 6.15's second part, to a `_Bool` 0 or 1, since
+   * its third; to an `int`,
    * thirty-two; to a `long`, all of them. A cast to a pointer or to `void`
    * is not an integer constant expression, and is not settled. *)
   Cast       : rooted  = $value.rooted
@@ -3888,10 +3903,10 @@ arg  = e:assignment -> Arg(value: $e) .
              : low32   = $value.folded mod 4294967296
              : settled = $value.settled and $ptrs = 0 and $base.tagname = ""
              : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 4))
-             : folded  = lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128 and not $base.buns, 0)],
+             : folded  = lookup([[true, lookup([[0, 0]], $value.folded, 1)]], (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B"), lookup([[1, $low8 - lookup([[true, 256]], $low8 >= 128 and not $base.buns, 0)],
                                  [2, $low16 - lookup([[true, 65536]], $low16 >= 32768 and not $base.buns, 0)],
                                  [4, $low32 - lookup([[true, 4294967296]], $low32 >= 2147483648 and not $base.buns, 0)]],
-                                $base.basew, $value.folded) .
+                                $base.basew, $value.folded)) .
   Invert     : settled = $value.settled and not ($uns and $wide)
              : why     = lookup([[true, 0]], $settled, lookup([[false, $value.why]], $value.settled, 1))
              : folded  = lookup([[true, 4294967295 - $value.folded mod 4294967296]], $uns,
