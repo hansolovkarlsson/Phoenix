@@ -6823,3 +6823,35 @@ a value whose low byte is zero, 256 and 2^32, so that a narrowing where a
 test belongs prints 0 where `cc` prints 1, and the breaks bore it out:
 each conversion point taken out failed a witness, once a `static` `_Bool`
 initialised alone was added for the one that did not. 639 checks.
+
+**6.15's fourth part, `enum`, and a question settled with Hans before it
+was built.** Probing `cc` for the witnesses had found that an `enum` with
+no negative constant is an `unsigned int` here, and `enums.c` asks it.
+That makes an enumeration's type depend on its constants' values, which
+are constant expressions, and constant expressions are worked out by the
+`constants` pass, after the `types` pass that needs the type. Proem's
+enumerators are `1u << n`, so the values are real expressions. Three ways
+were put to Hans: work enumerators out where they are declared, in the
+`locals` pass; make every enumeration an `int` and depart from this `cc`;
+or prototype both. **He chose the first**, and it is the one place a
+constant expression is worked out before the `constants` pass: numbers in
+any base, earlier enumerators, parentheses, unary `-`, `+` and `~`, and
+`+ - * / % << >> & | ^`, in exact integers, an operand past 2^32 or a
+shift past 31 not worked out so that nothing traps, and the value checked
+against an `int`'s range. An enumeration's key is `int` or `unsigned
+int`, so its objects are that type through the tag table structs use, and
+each constant is a name whose entry carries its value.
+
+**Reading it for how it could be wrong** found that a file-scope
+enumerator looked its value's names up where the globals are not, so
+`enum e { A = x }` said `x` was not declared, which is not what is wrong
+with it; and two missing witnesses, an enumerator in hex and octal and
+`++` of a constant. **The suite found one more**: an octal constant with
+an 8 in it, which the `types` pass refuses in its own words, stopped the
+compiler when this part read it in base 8, and is not read now. And
+since the working out runs at every `Binary` in a program and not only in
+an enumerator, `unsigned-folds.c`, which multiplies two numbers near 2^32,
+overflowed the notation's sixty-four bits until an operand past 2^31 was
+not worked out. Fourteen breaks, all caught. **6.15 closed with it**, its
+four witnesses agreeing and every refusal it listed held, and `pending/`
+is empty again. 639 → 649 checks.

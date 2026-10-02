@@ -2495,7 +2495,11 @@ refuses "'_Noreturn' in use" "'_Noreturn' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Noreturn-in-use.c"
 refuses "'_Alignas' in use" "'_Alignas' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-_Alignas-in-use.c"
-refuses "'enum' in use" "'enum' is C11's, and not this subset's yet" \
+# `enum` was refused here by name until ROADMAP 6.15's fourth part. This
+# program names one before its list, which C11 does not have, and `cc`
+# refuses it for that now; the rest of what `cc` refuses of one is with
+# the integer types, below.
+refuses "'enum' named before its list" "'enum colour' is named before its list, and C11 6.7.2.3p3 has no enumeration declared without one" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-enum-in-use.c"
 refuses "'union' in use" "'union' is C11's, and not this subset's yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/keyword-union-in-use.c"
@@ -2799,6 +2803,29 @@ refuses "a function returning an array" "expected *, and found \"f\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-an-array.c"
 refuses "an array of functions" "expected [, =, , or ;, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-functions.c"
+# **Enumerations**, since ROADMAP 6.15's fourth part. `cc` refuses all but
+# the last, a character constant as an enumerator's value, which this
+# subset does not work out before the `types` pass and refuses by name.
+refuses "an enumerator twice" "'A' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-twice.c"
+refuses "an enumerator named as a global already" "'A' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-named-already.c"
+refuses "an enumerator past an int" "'X' is 4294967296, past an int's range" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-past-int.c"
+refuses "and one counted past it" "'N' is 2147483648, past an int's range" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-counted-past-int.c"
+refuses "an enumeration defined twice" "'enum e' is defined twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enum-defined-twice.c"
+refuses "an assignment to an enumerator" "'RED' is an enumeration constant, and a constant is not something a value can be put in" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/assign-to-an-enumerator.c"
+refuses "'&' of an enumerator" "'&' wants somewhere a value is kept, and 'RED' is an enumeration constant" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/address-of-an-enumerator.c"
+refuses "'++' of an enumerator" "'++' wants somewhere a value is kept" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-enumerator.c"
+refuses "an enumerator from a global" "'A' is given a value this subset does not work out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-not-constant.c"
+refuses "an enumerator from a character" "'A' is given a value this subset does not work out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-from-a-character.c"
 # **A call by name is still a call by name**, since ROADMAP 6.14's second
 # part made every call one node: `bl _apply`, and a call through a
 # pointer is a `blr`. Both ways the program says the same, so only the

@@ -216,7 +216,9 @@
                                    $global, "\tsub x0, x29, #{}\n" of $offset))
             : load = lookup([[true, "{}\t{}, [x0]\n" of $addr, $ldr]], $global,
                             "{}{}\t{}, {}\n" of $pre, lookup([[true, ""]], $offset <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset), $ldr, lookup([[true, "[x29, #-{}]" of $offset]], $offset <= 255, "[x16]"))
-            : out  = lookup([[true, $addr]], $aggregate, $load) .
+            (* An enumeration constant is its value, since ROADMAP 6.15's
+             * fourth part, loaded as a number is. *)
+            : out  = lookup([[true, "\tldr w0, ={}\n" of $evalue]], $econst, lookup([[true, $addr]], $aggregate, $load)) .
 
   (* A dereference is a load from what the value came out as, and its address
    * is that value before the load, so `&*p` emits exactly what `p` emits and

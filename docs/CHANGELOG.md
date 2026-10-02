@@ -16,10 +16,33 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-01: C `enum`, and the integer types closed
+
+**Enumerations work**, the fourth and last part of [ROADMAP
+6.15](COMPLETED.md#615-the-integer-types), which closes it: `enum` with a
+tag, without one, and through a typedef, in a block or at file scope;
+constants counted on from 0 or from a value written, which may be worked
+out from numbers in any base, earlier constants, parentheses and the
+arithmetic and bitwise operators, so Proem's `1u << 4` flags are; and the
+constants used as `case` labels, in initialisers and as values. **An
+enumeration's type is the one this `cc` gives it**: an `unsigned int`
+when none of its constants is negative, and an `int` when one is.
+
+Refused, as `cc` refuses them: an enumerator declared twice or named as
+something else already is, one past an `int`'s range, an enumeration
+defined twice or named before its list, an assignment, `++` or `&` of a
+constant, and a value that is no constant. Refused by name, though `cc`
+compiles it: a value from a character constant, `A = 'a'`.
+
+**Tests:** 639 → 649. Eleven refusals. Two programs join the C oracle:
+322 agree with `cc`, none diverges. Refusals: 409.
+
+---
+
 ## 2026-10-01: C `_Bool`
 
 **`_Bool` works**, the third part of [ROADMAP
-6.15](ROADMAP.md#615-the-integer-types), and so does `bool` from
+6.15](COMPLETED.md#615-the-integer-types), and so does `bool` from
 `<stdbool.h>` once `cc -E` has made it `_Bool`: one byte, and **always 0
 or 1**, whatever it is given, a `long` of 2^32 or an `int` of 256 among
 them, in an assignment, `+=`, `--`, an initialiser, a global, a cast, a
@@ -38,7 +61,7 @@ Refusals: 399.
 ## 2026-10-01: C `short`
 
 **`short` works**, the second part of [ROADMAP
-6.15](ROADMAP.md#615-the-integer-types): `short`, `short int` and
+6.15](COMPLETED.md#615-the-integer-types): `short`, `short int` and
 `unsigned short`, two bytes, wrapping at sixteen bits, in arrays, structs,
 globals and `static`s, as parameters and return values, and through
 `...`. A function returning one hands it back as `cc` expects.
@@ -54,7 +77,7 @@ a refusal until now: 317 agree with `cc`, none diverges. Refusals: 399.
 ## 2026-10-01: C `long long`
 
 **`long long` works**, the first part of [ROADMAP
-6.15](ROADMAP.md#615-the-integer-types): `long long`, `long long int` and
+6.15](COMPLETED.md#615-the-integer-types): `long long`, `long long int` and
 `unsigned long long`, eight bytes as `long` is on this machine, and the
 suffixes `LL`, `ll`, `ULL` and `LLU` in a constant, in hex too. `signed
 char` already worked, as `char`, which is signed here.

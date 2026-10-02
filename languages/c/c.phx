@@ -195,6 +195,7 @@ program = { item } -> Program(items: $1) .
     declare Typedef.name
     hide    Param.name Local.name LocalInit.name LocalArray.name
             Static.name StaticInit.name StaticArray.name LocalAgg.name StaticAgg.name
+            Enumerator.name
     scope   block function for-declaration fn-suffix
     guard   typedef-name .
 
@@ -571,6 +572,16 @@ typedef-name = name .
  * none, and a list holding the definition or empty, which `Base` keeps as
  * its `def`. A struct with no members is **not** a syntax error, so that it
  * can be refused by name: see the `locals` pass. *)
+(* **An enumeration as a specifier**, C11 6.7.2.2, since ROADMAP 6.15's
+ * fourth part, written as a struct's is: its tag, its tag and its list, or
+ * a list with no tag. Each enumerator is a name and, if one is written, the
+ * value after its `=`, which the `locals` pass works out. *)
+enum-core   = "enum" t:name "{" a:enumerator r:{ "," b:enumerator -> $b } [ "," ] "}" -> [$t, [EnumDef(name: $t, items: flatten([[$a], $r]))]]
+            | "enum" "{" a:enumerator r:{ "," b:enumerator -> $b } [ "," ] "}"        -> ["", [EnumDef(name: "", items: flatten([[$a], $r]))]]
+            | "enum" t:name                                                          -> [$t, []] .
+enumerator  = n:name "=" v:conditional -> Enumerator(name: $n, value: [$v])
+            | n:name                   -> Enumerator(name: $n, value: []) .
+
 struct-core = "struct" t:name "{" m:{ member } "}" -> [$t, [StructDef(name: $t, members: $m)]]
             | "struct" "{" m:{ member } "}"        -> ["", [StructDef(name: "", members: $m)]]
             | "struct" t:name                      -> [$t, []] .
@@ -600,7 +611,9 @@ type-word = "void" | "char" | "short" | "int" | "long" | "float" | "double"
 specifier = qualifier | storage | function-specifier .
 specifiers = a:{ specifier } t:struct-core b:{ specifier }
                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b]), "  ")), def: at($t, 2))
-           | a:{ specifier } k:( "union" | "enum" ) t:name b:{ specifier }
+           | a:{ specifier } t:enum-core b:{ specifier }
+               -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b]), "  ")), def: at($t, 2))
+           | a:{ specifier } k:"union" t:name b:{ specifier }
                -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
            | a:{ specifier } t:typedef-name b:{ specifier }
                -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
@@ -618,6 +631,10 @@ sspecifiers = a:{ not-static } "static" b:{ not-static } t:struct-core c:{ not-s
                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["static"], $b, ["struct"], $c]), "  ")), def: at($t, 2))
             | a:{ not-static } t:struct-core b:{ not-static } "static" c:{ not-static }
                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b, ["static"], $c]), "  ")), def: at($t, 2))
+            | a:{ not-static } "static" b:{ not-static } t:enum-core c:{ not-static }
+                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["static"], $b, ["enum"], $c]), "  ")), def: at($t, 2))
+            | a:{ not-static } t:enum-core b:{ not-static } "static" c:{ not-static }
+                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b, ["static"], $c]), "  ")), def: at($t, 2))
             | a:{ not-static } "static" b:{ not-static } t:typedef-name c:{ not-static }
                 -> Named(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, $c]), "  "))
             | a:{ not-static } t:typedef-name b:{ not-static } "static" c:{ not-static }
@@ -632,6 +649,10 @@ tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } t:struct-core c:{ n
                  -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["typedef"], $b, ["struct"], $c]), "  ")), def: at($t, 2))
              | a:{ not-typedef } t:struct-core b:{ not-typedef } "typedef" c:{ not-typedef }
                  -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b, ["typedef"], $c]), "  ")), def: at($t, 2))
+             | a:{ not-typedef } "typedef" b:{ not-typedef } t:enum-core c:{ not-typedef }
+                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["typedef"], $b, ["enum"], $c]), "  ")), def: at($t, 2))
+             | a:{ not-typedef } t:enum-core b:{ not-typedef } "typedef" c:{ not-typedef }
+                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b, ["typedef"], $c]), "  ")), def: at($t, 2))
              | a:{ not-typedef } "typedef" b:{ not-typedef } t:typedef-name c:{ not-typedef }
                  -> Named(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, $c]), "  "))
              | a:{ not-typedef } t:typedef-name b:{ not-typedef } "typedef" c:{ not-typedef }
@@ -646,7 +667,9 @@ tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } t:struct-core c:{ n
  * a member is a syntax error and not a refusal, as it was. *)
 sqlist = a:{ qualifier } t:struct-core b:{ qualifier }
            -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["struct"], $b]), "  ")), def: at($t, 2))
-       | a:{ qualifier } k:( "union" | "enum" ) t:name b:{ qualifier }
+       | a:{ qualifier } t:enum-core b:{ qualifier }
+           -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b]), "  ")), def: at($t, 2))
+       | a:{ qualifier } k:"union" t:name b:{ qualifier }
            -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
        | a:{ qualifier } t:typedef-name b:{ qualifier }
            -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
@@ -1092,7 +1115,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
                                    "",
-                                   lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
+                                   "",
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
                                    lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
@@ -1158,7 +1181,7 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "float "]], size(split($words, " float ")) > 1, ""),
                                    lookup([[true, "double "]], size(split($words, " double ")) > 1, ""),
                                    "",
-                                   lookup([[true, "enum "]], size(split($words, " enum ")) > 1, ""),
+                                   "",
                                    lookup([[true, "union "]], size(split($words, " union ")) > 1, ""),
                                    lookup([[true, "volatile "]], size(split($words, " volatile ")) > 1, ""),
                                    lookup([[true, "restrict "]], size(split($words, " restrict ")) > 1, ""),
@@ -1382,7 +1405,12 @@ arg  = e:assignment -> Arg(value: $e) .
          : ioct    = not $ihex and slice($ibody, 1, 1) = "0" and size($ibody) > 1
          : idec    = not $ihex and not $ioct
          : idigits = lookup([[true, slice($ibody, 3, size($ibody))]], $ihex, $ibody)
-         : ndigits = size($idigits) .
+         : ndigits = size($idigits)
+         (* An octal constant with an 8 or a 9 is refused by the `types`
+          * pass, and is not read here as one. *)
+         : ebad    = $ioct and (size(split($idigits, "8")) > 1 or size(split($idigits, "9")) > 1)
+         : eok     = $ndigits <= 15 and not $ebad
+         : ev      = int(lookup([[true, "0"]], $ebad, slice($idigits, 1, 15)), lookup([[true, 16]], $ihex, lookup([[true, 8]], $ioct, 10))) .
 
   (* The table is a thread, because *what has been declared so far* is what
    * a walk in document order has. All three are set afresh at each function
@@ -1773,7 +1801,12 @@ arg  = e:assignment -> Arg(value: $e) .
        ! $unsup = "" and $nstore > 1
            : "this declaration has {} storage classes, and C11 6.7.1p2 allows one" of $nstore
        ! $unsup = "" and $nstore < 2 and $tname = ""
-           : "'{}' is not one of the types C11 6.7.2p2 lists" of $display .
+           : "'{}' is not one of the types C11 6.7.2p2 lists" of $display
+       (* **An enumeration is named after its list**, C11 6.7.2.3p3, since
+        * ROADMAP 6.15's fourth part: there is no `enum e;` before one, as
+        * there is a `struct s;`. *)
+       ! size(split($words, " enum ")) > 1 and size($def) = 0 and not defined($tags, $name)
+           : "'enum {}' is named before its list, and C11 6.7.2.3p3 has no enumeration declared without one" of $name .
 
   (* A member starts at the next offset its alignment allows. An element is
    * aligned as its base is, or to eight when it is a pointer, and an array as
@@ -2011,7 +2044,70 @@ arg  = e:assignment -> Arg(value: $e) .
        : vrec  = at(lookup($rets, $lkey, ["", 4, 0, false, "0"]), 1) <> "" and at(lookup($rets, $lkey, ["", 4, 0, false, "0"]), 1) <> "void" and at(lookup($rets, $lkey, ["", 4, 0, false, "0"]), 3) = 0
        : down callpos = true .
   Arg    : down callpos = false .
-  Binary : down callpos = false .
+  (* **An enumerator's value is worked out here**, since ROADMAP 6.15's
+   * fourth part, settled with Hans on 2026-10-01: an `enum` is an
+   * `unsigned int` in this `cc` when none of its constants is negative and
+   * an `int` when one is, and the `types` pass, which runs before the
+   * `constants` pass, has to know which. So this pass works out what an
+   * enumerator's `=` says, from numbers, earlier enumerators, `+`, `-`,
+   * `~` and the arithmetic and bitwise operators, in exact integers: `ev`
+   * the value and `eok` whether it could be, which is false for anything
+   * else and refused by name at the enumerator. An operand past 2^31, a
+   * division by zero and a shift past 31 are not worked out, so that no
+   * product or shift passes 2^62 and nothing here traps: these are worked
+   * out at every `Binary` in a program, and `unsigned-folds.c` multiplies
+   * two numbers near 2^32. *)
+  otherwise ev  = 0
+  otherwise econst = false
+  otherwise eok = false
+  Negate : ev = 0 - $value.ev : eok = $value.eok .
+  Plus   : ev = $value.ev     : eok = $value.eok .
+  Invert : ev = -1 - $value.ev : eok = $value.eok .
+  Binary : down callpos = false
+         : esmall = $left.ev >= 0 - 2147483648 and $left.ev <= 2147483648 and $right.ev >= 0 - 2147483648 and $right.ev <= 2147483648
+         : el     = lookup([[true, $left.ev]], $esmall, 0)
+         : er     = lookup([[true, $right.ev]], $esmall, 0)
+         : enz    = lookup([[0, 1]], $er, $er)
+         : epow   = at([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824, 2147483648], lookup([[true, $er]], $er >= 0 and $er < 32, 0) + 1)
+         : ev     = lookup([["+", $el + $er], ["-", $el - $er], ["*", $el * $er], ["/", quotient($el, $enz)], ["%", remainder($el, $enz)],
+                            ["<<", $el * $epow], [">>", $el div $epow], ["&", bitand($el, $er)], ["|", bitor($el, $er)], ["^", bitxor($el, $er)]], $op, 0)
+         : eok    = $left.eok and $right.eok and $esmall
+                    and lookup([["+", true], ["-", true], ["*", true], ["/", $er <> 0], ["%", $er <> 0], ["<<", $er >= 0 and $er < 32],
+                                [">>", $er >= 0 and $er < 32], ["&", true], ["|", true], ["^", true]], $op, false) .
+
+  (* **An enumeration**, C11 6.7.2.2, since ROADMAP 6.15's fourth part: its
+   * constants counted on from 0, or from what an `=` says, `enext`, and
+   * whether any is negative, `eneg`, which makes it an `int` and otherwise
+   * an `unsigned int`, this `cc`'s choice, which C11 6.7.2.2p4 leaves to
+   * the implementation. Its key is that type's, so an object of it is an
+   * `int` or an `unsigned int` in every pass, and its tag names the key as
+   * a struct's names its layout. *)
+  thread enext = 0
+  thread eneg  = false
+  EnumDef : down env   = lookup([[true, $env]], $infunc, $globals)
+          : down enext = 0
+          : down eneg  = false
+          : mykey  = lookup([[true, "int"]], $eneg, "unsigned int")
+          : tags   = lookup([[true, bind($tags, $name, $mykey)]], $name <> "", $tags)
+          : tscope = lookup([[true, bind($tscope, $name, true)]], $name <> "", $tscope)
+          ! $name <> "" and defined($tscope, $name)
+              : "'enum {}' is defined twice" of $name .
+  (* Each constant is an `int` with a value, and a name in the scope it is
+   * written in, at file scope a global's: its entry is a name's, with the
+   * value as a thirteenth field, which `Variable` reads. *)
+  Enumerator : val     = lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1))
+             : enext   = $val + 1
+             : eneg    = $eneg or $val < 0
+             : env     = bind($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4", $val])
+             : scope   = bind($scope, $name, true)
+             : globals = lookup([[true, bind($globals, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4", $val])]], not $infunc, $globals)
+             ! size($value) > 0 and not at(flatten([$value.eok, [false]]), 1)
+                 : "'{}' is given a value this subset does not work out: C11 6.7.2.2p2 wants an integer constant expression, and this works one out only from numbers, enumerators, parentheses and the arithmetic and bitwise operators" of $name
+             ! lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) > 2147483647
+               or lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) < 0 - 2147483648
+                 : "'{}' is {}, past an int's range, which C23 allows and C11 6.7.2.2p2 does not" of $name, lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1))
+             ! defined($scope, $name) or (not $infunc and (defined($globals, $name) or defined($funcs, $name) or defined($typedefs, $name)))
+                 : "'{}' is declared twice" of $name .
 
   (* A block is a scope: its declarations are torn down on the way out and
    * the enclosing tables come back. The byte counter is *not* restored,
@@ -2729,6 +2825,12 @@ arg  = e:assignment -> Arg(value: $e) .
            : vname   = $name
            : means   = lookup($env, $vkey, lookup([[true, [0, 0, 0, 1, "", true, false, false, $vkey, "0", false, "b:1:0:1::{}" of $vkey]]],
                                                   defined($funcs, $vkey), [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4"]))
+           (* An enumeration constant's entry has its value as a thirteenth
+            * field, see `Enumerator`. *)
+           : econst  = size($means) > 12
+           : evalue  = at(flatten([$means, [0]]), 13)
+           : ev      = $evalue
+           : eok     = $econst
            : known   = $layouts
            : vreg    = at($means, 11)
            : vlv     = at($means, 12)
@@ -2995,7 +3097,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "") or $fnk <> ""
            : uns   = $vuns
            : quals = lookup([[true, "{}0" of $vquals]], slice($xlv, 1, 1) = "a", $vquals)
-           : lvalue = true .
+           : lvalue = not $econst .
   Addr     : xlv    = "p:8:0:8|{}" of $place.xlv
            : tag   = $place.tag
            : dec   = lookup([[true, "p:8:0:8|{}" of slice($xlv, size(at(split($xlv, "|"), 1)) + 2, size($xlv))]], slice($xlv, 1, 1) = "a", $xlv)
@@ -3007,7 +3109,9 @@ arg  = e:assignment -> Arg(value: $e) .
            : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "")
            : quals = "{}0" of $place.quals
            : uns   = $place.uns
-           ! not $place.lvalue
+           ! $place.econst
+               : "'&' wants somewhere a value is kept, and '{}' is an enumeration constant" of $place.name
+           ! not $place.lvalue and not $place.econst
                : "'&' wants somewhere a value is kept, and a member of an assignment or a call is a member of a value" .
   (* An array is not an lvalue, C11 6.3.2.1 again: it decays before anything
    * can be assigned to it, so there is nothing to assign to. Without this the
@@ -3037,7 +3141,11 @@ arg  = e:assignment -> Arg(value: $e) .
             * or a `*` of a pointer to one, C11 6.3.2.1p1. *)
            ! $place.fnk <> ""
                : "a function is not something a value can be put in, C11 6.3.2.1p1"
-           ! not $place.lvalue
+           (* **An enumeration constant is a value**, not somewhere one is
+            * kept, since ROADMAP 6.15's fourth part. *)
+           ! $place.econst
+               : "'{}' is an enumeration constant, and a constant is not something a value can be put in" of $place.name
+           ! not $place.lvalue and not $place.econst
                : "a member of an assignment or a call is a member of a value, and a value is not something another can be put in"
            ! $place.record and ($value.type <> 0 or $value.tag <> $place.tag)
                : "'struct {}' is assigned {}, and a struct takes only its own kind"
@@ -3824,7 +3932,11 @@ arg  = e:assignment -> Arg(value: $e) .
    * from libc as well as from this file. Only `anchored` says so: `rooted`
    * tells an address with an offset from none, and arithmetic on a
    * function is refused before that is asked. *)
-  Variable : anchored = $global and ($count > 0 or $fnk <> "")
+  (* An enumeration constant is worked out already, since ROADMAP 6.15's
+   * fourth part: its value is the `locals` pass's. *)
+  Variable : settled  = $econst
+           : folded   = $evalue
+           : anchored = $global and ($count > 0 or $fnk <> "")
            : sited  = $global
            : rooted = $global and $count > 0 .
   Addr     : anchored = $place.global : rooted = $place.sited .

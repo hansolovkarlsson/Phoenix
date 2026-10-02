@@ -545,9 +545,10 @@ first entry of the C11 arc. **So was the seventh,
 as C11 6.7.9 has them, opened on 2026-09-30 and closed on 2026-10-01**,
 the second. **So was the eighth,
 [6.14](COMPLETED.md#614-pointers-to-functions), pointers to functions,
-opened and closed on 2026-10-01**, the third. **Open:
-[6.15](#615-the-integer-types), the integer types**, the fourth, opened on
-2026-10-01.
+opened and closed on 2026-10-01**, the third. **So was the ninth,
+[6.15](COMPLETED.md#615-the-integer-types), the integer types, opened and
+closed on 2026-10-01**, the fourth. Nothing in the arc is open now; the
+next entry is chosen from the map below.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
@@ -615,7 +616,7 @@ the arc is going after this one.
 | --- | --- |
 | declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. *Function pointers since [6.14](COMPLETED.md#614-pointers-to-functions)*. Left: a function declared through a typedef of its type, `binop add;`, refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
 | initialisers, 6.7.9 | *all of it since [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them)*, but for what waits on other rows: a `union`'s, a wide string, an `enum` constant as a value. Refused by name: an array designator that is an expression and not a number written out; an object nested more than eight levels deep; a struct over 32767 bytes or 86 members, in an initialiser; a struct's compound literal initialising a global, which `cc` takes as an extension |
-| types, 6.2.5 | **`_Bool`** (113 uses in CPP), **`enum`** (7 types), **`union`**, **`long long`** (behind `uintmax_t`; the `LL` suffix is refused), `short`, `signed char` as its own type, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name) |
+| types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name), an enumerator's value from a character constant (refused by name), and an array's size from a constant expression, `int t[BLUE]` |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
 | lexical, 6.4 | **the escapes `\r` `\t` `\v` `\f`** in a character constant (CPP's `lexer.c` and `source.c` stop there), hex escapes, adjacent string literals joined, a `\0` inside a string, the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants |
@@ -638,7 +639,7 @@ initialiser in CPP's source still stops. They were the next entry,
 113 times, then `enum`, `union` and `long long`. Counted again on
 2026-10-01 in `~/Projects/Proem`, `lib/` and `driver/`: `bool` 143 times,
 `enum` 9, `long long` 4, and no `union`, `short` or floating point; the
-integer types are the next entry, [6.15](#615-the-integer-types).
+integer types were the next entry, [6.15](COMPLETED.md#615-the-integer-types), closed the same day.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
@@ -743,103 +744,3 @@ work; `.type` and `.size`, which the link does not need; and a third
 target. **The entry closes** when every program in the oracle agrees with
 clang under QEMU as it agrees with `cc` on the Mac, with none diverging on
 either.
-
-### 6.15 The integer types
-
-The fourth entry of the C11 arc, and the types row of the map, cut to
-what is integer: **`_Bool`, `enum`, `long long`, `short` and `signed
-char`**, the integer types of C11 6.2.5 the subset does not have. Proem's
-source writes `bool` 143 times, which `<stdbool.h>` makes `_Bool`, `enum`
-nine times and `long long` four, behind its file identities; `short` and
-`signed char` are what is left of C's integers and share the machinery.
-Floating point and `union` are entries of their own, and Proem needs
-neither. Today `short` and `_Bool` are refused by name as C11's and not
-the subset's, `long long` likewise, its `LL` suffix is a syntax error, and
-`enum` is read only after `enum` and a tag, to be refused.
-
-**Four programs show what breaks without it**, kept in
-`languages/c/tests/pending/` until the part that makes each agree moves it
-to the oracle. Each was compiled by `cc -std=c11 -pedantic -Wall` with no
-warning:
-
-| program | `cc` | Phoenix today |
-| --- | --- | --- |
-| `long-long.c`: `long long`, `long long int` and `unsigned long long`, the suffixes `LL`, `ll` and `ULL`, the largest `unsigned long long`, a `long long` parameter and return, Proem's `struct { unsigned long long dev, ino; }`, and `signed char` from 200, beside `unsigned char` | exits 177, prints three lines | stops at the `L` of `9000000000LL`, on line 5 |
-| `shorts.c`: `short` and `unsigned short` wrapping at sixteen bits, an array of `short` and a pointer stepping through it, a struct laid out with a `short` and an `unsigned short`, a `short` parameter and return, and a cast to `short` | exits 8, prints three lines | refuses `short` by name, on line 2 |
-| `bools.c`: `_Bool` from 256, from -3, from a pointer and from a cast, `b++`, an array of `_Bool` in braces, a struct of them, a function returning one from `x % 2`, and one tested in `&&` | exits 4, prints three lines | refuses `_Bool` by name, on line 2 |
-| `enums.c`: constants counted on from 0 and from a value written, one negative, one worked out from another, `LARGE = SMALL + 9`; an `enum` with a tag, a typedef of one with none, one in a block; constants as `case` labels, as indices and in an initialiser; an `enum` as a member and a parameter; and **its type**: an `enum` with no negative constant is `unsigned int` in this `cc` and one with a negative constant is `int`, which C11 6.7.2.2p4 leaves to the implementation, while the constants are always `int` | exits 9, prints three lines | stops at `{` after `enum color`, on line 2 |
-
-**Built in four parts, in this order**, each with the suite green:
-
-1. **`long long` and `signed char`**, each the width of a type already
-   here, `long` and `char`, and a type of its own in name: the words
-   counted as the types 6.7.2p2 lists, the suffixes `LL` and `ULL` in a
-   constant, with 6.4.4.1's table for them. `long-long.c` is the witness.
-   *Built on 2026-10-01*, with `long-long-more.c` beside it, and the two
-   refusals of `long long` since 6.9 and 6.12 moved to the oracle. **It
-   was smaller than planned**: `signed char` already counted to `char`'s
-   entry, and `long long` now counts to `long`'s, since the two are the
-   same eight bytes here in every way a type is asked about; the suffix
-   takes `ll` or `LL` before one `l`, and a constant's digits are its text
-   less as many letters as it has. Three breaks, all caught. Refused as
-   `cc` refuses it: `lL`, which is no suffix.
-2. **`short`**, two bytes, signed and not: a load that sign- or
-   zero-extends a half-word, a store of one, `.short` in data, the
-   `constants` pass wrapping at sixteen bits, and a struct's layout
-   aligning one at two. `shorts.c` is the witness.
-   *Built on 2026-10-01*, with `shorts-more.c` beside it, and `short`'s
-   refusal by name since 6.12 moved to the oracle. Every table the emit
-   pass picks an instruction from by width took a row for two: a load, a
-   store, the narrowing after a store, an initialiser, data and a cast;
-   and a function returning a `short` narrows it at `return`, as Apple's
-   arm64 has a callee do. **`tests/abi/` took `short` too**, both ways,
-   since only a caller or a callee `cc` compiled can tell which side
-   narrows: a callee here that did not was caught there, and a caller
-   here narrowing what a callee returned changed nothing, since `cc`'s
-   callee narrows, and was taken out. Of eleven breaks, eight were caught,
-   two once their witness was written; two have no witness and cannot,
-   noted where they are, and the third was that caller's narrowing.
-   Refused as `cc -pedantic-errors` refuses them: `short long` and `short
-   short`.
-3. **`_Bool`**, one byte, unsigned, and **0 or 1 whatever it is given**,
-   C11 6.3.1.2: every conversion into one, an assignment, an
-   initialiser, an argument, a `return`, a cast and an update, is a test
-   against zero and not a truncation, which is the part's question: each
-   of those places converts today by narrowing, and each must learn the
-   one conversion that does not. `bools.c` is the witness.
-   *Built on 2026-10-01*, with `bools-more.c` beside it, and `_Bool`'s
-   refusal by name since 6.12 moved to the oracle. **The question was
-   how a place knows it is a `_Bool`**, since its text was an `unsigned
-   char`'s: it is `b:1:0:1:::B` now, a seventh field no other type has,
-   and each of the nine places a value becomes one asks it and makes the
-   value 0 or 1 with a `cmp` and a `cset` before it is stored: an
-   assignment, an update, an initialiser alone and in braces, data, a
-   `static`'s, a cast, a `return`, and an argument. **An argument is
-   the caller's to convert**, as a callee `cc` compiled counts on, so
-   the flags a call reads of each parameter, which said whether it was a
-   `long`, say `l`, `b` or nothing now. `tests/abi/` took `_Bool` both
-   ways. A function returning a `_Bool` is not refused as one returning
-   a `char` is. Thirteen breaks, all caught, one once a `static` `_Bool`
-   initialised alone was written into the witness. Refused as `cc`
-   refuses it: `unsigned _Bool`.
-4. **`enum`**, C11 6.7.2.2: a tag and its constants as a specifier, as a
-   struct's are since 6.12, each constant an `int` the `constants` pass
-   works out, in the ordinary name space and the scope it is written in,
-   so a `case` label and an initialiser take one; and an `enum` object an
-   `unsigned int` or an `int` as this `cc` chooses. `enums.c` is the
-   witness.
-
-**What `cc` refuses, and so will this**, each checked with `cc -std=c11
--pedantic-errors` on 2026-10-01: an enumerator declared twice, or named
-as something else already is; one past an `int`'s range, which is C23's;
-an `enum` defined twice in one scope, and one declared without its list,
-which C11 does not forward-declare; an assignment to a constant, or `&`
-of one; one worked out from what is not a constant; `long long long`,
-`unsigned _Bool` and `short long`.
-
-*Not in this step:* an array's size worked out from a constant expression
-rather than written as a number, `int t[BLUE]`, which every declarator
-here reads as a number and which waits for an entry of its own; bit-fields;
-`union`; and floating point. **The entry closes** when the four programs
-agree with `cc`, none diverging, and every refusal above has its program
-in `refused/`.
