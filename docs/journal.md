@@ -6933,3 +6933,22 @@ linker cuts `__TEXT,__cstring` at each NUL and may share what follows one;
 the bytes after the NUL being some other literal's once linked. **6.16 closed with it**,
 its three witnesses agreeing and every refusal it listed held, and
 `pending/` is empty again. 649 → 656 checks.
+
+**Proem's source was run through the `check` driver, which no entry had
+done; each had been chosen by counting words in it.** Every file was put
+through `cc -E` and then `check`. With Apple's headers, none reached a line
+of Proem: `long double` in `<stddef.h>` and a `union` in Darwin's
+`__mbstate_t` come first, in every program that includes `<stdio.h>`. So
+the second run used stub headers declaring only what Proem uses, written
+in the subset, which `cc -pedantic` compiles Proem with cleanly, and with
+`va_start` left to a builtin the subset does not have, so that defining a
+variadic function shows rather than being stubbed away. Two files were
+accepted whole. The other eight stop at four things, and three of them
+were on the list already: `va_start`, a function returning `unsigned
+char`, and `?:` with `NULL`. **The fourth, and the commonest, had been
+written down and lost**: `T *p = calloc(n, sizeof *p)`, a name used in its
+own initialiser, which C11 6.2.1p7 allows and the `locals` pass refuses,
+because it binds a name at the end of its declaration and not its
+declarator. COMPLETED said so on 2026-09-23 and a refusal program held it
+as a refusal, and no list carried it after that day. A word count would
+not have found it, since nothing in it is a word the subset lacks.
