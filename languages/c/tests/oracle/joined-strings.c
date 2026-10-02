@@ -10,5 +10,6 @@ int main(void) {
     printf("%s %s %s %d\n", names[0], names[1], names[2],
            (int)sizeof("" ""));
     printf("%s" "%d\n", "x\\" "\"y", 7);
+    printf("%s %d\n", "q\"" "r", (int)sizeof "q\"" "r");
     return sizeof "Proem " "lexer";
 }

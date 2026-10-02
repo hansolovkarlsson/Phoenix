@@ -127,20 +127,22 @@ integer = ( "0" ( "x" | "X" ) hexdigit { hexdigit } | digit { digit } ) [ isuffi
  *
  * The lexer saying exactly this is what lets the `types` pass work out a
  * code without asking whether it can: anything that reaches it is one of the
- * ninety-five characters in its table, or one of six escapes. *)
+ * ninety-five characters in its table, or one of its escapes: six until
+ * ROADMAP 6.16's first part, and twelve since, with `\a \b \f \r \v \?`. *)
 escape    = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "0" | "a" | "b" | "f" | "r" | "v" | "?" ) .
 plain     = " " .. "&" | "(" .. "[" | "]" .. "~" .
 character = "'" ( escape | plain ) "'" .
 
 (* A string literal is the same characters between double quotes, where the
- * double quote needs an escape and the single one does not, and with **five**
- * escapes rather than six. `\0` is left out because a string is where it
+ * double quote needs an escape and the single one does not, and with every
+ * escape a character constant has but one. `\0` is left out because a string is where it
  * stops meaning what it seems to: C reads up to three octal digits after the
  * backslash, so `"\01"` is one byte and not a NUL and a `1`, and a lexer
  * that knew only `\0` would count two. It is refused rather than
  * miscounted, and arrives with the octal escapes. A character constant keeps
  * it, because the closing quote ends it there. Two literals side by side,
- * which C joins, are a syntax error here. *)
+ * which C joins, are two tokens, and the grammar joins them, since ROADMAP
+ * 6.16's second part. *)
 sescape = "\\" ( "n" | "t" | "\\" | "'" | "\"" | "a" | "b" | "f" | "r" | "v" | "?" ) .
 splain  = " " .. "!" | "#" .. "[" | "]" .. "~" .
 string  = "\"" { sescape | splain } "\"" .
@@ -218,7 +220,7 @@ item = b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } 
      (* **`_Static_assert`**, C11 6.7.10, since ROADMAP 6.12's second part:
       * a condition the `constants` pass works out, and a message it gives
       * when the condition is zero. It may be an item or a statement. *)
-     | "_Static_assert" "(" c:conditional "," m:string ")" ";" -> StaticAssert(cond: $c, message: $m, file: true)
+     | "_Static_assert" "(" c:conditional "," m:string ms:{ string } ")" ";" -> StaticAssert(cond: $c, message: $m, more: $ms, file: true)
      (* **A declaration of no names**, since ROADMAP 6.12's third part:
       * `struct s { ... };` defines a struct and `struct s;` declares one,
       * C11 6.7.2.3. Until then a definition was an item of its own, at file
@@ -788,7 +790,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
           | "continue" ";"                          -> Continue
           | ";"                                     -> Empty
           | block
-          | "_Static_assert" "(" c:conditional "," m:string ")" ";" -> StaticAssert(cond: $c, message: $m, file: false)
+          | "_Static_assert" "(" c:conditional "," m:string ms:{ string } ")" ";" -> StaticAssert(cond: $c, message: $m, more: $ms, file: false)
           | e:expression ";"                        -> Discard(value: $e) .
 
 (* C's expression grammar, all fifteen of its levels. `lib/expression.phx`
@@ -1013,7 +1015,7 @@ suffix    = p:primary "[" e:expression "]"
  * expression cannot. *)
 primary = integer -> Number(text: $1)
         | character -> Character(text: $1)
-        | string    -> String(text: $1)
+        | string { string } -> String(text: $1, more: $2)
         | name    -> Variable(name: $1, lit: [])
         | "_Generic" "(" assignment { "," ( typename | "default" ) ":" assignment } ")" -> Unsupported(word: "_Generic")
         | literal
@@ -2689,9 +2691,10 @@ arg  = e:assignment -> Arg(value: $e) .
   otherwise iszero = false
   otherwise slen   = 0
   String : strlit = true
-         : sbody  = slice($text, 2, size($text) - 1)
+         : swhole = join(flatten([[$text], $more]))
+         : sbody  = slice($swhole, 2, size($swhole) - 1)
          : ssingle = join(split($sbody, "\\\\"), "\t")
-         : slen   = size($ssingle) - (size(split($ssingle, "\\")) - 1) .
+         : slen   = size($ssingle) - (size(split($ssingle, "\\")) - 1) - 2 * (size(split($ssingle, "\"\"")) - 1) .
 
   (* **A global takes no frame**, and is bound in `globals` instead of
    * `env`, with the name its entry needs and nothing the frame counts. Its
@@ -3672,11 +3675,21 @@ arg  = e:assignment -> Arg(value: $e) .
    * same pairs the escapes are made of, because both read left to right and
    * nothing else in an escape is a backslash.
    *
+   * **Literals side by side are one**, C11 6.4.5p5, since ROADMAP 6.16's
+   * second part: the node holds the first and the rest, and its text is
+   * all of them written together, so that a join is `""` in the body, two
+   * characters and no byte. A `"` inside a literal is always escaped, so
+   * the only other quote a body has is the one in `\"`, which can stand
+   * just before a join, `\"""`; counting `""` from the left finds one
+   * pair in three quotes whichever two it takes, so it needs no setting
+   * aside.
+   *
    * `string-length-agrees.c` holds this against the bytes the assembler
    * wrote, counted by walking them. *)
-  String : body   = slice($text, 2, size($text) - 1)
+  String : joined = join(flatten([[$text], $more]))
+         : body   = slice($joined, 2, size($joined) - 1)
          : single = join(split($body, "\\\\"), "\t")
-         : length = size($single) - (size(split($single, "\\")) - 1)
+         : length = size($single) - (size(split($single, "\\")) - 1) - 2 * (size(split($single, "\"\"")) - 1)
          : type   = 1
          : width  = 1
          : size   = $length + 1 .
@@ -3960,7 +3973,8 @@ arg  = e:assignment -> Arg(value: $e) .
   StaticAssert ! not $cond.settled
                    : "'_Static_assert' has to be worked out before the program runs, C11 6.7.10p3, and this cannot be"
                ! $cond.settled and $cond.folded = 0
-                   : "static assertion failed: {}" of slice($message, 2, size($message) - 1) .
+                   : "static assertion failed: {}" of join(split(slice(join(flatten([[$message], $more])), 2,
+                                                                       size(join(flatten([[$message], $more]))) - 1), "\"\"")) .
 
   Number     : settled = true : folded = $bits .
   Character  : settled = true : folded = $code .

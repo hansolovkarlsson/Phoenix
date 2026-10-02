@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-02: C string literals side by side
+
+**Two string literals or more, side by side, are one**, the second part
+of [ROADMAP 6.16](ROADMAP.md#616-escapes-and-joined-strings), as C11
+6.4.5p5 has it: anywhere a string is, in an initialiser, under `sizeof`,
+and as a `_Static_assert`'s message. Proem writes most of its messages
+that way.
+
+**Tests:** 649 → 649. Four programs join the C oracle, one of them
+a refusal until now: 326 agree with `cc`, none diverges. Refusals: 409,
+one in and one out.
+
+---
+
 ## 2026-10-02: C escapes `\a` `\b` `\f` `\r` `\v` `\?`
 
 **The six simple escapes C has and the subset did not**, the first part

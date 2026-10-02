@@ -6880,3 +6880,17 @@ emit pass changed. `\v` and `\a` go to the assembler as `\013` and
 `\007`, and `\?` as a question mark; each rewrite is made with the
 escaped backslashes set aside, as `\'`'s is, or `"\\v"` would become a
 backslash and a vertical tab. Four breaks, all caught.
+
+**Part 2 joined literals side by side**, which the grammar does now,
+`string { string }`, with the node's text all of them written together
+and `""` where they meet: two characters, no byte. The emit pass writes
+each piece as a string of its own in one `.ascii`, with the NUL after
+the last, because `"\1" "2"` run together is `\12`, one byte where C
+has two. **One step I wrote was not needed, and a break showed it**:
+setting `\"` aside before counting the `""`, for the case `"q\"" "r"`.
+Three quotes in a row hold exactly one pair whichever two are taken, so
+the count is right either way; the emit pass does need it, because there
+which two are taken decides where the text is cut. `_Static_assert` took
+a joined message as well, since `cc` does and the parse stopped on one.
+Six breaks, four caught, one a step removed, and one that needs part 3's
+witness.

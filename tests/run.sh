@@ -1878,14 +1878,12 @@ refuses "two characters in one" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-two-characters.c"
 refuses "and a tab typed between the quotes" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-a-tab.c"
-# A string literal takes five of those escapes and not `\0`, because C reads
-# up to three octal digits after it and a lexer that knew only `\0` would
-# miscount `"\01"`. Two literals side by side, which C joins, reach the parser
-# as two strings and are a syntax error at the second. `cc` compiles both.
+# A string literal takes the character constant's escapes but `\0`, because C
+# reads up to three octal digits after it and a lexer that knew only `\0`
+# would miscount `"\01"`. `cc` compiles it. Two literals side by side are
+# joined since ROADMAP 6.16's second part, and that program is in the oracle.
 refuses "a NUL written into a string" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/string-with-a-nul.c"
-refuses "and two strings side by side" 'and found ""b""' \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/string-concatenated.c"
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the
@@ -2573,6 +2571,8 @@ refuses "a static assertion that fails" "static assertion failed: int is eight b
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-fails.c"
 refuses "and one in a block" "static assertion failed: zero" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-fails-in-a-block.c"
+refuses "and one whose message is two strings joined" "static assertion failed: one two" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-fails-joined.c"
 refuses "a static assertion of a variable" "'_Static_assert' has to be worked out before the program runs, C11 6.7.10p3, and this cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-assert-not-constant.c"
 refuses "a 'for' declaring a static" "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" \

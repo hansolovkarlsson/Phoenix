@@ -795,6 +795,17 @@ warning:
    length the sum of theirs, and each piece written as an `.ascii` of
    its own, so that the text of two never runs together into an escape
    neither had. `joined-strings.c` is the witness.
+   *Built on 2026-10-02*: `string { string }` in the grammar, the node
+   holding the first literal and the rest, and the length less two for
+   each `""` where two meet. The emit pass sets `\"` aside before it
+   finds the joins, which the length does not need, since three quotes
+   in a row hold one pair whichever two are taken. `_Static_assert` takes
+   a joined message too, as `cc` does, and gives it back joined when it
+   fails. Two strings side by side, refused since 2026-09-22, moved to
+   the oracle. Six breaks, four caught; a fifth showed a step the length
+   did not need, which is gone. The sixth, the pieces written as one
+   text, needs a numeric escape to show, and `numeric-escapes.c` holds it
+   once part 3 is in.
 3. **Octal and hex escapes.** A character constant's code is `int` of
    its digits in base 8 or 16, less 256 above 127, since `char` is
    signed here, C11 6.4.4.4p13. A string's length is the question: every
