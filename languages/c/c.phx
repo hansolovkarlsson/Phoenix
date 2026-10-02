@@ -1430,6 +1430,10 @@ arg  = e:assignment -> Arg(value: $e) .
   thread env   = empty
   thread scope = empty
   thread bytes = 0
+  (* The name a declaration is initialising, while its initialiser is
+   * walked, where the declaration cannot bind it first, since the probe of
+   * Proem's source on 2026-10-02: see `LocalInit`. *)
+  thread ownname = ""
 
   (* Which register a parameter arrives in is its **position**, which a byte
    * offset no longer says. It said it while every declaration was one slot
@@ -2166,11 +2170,25 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is 'static' and was read as a local that is not: a fault in c.phx, and not in the program" of $name
             ! $base.sext and defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 10)] <> [$stars + $base.ptrs, 0, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                 : "'{}' is declared again with another type, C11 6.7p4" of $name .
-  (* **The name is bound on the way out**, after its initialiser has been
-   * walked, so `int x = sizeof(x);` finds no `x` and is refused. C11 6.2.1p7
-   * starts the scope at the end of the declarator, before the `=`, and `cc`
-   * answers 4. A refusal and not a wrong answer, and so left; the parse gets
-   * this right for a typedef hidden by its own local, see `%names`.
+  (* **The name is in scope in its own initialiser**, C11 6.2.1p7, which
+   * starts the scope at the end of the declarator, before the `=`: `int x =
+   * sizeof(x);` is 4, and `T *p = calloc(n, sizeof *p)` is how Proem writes
+   * an allocation, thirteen times. Until the probe of Proem's source on
+   * 2026-10-02 the name was bound on the way out only, after the
+   * initialiser, and refused as undeclared.
+   *
+   * So it is bound **on the way in** too, which needs everything its entry
+   * holds before the children are walked. Without parentheses in the
+   * declarator the type text is the stars and the base, which the
+   * specifiers, a sibling walked already, give; with them it is the
+   * `Paren` children's, worked out on the way out, and that one form is
+   * refused by name through `ownname`, which the initialiser's `Variable`
+   * reads. The slot is claimed on the way in as well, the frame thread set
+   * past it for the initialiser, because an initialiser can take frame
+   * bytes of its own, a compound literal, and the early and the late entry
+   * have to name the same slot. `own-initialiser.c` takes the address of
+   * its own name beside a compound literal. The parse gets the typedef
+   * case right on its own, see `%names`.
    *
    * A declaration with an initialiser is never an array: the subset has no
    * way to write the initialiser one would want. It may be a struct, since
@@ -2181,6 +2199,16 @@ arg  = e:assignment -> Arg(value: $e) .
             : down inparen = false
             : down pP      = ""
             : down pouter  = $dims
+            : down early   = size($paren) = 0
+            : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+            : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
+            : down etakes  = ((int(at(split(at(split($elv, "|"), 1), ":"), 2)) + 7) div 8) * 8
+            : down obytes  = $bytes
+            : down heldown = $ownname
+            : down ownname = lookup([[true, $ownname]], $early, $name)
+            : down bytes   = lookup([[true, $bytes + $etakes]], $early, $bytes)
+            : down env     = lookup([[true, bind($env, $name, [$obytes + $etakes, $eptrs, 0, $base.basew, $base.tagname, false, false, $base.buns, "", ("{}{}" of $base.bquals, $squals), $base.sreg, $elv])]],
+                                    $early, $env)
             : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
                               size($paren), join($paren.t))
             : lv     = $lvin
@@ -2188,10 +2216,11 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((int(at(split(at(split($lv, "|"), 1), ":"), 2)) + 7) div 8) * 8
-            : offset = $bytes + $takes
+            : offset = lookup([[true, $obytes + $takes]], $early, $bytes + $takes)
             : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])
             : scope  = bind($scope, $name, true)
-            : bytes  = $bytes + $takes
+            : bytes  = lookup([[true, $bytes]], $early, $bytes + $takes)
+            : ownname = $heldown
             ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
             ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
@@ -2317,6 +2346,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * `constants` pass because it is not worked out before the program runs,
    * as `cc` refuses it. The name is bound on the way out, as a local's is. *)
   StaticInit  : down dbase   = $base
+              : down heldown = $ownname
+              : down ownname = $name
+              : ownname = $heldown
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2347,6 +2379,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * worked out until they have been walked, after this node is entered. An
    * array of no stated size has as many elements as the walk reached. *)
   LocalAgg    : down abase    = $base
+              : down heldown = $ownname
+              : down ownname = $name
+              : ownname = $heldown
               : down astars   = $stars
               : down adims    = $dims
               : down aparen   = $paren
@@ -2450,6 +2485,9 @@ arg  = e:assignment -> Arg(value: $e) .
               ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
                   : "a compound literal is of 'struct {}', which is not complete here, C11 6.5.2.5p1" of at(split($base.tagname, "."), 1) .
   StaticAgg   : down abase    = $base
+              : down heldown = $ownname
+              : down ownname = $name
+              : ownname = $heldown
               : down astars   = $stars
               : down adims    = $dims
               : down aparen   = $paren
@@ -2498,6 +2536,9 @@ arg  = e:assignment -> Arg(value: $e) .
                   : "'{}' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" of $name
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
   GlobalAgg   : down env = $globals
+              : down heldown = $ownname
+              : down ownname = $name
+              : ownname = $heldown
               : down abase    = $base
               : down astars   = $stars
               : down adims    = $dims
@@ -2803,6 +2844,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * globals above it: `int b = a;` finds `a`, and is refused because it is
    * not constant, as `cc` refuses it, rather than as undeclared. *)
   GlobalInit  : down env = $globals
+              : down heldown = $ownname
+              : down ownname = $name
+              : ownname = $heldown
               : down dbase   = $base
               : down dstars  = $stars
               : down inparen = false
@@ -2872,7 +2916,9 @@ arg  = e:assignment -> Arg(value: $e) .
            : count   = at($means, 3)
            : basew   = at($means, 4)
            : tagname = at($means, 5)
-           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name)
+           ! not defined($env, $name) and size($lit) = 0 and $name = $ownname
+               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet but in a local with no parentheses in its declarator and no braces or 'static'" of $name
+           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name) and not (size($lit) = 0 and $name = $ownname)
                : lookup([[true, "'{}' is called before it is declared"]], $callpos, "'{}' is not declared") of $name .
 
   (* A member cannot be looked up here, because which struct it is in is the

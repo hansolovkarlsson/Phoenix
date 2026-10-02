@@ -616,7 +616,7 @@ the arc is going after this one.
 
 | | what the subset lacks |
 | --- | --- |
-| declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. *Function pointers since [6.14](COMPLETED.md#614-pointers-to-functions)*. Left: **a name in scope in its own initialiser**, C11 6.2.1p7, refused as undeclared, which Proem writes thirteen times as `T *p = calloc(n, sizeof *p)`; a function declared through a typedef of its type, `binop add;`, refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
+| declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. *Function pointers since [6.14](COMPLETED.md#614-pointers-to-functions)*. Left: *a name in scope in its own initialiser, C11 6.2.1p7, in a plain local since 2026-10-02*, and refused by name in braces, in a `static` or a global, and in a declarator in parentheses; a function declared through a typedef of its type, `binop add;`, refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
 | initialisers, 6.7.9 | *all of it since [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them)*, but for what waits on other rows: a `union`'s and a wide string; an `enum` constant as a value came with [6.15](COMPLETED.md#615-the-integer-types). Refused by name: an array designator that is an expression and not a number written out; an object nested more than eight levels deep; a struct over 32767 bytes or 86 members, in an initialiser; a struct's compound literal initialising a global, which `cc` takes as an extension |
 | types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name), an enumerator's value from a character constant (refused by name), and an array's size from a constant expression, `int t[BLUE]` |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
@@ -668,8 +668,9 @@ The first is a defect and not a missing feature: C11 6.2.1p7 puts a name
 in scope from the end of its declarator, and the `locals` pass binds it at
 the end of the declaration. [COMPLETED](COMPLETED.md) has said so since
 2026-09-23 and `refused/local-in-its-own-initialiser.c` holds it, but it
-was on no list here until the probe found it the commonest stop. It is
-fixed first. A probe finds only the first stop in each file, so what is
+was on no list here until the probe found it the commonest stop. It was
+fixed the same day, for a plain local, which is every case Proem writes;
+the other forms are refused by name. A probe finds only the first stop in each file, so what is
 behind each is found when it is lifted.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,

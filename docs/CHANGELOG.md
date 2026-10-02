@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-02: C names in their own initialisers
+
+**A local's name may be used in its own initialiser**, as C11 6.2.1p7
+has it: `struct node *n = malloc(sizeof *n);`, `int x = sizeof(x);`, and
+the address of the name itself. It had been refused as undeclared since
+the subset began, and it is how Proem writes every allocation. Found by
+running Proem's source through Phoenix, which no earlier change had done.
+
+Refused by name, though `cc` compiles them: the same in an initialiser in
+braces, in a `static` local or a global, and where the declarator has
+parentheses.
+
+**Tests:** 656 → 659. Five refusals, two of the old ones gone to the
+oracle. Three programs join the C oracle: 333 agree with `cc`, none
+diverges. Refusals: 419.
+
+---
+
 ## 2026-10-02: C octal and hex escapes, and escapes closed
 
 **Octal and hex escapes work**, the third and last part of [ROADMAP

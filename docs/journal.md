@@ -6952,3 +6952,28 @@ because it binds a name at the end of its declaration and not its
 declarator. COMPLETED said so on 2026-09-23 and a refusal program held it
 as a refusal, and no list carried it after that day. A word count would
 not have found it, since nothing in it is a word the subset lacks.
+
+**The own-initialiser fix was a question of what is known on the way in.**
+The `locals` pass bound a name on leaving its declaration, after the
+initialiser, because the entry it binds holds the type text, and the type
+text of a declarator in parentheses is worked out by its `Paren` children
+on their way out. Without parentheses it is the stars and the base, and
+the base is the specifiers', a sibling walked already, so a plain local
+can bind on the way in; a `down` on the `env` thread is what sets it for
+the initialiser. **The slot has to be claimed on the way in too**, which
+the first sketch missed: an initialiser can take frame bytes of its own,
+a compound literal, so the late entry's offset would have moved past them
+and named a different slot from the early one. The frame thread is set
+past the variable before the initialiser is walked, and the witness takes
+the variable's address inside its own initialiser beside a compound
+literal and compares it after. Every other form, braces, `static`, a
+global and parentheses, sets a thread naming the declaration, and a
+`Variable` that finds no entry under that name is refused by name rather
+than as undeclared, which would be false. Five breaks: four caught. The
+fifth, a wrong star count in the early entry, has no witness a defined
+program can give: the count is read only to ask whether a value is a
+struct, and the one program that reaches it reads an uninitialised local.
+**One full run failed in the Solveig leg**, on two programs printing
+nothing, with Solveig untouched since 2026-09-18; the leg run alone agreed
+on all 82, and the cause was not found. The next full run is what the
+count stands on. 656 → 659 checks.

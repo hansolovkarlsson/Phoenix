@@ -2023,17 +2023,29 @@ refuses "a typedef twice, for two types" "'T' is a typedef twice, for two differ
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-twice-differently.c"
 refuses "a typedef used as a value" "'T' is not declared" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-used-as-a-value.c"
-# A local is in scope from the end of its declaration here, and from the end
-# of its declarator in C11 6.2.1p7, so `int x = sizeof(x);` is refused where
-# `cc` answers 4. That was so before `typedef`, and is written down now
-# because `typedef` gave it a second form: `int T = sizeof(T);` with `T` a
-# typedef of `char`. The parse reads the second `T` as the variable, because
-# `%names` binds at the name, and the pass refuses it as the first. Before the
-# binding moved to the name it compiled, and answered 1 where `cc` says 4.
-refuses "a local in its own initialiser" "'x' is not declared" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/local-in-its-own-initialiser.c"
-refuses "and a typedef hidden in its hider's initialiser" "'T' is not declared" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-hidden-in-its-own-initialiser.c"
+# A local is in scope from the end of its declarator, C11 6.2.1p7, so `int x =
+# sizeof(x);` is 4, and `int T = sizeof(T);` with `T` a typedef of `char` is 4
+# too, the parse reading the second `T` as the variable since `%names` binds
+# at the name. Both were refused until the probe of Proem's source on
+# 2026-10-02 found `T *p = calloc(n, sizeof *p)` its commonest stop, and both
+# are in the oracle. The `locals` pass binds the name before its initialiser
+# only in a plain local, and the other forms are refused by name, each of which
+# `cc` compiles: a declarator in parentheses, braces, `static`, a global.
+refuses "a name in its own initialiser, where the declarator has parentheses" \
+        "'f' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-in-parentheses.c"
+refuses "and an array's, in braces" \
+        "'a' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-array-in-braces.c"
+refuses "and a struct's, in braces" \
+        "'x' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-struct-in-braces.c"
+refuses "and a 'static' local's" \
+        "'n' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-static.c"
+refuses "and a global's" \
+        "'g' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-global.c"
 # **A struct returned**, since 2026-09-23. A `return` is a copy into what the
 # function returns, so it takes the assignment's rule: its own kind of struct,
 # and no struct where the function returns an `int`. A struct a call gives back
