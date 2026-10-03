@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-03: C functions returning a `char`
+
+**A function may return a `char`**, `signed char` or `unsigned char`,
+narrowed at `return` as a `short` is, so `char f(int x) { return x; }`
+gives back the low eight bits, sign- or zero-extended as Apple's arm64
+has a callee do. It had been refused by name since functions came in. It
+was the first stop in Proem's `lexer.c`, which now gets 364 lines further
+and stops at a `?:` with a `void *` on one side.
+
+**Tests:** 664 → 663. One refusal gone to the oracle. Two programs join
+the C oracle: 337 agree with `cc`, none diverges. Refusals: 423. The ABI
+test returns a `char` and an `unsigned char` across `cc` both ways.
+
+---
+
 ## 2026-10-03: C `?:` with a null pointer constant
 
 **A pointer and a null pointer constant may be the two arms of `?:`**,

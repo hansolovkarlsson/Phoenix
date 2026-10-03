@@ -440,7 +440,8 @@ fn-suffix = "(" "void" ")" -> Sig(params: [], variadic: 0)
  * reason, and a base is the one node that already answers what a struct is.
  * The stars arrived on 2026-09-25, ROADMAP 6.2, and until then `int *f()` was
  * a syntax error and a typedef of a pointer was the only way to write one.
- * `char f()` parses too, and the `locals` pass refuses it by name.
+ * `char f()` parses too, and is returned narrowed, as a `short` is, since
+ * 2026-10-03; the `locals` pass refused it by name until then.
  *
  * `item` tries this alternative first, and a struct's definition fails it at
  * the `{` after the tag, where a function's name was wanted, and moves on.
@@ -1930,9 +1931,6 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
-            ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
-                and at(split(("{}:::::::" of at(split($ret.blv, "|"), 1)), ":"), 7) <> "B"
-                : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
                     of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .
@@ -1975,9 +1973,6 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is declared twice, returning a different type each time" of $name
             ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
-            ! $stars + $ret.ptrs = 0 and $ret.tagname = "" and $ret.basew = 1
-                and at(split(("{}:::::::" of at(split($ret.blv, "|"), 1)), ":"), 7) <> "B"
-                : "'{}' returns a char, and a function here returns an int, a long, a struct or a pointer" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
                     of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .

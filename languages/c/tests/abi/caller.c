@@ -23,6 +23,8 @@ int takeshort(short x);
 int takeushort(unsigned short x);
 int takebool(_Bool b);
 _Bool mkbool(int x);
+char cnarrow(int x);
+unsigned char ucnarrow(int x);
 int ldigits(long n) { if (n >= 10) ldigits(n / 10); putchar('0' + n - (n / 10) * 10); return 0; }
 int lprint(long n) { if (n < 0) { putchar('-'); n = 0 - n; } ldigits(n); putchar(' '); return 0; }
 int digits(int n) { if (n >= 10) digits(n / 10); putchar('0' + n - (n / 10) * 10); return 0; }
@@ -45,5 +47,6 @@ int main() {
     i = 20000; print(sdouble(i)); print(sdouble(i) + 1); print(udouble(i * 2)); print(udouble(i * 2) + 1);
     i = 70000; print(takeshort(i)); print(takeushort(i)); print(takeshort(-i)); print(takeushort(-1)); putchar(10);
     i = 256; print(takebool(i)); print(takebool(0)); print(mkbool(i)); print(mkbool(i) + 1); print(mkbool(0)); putchar(10);
+    i = 200; print(cnarrow(i)); print(cnarrow(i) + 1); print(ucnarrow(i + 100)); print(ucnarrow(-1) + 1); print(cnarrow(-i) < 0); putchar(10);
     return 0;
 }

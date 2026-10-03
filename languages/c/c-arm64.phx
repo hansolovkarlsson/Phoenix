@@ -977,7 +977,7 @@
                      of $value.out, ($copy of $retsize, $n, "x0", "x1", $n)
          : large = "{}{}\tldr x1, {}\n{}"
                      of $value.out, lookup([[true, ""]], $x8slot <= 255, "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $x8slot), lookup([[true, "[x29, #-{}]" of $x8slot]], $x8slot <= 255, "[x16]"), ($copy of $retsize, $n, "x0", "x1", $n)
-         : scalar = "{}{}{}{}" of $value.out, $retshort, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], $retbool, ""),
+         : scalar = "{}{}{}{}" of $value.out, $retnarrow, lookup([[true, "\tcmp x0, #0\n\tcset w0, ne\n"]], $retbool, ""),
                       lookup([[true, "\tsxtw x0, w0\n"]],
                              $retlong and $value.type = 0 and not $value.wide and not $value.uns,
                              lookup([[true, "\tmov w0, w0\n"]],
@@ -1018,10 +1018,14 @@
             * part: its sixteen bits sign- or zero-extended into `w0`, as
             * Apple's arm64 has a callee do, and as `tests/abi/` holds against
             * a caller `cc` compiled, which reads `w0` as it is. A callee `cc`
-            * compiled does the same, so a caller here does nothing more. *)
+            * compiled does the same, so a caller here does nothing more. **A
+            * `char` the same way**, since 2026-10-03, its eight bits; a
+            * `_Bool` is a byte too, and is made 0 or 1 by `retbool` instead,
+            * since narrowing first would make 256 false. *)
            : down retbool   = (at(split(("{}:::::::" of at(split($rlv, "|"), 1)), ":"), 7) = "B")
-           : down retshort  = lookup([[true, lookup([[true, "\tuxth w0, w0\n"]], $ret.buns, "\tsxth w0, w0\n")]],
-                                     $rptrs = 0 and $ret.tagname = "" and $ret.basew = 2, "")
+           : down retnarrow = lookup([[2, lookup([[true, "\tuxth w0, w0\n"]], $ret.buns, "\tsxth w0, w0\n")],
+                                      [1, lookup([[true, ""]], $retbool, lookup([[true, "\tand w0, w0, #255\n"]], $ret.buns, "\tsxtb w0, w0\n"))]],
+                                     lookup([[true, $ret.basew]], $rptrs = 0 and $ret.tagname = "", 0), "")
            : down x8slot    = $frame + 8
            : down temps     = lookup([[true, 16]], $retsize > 16, 0)
            : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)

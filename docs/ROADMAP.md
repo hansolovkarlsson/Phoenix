@@ -618,11 +618,11 @@ the arc is going after this one.
 | --- | --- |
 | declarations, 6.7 | *most of it since [6.12](COMPLETED.md#612-declarations-as-c11-67-has-them)*. *Function pointers since [6.14](COMPLETED.md#614-pointers-to-functions)*. Left: *a name in scope in its own initialiser, C11 6.2.1p7, in a plain local since 2026-10-02*, and refused by name in braces, in a `static` or a global, and in a declarator in parentheses; a function declared through a typedef of its type, `binop add;`, refused by name; parentheses more than one deep in a declarator; a function declarator in a list, `int x, f(void);`; an identifier-list definition whose declarations are in another order or name two at once; a struct passed whole to a prototype written before it is complete; a global of a struct completed later in the file |
 | initialisers, 6.7.9 | *all of it since [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them)*, but for what waits on other rows: a `union`'s and a wide string; an `enum` constant as a value came with [6.15](COMPLETED.md#615-the-integer-types). Refused by name: an array designator that is an expression and not a number written out; an object nested more than eight levels deep; a struct over 32767 bytes or 86 members, in an initialiser; a struct's compound literal initialising a global, which `cc` takes as an extension |
-| types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, a function returning a `char` (refused by name), an enumerator's value from a character constant (refused by name), and an array's size from a constant expression, `int t[BLUE]` |
+| types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, an enumerator's value from a character constant (refused by name), and an array's size from a constant expression, `int t[BLUE]` |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
 | lexical, 6.4 | *the escapes, octal and hex escapes and joined strings since [6.16](COMPLETED.md#616-escapes-and-joined-strings)*. Left: the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants, a character constant of more than one character; refused by name, a hex escape of more than two digits whose others are zeros |
-| expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
+| expressions | `_Generic`; **`?:` with a `void *` beside a pointer to an object**, which C11 6.5.15p6 makes a `void *` and which is refused here as two types, the stop in Proem's `lexer.c` since 2026-10-03; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
 **The declarations row came first**, because most of the rest is written
@@ -686,6 +686,11 @@ third run, with the stubs written again, accepts `output.c` and
 `source.c` whole: **seven of the ten**. Nothing was behind it in either.
 `expr.c` and `pp.c` stop at `va_list`, the typedef a variadic definition
 declares before its `va_start`, and `lexer.c` at the `char` return.
+**The `char` return was lifted the same day**, and `lexer.c` stops 364
+lines further on, at `len <= sizeof small ? small : malloc(len)`: **`?:`
+with a pointer to an object on one side and a `void *` on the other**,
+which C11 6.5.15p6 makes a `void *`, and which is refused here as
+pointers to two different types.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its

@@ -23,3 +23,5 @@ int takeshort(short x) { return x; }
 int takeushort(unsigned short x) { return x; }
 int takebool(_Bool b) { return b * 10; }
 _Bool mkbool(int x) { return x; }
+char cnarrow(int x) { return x; }
+unsigned char ucnarrow(int x) { return x; }

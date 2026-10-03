@@ -7030,3 +7030,25 @@ before this change stops both at the `?:`. Seven of the ten are accepted.
 `expr.c` and `pp.c` now show their stop as `__builtin_va_list` in a
 typedef, which is the same missing feature reached one line earlier than
 `va_start`. 659 → 664 checks.
+
+**A function returning a `char` was refused only because nothing narrowed
+it, and `short` had since built the narrowing.** The refusal dates from
+when a `char` result would have come back in a register with whatever
+the callee's arithmetic left above its low byte. ROADMAP 6.15's second
+part made a `short` return sign- or zero-extend `w0` before the jump to
+the epilogue, as Apple's arm64 has a callee do, and the `char` row of
+that table is one more entry: `sxtb`, or `and #255` for an unsigned
+one. The one care is `_Bool`, also a byte, which `retbool` makes 0 or 1;
+narrowing first would turn 256 into false, so a `_Bool` is left to it.
+Five breaks: four caught, by `return-a-char.c` and by the ABI test, which
+now returns both kinds of `char` across `cc` both ways. The fifth, letting
+a struct of one byte reach the narrowing, changes nothing a program can
+see: a struct returns through its own path and never reads it.
+
+**The probe of `lexer.c` goes 364 lines further and stops at `?:`
+again**, `len <= sizeof small ? small : malloc(len)`: an array of `char`
+beside the `void *` that `malloc` returns. C11 6.5.15p6 makes the answer
+a `void *`, and this subset refuses two kinds of pointer by name. It is
+not a null pointer constant, so the morning's change does not reach it.
+It goes on ROADMAP's expressions row as the next stop. 664 → 663 checks,
+one refusal having left.
