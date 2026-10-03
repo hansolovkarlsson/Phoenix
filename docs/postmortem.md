@@ -1724,7 +1724,17 @@ behind each is found when it is lifted"* (ROADMAP, 2026-10-02). Behind
 `?:` with `NULL` in `output.c` and `source.c` there was nothing: both are
 accepted whole. Behind the `char` return in `lexer.c` there was another
 `?:`, a `void *` beside a `char` array, 364 lines on. The line said only
-that something might be there, and that is all it could say.
+that something might be there, and that is all it could say. Behind that
+`?:`, lifted after the first closeout, there was nothing: `lexer.c` is
+accepted whole, eight files of ten.
+
+*Held: the two uncaught breaks "may be breaks no program can see"*
+(journal, the first closeout of 2026-10-03). They were: a function never
+has a `void` tag, and the answer of a refused `?:` is read by nothing, so
+each guard was taken out rather than given a witness. The same journal
+paragraph's other belief, that the `const void *` witness "has to be
+rewritten", failed: it still told the two cases apart, and only its
+message moved.
 
 > A refusal's reason is a claim about the rest of the compiler. When the
 > compiler changes, the reasons written against it are the first thing
