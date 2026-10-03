@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-03: C `?:` with a `void *` beside another pointer
+
+**A `void *` and a pointer to an object may be the two arms of `?:`**,
+either way round, and the answer is a `void *`, as C11 6.5.15p6 has it:
+`len <= sizeof small ? small : malloc(len)`. It had been refused as two
+kinds of pointer. It was the next stop in Proem's `lexer.c`, which is now
+accepted whole: eight of its ten files are.
+
+Refused, which `cc` only warns about: a `void *` beside a function or a
+pointer to one, and a `void **`, which is no `void *`, beside another
+pointer. A program reading through such an answer, `*(c ? p : v)`, is
+refused because a `void *` has nothing to read, as `cc` refuses it.
+
+**Tests:** 663 → 669. Six refusals. One program joins the C oracle: 338
+agree with `cc`, none diverges. Refusals: 429.
+
+---
+
 ## 2026-10-03: C functions returning a `char`
 
 **A function may return a `char`**, `signed char` or `unsigned char`,

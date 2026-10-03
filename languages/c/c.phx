@@ -3151,6 +3151,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * made of them. *)
   otherwise xlv = "{}b:{}:0:{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $type, ""), $width, $width
 
+  (* **Whether it is a function or a pointer to one**, `fptr`, as the
+   * initialiser's check below asks it of a value's text, and **whether it is
+   * a `void *`**, `vptr`, since 2026-10-03, for `?:`. A function and a
+   * pointer to one have no `void` tag whatever they return, see `Variable`,
+   * so `vptr` needs no `not $fptr`: written in, it changed nothing a program
+   * could show, with a function returning `void` on either side. *)
+  otherwise fptr = $fnk <> "" or (slice($xlv, 1, 1) = "p" and at(split(("{}::::::" of at(split(("{}||" of $xlv), "|"), 2)), ":"), 6) <> "")
+  otherwise vptr = $type = 1 and $tag = "void"
+
   (* **A name that is an array decays**, C11 6.3.2.1: in an expression it is a
    * pointer to its first element, so its `type` has one more star than it was
    * declared with. Its `size` does **not** decay, because `sizeof` is one of
@@ -3510,14 +3519,23 @@ arg  = e:assignment -> Arg(value: $e) .
    * C11 6.5.15p6, since 2026-10-03, whichever side each is on: `useo` says
    * the answer is the second arm's, when it is a pointer and the first is
    * a number or a 0 cast to `void *`. A number that is no null pointer
-   * constant beside a pointer is refused, which `cc` only warns about. What
-   * `cc` also takes and this does not: pointers to two types, which `cc`
-   * only warns about too and which has no one type to be. *)
+   * constant beside a pointer is refused, which `cc` only warns about.
+   * **A `void *` beside a pointer to an object is a `void *`**, the same
+   * paragraph, since 2026-10-03, and `useo` picks the second arm when it is
+   * the `void *`; `vptr` says an arm is one, and `fptr` that an arm is a
+   * function or a pointer to one, which C11 6.5.15p3 does not put beside a
+   * `void *` and which is refused below. `useo` does not ask `fptr`, since
+   * the answer of a refused `?:` is read by nothing. The answer's `const` is
+   * the `void *`'s own, not the two pointees' together as C has it: nothing
+   * here can tell, since a `void *` is not written through and a qualifier
+   * dropped at an assignment is not refused. What `cc` also takes and this
+   * does not: pointers to two other types, which `cc` only warns about too
+   * and which has no one type to be. *)
   (* An array arm decays, so the text says what `type` says. *The decay has
    * no witness, and cannot have one yet*: a `*` of the answer drops the
    * array's level whether it decayed or not, and nothing else here reads a
    * `?:`'s text. Left out, the oracle and every refusal stayed green. *)
-  Choose  : useo   = $other.type > 0 and ($then.type = 0 or $then.npc)
+  Choose  : useo   = $other.type > 0 and ($then.type = 0 or $then.npc or ($other.vptr and not $other.npc))
           : axlv   = lookup([[true, $other.xlv]], $useo, $then.xlv)
           : xlv    = lookup([[true, "p:8:0:8|{}" of $axlv]], lookup([[true, $other.fnk]], $useo, $then.fnk) <> "", lookup([[true, "p:8:0:8|{}" of slice($axlv, size(at(split($axlv, "|"), 1)) + 2, size($axlv))]], slice($axlv, 1, 1) = "a", $axlv))
           : type  = lookup([[true, $other.type]], $useo, $then.type)
@@ -3538,6 +3556,7 @@ arg  = e:assignment -> Arg(value: $e) .
           ! ($then.type > 0) <> ($other.type > 0) and not lookup([[0, $then.npc]], $then.type, $other.npc)
               : "'?:' has a pointer on one side and a number on the other, and only a null pointer constant, C11 6.3.2.3p3, goes beside a pointer"
           ! $then.type > 0 and $other.type > 0 and not $then.npc and not $other.npc
+              and not ($then.vptr and not $other.fptr) and not ($other.vptr and not $then.fptr)
               and ($then.type <> $other.type or $then.width <> $other.width or $then.tag <> $other.tag)
               : "'?:' has pointers to two different types" .
 

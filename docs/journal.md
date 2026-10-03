@@ -7087,3 +7087,24 @@ the first thing to settle tomorrow. The full suite also shows that
 types: a `const void *` beside an `int *` is now a `void *` answer, as C
 has it, and the program stops at the `*` of it instead, so that witness
 has to be rewritten, not its message moved.
+
+**The `void *` case was finished after the closeout**, in a session that
+began from a crash, with the work still in the tree as the standup had
+left it. The two breaks that no witness caught turned out to be guards no
+program can reach, and were taken out rather than kept. `vptr` had asked
+`not $fptr`, and a function or a pointer to one never has a `void` tag
+whatever it returns, so the guard repeated what the tag already says:
+written in or out, a `void` function and a pointer to one were refused on
+either side alike. `useo` had asked that the first arm be no pointer to a
+function, and a `?:` with one beside a `void *` is refused, so which arm
+its answer took is read by nothing. The witness the standup said to
+rewrite did not need it: `choose-a-pointer-or-a-const-void-zero.c` still
+tells a null pointer constant from a `const void *`, since the first
+makes the answer an `int *` that can be read and the second a `void *`
+that cannot, which `cc` refuses too, so only its message moved. **Which
+arm the answer is can be shown only by a refusal**, since a `void *` can
+be neither read nor counted in here, so `useo`'s new arm has its own:
+`choose-an-int-pointer-or-a-void-pointer-read.c` reads through an `int *`
+beside a `void *`. Ten breaks, ten caught. With the change, `lexer.c` is
+accepted whole, eight of Proem's ten files, where `HEAD` before it stops
+at the `?:`. 663 → 669 checks.

@@ -622,7 +622,7 @@ the arc is going after this one.
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` |
 | lexical, 6.4 | *the escapes, octal and hex escapes and joined strings since [6.16](COMPLETED.md#616-escapes-and-joined-strings)*. Left: the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants, a character constant of more than one character; refused by name, a hex escape of more than two digits whose others are zeros |
-| expressions | `_Generic`; **`?:` with a `void *` beside a pointer to an object**, which C11 6.5.15p6 makes a `void *` and which is refused here as two types, the stop in Proem's `lexer.c` since 2026-10-03; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
+| expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
 **The declarations row came first**, because most of the rest is written
@@ -690,7 +690,9 @@ declares before its `va_start`, and `lexer.c` at the `char` return.
 lines further on, at `len <= sizeof small ? small : malloc(len)`: **`?:`
 with a pointer to an object on one side and a `void *` on the other**,
 which C11 6.5.15p6 makes a `void *`, and which is refused here as
-pointers to two different types.
+pointers to two different types. That was lifted the same day too, and
+`lexer.c` is accepted whole: **eight of the ten**. What stops the other
+two, `expr.c` and `pp.c`, is `va_list`, a variadic function defined.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its

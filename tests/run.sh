@@ -1805,8 +1805,9 @@ refuses "a pointer shifted in place" "'<<=' does not take a pointer" \
 # oracle. A number that is not one, beside a pointer, and two kinds of pointer
 # are declined by name: `cc` only warns at each, and the second has no one
 # type for the answer. A 0 is a null pointer constant cast to `void *` and to
-# nothing else, and only unqualified, C11 6.3.2.3p3, so the last two are two
-# kinds of pointer and not a pointer and a null.
+# nothing else, and only unqualified, C11 6.3.2.3p3, so the last two are not a
+# pointer and a null: a `char *` is a second kind of pointer, and a `const void
+# *` makes the answer one, which has nothing to read, as `cc` refuses it too.
 mixed="only a null pointer constant, C11 6.3.2.3p3, goes beside a pointer"
 refuses "a pointer or 1" "$mixed" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-one.c"
@@ -1818,8 +1819,26 @@ refuses "pointers to two types" "'?:' has pointers to two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-pointers.c"
 refuses "a pointer or 0 cast to a 'char *'" "'?:' has pointers to two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-char-pointer-zero.c"
-refuses "a pointer or 0 cast to a 'const void *'" "'?:' has pointers to two different types" \
+refuses "a pointer or 0 cast to a 'const void *'" "'*' on a 'void *' has nothing to read" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-const-void-zero.c"
+# A `void *` beside a pointer to an object is a `void *`, C11 6.5.15p6, since
+# 2026-10-03, and `choose-a-void-pointer.c` is in the oracle. Beside a function
+# or a pointer to one, on either side, it is two types, which C11 6.5.15p3 does
+# not allow and `cc` only warns about; so is a `void **`, which is no `void *`.
+refuses "a 'void *' or a pointer to a function" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-void-pointer-or-a-function-pointer.c"
+refuses "a pointer to a function or a 'void *'" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-function-pointer-or-a-void-pointer.c"
+refuses "a 'void *' or a function" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-void-pointer-or-a-function.c"
+refuses "a 'void **' or an 'int *'" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-void-pointer-pointer-or-an-int-pointer.c"
+refuses "a 'void *' or a pointer to a function returning 'void'" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-void-pointer-or-a-void-function-pointer.c"
+# Which arm the answer is shows only in a refusal: an `int *` beside a `void *`
+# is a `void *`, and has nothing to read, as `cc` refuses it too.
+refuses "an 'int *' or a 'void *', read" "'*' on a 'void *' has nothing to read" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-an-int-pointer-or-a-void-pointer-read.c"
 # The answer beside a null is the pointer's in every part, its `const` too, so
 # a write through it is refused as `cc` refuses it.
 refuses "a write through a null or a 'const int *'" "'=' changes something declared 'const'" \
