@@ -6984,3 +6984,49 @@ at `has_id ? &id : NULL`, the same `?:` with a null pointer constant that
 stops `output.c`. Five of Proem's ten files are accepted now, and what
 stops the other five was already on the list: `?:` in two, `va_start` in
 two, a function returning a `char` in one.
+
+## 2026-10-03: `?:` with a null pointer constant
+
+**The obstacle COMPLETED gave for it had gone two days before anyone
+looked.** On 2026-09-26 the null pointer constant was held out because
+the check is in `types` and whether a thing is a constant 0 was the
+`constants` pass's answer, which runs after it. On 2026-10-01, for
+`enum`, the `locals` pass began working out `ev` and `eok`, an integer
+constant expression's value and whether it is one, because `types` had to
+know an enumeration's signedness. That is the question C11 6.3.2.3p3
+asks, in the pass before the check. So a null pointer constant is one
+attribute with a default, `npc`, true where `eok` holds and `ev` is 0 on
+something of no pointer and no struct, and true on a `Cast` to an
+unqualified `void *`, with no parentheses in its declarator, of such a
+thing. `(void *)0` matters more than the bare `0`: it is what `NULL`
+expands to in Apple's headers, so it is the form Proem's seven uses
+reach the compiler in.
+
+**`Choose` takes every part of its type from one arm**, and which arm is
+now `useo`: the second, when it is a pointer and the first is a number or
+a null cast to `void *`. Each attribute that read `$then` reads through
+it, the decay of an array or a function included. The refusal of a
+pointer beside a number asks whether *the number* is a null pointer
+constant. The first draft asked whether either arm was, and so let
+`c ? (void *)0 : 1` through. The new refusal program `choose-void-zero-or-one.c`
+caught that before the suite ran.
+
+**Thirteen breaks, eleven caught at the first try.** Two were not:
+taking the second arm's function decay from the first, and its `const`
+levels. The first wanted a call through the answer, `(y ? 0 : twice)(6)`,
+which went into `choose-a-null-pointer.c`. The second wanted a write
+through it, refused because the pointer is to `const`, which is
+`choose-a-null-or-a-const-pointer-assigned.c`. With both, all thirteen
+are caught. ROADMAP 6's fix for `?:` taking its `const` levels from its
+first arm only is narrowed by this, not closed: beside a null the levels
+are the pointer's, and between two pointers they are still the first's.
+
+**The probe was run a third time**, and its stub headers had to be
+written again, since the last ones were in another job's scratch: a
+`NULL` of `((void *)0)`, `va_list` left to the builtin, and what each
+file calls declared in the subset, with `cc -pedantic -Wall` clean on all
+ten. `output.c` and `source.c` are accepted whole, where the build
+before this change stops both at the `?:`. Seven of the ten are accepted.
+`expr.c` and `pp.c` now show their stop as `__builtin_va_list` in a
+typedef, which is the same missing feature reached one line earlier than
+`va_start`. 659 → 664 checks.

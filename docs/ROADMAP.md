@@ -681,6 +681,12 @@ arm's type; defining a variadic function stops `expr.c` and `pp.c`; and
 a function returning an `unsigned char` stops `lexer.c`. A probe finds only the first stop in each file, so what is
 behind each is found when it is lifted.
 
+**`?:` with a null pointer constant was lifted on 2026-10-03**, and a
+third run, with the stubs written again, accepts `output.c` and
+`source.c` whole: **seven of the ten**. Nothing was behind it in either.
+`expr.c` and `pp.c` stop at `va_list`, the typedef a variadic definition
+declares before its `va_start`, and `lexer.c` at the `char` return.
+
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
 order: the **second target**

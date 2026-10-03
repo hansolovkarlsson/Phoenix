@@ -16,6 +16,28 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-03: C `?:` with a null pointer constant
+
+**A pointer and a null pointer constant may be the two arms of `?:`**,
+either way round, and the answer is the pointer's type, as C11 6.5.15p6
+has it: `c ? "2" : NULL` and `has_id ? &id : NULL`, with `NULL` written
+as Apple's headers write it, `((void *)0)`, or as a plain `0`, `1 - 1` or
+an enumerator worth 0. It had been refused since `?:` came in, and was
+the first stop in two of Proem's files, which are now accepted whole:
+seven of its ten are.
+
+Refused, which `cc` only warns about: a number beside a pointer that is
+no null pointer constant, `1` or an `int` variable holding 0. A 0 cast to
+any pointer type but an unqualified `void *` is a pointer and not a null
+pointer constant, so beside a pointer to another type it is refused as
+before.
+
+**Tests:** 659 → 664. Six refusals, one of the old ones gone to the
+oracle. Two programs join the C oracle: 335 agree with `cc`, none
+diverges. Refusals: 424.
+
+---
+
 ## 2026-10-02: C names in their own initialisers
 
 **A local's name may be used in its own initialiser**, as C11 6.2.1p7

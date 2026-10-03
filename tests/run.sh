@@ -1800,13 +1800,30 @@ refuses "two kinds of struct" "'?:' has 'struct t' on one side and 'struct u' on
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-structs.c"
 refuses "a pointer shifted in place" "'<<=' does not take a pointer" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/shift-a-pointer-in-place.c"
-# These two `cc` compiles, and this subset declines by name: a pointer beside
-# `0` needs a null pointer constant, a literal 0 known from any other `int`,
-# and two kinds of pointer have no one type for the answer. `cc` only warns.
-refuses "a pointer or 0" "this subset has no null pointer constant" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-zero.c"
+# A pointer beside a null pointer constant is the pointer's type, C11
+# 6.5.15p6, since 2026-10-03, and `choose-a-pointer-or-zero.c` moved to the
+# oracle. A number that is not one, beside a pointer, and two kinds of pointer
+# are declined by name: `cc` only warns at each, and the second has no one
+# type for the answer. A 0 is a null pointer constant cast to `void *` and to
+# nothing else, and only unqualified, C11 6.3.2.3p3, so the last two are two
+# kinds of pointer and not a pointer and a null.
+mixed="only a null pointer constant, C11 6.3.2.3p3, goes beside a pointer"
+refuses "a pointer or 1" "$mixed" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-one.c"
+refuses "a pointer or an int holding 0" "$mixed" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-zero-variable.c"
+refuses "a null pointer or 1" "$mixed" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-void-zero-or-one.c"
 refuses "pointers to two types" "'?:' has pointers to two different types" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-two-pointers.c"
+refuses "a pointer or 0 cast to a 'char *'" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-char-pointer-zero.c"
+refuses "a pointer or 0 cast to a 'const void *'" "'?:' has pointers to two different types" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-const-void-zero.c"
+# The answer beside a null is the pointer's in every part, its `const` too, so
+# a write through it is refused as `cc` refuses it.
+refuses "a write through a null or a 'const int *'" "'=' changes something declared 'const'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-null-or-a-const-pointer-assigned.c"
 # `break` and `continue` belong to a loop, since 2026-09-25 (ROADMAP 6.4):
 # outside every loop, or after one has ended, each is refused, as `cc`
 # refuses it, at the same column.

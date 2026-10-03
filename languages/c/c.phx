@@ -3132,6 +3132,14 @@ arg  = e:assignment -> Arg(value: $e) .
    * function is its own address, C11 6.3.2.1p4, and decays to a pointer to
    * itself, as an array decays to a pointer to its first element. *)
   otherwise fnk = ""
+
+  (* **Whether it is a null pointer constant**, since 2026-10-03, C11
+   * 6.3.2.3p3: an integer constant expression worth 0, which `ev` and `eok`
+   * of the `locals` pass already work out, or one cast to `void *`, which
+   * `Cast` says. `0`, `1 - 1` and an enumerator worth 0 are; an `int`
+   * variable holding 0 is not, nor a 0 cast to a `char` pointer. Only `?:`
+   * asks, where C11 6.5.15p6 gives the answer the other arm's type. *)
+  otherwise npc = $type = 0 and $tag = "" and $eok and $ev = 0
   (* And a size falls out of the type for everything except a name, because a
    * name is the only thing that can be an array: no operator here answers
    * one. `Variable` therefore says its own and this covers the rest. *)
@@ -3502,24 +3510,29 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **`?:` brings its two arms to one type**, C11 6.5.15. Two numbers are
    * the usual arithmetic conversions, so a `long` arm makes it a `long` and
    * two `char`s make an `int`; two pointers must be to the same type; two
-   * structs must be the same struct, and the answer is one. What `cc` also
-   * takes and this does not: a pointer on one side and `0` on the other, a
-   * null pointer constant, which would need this pass to know a literal 0
-   * from any other `int`; and pointers to two types, which `cc` only warns
-   * about and which has no one type to be. *)
+   * structs must be the same struct, and the answer is one. A pointer
+   * beside a null pointer constant, `c ? p : NULL`, is the pointer's type,
+   * C11 6.5.15p6, since 2026-10-03, whichever side each is on: `useo` says
+   * the answer is the second arm's, when it is a pointer and the first is
+   * a number or a 0 cast to `void *`. A number that is no null pointer
+   * constant beside a pointer is refused, which `cc` only warns about. What
+   * `cc` also takes and this does not: pointers to two types, which `cc`
+   * only warns about too and which has no one type to be. *)
   (* An array arm decays, so the text says what `type` says. *The decay has
    * no witness, and cannot have one yet*: a `*` of the answer drops the
    * array's level whether it decayed or not, and nothing else here reads a
    * `?:`'s text. Left out, the oracle and every refusal stayed green. *)
-  Choose  : xlv    = lookup([[true, "p:8:0:8|{}" of $then.xlv]], $then.fnk <> "", lookup([[true, "p:8:0:8|{}" of slice($then.xlv, size(at(split($then.xlv, "|"), 1)) + 2, size($then.xlv))]], slice($then.xlv, 1, 1) = "a", $then.xlv))
-          : type  = $then.type
-          : quals = $then.quals
+  Choose  : useo   = $other.type > 0 and ($then.type = 0 or $then.npc)
+          : axlv   = lookup([[true, $other.xlv]], $useo, $then.xlv)
+          : xlv    = lookup([[true, "p:8:0:8|{}" of $axlv]], lookup([[true, $other.fnk]], $useo, $then.fnk) <> "", lookup([[true, "p:8:0:8|{}" of slice($axlv, size(at(split($axlv, "|"), 1)) + 2, size($axlv))]], slice($axlv, 1, 1) = "a", $axlv))
+          : type  = lookup([[true, $other.type]], $useo, $then.type)
+          : quals = lookup([[true, $other.quals]], $useo, $then.quals)
           : uns   = lookup([[0, lookup([[true, ($then.wide and $then.puns) or ($other.wide and $other.puns)]],
                                        $then.wide or $other.wide, $then.puns or $other.puns)]],
-                           $then.type, $then.uns)
+                           $type, lookup([[true, $other.uns]], $useo, $then.uns))
           : width = lookup([[0, lookup([[true, 8]], $then.wide or $other.wide, 4)]],
-                           $then.type, $then.width)
-          : tag   = $then.tag
+                           $type, lookup([[true, $other.width]], $useo, $then.width))
+          : tag   = lookup([[true, $other.tag]], $useo, $then.tag)
           : aggregate = $then.record and $then.tag <> "void"
           ! $cond.record
               : "'{}' is a condition, and C tests only numbers and pointers" of $cond.kind
@@ -3527,9 +3540,9 @@ arg  = e:assignment -> Arg(value: $e) .
               : "'?:' has a struct on one side and not on the other"
           ! $then.record and $other.record and $then.tag <> $other.tag
               : "'?:' has '{}' on one side and '{}' on the other" of $then.kind, $other.kind
-          ! ($then.type > 0) <> ($other.type > 0)
-              : "'?:' has a pointer on one side and a number on the other, and this subset has no null pointer constant"
-          ! $then.type > 0 and $other.type > 0
+          ! ($then.type > 0) <> ($other.type > 0) and not lookup([[0, $then.npc]], $then.type, $other.npc)
+              : "'?:' has a pointer on one side and a number on the other, and only a null pointer constant, C11 6.3.2.3p3, goes beside a pointer"
+          ! $then.type > 0 and $other.type > 0 and not $then.npc and not $other.npc
               and ($then.type <> $other.type or $then.width <> $other.width or $then.tag <> $other.tag)
               : "'?:' has pointers to two different types" .
 
@@ -3640,6 +3653,8 @@ arg  = e:assignment -> Arg(value: $e) .
        : aggregate = slice($xlv, 1, 1) = "a" or ($type = 0 and $tag <> "")
        : quals = $dquals
        : uns   = $base.buns
+       : npc   = $type = 1 and $tag = "void" and size($paren) = 0 and size(split($quals, "1")) = 1
+                 and $value.type = 0 and $value.tag = "" and $value.eok and $value.ev = 0
        ! slice($lv, 1, 1) = "a"
            : "a cast to an array is not C, C11 6.5.4"
        ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
