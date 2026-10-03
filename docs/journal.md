@@ -7052,3 +7052,38 @@ a `void *`, and this subset refuses two kinds of pointer by name. It is
 not a null pointer constant, so the morning's change does not reach it.
 It goes on ROADMAP's expressions row as the next stop. 664 → 663 checks,
 one refusal having left.
+
+**The open fixes were sorted by what each costs**, easiest first, at
+Hans's asking, from where each sits in `c.phx` and not from a count:
+the `char` return, an enumerator from a character constant and the
+escape witnesses at the bottom, because the machinery for each exists;
+the function-pointer check at an argument and a `return`, `binop add;`,
+`int x, f(void);` and the other forms of a name in its own initialiser
+in the middle, because each is a new binding or check on an existing
+pattern; and `()` as unprototyped, the `const` levels of `?:` between
+two pointers and the limits the notation sets, at the top. The `void *`
+case of `?:`, found by the probe that afternoon, went to the front,
+since it is the one stop between `lexer.c` and accepted.
+
+**`?:` with a `void *` beside a pointer to an object was begun and not
+finished**, and is uncommitted at the close. Two defaults join `npc` in
+the `types` pass: `fptr`, whether a value is a function or a pointer to
+one, read off its text as the initialiser's check reads it, and `vptr`,
+whether it is a `void *` that is neither. Two things the notation said
+on the way. A check may not read an attribute its own rule computes, so
+these could not be attributes of `Choose`; they are defaults every node
+has, and `Choose` reads them off its arms. And a default reading `xlv`
+has to be declared after `xlv`'s own default, which is why they sit
+below it and not beside `npc`. The answer's `const` is the `void *`'s
+own, not the two pointees' together as C11 6.5.15p6 has it: a `void *`
+is not written through and a dropped qualifier is not refused here, so
+no program could tell. With it, `lexer.c` is accepted whole, eight of
+Proem's ten files. Eleven breaks were tried: nine caught, and two
+not, a missing guard against a pointer to a function in `useo` and in
+`vptr`, which may be breaks no program can see, since that pairing is
+refused anyway and a pointer to a function has no `void` tag. That is
+the first thing to settle tomorrow. The full suite also shows that
+`choose-a-pointer-or-a-const-void-zero.c` is no longer refused as two
+types: a `const void *` beside an `int *` is now a `void *` answer, as C
+has it, and the program stops at the `*` of it instead, so that witness
+has to be rewritten, not its message moved.

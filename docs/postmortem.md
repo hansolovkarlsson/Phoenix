@@ -1695,3 +1695,37 @@ with a null pointer constant, already listed.
 > A count of words in a program says what it uses; a run says what it
 > stops at, in the order the compiler meets it. Where the target is a
 > real program, run it, and read each stop knowing which phase made it.
+
+## 35. "Whether a thing is a constant 0 is the `constants` pass's answer, which runs after it"
+
+On 2026-10-03 the next two of Proem's stops were lifted, and three things
+written earlier met them.
+
+*Failed, as a reason that outlived itself: the null pointer constant
+"stays out as well: `c ? p : 0` is still refused, because the check is in
+`types`, and whether a thing is a constant 0 is the `constants` pass's
+answer, which runs after it"* ([COMPLETED 6.7](COMPLETED.md#67-void-and-casts),
+2026-09-26). It was true the day it was written. On 2026-10-01 `enum`
+needed an enumerator's value before `types`, and the `locals` pass began
+working out `ev` and `eok`, which is the question C11 6.3.2.3p3 asks, in
+the pass before the check. Nothing reread the 6.7 sentence, and the fix,
+when it came, was one default attribute. **A reason recorded for holding
+something out is a prediction that the obstacle stays**, and it is not
+rescored when the obstacle goes.
+
+*Held: "a function returning a `char` stops `lexer.c`"* (ROADMAP, the
+second run of 2026-10-02). It did, and lifting it took one row in a
+table `short` had built: the refusal's own reason, "a register nothing
+here narrows", had stopped being true on 2026-10-01 too, the same shape
+as the first.
+
+*Half held: "a probe finds only the first stop in each file, so what is
+behind each is found when it is lifted"* (ROADMAP, 2026-10-02). Behind
+`?:` with `NULL` in `output.c` and `source.c` there was nothing: both are
+accepted whole. Behind the `char` return in `lexer.c` there was another
+`?:`, a `void *` beside a `char` array, 364 lines on. The line said only
+that something might be there, and that is all it could say.
+
+> A refusal's reason is a claim about the rest of the compiler. When the
+> compiler changes, the reasons written against it are the first thing
+> to reread, before the stops a probe finds.
