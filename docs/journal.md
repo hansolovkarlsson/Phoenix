@@ -7108,3 +7108,20 @@ be neither read nor counted in here, so `useo`'s new arm has its own:
 beside a `void *`. Ten breaks, ten caught. With the change, `lexer.c` is
 accepted whole, eight of Proem's ten files, where `HEAD` before it stops
 at the `?:`. 663 → 669 checks.
+
+**The probe's stub headers went into the repository**, at Hans's word,
+in [`languages/c/tests/proem/`](../languages/c/tests/proem/), with a
+`run.sh` that does what had been typed by hand three times. They had been
+written in a job's scratch twice, once on 2026-10-02 and again on the
+morning of the 3rd, when the first set was in a scratch no longer to
+hand, and the second set survived a crash only because the job's
+directory outlived its session. The headers are the same declarations,
+one to a line, each file saying what it is for; the probe gives the same
+eight accepted and two stopped through them. Two choices are written into
+the script's header. Every file must pass `cc -std=c11 -pedantic -Wall`
+against the stubs before Phoenix sees it, and a file that does not is
+reported as the stubs falling short, not as a stop, so a missing
+declaration cannot pass for a missing feature. And it is not part of
+`make test`, since Proem is not in this repository and CLAUDE.md promises
+a suite that needs nothing outside it: it reads a checkout, beside this
+one by default.

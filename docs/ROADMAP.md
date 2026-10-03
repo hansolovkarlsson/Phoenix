@@ -693,6 +693,12 @@ which C11 6.5.15p6 makes a `void *`, and which is refused here as
 pointers to two different types. That was lifted the same day too, and
 `lexer.c` is accepted whole: **eight of the ten**. What stops the other
 two, `expr.c` and `pp.c`, is `va_list`, a variadic function defined.
+**The stubs and the probe are in the repository since that evening**,
+[`languages/c/tests/proem/`](../languages/c/tests/proem/): `run.sh`
+prints each file's first stop against a Proem checkout, beside this one
+by default, after checking it against the stubs with `cc -pedantic`. It is
+not in `make test`, since Proem is not here. Twice the stubs had been
+written in a job's scratch and were not there for the next run.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its
