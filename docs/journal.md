@@ -7424,3 +7424,45 @@ the rule, the three `tdfns` skips, the copy, the `Global`'s own count
 check, `plvs` in `types`, and `StaticInit`'s copy alone, which needed a
 `static` pointer added to the witness first. Fifteen caught. 706 → 713
 checks; Proem still eight of ten.
+
+**The fourth fix: functions declared in a block, and a parameter of a
+function's type.** The parameter was the easy part: C11 6.7.6.3p8 makes
+`binop f` a pointer to a function, as an array parameter is a pointer to
+its element, so its level text gets a `p` level in front, beside `adj`.
+A member of a function's type is no C, 6.7.2.1p3, and `cc` refuses it;
+only its words were wrong, saying C allows it. `int f(void);` in a block
+is a `FnDecl`, read by a statement alternative that tries `list-function`
+before a local's declarator, as a file-scope list does. The first run
+lost `x` of `int x = 4, add(int, int);`: a `FnDecl` resets `env`,
+`scope`, `bytes` and `pindex` for its parameters and never put them back,
+which file scope could not show. It puts them back now, as `Sig` does,
+and in a block it puts its name in the block's `scope`, so a local of its
+name after it is declared twice.
+
+The `functions` pass counts a function's declarations at file scope and
+does not walk a body, so a block's declaration is not counted there. That
+is what `tdfns` was made for this morning, for a typedef's function: a
+count the `functions` pass cannot see, which each declaration checks
+against. A block's `FnDecl` records its count there, and checks its own
+against what `funcs` holds already, which covers a definition before it.
+`binop add;` in a block is a `Local` that copies the typedef's entries,
+takes no slot and binds no local, the `Global`'s way; its attributes are
+`down`s, since a check cannot read what its own rule computes on the way
+out. A function declared in a block where a local of its name is in scope
+is refused by name, since the name would be found as the local; and one
+declared in a block is still known after it, since `funcs` has no block
+scope, which `cc` refuses and this does not, on ROADMAP.
+
+Twenty-three breaks, and the first run missed seven. Two have no witness
+and cannot: putting `pindex` back, which nothing after it reads, and the
+`Local` taking no slot. One was dead code: a `static-list` rule for the
+`static` form, which `specifiers` read already, since they take the word;
+it is gone. Three were witnesses too kind: `labs` declared through a
+typedef in a block is called with an `int` and with a 64-bit answer,
+which is what shows its widths and its return type copied, and a refusal
+holds a definition after the block's declaration with another count. And
+the storage-class refusal in a block printed the file scope's words too,
+which a refusal that looks for its own words cannot see, so a check holds
+that they are absent. Twenty of twenty then, the dead rule gone and the
+two without a witness said so where they stand. 713 → 727 checks;
+Proem still eight of ten.

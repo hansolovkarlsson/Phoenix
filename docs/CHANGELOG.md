@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C functions declared in a block, and parameters of a function's type
+
+**`int f(void);` in a block declares `f`**, and so do `int x, f(void);`
+and `binop add;` with `binop` a typedef of a function's type, which were a
+syntax error and a refusal. Each is checked against the function's other
+declarations, as one at file scope is, and the locals around it keep
+their places. `static`, `auto` or `register` on one is refused, as C11
+6.7.1p7 has it. **A parameter of a function's type**, `int apply(binop f)`,
+is a pointer to one, as 6.7.6.3p8 has it, where it was refused. A
+function declared in a block where a local of its name is in scope is
+refused by name, and one declared in a block is still known after it,
+which `cc` refuses. A member of a function's type was refused in words
+saying C allows it; they now say it does not.
+
+**Tests:** 713 → 727. Thirteen refusals, one more check, and one refusal
+gone, since the program compiles. One program joins the C oracle: 349
+agree with `cc`, none diverges. Refusals: 485.
+
+---
+
 ## 2026-10-04: C `()` in a pointer to a function is no prototype
 
 **`int (*f)()` points at a function of unstated parameters**, as C11

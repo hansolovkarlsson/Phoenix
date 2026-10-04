@@ -262,6 +262,13 @@ item = b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } 
 
 list-declarator = list-function | global-declarator .
 
+(* **And in a block**, since 2026-10-04: `int f(void);` and `int x, f(void);`
+ * declare a function there as at file scope, C11 6.7.6.3, the name in
+ * force to the block's end as C11 6.2.1p4 has it. `static int f(void);`
+ * is read here too, since `specifiers` take the word, and refused by
+ * name, C11 6.7.1p7. *)
+local-list = list-function | local-declarator .
+
 (* **A function declared beside other names**, a `FnDecl`, which is a
  * `Prototype` whose return type is the `base` the `Decls` above hands down,
  * as every declarator's type is. A rule of its own because it is a scope,
@@ -807,7 +814,7 @@ statement = "return" e:expression ";"              -> Return(value: $e)
                    -> Decls(spec: $b, items: [], kind: "block")
           | b:sspecifiers d:static-declarator r:{ "," e:static-declarator -> $e } ";"
                    -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
-          | b:specifiers d:local-declarator r:{ "," e:local-declarator -> $e } ";"
+          | b:specifiers d:local-list r:{ "," e:local-list -> $e } ";"
                    -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "block")
           (* The `else` form first. Trying it first is also what settles the
            * dangling else: an inner `if` gets the chance to take the `else`
@@ -1113,6 +1120,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * lists this pass gathers at the top are its items' lists joined, and
    * a node with none gives none. *)
   Decls  : down base = $spec
+         : down dkind = $kind
          : shape  = flatten($items.shape)
          : dshape = flatten($items.dshape)
          : dname  = flatten($items.dname)
@@ -1276,8 +1284,13 @@ arg  = e:assignment -> Arg(value: $e) .
             ! size($params) > 8
                 : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
                     of $name, size($params)
-            ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
-                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register") .
+            ! $dkind = "file" and $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register")
+            (* In a block, since 2026-10-04, the one storage class a
+             * function's declaration may have is `extern`. *)
+            ! $dkind = "block" and $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg or $base.stat)
+                : "'{}' is a function declared '{}' in a block, and C11 6.7.1p7 allows a function there no storage class but 'extern'"
+                    of $name, lookup([[true, "auto"]], $base.sauto, lookup([[true, "register"]], $base.sreg, "static")) .
   Function  : internal = lookup([[true, 1]], $ret.stat, 0)
             : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
@@ -1897,7 +1910,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * its element is. *)
   MemberScalar : down dbase   = $base
                ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
-                   : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
+                   : "'{}' is a member of a function's type, which C11 6.7.2.1p3 does not allow; a pointer to one it does" of $name
                : down dstars  = $stars
                : down inparen = false
                : down pP      = ""
@@ -1977,6 +1990,10 @@ arg  = e:assignment -> Arg(value: $e) .
    *
    * A second declaration has to say the same thing as the first, which is
    * C11 6.7p4. *)
+  (* The functions a typedef of their type declares, and since
+   * 2026-10-04 those declared in a block, each with its count, which the
+   * `functions` pass cannot see: see `Global`, below. *)
+  thread tdfns = empty
   Prototype : rlv   = lookup([[0, "{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $stars), $ret.blv]], size($rparen), join($rparen.t))
             : rptrs = lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1))
             : down dbase   = $ret
@@ -2020,10 +2037,31 @@ arg  = e:assignment -> Arg(value: $e) .
             : down inparen = false
             : down pP      = ""
             : down pouter  = []
-          : down env    = empty
+            (* Its parameters are a scope of their own, as a prototype's
+             * are, and what they change is put back, since 2026-10-04,
+             * when one could be declared in a block, where the locals
+             * before it are still in force after it. In a block it is a
+             * name of the block's, so a local of its name there after it
+             * is declared twice. *Putting `pindex` back has no witness*:
+             * nothing after a declaration in a block reads it. *)
+            : down fdenv    = $env
+            : down fdscope  = $scope
+            : down fdbytes  = $bytes
+            : down fdpindex = $pindex
+            : down env    = empty
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
+            : env    = $fdenv
+            : scope  = lookup([[true, bind($fdscope, $name, true)]], $dkind = "block", $fdscope)
+            : bytes  = $fdbytes
+            : pindex = $fdpindex
+            : tdfns  = lookup([[true, bind($tdfns, $name, [size($params), $variadic])]], $dkind = "block" and $variadic <> 2, $tdfns)
+            ! $dkind = "block" and defined($fdenv, $name)
+                : "'{}' is declared a function in a block where a local of its name is in scope, which C11 6.2.1p4 allows and this subset does not yet" of $name
+            ! $dkind = "block" and $variadic <> 2 and defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) <> 2
+              and lookup($funcs, $name, [0, 0]) <> [size($params), $variadic]
+                : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
             : funcs = lookup([[true, $funcs]], $variadic = 2 and defined($funcs, $name), bind($funcs, $name, [size($params), $variadic]))
             : sigs  = lookup([[true, $sigs]], $variadic = 2 and defined($sigs, $name), bind($sigs, $name, $params.passes))
             : rets  = bind($rets, $name, [lookup([[0, $base.tagname]], size($rparen), ""), $base.basew, $rptrs, $base.buns, ("{}{}" of $base.bquals, $squals), $rlv])
@@ -2111,15 +2149,18 @@ arg  = e:assignment -> Arg(value: $e) .
    * and the ninth is refused as the ninth parameter is: it would be on the
    * stack, and nothing puts it there. *)
   Param : down dbase   = $base
-        ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
-            : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
         : down dstars  = $stars
         : down inparen = false
         : down pP      = ""
         : down pouter  = $dims
         : lvin   = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]],
                           size($paren), join($paren.t))
-        : lv     = lookup([[1, "p:8:0:8|{}" of $lvin]], $adj, $lvin)
+        (* **A parameter of a function's type is a pointer to one**, C11
+         * 6.7.6.3p8, as one of an array's is a pointer to its element, since
+         * 2026-10-04: `binop f`, with `binop` a typedef of a function's
+         * type, is `binop *f`. It was refused by name until then. *)
+        : fnparm = $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+        : lv     = lookup([[true, "p:8:0:8|{}" of $lvin]], $adj = 1 or $fnparm, $lvin)
         : ptrs   = lookup([[true, size(at(split($lv, "a:"), 1)) div 8]], size(at(split($lv, "a:"), 1)) < size(at(split($lv, "b:"), 1)), size(at(split($lv, "b:"), 1)) div 8)
         : basew  = $base.basew
         : dquals = "{}{}" of $base.bquals, $squals
@@ -2298,8 +2339,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * which is what *not an array* is spelled as everywhere below. A struct is
    * its size rounded up to eight, the way an array is. *)
   Local     : down dbase   = $base
-            ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
-                : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
+            : down lfnty  = $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+            : down lfnkey = at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6)
+            : down lfnun  = at(lookup($funcs, $lfnkey, [0, 0]), 2) = 2
             : down dstars  = $stars
             : down inparen = false
             : down pP      = ""
@@ -2310,16 +2352,39 @@ arg  = e:assignment -> Arg(value: $e) .
             : ptrs   = lookup([[true, size(at(split($lv, "a:"), 1)) div 8]], size(at(split($lv, "a:"), 1)) < size(at(split($lv, "b:"), 1)), size(at(split($lv, "b:"), 1)) div 8)
             : basew  = $base.basew
             : dquals = "{}{}" of $base.bquals, $squals
-            : takes  = lookup([[true, 0]], $base.sext, ((int(at(split(at(split($lv, "|"), 1), ":"), 2)) + 7) div 8) * 8)
+            : takes  = lookup([[true, 0]], $base.sext or $lfnty, ((int(at(split(at(split($lv, "|"), 1), ":"), 2)) + 7) div 8) * 8)
             : offset = $bytes + $takes
-            : env    = bind($env, $name, lookup([[true, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false, $lv]]],
+            : env    = lookup([[true, $env]], $lfnty, bind($env, $name, lookup([[true, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false, $lv]]],
                                                $base.sext,
-                                               [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv]))
+                                               [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])))
             : scope  = bind($scope, $name, true)
+            (* **A function declared through a typedef of its type**, `binop
+             * add;`, since 2026-10-04 in a block as at file scope, see
+             * `Global`: no slot and no local, but the typedef's entries
+             * copied to its name where it has none, and its count in
+             * `tdfns`. It may not hide a local, as a `FnDecl` may not.
+             * *Taking no slot has no witness*: a slot taken makes the frame
+             * larger and every offset still right. *)
+            : funcs   = lookup([[true, bind($funcs, $name, lookup($funcs, $lfnkey, [0, 0]))]], $lfnty and not ($lfnun and defined($funcs, $name)), $funcs)
+            : sigs    = lookup([[true, bind($sigs, $name, lookup($sigs, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $sigs)
+            : rets    = lookup([[true, bind($rets, $name, lookup($rets, $lfnkey, ["", 4, 0, false, "0"]))]], $lfnty and not ($lfnun and defined($funcs, $name)), $rets)
+            : pwidths = lookup([[true, bind($pwidths, $name, lookup($pwidths, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $pwidths)
+            : plvs    = lookup([[true, bind($plvs, $name, lookup($plvs, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $plvs)
+            : tdfns   = lookup([[true, bind($tdfns, $name, lookup($funcs, $lfnkey, [0, 0]))]], $lfnty, $tdfns)
+            ! $lfnty and defined($env, $name)
+                : "'{}' is declared a function in a block where a local of its name is in scope, which C11 6.2.1p4 allows and this subset does not yet" of $name
+            ! $lfnty and defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) <> 2 and not $lfnun
+              and lookup($funcs, $name, [0, 0]) <> lookup($funcs, $lfnkey, [0, 0])
+                : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
+            ! $lfnty and defined($rets, $name) and lookup($rets, $name, []) <> lookup($rets, $lfnkey, [])
+                : "'{}' is declared twice, returning a different type each time" of $name
+            ! $lfnty and $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                : "'{}' is a function declared '{}' in a block, and C11 6.7.1p7 allows a function there no storage class but 'extern'"
+                    of $name, lookup([[true, "auto"]], $base.sauto, "register")
             : bytes  = $bytes + $takes
-            ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
+            ! not $lfnty and $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-            ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+            ! not $lfnty and $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
                 : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
             ! defined($scope, $name) : "'{}' is declared twice" of $name
             ! $base.unsup = "" and $base.nstore < 2 and $base.tdef and $dkind <> "for"
@@ -2463,7 +2528,7 @@ arg  = e:assignment -> Arg(value: $e) .
 
   Static      : down dbase   = $base
               ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
-                  : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
+                  : "'{}' is a function declared 'static' in a block, and C11 6.7.1p7 allows a function there no storage class but 'extern'" of $name
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -3002,8 +3067,9 @@ arg  = e:assignment -> Arg(value: $e) .
    * A typedef with no prototype, `typedef int F();`, says no count, so
    * neither it nor a `()` declaration is checked against one, and its
    * entries are copied only where the name has none, as a `()` prototype
-   * binds, so a prototype written before it still says what is taken. *)
-  thread tdfns = empty
+   * binds, so a prototype written before it still says what is taken.
+   * The thread is declared above `Prototype`, since a function declared
+   * in a block records its count in it too. *)
   otherwise fnty = false
   Global      : down dbase   = $base
               : fnty    = $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""

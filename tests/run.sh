@@ -2498,7 +2498,7 @@ refuses "a struct with a const member, whole" "'struct s' has a 'const' member, 
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member.c"
 refuses "and one with it a struct further in" "'struct out' has a 'const' member, so it is not assigned whole" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/copy-a-struct-with-a-const-member-inside.c"
-refuses "'const' as a name" 'or name, and found "="' \
+refuses "'const' as a name" 'name or (, and found "="' \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-as-a-name.c"
 refuses "a function returning const, then not" "'f' is declared twice, returning a different type each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/const-return-then-plain.c"
@@ -2906,10 +2906,49 @@ refuses "a function returned as a number" "'return' in 'get' is given a pointer 
 # **A function declared through a typedef of its type**, `binop add;`, is a
 # prototype at file scope since 2026-10-04, which
 # `functions-declared-through-a-typedef.c` holds against `cc`, and is checked
-# against the function's other declarations and the globals. In a block it is
-# still refused by name, which `cc` compiles.
-refuses "a function declared through a typedef, in a block" "'add' is declared through a typedef of a function's type" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef-in-a-block.c"
+# against the function's other declarations and the globals. **In a block
+# too**, since 2026-10-04, and so is `int f(void);` and `int x, f(void);`,
+# which `functions-declared-in-a-block.c` holds against `cc`, as it holds a
+# parameter of a function's type, a pointer to one. `cc` refuses all of
+# these but the two that hide a local, which C allows and this refuses by
+# name: the name would be found as the local. A member of a function's
+# type is no C, and the words said otherwise until then.
+refuses "a function in a block with another arity" "'f' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-with-another-arity.c"
+refuses "and before a definition with another" "'f' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-before-another-arity.c"
+refuses "and one hiding a local" "'f' is declared a function in a block where a local of its name is in scope" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-hiding-a-local.c"
+refuses "a local named as a function in its block" "'f' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/local-named-as-a-function-in-its-block.c"
+refuses "a 'static' function in a block" "'f' is a function declared 'static' in a block" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-function-in-a-block.c"
+refuses "a 'register' function in a block" "'f' is a function declared 'register' in a block" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/register-function-in-a-block.c"
+refuses "a typedef's function in a block hiding a local" "'add' is declared a function in a block where a local of its name is in scope" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-hiding-a-local.c"
+refuses "and with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-with-another-arity.c"
+refuses "and before a definition with another" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-before-another-arity.c"
+refuses "and returning another type" "'add' is declared twice, returning a different type each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-returning-another-type.c"
+refuses "and 'static'" "'add' is a function declared 'static' in a block" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/static-typedef-function-in-a-block.c"
+refuses "and 'register'" "'add' is a function declared 'register' in a block" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/register-typedef-function-in-a-block.c"
+refuses "and a local of its name after it" "'add' is declared twice" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/local-named-as-a-typedef-function-in-its-block.c"
+# A storage class on a function in a block is said in a block's words, and
+# not as the file scope's as well, which it was until the check asked.
+out=$(bounded "$phx" --quiet --driver check "$root/languages/c/c-arm64.phx" "$r/register-function-in-a-block.c" 2>&1)
+if printf '%s' "$out" | grep -q 'at file scope'; then
+    report fail "a function in a block is not said to be at file scope" "$out"
+else
+    report pass "a function in a block is not said to be at file scope"
+fi
+refuses "a member of a function's type" "'m' is a member of a function's type, which C11 6.7.2.1p3 does not allow" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/member-of-a-function-type.c"
 refuses "a typedef's function defined with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-defined-with-another-arity.c"
 refuses "and prototyped with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
