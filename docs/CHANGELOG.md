@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C `()` in a pointer to a function is no prototype
+
+**`int (*f)()` points at a function of unstated parameters**, as C11
+6.7.6.3p14 has it, where it was read as a pointer to one taking none: a
+call through it is compiled with its arguments in registers, and it may be
+given any function returning the same type whose parameters are not
+`char`, `short` or `_Bool` and which has no `...`, as 6.7.6.3p15 allows and
+`cc` takes; given anything else it is refused, as `cc` refuses it. The
+same holds of `()` in a typedef of a function's type, a cast and a
+parameter. A function declared through such a typedef, `F add;`, may then
+be defined with parameters, and a prototype written before it still says
+what is taken.
+
+**Tests:** 706 → 713. Seven refusals. One program joins the C oracle: 348
+agree with `cc`, none diverges. Refusals: 472.
+
+---
+
 ## 2026-10-04: C names in parentheses in a declarator
 
 **`int (x) = 3;` declares `x`**, as C11 6.7.6p6 has it, where it was a

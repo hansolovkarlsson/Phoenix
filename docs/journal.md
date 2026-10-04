@@ -7394,3 +7394,33 @@ parse error moved: `int (f(void))[3];` reads `(f` as a name now and stops
 at the second `(`. `names-in-parentheses.c` joins the oracle. Seven
 breaks, one per rule, the recursion, and the inner name: seven caught.
 706 checks, unchanged; Proem still eight of ten.
+
+**The third fix: `()` in a pointer to a function.** `fn-suffix` takes
+`()` as its own alternative now, `variadic` 2, as a declaration's took it
+this morning, so a pointer, a typedef, a cast and a parameter each say no
+prototype, and a call through one already read the key's arity and passed
+each argument in a register. The grammar was one line. The rest was the
+type check a pointer to a function is given, which compares four things a
+call reads, the count among them, so `int (*f)() = twice;` was refused as
+another type. C11 6.7.6.3p15 makes the two compatible when they return the
+same type and the prototyped one is not variadic and has no parameter its
+promotion changes, and `cc` agrees, refusing `char`, `short`, `_Bool` and
+`...` and taking a struct. The check is seven copies of one text, so it was
+rewritten by a script that found each comparison, read its two keys, and
+wrapped it, which keeps the seven the same; `char`, `short` and `_Bool` are
+three level texts looked for in `plvs`, which the `types` pass now reads as
+`constants` did.
+
+A typedef was the other place. `typedef int F(); F add;` copies the
+typedef's entries to `add` and records its count in `tdfns`, so the later
+definition with two parameters was refused as a second count. A `()` says
+no count, so the three checks against `tdfns` skip it, and the copy is
+made only where the name has none, as a `()` prototype binds: `long
+labs(long); G labs;` with `G` returning `long` and no prototype keeps the
+prototype, and the witness calls `labs(-5)`, which loses its sign
+extension if the copy wins. Fifteen breaks: the alternative, each of the
+three narrow types, the variadic test, the result's equality, each side of
+the rule, the three `tdfns` skips, the copy, the `Global`'s own count
+check, `plvs` in `types`, and `StaticInit`'s copy alone, which needed a
+`static` pointer added to the witness first. Fifteen caught. 706 → 713
+checks; Proem still eight of ten.

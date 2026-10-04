@@ -2952,6 +2952,26 @@ refuses "a prototype kept past '()': a number for a struct" "'take' is given a s
         --driver check "$root/languages/c/c-arm64.phx" "$r/prototype-kept-past-empty-parentheses-struct.c"
 refuses "and a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/prototype-kept-past-empty-parentheses-function.c"
+# **And in a pointer to a function**, since 2026-10-04, which
+# `pointers-to-functions-without-prototypes.c` holds against `cc`: such a
+# pointer is given a function of any parameters that are their own
+# promotions and no `...`, C11 6.7.6.3p15, and these `cc` refuses as well,
+# but the last, which it compiles and this refuses by name.
+fx="is given a pointer to a function of another type"
+refuses "no prototype given a 'char' parameter" "'h' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-without-a-prototype-given-a-char-parameter.c"
+refuses "and a '_Bool' one, by '='" "'=' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-without-a-prototype-given-a-bool-parameter.c"
+refuses "and a variadic function, in a global" "'h' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-without-a-prototype-given-a-variadic.c"
+refuses "and one returning another type, by 'return'" "'return' in 'take' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-without-a-prototype-returning-another-type.c"
+refuses "a 'short' parameter given no prototype" "'k' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-with-a-short-given-one-without-a-prototype.c"
+refuses "a variadic parameter given no prototype" "argument 1 of 'apply' $fx" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/variadic-given-a-function-without-a-prototype.c"
+refuses "a struct through a pointer with no prototype" "'h' is given a 'struct s' where no prototype says what it takes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-through-a-pointer-without-a-prototype.c"
 refuses "a function returning a function" "expected ;, { or ,, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
 # **A function declared in a list with other names**, since 2026-10-04,
