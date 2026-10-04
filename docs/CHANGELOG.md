@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C `?:` between two pointers is `const` where either is
+
+**`*(c ? p : q) = 1` with `q` a pointer to a `const int` is refused**, as
+C11 6.5.15p6 has it and `cc` refuses it, where it was accepted when `q`
+was the second arm: the answer of `?:` between two pointers to one type
+is `const` at each level either arm is, where it had been the first
+arm's. A write under the `const` level is still compiled.
+
+**Tests:** 727 → 729. Two refusals. One program joins the C oracle: 350
+agree with `cc`, none diverges. Refusals: 487.
+
+---
+
 ## 2026-10-04: C functions declared in a block, and parameters of a function's type
 
 **`int f(void);` in a block declares `f`**, and so do `int x, f(void);`

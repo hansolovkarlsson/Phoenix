@@ -622,7 +622,7 @@ the arc is going after this one.
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
 | functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` or to a function with no prototype; *`()` as no prototype in a declaration, and since the same day in a pointer to a function, a typedef, a cast and a parameter*, where a definition's is still no parameters |
 | lexical, 6.4 | *the escapes, octal and hex escapes and joined strings since [6.16](COMPLETED.md#616-escapes-and-joined-strings)*. Left: the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants, a character constant of more than one character; refused by name, a hex escape of more than two digits whose others are zeros |
-| expressions | `_Generic`; and one fix, **`?:` takes its `const` levels from its first arm only**, so `*(c ? p : q) = 1` with `q` a pointer to `const` is accepted where `cc` refuses it. A refusal missing, never a false one; the notation has no direct way to combine the two arms' levels a character at a time |
+| expressions | `_Generic`. *`?:` between two pointers takes the `const` levels of both since 2026-10-04*, sixteen positions written out, since the notation has no loop |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
 
 **The declarations row came first**, because most of the rest is written

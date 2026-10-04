@@ -1843,6 +1843,14 @@ refuses "an 'int *' or a 'void *', read" "'*' on a 'void *' has nothing to read"
 # a write through it is refused as `cc` refuses it.
 refuses "a write through a null or a 'const int *'" "'=' changes something declared 'const'" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-null-or-a-const-pointer-assigned.c"
+# **Two pointers to one type give the `const` of both**, since 2026-10-04,
+# C11 6.5.15p6, where the answer had the first arm's: a write through it is
+# refused when either arm's level is `const`, as `cc` refuses it, and a
+# write under it is not, which `choose-pointers-with-const-levels.c` holds.
+refuses "a write through an 'int *' or a 'const int *'" "'=' changes something declared 'const'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-a-pointer-or-a-const-pointer-assigned.c"
+refuses "and through an 'int **' or an 'int *const *'" "'=' changes something declared 'const'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/choose-pointers-to-a-pointer-or-a-const-one-assigned.c"
 # `break` and `continue` belong to a loop, since 2026-09-25 (ROADMAP 6.4):
 # outside every loop, or after one has ended, each is refused, as `cc`
 # refuses it, at the same column.

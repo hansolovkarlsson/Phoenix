@@ -3878,12 +3878,22 @@ arg  = e:assignment -> Arg(value: $e) .
    * the `void *`; `vptr` says an arm is one, and `fptr` that an arm is a
    * function or a pointer to one, which C11 6.5.15p3 does not put beside a
    * `void *` and which is refused below. `useo` does not ask `fptr`, since
-   * the answer of a refused `?:` is read by nothing. The answer's `const` is
-   * the `void *`'s own, not the two pointees' together as C has it: nothing
-   * here can tell, since a `void *` is not written through and a qualifier
-   * dropped at an assignment is not refused. What `cc` also takes and this
+   * the answer of a refused `?:` is read by nothing. What `cc` also takes and this
    * does not: pointers to two other types, which `cc` only warns about too
-   * and which has no one type to be. *)
+   * and which has no one type to be.
+   *
+   * **Two pointers to one type give the `const` of both**, C11 6.5.15p6,
+   * since 2026-10-04: each level of the answer is `const` where either
+   * arm's is, so `*(c ? p : q) = 1` with `q` to a `const int` is refused
+   * whichever arm `q` is, where until then the levels were the first
+   * arm's. Two arms of one type have one number of levels, so their
+   * `quals` are the same length, and the notation has no loop, so the
+   * answer is sixteen positions written out, past the most a type here has;
+   * `slice` past the end is nothing. It is asked of every two pointers, a
+   * 0 cast to `void *` and a `void *` beside another among them, where it
+   * changes nothing a program can see: a null adds no `const`, and a
+   * `void *` is not written through. The guards that left those two out
+   * were taken out for that, since no break of them failed. *)
   (* An array arm decays, so the text says what `type` says. *The decay has
    * no witness, and cannot have one yet*: a `*` of the answer drops the
    * array's level whether it decayed or not, and nothing else here reads a
@@ -3892,7 +3902,9 @@ arg  = e:assignment -> Arg(value: $e) .
           : axlv   = lookup([[true, $other.xlv]], $useo, $then.xlv)
           : xlv    = lookup([[true, "p:8:0:8|{}" of $axlv]], lookup([[true, $other.fnk]], $useo, $then.fnk) <> "", lookup([[true, "p:8:0:8|{}" of slice($axlv, size(at(split($axlv, "|"), 1)) + 2, size($axlv))]], slice($axlv, 1, 1) = "a", $axlv))
           : type  = lookup([[true, $other.type]], $useo, $then.type)
-          : quals = lookup([[true, $other.quals]], $useo, $then.quals)
+          : quals = lookup([[true, "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of lookup([["0", slice($then.quals, 1, 1)], ["", slice($then.quals, 1, 1)]], slice($other.quals, 1, 1), slice($other.quals, 1, 1)), lookup([["0", slice($then.quals, 2, 2)], ["", slice($then.quals, 2, 2)]], slice($other.quals, 2, 2), slice($other.quals, 2, 2)), lookup([["0", slice($then.quals, 3, 3)], ["", slice($then.quals, 3, 3)]], slice($other.quals, 3, 3), slice($other.quals, 3, 3)), lookup([["0", slice($then.quals, 4, 4)], ["", slice($then.quals, 4, 4)]], slice($other.quals, 4, 4), slice($other.quals, 4, 4)), lookup([["0", slice($then.quals, 5, 5)], ["", slice($then.quals, 5, 5)]], slice($other.quals, 5, 5), slice($other.quals, 5, 5)), lookup([["0", slice($then.quals, 6, 6)], ["", slice($then.quals, 6, 6)]], slice($other.quals, 6, 6), slice($other.quals, 6, 6)), lookup([["0", slice($then.quals, 7, 7)], ["", slice($then.quals, 7, 7)]], slice($other.quals, 7, 7), slice($other.quals, 7, 7)), lookup([["0", slice($then.quals, 8, 8)], ["", slice($then.quals, 8, 8)]], slice($other.quals, 8, 8), slice($other.quals, 8, 8)), lookup([["0", slice($then.quals, 9, 9)], ["", slice($then.quals, 9, 9)]], slice($other.quals, 9, 9), slice($other.quals, 9, 9)), lookup([["0", slice($then.quals, 10, 10)], ["", slice($then.quals, 10, 10)]], slice($other.quals, 10, 10), slice($other.quals, 10, 10)), lookup([["0", slice($then.quals, 11, 11)], ["", slice($then.quals, 11, 11)]], slice($other.quals, 11, 11), slice($other.quals, 11, 11)), lookup([["0", slice($then.quals, 12, 12)], ["", slice($then.quals, 12, 12)]], slice($other.quals, 12, 12), slice($other.quals, 12, 12)), lookup([["0", slice($then.quals, 13, 13)], ["", slice($then.quals, 13, 13)]], slice($other.quals, 13, 13), slice($other.quals, 13, 13)), lookup([["0", slice($then.quals, 14, 14)], ["", slice($then.quals, 14, 14)]], slice($other.quals, 14, 14), slice($other.quals, 14, 14)), lookup([["0", slice($then.quals, 15, 15)], ["", slice($then.quals, 15, 15)]], slice($other.quals, 15, 15), slice($other.quals, 15, 15)), lookup([["0", slice($then.quals, 16, 16)], ["", slice($then.quals, 16, 16)]], slice($other.quals, 16, 16), slice($other.quals, 16, 16))]],
+                           $then.type > 0 and $other.type > 0,
+                           lookup([[true, $other.quals]], $useo, $then.quals))
           : uns   = lookup([[0, lookup([[true, ($then.wide and $then.puns) or ($other.wide and $other.puns)]],
                                        $then.wide or $other.wide, $then.puns or $other.puns)]],
                            $type, lookup([[true, $other.uns]], $useo, $then.uns))

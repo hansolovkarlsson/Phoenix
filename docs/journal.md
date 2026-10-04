@@ -7466,3 +7466,27 @@ which a refusal that looks for its own words cannot see, so a check holds
 that they are absent. Twenty of twenty then, the dead rule gone and the
 two without a witness said so where they stand. 713 → 727 checks;
 Proem still eight of ten.
+
+**The fifth fix: `?:` between two pointers takes both arms' `const`.**
+The answer's `quals` were the first arm's, so `*(c ? p : q) = 1` with `q`
+to a `const int` was accepted and `*(c ? q : p) = 1` refused. ROADMAP had
+said the notation has no direct way to combine two texts a character at
+a time, which is true, and no loop either; but two arms of one type have
+one number of levels, and a type here has at most twelve stars and a
+base, so the answer is sixteen positions written out, each the other
+arm's digit where it is not 0 and the first's where it is. `slice` takes
+an end and not a length, and gives nothing past the end, so a position
+past both is nothing and nothing traps. `**(c ? pp : qq) = 5` with `qq`
+an `int *const *` is still taken, as `cc` takes it, which the new oracle
+program holds.
+
+It first left out a null pointer constant and a `void *` arm, as the
+`void *` case had kept its own `const` before. No break of either guard
+failed, and none can: a 0 cast to `void *` has no `const` to add, and the
+answer beside a `void *` is a `void *`, which is not written through. So
+the two guards are gone and the comment says why, which also retires the
+old sentence about the `void *` keeping its own. Three breaks, three
+caught. The first full run stopped the C oracle at its 600 seconds,
+which it takes about four minutes of alone; the machine's load was over
+three, and it finished on the second run. 727 → 729 checks; Proem still
+eight of ten.
