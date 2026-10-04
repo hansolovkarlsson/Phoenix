@@ -16,6 +16,18 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C escapes past their second digit, each refused
+
+Nothing a program can do changed. **Every digit is now shown refused as
+the third of a hex escape, and as the third of an octal escape that starts
+with a 4 to 7**, one to a line, in one program `cc` refuses line for line.
+Until now each of those two refusals was shown by a single example, so a
+digit missed would have let a string through a byte too long.
+
+**Tests:** 668 → 669. One refusal: 429.
+
+---
+
 ## 2026-10-04: C enumerators from character constants
 
 **An enumerator may be given a character constant's value**, and any

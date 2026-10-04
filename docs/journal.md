@@ -7144,3 +7144,18 @@ here as in `cc` and so makes the enumeration an `int`. Two breaks, `ev`
 from the unsigned `cval` and `eok` false, were both caught by it.
 `enumerator-from-a-character.c` was its refusal and is gone. 669 → 668
 checks.
+
+**The escape witnesses, the second fix.** On 2026-10-02 the two stages of
+a string's escapes that only find refusals, a third hex digit and a third
+octal digit after a 4 to 7, were held by the digits their refusal programs
+happened to write, not by every digit, and the closeout listed it. A digit
+left out of either stage is not refused: it is read as a character of its
+own, and the string is accepted a byte longer than `cc` makes it. One
+refusal in a file cannot show that, since any other line's still fails the
+program, but `check` reports every refusal with its line, so
+`string-escapes-every-third-digit.c` writes the 22 hex digits and the 32
+octal cases one to a line and the check in `tests/run.sh` wants lines 5 to
+26 refused as hex and 27 to 58 as octal, exactly. `cc -ferror-limit=0`
+refuses all 54 lines too. Thirty breaks, each third-position pattern in
+`c.phx` sent to a marker that never occurs, thirty caught. 668 → 669
+checks.

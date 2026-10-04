@@ -1937,6 +1937,21 @@ refuses "an escape C does not have" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/char-constant-unknown-escape.c"
 refuses "and one in a string" "nothing here matches any token rule" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/string-unknown-escape.c"
+# **The two stages that only find refusals are held digit by digit**, since
+# 2026-10-04: a third hex digit, and a third octal digit after a 4 to 7.
+# A digit dropped from either stage is read as a character of its own and
+# the string accepted a byte longer, so one refusal in a file is not enough:
+# the witness writes each digit on a line of its own, lines 5 to 26 hex and
+# 27 to 58 octal, and every one of those lines has to be refused. `cc`
+# refuses each of them too.
+third=$(bounded "$phx" --quiet --driver check "$root/languages/c/c-arm64.phx" "$r/string-escapes-every-third-digit.c" 2>&1)
+hexl=$(printf '%s\n' "$third" | grep 'has more than two digits' | sed 's/.*\.c:\([0-9]*\):.*/\1/' | tr '\n' ' ')
+octl=$(printf '%s\n' "$third" | grep 'is past 255' | sed 's/.*\.c:\([0-9]*\):.*/\1/' | tr '\n' ' ')
+if [ "$hexl" = "$(seq 5 26 | tr '\n' ' ')" ] && [ "$octl" = "$(seq 27 58 | tr '\n' ' ')" ]; then
+    report pass "every third digit of an escape refused, each on its own line"
+else
+    report fail "every third digit of an escape refused, each on its own line" "hex lines: $hexl; octal lines: $octl"
+fi
 # A subscript is a `*` of a `+`, C11 6.5.2.1, and builds nothing else, so an
 # `int` subscripted is refused as the `*` it is. `cc` says *subscripted value*;
 # the program is refused either way, and the message names the operator the
