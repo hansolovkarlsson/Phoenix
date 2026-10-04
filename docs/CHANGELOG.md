@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C pointers to functions checked at a call and a `return`
+
+**A pointer to a function is passed and returned only as its own type**,
+as it was already assigned and initialised: an argument or a `return` of
+another function's type, of a pointer to an object where a pointer to a
+function goes, or of a function where a pointer to an object or a number
+goes, is refused. These had been accepted, and a call through the wrong
+type passed and read what that type says. `cc` refuses or warns on each.
+
+**`(void *)0` goes into a pointer to a function**, as C11 6.3.2.3p3 has
+it, at an assignment, a local's initialiser, braces, an argument and a
+`return`. It had been refused at the first three as a pointer to something
+that is not a function. It is still refused as a global's or a `static`'s
+initialiser, for any pointer, which is now on the roadmap.
+
+**Tests:** 669 → 677. Eight refusals. One program joins the C oracle:
+340 agree with `cc`, none diverges. Refusals: 437.
+
+---
+
 ## 2026-10-04: C escapes past their second digit, each refused
 
 Nothing a program can do changed. **Every digit is now shown refused as

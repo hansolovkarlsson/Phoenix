@@ -7159,3 +7159,35 @@ octal cases one to a line and the check in `tests/run.sh` wants lines 5 to
 refuses all 54 lines too. Thirty breaks, each third-position pattern in
 `c.phx` sent to a marker that never occurs, thirty caught. 668 → 669
 checks.
+
+**The function-pointer check at an argument and a `return`, the third.**
+6.14's fourth part put the check at an assignment and an initialiser and
+left these two, a refusal missing and never a false one. The check is the
+initialiser's four clauses copied, with the place's level text taken from
+somewhere new: a `return` reads the function's own, `rlv` from `locals`,
+handed down as `glv`; an argument reads its parameter's from a new table,
+`plvs`, bound beside `pwidths` in the three places a signature is, and is
+checked in the `constants` pass, where an argument already knows its
+position, guarded so that one through `...` is not compared with anything.
+
+**It found a false refusal on the first probe.** Proem's `output.c`, one of
+the eight accepted, stopped at `proem_pp_on_file(pp, NULL, NULL)`: `NULL`
+in the stubs is `((void *)0)`, as Apple spells it, and the check refused it
+as a pointer to something that is not a function. So had the old ones, at
+`=`, a local's initialiser and braces, which no program had tried: C11
+6.3.2.3p3 makes a 0 cast to `void *` a null pointer constant, and `cc
+-pedantic` takes it into a pointer to a function. `npc`, from the `?:`
+work yesterday, already said which values are one, and the clause now asks
+it. **A copied check copies its mistakes**, and only a real program found
+this one; the witness, `function-pointers-passed-and-returned.c`, gives
+`(void *)0` at every site and calls through the pointers it can.
+
+Fifteen breaks: each of the eight new clauses dropped, and `npc` dropped at
+each of the seven sites; thirteen caught. The two missed were a global's
+and a `static`'s initialiser, where the `constants` pass refuses
+`(void *)0` for any pointer before it could matter, so the clause was a
+guard no program reaches and was taken out, as the standup said to do.
+That refusal is false too, since a plain `0` is taken, and it goes on
+ROADMAP's initialisers row. A comment of mine wrote `(void *)0`, whose
+`*)` ended it, and the description stopped loading; the comments say "a 0
+cast to `void *`" instead. Proem is eight of ten again. 669 → 677 checks.

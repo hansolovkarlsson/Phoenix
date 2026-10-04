@@ -2873,6 +2873,27 @@ refuses "a pointer to an int to a pointer to a function" "'f' is given a pointer
         --driver check "$root/languages/c/c-arm64.phx" "$r/object-pointer-to-function-pointer.c"
 refuses "a function to a number" "'n' is given a pointer to a function, where a number goes" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-to-a-number.c"
+# **And the same four at an argument and at a `return`**, since 2026-10-04,
+# which had been accepted: a call through a pointer of the wrong type passes
+# and reads what the wrong type says. A null pointer constant, `(void *)0`
+# as well as `0`, goes into a pointer to a function at each of them, which
+# `function-pointers-passed-and-returned.c` holds against `cc`.
+refuses "an argument a pointer to a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/argument-function-pointer-of-another-type.c"
+refuses "an argument a function, to a pointer to an int" "argument 1 of 'deref' is given a pointer to a function, where a pointer to something else goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/argument-function-to-object-pointer.c"
+refuses "an argument a pointer to an int, to a pointer to a function" "argument 1 of 'apply' is given a pointer to something that is not a function, where a pointer to a function goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/argument-object-pointer-to-function-pointer.c"
+refuses "an argument a function, to a number" "argument 1 of 'wide' is given a pointer to a function, where a number goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/argument-function-to-a-number.c"
+refuses "a pointer to a function of another type returned" "'return' in 'get' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-function-pointer-of-another-type.c"
+refuses "a function returned as a 'void *'" "'return' in 'get' is given a pointer to a function, where a pointer to something else goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-function-to-void-pointer.c"
+refuses "a pointer to an int returned as a pointer to a function" "'return' in 'get' is given a pointer to something that is not a function, where a pointer to a function goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-object-pointer-to-function-pointer.c"
+refuses "a function returned as a number" "'return' in 'get' is given a pointer to a function, where a number goes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/return-function-to-a-number.c"
 refuses "a function declared through a typedef" "'add' is declared through a typedef of a function's type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef.c"
 refuses "a function returning a function" "expected ; or {, and found \"(\"" \
