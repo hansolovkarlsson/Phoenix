@@ -1074,7 +1074,7 @@
   thread written = empty
 
   Global      : out = ""
-              : emits = not $base.sext and not defined($initialised, $name) and not defined($written, $name)
+              : emits = not $fnty and not $base.sext and not defined($initialised, $name) and not defined($written, $name)
               : written = lookup([[true, bind($written, $name, true)]], $emits, $written)
               : globl = lookup([[true, ""]], $hidden, "\t.globl _{}\n" of $name)
               : gdata = "{}{}" of $gdata,

@@ -2887,8 +2887,40 @@ refuses "a pointer to an int returned as a pointer to a function" "'return' in '
         --driver check "$root/languages/c/c-arm64.phx" "$r/return-object-pointer-to-function-pointer.c"
 refuses "a function returned as a number" "'return' in 'get' is given a pointer to a function, where a number goes" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/return-function-to-a-number.c"
-refuses "a function declared through a typedef" "'add' is declared through a typedef of a function's type" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef.c"
+# **A function declared through a typedef of its type**, `binop add;`, is a
+# prototype at file scope since 2026-10-04, which
+# `functions-declared-through-a-typedef.c` holds against `cc`, and is checked
+# against the function's other declarations and the globals. In a block it is
+# still refused by name, which `cc` compiles.
+refuses "a function declared through a typedef, in a block" "'add' is declared through a typedef of a function's type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef-in-a-block.c"
+refuses "a typedef's function defined with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-defined-with-another-arity.c"
+refuses "and prototyped with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-prototyped-with-another-arity.c"
+refuses "and declared in a list with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-listed-with-another-arity.c"
+# A count that differs is said once: the checks of which parameters are
+# structs and which are `long`s ask only when the counts agree, since their
+# words are about one parameter against another.
+arity=$(bounded "$phx" --quiet --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-defined-with-another-arity.c" 2>&1 | grep -c 'error:')
+if [ "$arity" = 1 ]; then
+    report pass "a count that differs is said once"
+else
+    report fail "a count that differs is said once" "$arity errors"
+fi
+refuses "and declared after one of another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-declared-after-another-arity.c"
+refuses "and declared again returning another type" "'add' is declared twice, returning a different type each time" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-declared-returning-another-type.c"
+refuses "and named as a global already" "'add' is a global already, and a function and a global share one name space" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-named-as-a-global.c"
+refuses "a global named as a typedef's function" "'add' is a function already, and a function and a global share one name space" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-named-as-a-typedef-function.c"
+refuses "a typedef's function given a number for a struct" "'take' is given a struct where its parameter is not that struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-given-a-number-for-a-struct.c"
+refuses "a typedef's function given a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-given-another-function-type.c"
 refuses "a function returning a function" "expected ;, { or ,, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
 # **A function declared in a list with other names**, since 2026-10-04,

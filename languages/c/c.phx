@@ -1962,7 +1962,9 @@ arg  = e:assignment -> Arg(value: $e) .
             : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
             : pwidths = bind($pwidths, $name, $params.pwide)
             : plvs    = bind($plvs, $name, $params.lv)
-            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+            ! defined($tdfns, $name) and lookup($tdfns, $name, [0, 0]) <> [size($params), $variadic]
+                : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
+            ! defined($sigs, $name) and size(lookup($sigs, $name, empty)) = size($params) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
             ! defined($globals, $name)
@@ -1973,7 +1975,7 @@ arg  = e:assignment -> Arg(value: $e) .
                     <> [lookup([[0, $ret.tagname]], size($rparen), ""), lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void" and size($rparen) = 0, $ret.basew),
                         lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
-            ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
+            ! defined($pwidths, $name) and size(lookup($pwidths, $name, empty)) = size($params) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
@@ -1995,7 +1997,9 @@ arg  = e:assignment -> Arg(value: $e) .
             : rets  = bind($rets, $name, [lookup([[0, $base.tagname]], size($rparen), ""), $base.basew, $rptrs, $base.buns, ("{}{}" of $base.bquals, $squals), $rlv])
             : pwidths = bind($pwidths, $name, $params.pwide)
             : plvs    = bind($plvs, $name, $params.lv)
-            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+            ! defined($tdfns, $name) and lookup($tdfns, $name, [0, 0]) <> [size($params), $variadic]
+                : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
+            ! defined($sigs, $name) and size(lookup($sigs, $name, empty)) = size($params) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
             ! defined($globals, $name)
@@ -2006,7 +2010,7 @@ arg  = e:assignment -> Arg(value: $e) .
                     <> [lookup([[0, $base.tagname]], size($rparen), ""), lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void" and size($rparen) = 0, $base.basew),
                         lookup([[0, $stars + $base.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $base.buns, "{}{}" of $base.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
-            ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
+            ! defined($pwidths, $name) and size(lookup($pwidths, $name, empty)) = size($params) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
             ! $name = "main" and $stars + $base.ptrs = 0 and $base.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
@@ -2038,7 +2042,9 @@ arg  = e:assignment -> Arg(value: $e) .
             : pwidths = bind($pwidths, $name, $params.pwide)
             : plvs    = bind($plvs, $name, $params.lv)
             : frame = $bytes
-            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+            ! defined($tdfns, $name) and lookup($tdfns, $name, [0, 0]) <> [size($params), $variadic]
+                : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
+            ! defined($sigs, $name) and size(lookup($sigs, $name, empty)) = size($params) and lookup($sigs, $name, empty) <> $params.passes
                 : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
                     of $name
             ! defined($globals, $name)
@@ -2049,7 +2055,7 @@ arg  = e:assignment -> Arg(value: $e) .
                     <> [lookup([[0, $ret.tagname]], size($rparen), ""), lookup([[true, 0]], $ret.tagname <> "" and $ret.tagname <> "void" and size($rparen) = 0, $ret.basew),
                         lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $ret.buns, "{}{}" of $ret.bquals, $squals]
                 : "'{}' is declared twice, returning a different type each time" of $name
-            ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
+            ! defined($pwidths, $name) and size(lookup($pwidths, $name, empty)) = size($params) and lookup($pwidths, $name, empty) <> $params.pwide
                 : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
@@ -2947,12 +2953,35 @@ arg  = e:assignment -> Arg(value: $e) .
   (* **A name declared through a typedef of a function's type** declares a
    * function, `binop add;`, C11 6.7.6.3, since ROADMAP 6.14's fourth part,
    * when such a typedef could be written: refused by name in each
-   * declarator below, `Global`, `Local`, `Static`, `Param` and
-   * `MemberScalar`, since what it declares has no body and no storage. As
-   * a parameter it would be a pointer to the function, 6.7.6.3p8. *)
+   * declarator below, `Local`, `Static`, `Param` and `MemberScalar`, since
+   * what it declares has no body and no storage. As a parameter it would
+   * be a pointer to the function, 6.7.6.3p8.
+   *
+   * **At file scope it is a prototype**, since 2026-10-04: `fnty` says
+   * so, and the `Global` binds no global and takes no storage, but copies
+   * the typedef's entries in the five tables a call reads, which its `Sig`
+   * bound under its key, to its own name. The `functions` pass counts a
+   * function's parameters to check its declarations agree and cannot see
+   * a typedef's, so `tdfns` keeps the names declared this way, and each
+   * declaration of a function checks its count against them here, kept
+   * in `tdfns` itself, since a definition has bound its own by then. *)
+  thread tdfns = empty
+  otherwise fnty = false
   Global      : down dbase   = $base
-              ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
-                  : "'{}' is declared through a typedef of a function's type, which declares a function, as C allows and this subset does not yet" of $name
+              : fnty    = $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+              : fnkey   = at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6)
+              : funcs   = lookup([[true, bind($funcs, $name, lookup($funcs, $fnkey, [0, 0]))]], $fnty, $funcs)
+              : sigs    = lookup([[true, bind($sigs, $name, lookup($sigs, $fnkey, []))]], $fnty, $sigs)
+              : rets    = lookup([[true, bind($rets, $name, lookup($rets, $fnkey, ["", 4, 0, false, "0"]))]], $fnty, $rets)
+              : pwidths = lookup([[true, bind($pwidths, $name, lookup($pwidths, $fnkey, []))]], $fnty, $pwidths)
+              : plvs    = lookup([[true, bind($plvs, $name, lookup($plvs, $fnkey, []))]], $fnty, $plvs)
+              : tdfns   = lookup([[true, bind($tdfns, $name, lookup($funcs, $fnkey, [0, 0]))]], $fnty, $tdfns)
+              ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> "" and defined($funcs, $name)
+                and lookup($funcs, $name, [0, 0]) <> lookup($funcs, at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6), [0, 0])
+                  : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
+              ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> "" and defined($rets, $name)
+                and lookup($rets, $name, []) <> lookup($rets, at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6), [])
+                  : "'{}' is declared twice, returning a different type each time" of $name
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2966,16 +2995,18 @@ arg  = e:assignment -> Arg(value: $e) .
               : ebytes = int(at(split(at(split($lv, "|"), 1), ":"), 2))
               : galign = int(at(split(at(split($lv, "|"), 1), ":"), 4))
               : whole  = $ebytes
-              : globals = bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 7),
-                                                 $base.buns, $name, $dquals, false, $lv])
-              ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
+              : globals = lookup([[true, $globals]], $fnty, bind($globals, $name, [0, $ptrs, 0, $basew, $base.tagname, true, defined($globals, $name) and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 7),
+                                                 $base.buns, $name, $dquals, false, $lv]))
+              ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void" and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) = ""
                   : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
-              ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext
+              ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0 and not $base.sext and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) = ""
                   : "'{}' is declared of 'struct {}', which is not complete here, C11 6.7p7" of $name, at(split($base.tagname, "."), 1)
               ! defined($globals, $name) and [at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 2), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 3), lookup([[true, 0]], at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5) <> "" and at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5) <> "void", at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 4)), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 5), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 8), at(lookup($globals, $name, [0, 0, 0, 0, "", true, false, false, "", "0", false, "b:4:0:4"]), 10)] <> [$stars + $base.ptrs, 0, lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void", $base.basew), $base.tagname, $base.buns, "{}{}" of $base.bquals, $squals]
                   : "'{}' is declared again with another type, C11 6.7p4" of $name
-              ! defined($funcs, $name)
+              ! defined($funcs, $name) and not ($stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> "")
                   : "'{}' is a function already, and a function and a global share one name space, C11 6.2.3" of $name
+              ! defined($globals, $name) and $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> ""
+                  : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
               ! defined($typedefs, $name)
                   : "'{}' is a typedef already, and a typedef and a global share one name space, C11 6.2.3" of $name
               ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)

@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C functions declared through a typedef of their type
+
+**`typedef int binop(int, int); binop add, sub;` declares two functions**
+at file scope, as C11 6.7.6.3 has it, which can be called before they are
+defined and are checked against their other declarations: a different
+number of parameters, a different return type, or a global of the same
+name is refused. It had been refused by name. In a block, as a parameter
+and as a struct member it still is.
+
+**Tests:** 686 → 696. Nine refusals. One program joins the C oracle: 344
+agree with `cc`, none diverges. Refusals: 455.
+
+---
+
 ## 2026-10-04: C functions declared beside other names
 
 **A function may be declared in a list with other names at file scope**,

@@ -7279,3 +7279,35 @@ beside a global, and two refusals pass a struct parameter a number and a
 pointer to a function of another type. Nine of nine then. In a block,
 `int x, f(void);` is still a syntax error, and ROADMAP's declarations row
 says so. 682 → 686 checks; Proem still eight of ten.
+
+**The fifth fix, its third part: `binop add;`.** A `Global` whose base is
+a typedef of a function's type, with no stars, parentheses or brackets of
+its own, is `fnty`, and is a prototype: it binds no global and the emit
+writes no storage for it, and it copies the typedef's entries in the five
+tables a call reads, which the typedef's `Sig` bound under its key, to its
+own name. Two things the `functions` pass did for every other prototype it
+cannot do for this one, since it runs before any typedef's parameters are
+known: count them to check a function's declarations agree. So a new
+thread, `tdfns`, keeps each name declared this way with its count, and
+`Prototype`, `FnDecl` and `Function` check theirs against it in `locals`;
+the `Global` checks its own against a declaration before it.
+
+The count is kept in `tdfns` and not read back from `funcs`, because the
+first version read `funcs` in `Function`, which binds its own entry with a
+`down` clause, so the check compared the definition with itself and never
+fired; what fired instead were the checks of which parameters are structs
+and which `long`s, whose words are about one parameter against another and
+were wrong for a count. Those two now ask only when the counts agree, in
+all three rules, so a count that differs is said once; a check in
+`run.sh` holds that it is. The checks that an object's type is complete
+skip a function, since a typedef of one returning `void *` has `void` for
+its base's tag, which the probe found as `alloc malloc;` refused as
+`void`.
+
+Nineteen breaks; the first run missed two. `pwidths` showed nothing
+because `wide` was defined below `main`, and the definition's entry is
+the one the emit reads, so the witness calls `labs` through a typedef
+with a negative `int`; and the `Global`'s own return-type check was masked
+by the `Prototype`'s when the prototype came second, so its refusal puts
+it first. Nineteen of nineteen then. The old refusal of `binop add;` is
+kept, moved into a block. 686 → 696 checks; Proem still eight of ten.
