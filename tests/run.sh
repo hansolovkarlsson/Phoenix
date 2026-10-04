@@ -2356,6 +2356,22 @@ refuses "a global int initialised with an address" "'x' has to be initialised wi
 # does, and `cc` refuses it as no constant at all, which is what it says now.
 refuses "a global pointer initialised from another" "'q' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/global-pointer-from-a-pointer.c"
+# **An integer cast to a pointer is settled**, since 2026-10-04, C11 6.6p9,
+# which `pointers-cast-from-numbers-in-data.c` holds against `cc`. It is the
+# one pointer that is, so each place that wants an integer asks that its
+# operand is not a pointer, and these stay refused as they were. `cc` takes
+# all five as an extension; C11 6.6p6 and p8 do not.
+g6="'x' has to be initialised with something worked out before the program runs, C11 6.7.9p4, and this one cannot be"
+refuses "a global from '!' of a pointer" "$g6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-not-of-a-pointer.c"
+refuses "a global from a pointer '&&' a number" "$g6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-pointer-and-a-number.c"
+refuses "a global from a number '||' a pointer" "$g6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-number-or-a-pointer.c"
+refuses "a global chosen by a pointer" "$g6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-chosen-by-a-pointer.c"
+refuses "a global from a pointer cast to a number" "$g6" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/global-from-a-pointer-cast-to-a-number.c"
 # **`static`**, since 2026-09-29, ROADMAP 6.10's first part. Reserving the
 # word is what refuses the first, which compiled until then; `cc` refuses
 # the rest as well. Until ROADMAP 6.12's first part the word was first or

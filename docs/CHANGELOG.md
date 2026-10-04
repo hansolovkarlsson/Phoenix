@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C integers cast to pointers in a global's initialiser
+
+**`int *p = (void *)0;` compiles** as a global or a `static`, where it was
+refused as not worked out before the program runs; a plain `0` had been
+taken. Any integer constant cast to a pointer is now an address constant,
+as C11 6.6p9 has it, so `char *c = (char *)0;` and
+`int *t[2] = { (void *)0, (int *)16 };` are written into the object file
+as the numbers they are, and a pointer to a function may be initialised with a 0 cast to
+`void *` there too. A pointer cast to an integer, or given to `!`, `&&`,
+`||` or as the condition of `?:`, is still refused where a constant is
+wanted; `cc` takes those as an extension.
+
+**Tests:** 701 → 706. Five refusals. One program joins the C oracle: 346
+agree with `cc`, none diverges. Refusals: 465.
+
+---
+
 ## 2026-10-04: C `()` in a declaration is no prototype
 
 **`int f();` says nothing of `f`'s parameters**, as C11 6.7.6.3p14 has it,

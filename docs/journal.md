@@ -7341,3 +7341,31 @@ in a list; and a struct to an unprototyped function was refused as
 breaks, sixteen caught. `()` in a pointer to a function, `int (*f)()`, is
 still read as no parameters, on ROADMAP. 696 → 701 checks; Proem still
 eight of ten.
+
+**After the closeout, the first fix of the standup's list: an integer cast
+to a pointer in data.** `int *p = (void *)0;` as a global's or a `static`'s
+initialiser was refused as not worked out before the program runs, since
+the `constants` pass settled no cast to a pointer, and a plain `0` was
+taken. C11 6.6p9 makes any integer constant cast to a pointer an address
+constant, so the fix is that and not the null pointer constant alone: a
+cast to a pointer is settled when its operand is, keeping all sixty-four
+bits, where a cast to an integer is cut to its type's width; a pointer
+cast to another pointer keeps its number too, so `(char *)(void *)0` is
+settled. The emit already wrote a settled value as the number. The
+`types` pass's check that a pointer to a function is given a function had
+let a 0 cast to `void *` through everywhere but a global's and a
+`static`'s, on the ground that `constants` refused it there first; the
+ground went, and the two checks ask `npc` as the rest do.
+
+What had kept this safe was that **no value with a pointer's type was ever
+settled**, and the comment on `why` said so. Now some are, so everything
+that takes a settled value as an integer has to ask that it is not a
+pointer: `Binary` and `Compare` asked already, and a cast to an integer,
+`!`, `&&`, `||` and the condition of `?:` did not. Without those, `int x =
+!(void *)0;` would have been folded. `cc` takes all five as an extension
+and C11 6.6p6 and p8 do not, so they stay refused as they were, each held
+by a refusal. The witness, `pointers-cast-from-numbers-in-data.c`, has
+each form in a global, a `static`, an array and a struct in braces, and a
+pointer to a function; and `(int *)(1u - 2)`, which is what catches a
+pointer cut to thirty-two bits with its sign put back. Ten breaks, ten
+caught. 701 → 706 checks; Proem still eight of ten.
