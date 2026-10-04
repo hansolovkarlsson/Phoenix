@@ -1739,3 +1739,64 @@ message moved.
 > A refusal's reason is a claim about the rest of the compiler. When the
 > compiler changes, the reasons written against it are the first thing
 > to reread, before the stops a probe finds.
+
+## 36. "A refusal missing, never a false one"
+
+On 2026-10-04 seven of the open fixes were taken, easiest first, and four
+things written earlier met them.
+
+*Failed: the function-pointer check "is made at an assignment and an
+initialiser, and not yet at an argument or a `return`, where a pointer to
+a function of another type is accepted that `cc` refuses, a refusal
+missing and never a false one"* ([COMPLETED 6.14](COMPLETED.md#614-pointers-to-functions),
+2026-10-01). The missing half was missing, but the half that existed was
+not only a refusal: copied to an argument, it stopped Proem's `output.c`
+at `proem_pp_on_file(pp, NULL, NULL)` on the first probe, and the same
+clause had refused `(void *)0` at `=`, a local's initialiser and braces
+since it was written. No program had given a pointer to a function a
+null cast to `void *`, and C11 6.3.2.3p3 makes that a null pointer
+constant. **"Never a false one" was a claim about the programs tried,
+not about the check**, and a copy carried the defect to a place where a
+real program met it.
+
+*Failed, as wrong code: an enumerator's value "in exact integers"*
+(`c.phx`, `locals`, 2026-10-01). The comment bounded what exact integers
+could not do, a product past 2^62, a shift past 31, a division by zero,
+and said nothing of what C does differently from them, which is convert
+beside an unsigned operand. `enum { A = -1 / 2u }` compiled to 0 where
+`cc` gives 2147483647. It was found by a probe for something else, the
+`?:` item, written to see what `ev` answered beside a `u`. Hans chose a
+refusal by name over unsigned arithmetic; every use in Proem, `1u << 0`
+and `|`, is one where the two agree.
+
+*Held: the fixes "sorted by what each costs, easiest first"* (journal,
+2026-10-03). The bottom three were a moved rule, a generated witness and
+a copied check. The middle ones, `int x, f(void);` and `binop add;`, were
+each a node or a table and an afternoon's breaks, more than "a new
+binding or check on an existing pattern" said, but in that order. `()`,
+at the top, took a parse alternative, a flag through four passes and the
+emit's register placement, and found a hole in the arity count on the
+way. The `const` levels of `?:` and the notation's limits are still
+there, untouched, as the sort predicted.
+
+*Half held: "a break that no test catches deserves the same doubt in
+reverse: … the right move was to take it out"* (standup, 2026-10-03).
+Twenty-two breaks were missed on a first run today, and they were three
+different things. Five were guards no program reaches: `npc` at a
+global's and a `static`'s initialiser and `eok` on `-` and `~` of an
+unsigned came out, and one frame count was kept, with a comment, because
+a right count is still the right count. Thirteen were witnesses too kind:
+`puts`, with one argument, showing nothing of the registers, or a
+definition further down binding what a declaration alone should have.
+Four were two holes: the shift clause asked about a negative left side,
+which only a child already marked can be, instead of a value past 2^32;
+and three misses on `FnDecl` were one fault in the arity count, which an
+unprototyped name let a mismatch through. Taking
+out each unreachable guard was right. Reading every miss as an
+unreachable guard would have deleted the fixes for both holes.
+
+> A missed break is a question with three answers: a guard nothing
+> reaches, a witness that is too kind, or a check that asks the wrong
+> thing. Which one it is gets settled by writing the program that should
+> have failed, never by deciding first.
+
