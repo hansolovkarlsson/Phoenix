@@ -2889,8 +2889,20 @@ refuses "a function returned as a number" "'return' in 'get' is given a pointer 
         --driver check "$root/languages/c/c-arm64.phx" "$r/return-function-to-a-number.c"
 refuses "a function declared through a typedef" "'add' is declared through a typedef of a function's type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-declared-through-a-typedef.c"
-refuses "a function returning a function" "expected ; or {, and found \"(\"" \
+refuses "a function returning a function" "expected ;, { or ,, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
+# **A function declared in a list with other names**, since 2026-10-04,
+# `int x, f(void);`, which `functions-declared-in-a-list.c` holds against
+# `cc`, is checked as a prototype is: against a global of its name, and
+# against its own declaration again.
+refuses "a function in a list, named as a global already" "'x' is a global already, and a function and a global share one name space" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-named-twice.c"
+refuses "a function in a list, declared again with another arity" "a function is declared with two different numbers of parameters" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-declared-again.c"
+refuses "a function in a list, given a number for a struct" "'take' is given a struct where its parameter is not that struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-given-a-number-for-a-struct.c"
+refuses "a function in a list, given a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-given-another-function-type.c"
 refuses "a function returning an array" "expected *, and found \"f\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-an-array.c"
 refuses "an array of functions" "expected [, =, , or ;, and found \"(\"" \

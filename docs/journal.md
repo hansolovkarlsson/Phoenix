@@ -7254,3 +7254,28 @@ and every offset still right; it is kept, and the comment says so.
 `own-initialiser-braces-static-global.c` puts each beside a compound
 literal and reads back the address and the `sizeof`; the three refusals
 it replaces are gone. 685 → 682 checks; Proem still eight of ten.
+
+**The fifth fix, its second part: `int x, f(void);`.** It was a syntax
+error, since a file-scope declaration's list took only a global's
+declarators. The first try put a `Prototype` in the list with the
+specifiers as its `ret`, and the notation said no: a group inside a rule
+cannot name the rule's labels. So it is a node of its own, `FnDecl`, a
+prototype whose return type is the `base` the `Decls` hands down, as every
+other declarator's is; the 77th. Its three rules are `Prototype`'s copied
+with `$ret` read as `$base`. The copy was made by text substitution, which
+also turned `$rets` into `$bases`; the description said so at once.
+`list-function` is a rule of its own because it is a scope in `%names`, as
+`function` is, so a parameter named like a typedef hides it only to the
+`;`; it is tried before a global's declarator at each place, which would
+take the name and stop at the `(`. The parse error of
+`function-returning-a-function.c` gained a `,` among what it expected.
+
+Nine breaks, and the first run missed three: the `sigs`, `rets` and `plvs`
+bindings, because every function the witness declared in a list it also
+defined further down, and the definition binds the same entries, which the
+`types` pass is handed whole. A function only declared in a list is either
+the C library's or a refusal, so the witness calls `malloc` declared
+beside a global, and two refusals pass a struct parameter a number and a
+pointer to a function of another type. Nine of nine then. In a block,
+`int x, f(void);` is still a syntax error, and ROADMAP's declarations row
+says so. 682 → 686 checks; Proem still eight of ten.

@@ -201,7 +201,7 @@ program = { item } -> Program(items: $1) .
     hide    Param.name Local.name LocalInit.name LocalArray.name
             Static.name StaticInit.name StaticArray.name LocalAgg.name StaticAgg.name
             Enumerator.name
-    scope   block function for-declaration fn-suffix
+    scope   block function for-declaration fn-suffix list-function
     guard   typedef-name .
 
 (* A prototype or a definition, and the prototype first because it is the
@@ -252,8 +252,25 @@ item = b:tdspecifiers d:typedef-declarator r:{ "," e:typedef-declarator -> $e } 
       * with a count in brackets or an initialiser. It is tried after a
       * function, which fails at the `;`, `[` or `=` where its `(` was
       * wanted. Three nodes, for the reason a local is three. *)
-     | b:specifiers d:global-declarator r:{ "," e:global-declarator -> $e } ";"
+     (* **A function may be declared in the list**, since 2026-10-04, `int
+      * x, f(void);`, by `list-function`, which is tried first at each
+      * place, since a global's declarator would take the name and stop at
+      * the `(`. A declaration of one function alone is still `function`'s,
+      * which is tried before this. *)
+     | b:specifiers d:list-declarator r:{ "," e:list-declarator -> $e } ";"
          -> Decls(spec: $b, items: flatten([[$d], $r]), kind: "file") .
+
+list-declarator = list-function | global-declarator .
+
+(* **A function declared beside other names**, a `FnDecl`, which is a
+ * `Prototype` whose return type is the `base` the `Decls` above hands down,
+ * as every declarator's type is. A rule of its own because it is a scope,
+ * as `function` is: see `%names`. A function returning a pointer to a
+ * function is not written this way here. *)
+list-function = t:pointer n:name "(" "void" ")"
+                  -> FnDecl(name: $n, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [])
+              | t:pointer n:name "(" p:params v:dots ")"
+                  -> FnDecl(name: $n, stars: size($t), squals: join(each($t, "{}")), params: $p, variadic: size($v), rparen: []) .
 
 (* **One declarator**, since ROADMAP 6.12's second part, when a declaration
  * became a `Decls`: the specifiers once, as `spec`, and each name after
@@ -1215,6 +1232,21 @@ arg  = e:assignment -> Arg(value: $e) .
                     of $name, size($params)
             ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
                 : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
+  (* The same of a `FnDecl`, whose return type is `base`, since 2026-10-04. *)
+  FnDecl    : internal = lookup([[true, 1]], $base.stat, 0)
+            : shape = ["{}/{}" of $name, size($params)]
+            : dshape = ["{}/{}" of $name, $variadic]
+            : dname = [$name]
+            : fdefs = []
+            : hidden  = lookup($linkage, $name, $internal = 1)
+            : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
+            ! $base.stat and defined($linkage, $name) and not lookup($linkage, $name, false)
+                : "'{}' is declared 'static' after a declaration without it, C11 6.2.2p7" of $name
+            ! size($params) > 8
+                : "'{}' has {} parameters, and only eight are compiled: the ninth goes on the stack, and nothing here puts it there"
+                    of $name, size($params)
+            ! $base.unsup = "" and $base.nstore < 2 and ($base.sauto or $base.sreg)
+                : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $base.sauto, "register") .
   Function  : internal = lookup([[true, 1]], $ret.stat, 0)
             : shape = ["{}/{}" of $name, size($params)]
             : dshape = ["{}/{}" of $name, $variadic]
@@ -1946,6 +1978,39 @@ arg  = e:assignment -> Arg(value: $e) .
             ! $name = "main" and $stars + $ret.ptrs = 0 and $ret.tagname <> ""
                 : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
                     of lookup([["void", "void"]], $ret.tagname, "struct {}" of at(split($ret.tagname, "."), 1)) .
+  (* The same of a `FnDecl`, whose return type is `base`, since 2026-10-04. *)
+  FnDecl    : rlv   = lookup([[0, "{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $stars), $base.blv]], size($rparen), join($rparen.t))
+            : rptrs = lookup([[0, $stars + $base.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1))
+            : down dbase   = $base
+            : down dstars  = $stars
+            : down inparen = false
+            : down pP      = ""
+            : down pouter  = []
+          : down env    = empty
+            : down scope  = empty
+            : down bytes  = 0
+            : down pindex = 0
+            : funcs = bind($funcs, $name, [size($params), $variadic])
+            : sigs  = bind($sigs, $name, $params.passes)
+            : rets  = bind($rets, $name, [lookup([[0, $base.tagname]], size($rparen), ""), $base.basew, $rptrs, $base.buns, ("{}{}" of $base.bquals, $squals), $rlv])
+            : pwidths = bind($pwidths, $name, $params.pwide)
+            : plvs    = bind($plvs, $name, $params.lv)
+            ! defined($sigs, $name) and lookup($sigs, $name, empty) <> $params.passes
+                : "'{}' is declared twice, and a parameter that is a struct in one is not the same struct in the other"
+                    of $name
+            ! defined($globals, $name)
+                : "'{}' is a global already, and a function and a global share one name space, C11 6.2.3" of $name
+            ! defined($rets, $name)
+                and [at(lookup($rets, $name, empty), 1), lookup([[true, 0]], at(lookup($rets, $name, empty), 1) <> "" and at(lookup($rets, $name, empty), 1) <> "void", at(lookup($rets, $name, empty), 2)),
+                     at(lookup($rets, $name, empty), 3), at(lookup($rets, $name, empty), 4), at(lookup($rets, $name, empty), 5)]
+                    <> [lookup([[0, $base.tagname]], size($rparen), ""), lookup([[true, 0]], $base.tagname <> "" and $base.tagname <> "void" and size($rparen) = 0, $base.basew),
+                        lookup([[0, $stars + $base.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1)), $base.buns, "{}{}" of $base.bquals, $squals]
+                : "'{}' is declared twice, returning a different type each time" of $name
+            ! defined($pwidths, $name) and lookup($pwidths, $name, empty) <> $params.pwide
+                : "'{}' is declared twice, and a parameter that is a long in one is not in the other" of $name
+            ! $name = "main" and $stars + $base.ptrs = 0 and $base.tagname <> ""
+                : "'main' returns an int, C11 5.1.2.2.1, and this says '{}'"
+                    of lookup([["void", "void"]], $base.tagname, "struct {}" of at(split($base.tagname, "."), 1)) .
 
   Function  : rlv   = lookup([[0, "{}{}" of slice("p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|", 1, 8 * $stars), $ret.blv]], size($rparen), join($rparen.t))
             : rptrs = lookup([[0, $stars + $ret.ptrs]], size($rparen), at(flatten([$rparen.stars, [0]]), 1))

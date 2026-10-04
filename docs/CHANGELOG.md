@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C functions declared beside other names
+
+**A function may be declared in a list with other names at file scope**,
+`int count, printf(const char *format, ...), total = 5;`, in any place in
+the list, and is a prototype like any other: it can be called before its
+definition, and its declarations are checked against each other and
+against the globals. It had been a syntax error. In a block it still is.
+
+**Tests:** 682 → 686. Four refusals. One program joins the C oracle: 343
+agree with `cc`, none diverges. Refusals: 446.
+
+---
+
 ## 2026-10-04: C names in their own initialisers, in braces, `static` and global
 
 **A name may be used in its own initialiser in braces, in a `static`

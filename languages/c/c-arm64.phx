@@ -1035,6 +1035,7 @@
                   join($params.out), join($body.out), $name .
 
   Prototype : out = "" .
+  FnDecl    : out = "" .
   StructDef : out = "" .
   Typedef   : out = "" .
 
