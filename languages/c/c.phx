@@ -269,6 +269,8 @@ list-declarator = list-function | global-declarator .
  * function is not written this way here. *)
 list-function = t:pointer n:name "(" "void" ")"
                   -> FnDecl(name: $n, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [])
+              | t:pointer n:name "(" ")"
+                  -> FnDecl(name: $n, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 2, rparen: [])
               | t:pointer n:name "(" p:params v:dots ")"
                   -> FnDecl(name: $n, stars: size($t), squals: join(each($t, "{}")), params: $p, variadic: size($v), rparen: []) .
 
@@ -484,6 +486,14 @@ function = r:specifiers t:pointer "(" "*" q:{ "const" } u:pointer n:name "(" "vo
          | r:specifiers t:pointer n:name "(" "void" ")" "{" s:{ statement } "}"
              -> Function(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 0, rparen: [],
                          body: $s, ids: [])
+         (* **`()` in a declaration says nothing of the parameters**, C11
+          * 6.7.6.3p14, since 2026-10-04: an unprototyped function, whose
+          * `variadic` is 2. Its calls are not counted and their arguments
+          * go in registers with C's default promotions, 6.5.2.2p6; a later
+          * prototype or definition says what it takes. In a definition
+          * `()` is no parameters, as it was, and so is `(void)` anywhere. *)
+         | r:specifiers t:pointer n:name "(" ")" ";"
+             -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: [], variadic: 2, rparen: [])
          | r:specifiers t:pointer n:name "(" p:params v:dots ")" ";"
              -> Prototype(name: $n, ret: $r, stars: size($t), squals: join(each($t, "{}")), params: $p,
                           variadic: size($v), rparen: [])
@@ -1213,15 +1223,20 @@ arg  = e:assignment -> Arg(value: $e) .
                                    lookup([[true, "_Noreturn "]], size(split($words, " _Noreturn ")) > 1, ""),
                                    lookup([[true, "_Alignas "]], size(split($words, " _Alignas ")) > 1, "")), " "), 1) .
 
-  (* A shape is a name and an arity as one text, so that `positions` can
+  (* **An unprototyped declaration counts nothing**, since 2026-10-04: no
+   * shape, since it says no arity, and **no name** either, since a name
+   * with no shape would make room for another name's second one in the
+   * count below, and `int puts();` beside two arities of `f` would pass.
+   *
+   * A shape is a name and an arity as one text, so that `positions` can
    * count how many distinct ones there are: more shapes than names means a
    * name with two arities. **A `dshape` is the name and whether it ends in
    * `...`**, since 2026-09-26, counted the same way and kept apart so that
    * each refusal says which of the two differs. *)
   Prototype : internal = lookup([[true, 1]], $ret.stat, 0)
-            : shape = ["{}/{}" of $name, size($params)]
-            : dshape = ["{}/{}" of $name, $variadic]
-            : dname = [$name]
+            : shape = lookup([[2, []]], $variadic, ["{}/{}" of $name, size($params)])
+            : dshape = lookup([[2, []]], $variadic, ["{}/{}" of $name, $variadic])
+            : dname = lookup([[2, []]], $variadic, [$name])
             : fdefs = []
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
@@ -1234,9 +1249,9 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, lookup([[true, "auto"]], $ret.sauto, "register") .
   (* The same of a `FnDecl`, whose return type is `base`, since 2026-10-04. *)
   FnDecl    : internal = lookup([[true, 1]], $base.stat, 0)
-            : shape = ["{}/{}" of $name, size($params)]
-            : dshape = ["{}/{}" of $name, $variadic]
-            : dname = [$name]
+            : shape = lookup([[2, []]], $variadic, ["{}/{}" of $name, size($params)])
+            : dshape = lookup([[2, []]], $variadic, ["{}/{}" of $name, $variadic])
+            : dname = lookup([[2, []]], $variadic, [$name])
             : fdefs = []
             : hidden  = lookup($linkage, $name, $internal = 1)
             : linkage = bind($linkage, $name, lookup($linkage, $name, $internal = 1))
@@ -1957,11 +1972,11 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : funcs = bind($funcs, $name, [size($params), $variadic])
-            : sigs  = bind($sigs, $name, $params.passes)
+            : funcs = lookup([[true, $funcs]], $variadic = 2 and defined($funcs, $name), bind($funcs, $name, [size($params), $variadic]))
+            : sigs  = lookup([[true, $sigs]], $variadic = 2 and defined($sigs, $name), bind($sigs, $name, $params.passes))
             : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
-            : pwidths = bind($pwidths, $name, $params.pwide)
-            : plvs    = bind($plvs, $name, $params.lv)
+            : pwidths = lookup([[true, $pwidths]], $variadic = 2 and defined($pwidths, $name), bind($pwidths, $name, $params.pwide))
+            : plvs    = lookup([[true, $plvs]], $variadic = 2 and defined($plvs, $name), bind($plvs, $name, $params.lv))
             ! defined($tdfns, $name) and lookup($tdfns, $name, [0, 0]) <> [size($params), $variadic]
                 : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
             ! defined($sigs, $name) and size(lookup($sigs, $name, empty)) = size($params) and lookup($sigs, $name, empty) <> $params.passes
@@ -1992,11 +2007,11 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : funcs = bind($funcs, $name, [size($params), $variadic])
-            : sigs  = bind($sigs, $name, $params.passes)
+            : funcs = lookup([[true, $funcs]], $variadic = 2 and defined($funcs, $name), bind($funcs, $name, [size($params), $variadic]))
+            : sigs  = lookup([[true, $sigs]], $variadic = 2 and defined($sigs, $name), bind($sigs, $name, $params.passes))
             : rets  = bind($rets, $name, [lookup([[0, $base.tagname]], size($rparen), ""), $base.basew, $rptrs, $base.buns, ("{}{}" of $base.bquals, $squals), $rlv])
-            : pwidths = bind($pwidths, $name, $params.pwide)
-            : plvs    = bind($plvs, $name, $params.lv)
+            : pwidths = lookup([[true, $pwidths]], $variadic = 2 and defined($pwidths, $name), bind($pwidths, $name, $params.pwide))
+            : plvs    = lookup([[true, $plvs]], $variadic = 2 and defined($plvs, $name), bind($plvs, $name, $params.lv))
             ! defined($tdfns, $name) and lookup($tdfns, $name, [0, 0]) <> [size($params), $variadic]
                 : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
             ! defined($sigs, $name) and size(lookup($sigs, $name, empty)) = size($params) and lookup($sigs, $name, empty) <> $params.passes
@@ -3596,6 +3611,7 @@ arg  = e:assignment -> Arg(value: $e) .
   thread argi = 0
 
   Arg      : type = $value.type
+           : blank = ""
            : carries = lookup([[true, $value.tag]], $value.record, "") .
   Program  : down callees = $allsigs
            : down arities = $allfuncs
@@ -3613,7 +3629,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * pass puts it in the caller's frame, so, like any struct, it is its own
    * address. *)
   Call     : ckey      = lookup([[true, $fn.fnk]], $fn.fnk <> "", at(split(("{}::::::" of at(split(("{}||" of $fn.xlv), "|"), 2)), ":"), 6))
-           : argwide   = lookup($wides, $ckey, [])
+           (* An unprototyped callee's arguments are all named, since
+            * 2026-10-04, so the emit puts each in a register: Apple's arm64
+            * puts on the stack only what follows a `...`. *)
+           : argwide   = lookup([[2, $args.blank]], at(lookup($arities, $ckey, [0, 0]), 2), lookup($wides, $ckey, []))
            : returns   = lookup($results, $ckey, ["", 4, 0, false, "0"])
            : quals     = at($returns, 5)
            : uns       = at($returns, 4)
@@ -4199,6 +4218,7 @@ arg  = e:assignment -> Arg(value: $e) .
           : down plvs    = $allplvs .
   Call : down sig    = lookup($callees, $ckey, [])
        : down plv    = lookup($plvs, $ckey, [])
+       : down unproto = at(lookup($arities, $ckey, [0, 0]), 2) = 2
        : down callee = lookup([["", "a pointer to a function"]], $fn.vname, "'{}'" of $fn.vname)
        : down held   = $argi
        : down argi   = 0
@@ -4215,8 +4235,8 @@ arg  = e:assignment -> Arg(value: $e) .
                : "{} is given a struct where its parameter is not that struct, or something else where its parameter is a struct"
                    of $callee
            ! $argi >= size($sig) and $value.record and $value.tag <> "void"
-               : "{} is given a 'struct {}' through '...', and a struct is not passed that way here"
-                   of $callee, at(split($value.tag, "."), 1)
+               : "{} is given a 'struct {}' {}, and a struct is not passed that way here"
+                   of $callee, at(split($value.tag, "."), 1), lookup([[true, "where no prototype says what it takes"]], $unproto, "through '...'")
            (* **A pointer to a function is passed only as its own type**,
             * since 2026-10-04: the initialiser's four checks, against the
             * parameter's type from `plvs`. An argument through `...` has

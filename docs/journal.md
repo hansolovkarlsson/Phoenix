@@ -7311,3 +7311,33 @@ with a negative `int`; and the `Global`'s own return-type check was masked
 by the `Prototype`'s when the prototype came second, so its refusal puts
 it first. Nineteen of nineteen then. The old refusal of `binop add;` is
 kept, moved into a block. 686 → 696 checks; Proem still eight of ten.
+
+**The sixth fix: `()` as no prototype.** A declaration `int f();` was read
+as `int f(void)`, so `int f(); int f(int a) { ... }` was refused as two
+arities, which C11 6.7.6.3p14 allows and `cc` compiles. `()` is now its
+own alternative in a prototype and in a listed declarator, ahead of
+`params`, which would take it as an empty list, and the node's `variadic`
+is 2, *unprototyped*. The call's two arity checks already ask for 0 and
+1 only. In `locals` it binds `[0, 2]` and empty lists where nothing is
+bound yet and never over a real prototype; whatever comes after it binds
+over it. At the call, the `types` pass gives an unprototyped callee one
+blank width per argument, `$args.blank`, since `each` cannot write a node,
+so the emit counts every argument as named and puts each in a register.
+Apple's arm64 puts only what follows a `...` on the stack. `cc`'s own build
+of the first test segfaulted, because it declared `printf` with `()`, and
+a variadic function called without a prototype is undefined.
+
+**It found a hole in the arity check**, by a break that missed. The
+`functions` pass compares the number of distinct shapes with the number
+of distinct names, and an unprototyped declaration added a name with no
+shape, which made room for another name's second shape: `int puts();`
+beside `int f(int); int f(int a, int b) {}` passed. An unprototyped
+declaration now counts no name either, and two refusals hold it, one per
+form. Two witnesses were also too kind at first: `puts`, one argument,
+showed nothing of the registers, since the stack machine leaves the last
+argument in `x0` anyway, so the oracle calls `strcmp` declared with `()`
+in a list; and a struct to an unprototyped function was refused as
+"through `...`", which it is not, so the message says which. Sixteen
+breaks, sixteen caught. `()` in a pointer to a function, `int (*f)()`, is
+still read as no parameters, on ROADMAP. 696 → 701 checks; Proem still
+eight of ten.

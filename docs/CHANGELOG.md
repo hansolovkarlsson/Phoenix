@@ -16,6 +16,22 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C `()` in a declaration is no prototype
+
+**`int f();` says nothing of `f`'s parameters**, as C11 6.7.6.3p14 has it,
+where it had been read as `int f(void)`: a later prototype or definition
+with parameters is no longer refused as a second declaration that
+disagrees, and a call with arguments is compiled, each in a register, as
+`cc` passes them. `int puts(); puts("line");` works. A prototype written
+before a `()` still says what the function takes. In a definition, `()`
+is still no parameters, and in a pointer to a function it is still read
+as no parameters.
+
+**Tests:** 696 → 701. Five refusals. One program joins the C oracle: 345
+agree with `cc`, none diverges. Refusals: 460.
+
+---
+
 ## 2026-10-04: C functions declared through a typedef of their type
 
 **`typedef int binop(int, int); binop add, sub;` declares two functions**

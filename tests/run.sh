@@ -2921,6 +2921,21 @@ refuses "a typedef's function given a number for a struct" "'take' is given a st
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-given-a-number-for-a-struct.c"
 refuses "a typedef's function given a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-given-another-function-type.c"
+# **`()` in a declaration is no prototype**, C11 6.7.6.3p14, since
+# 2026-10-04: a call through one is not counted and its arguments go in
+# registers, which `functions-without-prototypes.c` holds against `cc`. A
+# prototype written before it still says what the function takes, and a
+# struct is not passed where none does.
+refuses "two arities beside a function with no prototype" "a function is declared with two different numbers of parameters" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/arity-mismatch-beside-a-function-without-a-prototype.c"
+refuses "and beside one declared in a list" "a function is declared with two different numbers of parameters" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/arity-mismatch-beside-a-listed-function-without-a-prototype.c"
+refuses "a struct passed where no prototype says what is taken" "'take' is given a 'struct s' where no prototype says what it takes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/struct-to-a-function-without-a-prototype.c"
+refuses "a prototype kept past '()': a number for a struct" "'take' is given a struct where its parameter is not that struct" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/prototype-kept-past-empty-parentheses-struct.c"
+refuses "and a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/prototype-kept-past-empty-parentheses-function.c"
 refuses "a function returning a function" "expected ;, { or ,, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
 # **A function declared in a list with other names**, since 2026-10-04,
