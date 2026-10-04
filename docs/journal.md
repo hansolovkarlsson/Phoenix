@@ -7369,3 +7369,28 @@ each form in a global, a `static`, an array and a struct in braces, and a
 pointer to a function; and `(int *)(1u - 2)`, which is what catches a
 pointer cut to thirty-two bits with its sign put back. Ten breaks, ten
 caught. 701 → 706 checks; Proem still eight of ten.
+
+**The second fix: a name in parentheses.** `int (x) = 3;` was a syntax
+error. Every declarator rule spells its name as `n:name`, a factor of the
+alternative, because `%names` binds the factor an action fills a hidden
+name from, the moment it is matched. That is any factor whose value is
+text, not only a token, so a rule `dname = name | "(" n:dname ")" -> $n`
+answers the name's text and binds as `name` did, from the last `)`, which
+is where C11 6.2.1p7 puts the name's scope. It replaces `n:name` in the
+five object declarator rules, the inner name of their pointer parentheses
+too, so `int ((x))`, `int (x)[2]` and `int (*(p))` are each the declarator
+written without the extra parentheses, which say nothing of the type and
+leave no node. `T (T) = sizeof(T);` hides the typedef as `T T` does.
+
+What this did not do is the other half of the standup's line: a name in
+its own initialiser where the declarator has a `*` in parentheses, `int
+(*f)(void) = ...f...`. Its type text is the `Paren` children's, worked
+out on the way out, and the early entry is made on the way in, before
+them; making it after them, before the initialiser, means each of the five
+rules with an initialiser handing its own kind of entry to a `Paren`. It
+stays refused by name, and the message now says *a `*` in parentheses*,
+since a name alone in them is bound early like any other. One refusal's
+parse error moved: `int (f(void))[3];` reads `(f` as a name now and stops
+at the second `(`. `names-in-parentheses.c` joins the oracle. Seven
+breaks, one per rule, the recursion, and the inner name: seven caught.
+706 checks, unchanged; Proem still eight of ten.

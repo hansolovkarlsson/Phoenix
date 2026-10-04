@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C names in parentheses in a declarator
+
+**`int (x) = 3;` declares `x`**, as C11 6.7.6p6 has it, where it was a
+syntax error: a name in any number of parentheses is the name, in a
+global, a `static`, a local, a member and a typedef, and inside a
+pointer's parentheses, `int (*(p))[2]`. A name declared so is in scope in
+its own initialiser, as any other is. A name in its own initialiser where
+the declarator has a `*` in parentheses, `int (*f)(void) = ...f...`, is
+still refused by name.
+
+**Tests:** 706 → 706; one refusal reads a different parse error. One program joins the C oracle: 347 agree with `cc`, none
+diverges. Refusals: 465.
+
+---
+
 ## 2026-10-04: C integers cast to pointers in a global's initialiser
 
 **`int *p = (void *)0;` compiles** as a global or a `static`, where it was

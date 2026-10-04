@@ -2966,7 +2966,9 @@ refuses "a function in a list, given a number for a struct" "'take' is given a s
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-given-a-number-for-a-struct.c"
 refuses "a function in a list, given a function of another type" "argument 1 of 'apply' is given a pointer to a function of another type" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-list-given-another-function-type.c"
-refuses "a function returning an array" "expected *, and found \"f\"" \
+# Since a name in parentheses is the name, 2026-10-04, the parse reads
+# `(f` as one and stops at the `(` after it.
+refuses "a function returning an array" "expected ), and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-an-array.c"
 refuses "an array of functions" "expected [, =, , or ;, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-functions.c"

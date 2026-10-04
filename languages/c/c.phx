@@ -282,121 +282,121 @@ list-function = t:pointer n:name "(" "void" ")"
  * reads `$base` changed. A declarator is the stars, the name, and a count
  * in brackets or an initialiser, as a declaration was; the three forms are
  * three nodes for the reason given for a local's, below. *)
-typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+typedef-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                   | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
+                   | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
-                   | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
+                   | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
-                   | s:pointer n:name f:fn-suffix
+                   | s:pointer n:dname f:fn-suffix
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 0, dims: [], fn: [$f])])
-                   | s:pointer n:name "[" c:integer "]" d:[ brackets ]
+                   | s:pointer n:dname "[" c:integer "]" d:[ brackets ]
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
-                   | s:pointer n:name
+                   | s:pointer n:dname
                      -> Typedef(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+global-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" "]" ")" f:fn-suffix "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix
                     -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix "=" v:assignment
                     -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix
                     -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
-                  | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                  | s:pointer n:dname "[" c:integer "]" d:[ brackets ] "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
-                  | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                  | s:pointer n:dname "[" "]" d:[ brackets ] "=" i:init-top
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
-                  | s:pointer n:name "=" i:initializer
+                  | s:pointer n:dname "=" i:initializer
                     -> GlobalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                     -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ] "=" v:assignment
                     -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ]
                     -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
-                  | s:pointer n:name "[" c:integer "]" d:[ brackets ]
+                  | s:pointer n:dname "[" c:integer "]" d:[ brackets ]
                     -> GlobalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
-                  | s:pointer n:name "=" v:assignment
+                  | s:pointer n:dname "=" v:assignment
                     -> GlobalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [], value: $v)
-                  | s:pointer n:name
+                  | s:pointer n:dname
                     -> Global(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-member-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+member-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix
                     -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix
                     -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                     -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ]
                     -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
-                  | s:pointer n:name "[" c:integer "]" d:[ brackets ]
+                  | s:pointer n:dname "[" c:integer "]" d:[ brackets ]
                     -> MemberArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
-                  | s:pointer n:name
+                  | s:pointer n:dname
                     -> MemberScalar(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+static-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" "]" ")" f:fn-suffix "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix
                     -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix "=" v:assignment
                     -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix
                     -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
-                  | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                  | s:pointer n:dname "[" c:integer "]" d:[ brackets ] "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
-                  | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                  | s:pointer n:dname "[" "]" d:[ brackets ] "=" i:init-top
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
-                  | s:pointer n:name "=" i:initializer
+                  | s:pointer n:dname "=" i:initializer
                     -> StaticAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                     -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ] "=" v:assignment
                     -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
-                  | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
+                  | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ]
                     -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
-                  | s:pointer n:name "[" c:integer "]" d:[ brackets ]
+                  | s:pointer n:dname "[" c:integer "]" d:[ brackets ]
                     -> StaticArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
-                  | s:pointer n:name "=" v:assignment
+                  | s:pointer n:dname "=" v:assignment
                     -> StaticInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [], value: $v)
-                  | s:pointer n:name
+                  | s:pointer n:dname
                     -> Static(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
-local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
+local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 0, init: $i)
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" "]" ")" f:fn-suffix "=" i:init-top
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" "]" ")" f:fn-suffix "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], unsized: 1, init: $i)
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" ")" f:fn-suffix
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" ")" f:fn-suffix
                    -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix "=" v:assignment
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix "=" v:assignment
                    -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])], value: $v)
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" f:fn-suffix
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" f:fn-suffix
                    -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [Paren(stars: 1 + size($t), dims: [], fn: [$f])])
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ] "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])], unsized: 0, init: $i)
-                 | s:pointer n:name "[" c:integer "]" d:[ brackets ] "=" i:init-top
+                 | s:pointer n:dname "[" c:integer "]" d:[ brackets ] "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [], unsized: 0, init: $i)
-                 | s:pointer n:name "[" "]" d:[ brackets ] "=" i:init-top
+                 | s:pointer n:dname "[" "]" d:[ brackets ] "=" i:init-top
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [], unsized: 1, init: $i)
-                 | s:pointer n:name "=" i:initializer
+                 | s:pointer n:dname "=" i:initializer
                    -> LocalAgg(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [], unsized: 0, init: $i)
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname "[" c:integer "]" e:[ brackets ] ")" d:[ brackets ]
                    -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [Paren(stars: 1 + size($t), dims: $e, fn: [])])
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ] "=" v:assignment
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ] "=" v:assignment
                    -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])], value: $v)
-                 | s:pointer "(" "*" q:{ "const" } t:pointer n:name ")" d:[ brackets ]
+                 | s:pointer "(" "*" q:{ "const" } t:pointer n:dname ")" d:[ brackets ]
                    -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: $d, paren: [Paren(stars: 1 + size($t), dims: [], fn: [])])
-                 | s:pointer n:name "[" c:integer "]" d:[ brackets ]
+                 | s:pointer n:dname "[" c:integer "]" d:[ brackets ]
                    -> LocalArray(name: $n, stars: size($s), squals: join(each($s, "{}")), count: int($c), dims: $d, paren: [])
-                 | s:pointer n:name "=" v:assignment
+                 | s:pointer n:dname "=" v:assignment
                    -> LocalInit(name: $n, stars: size($s), squals: join(each($s, "{}")), dims: [], paren: [], value: $v)
-                 | s:pointer n:name
+                 | s:pointer n:dname
                    -> Local(name: $n, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: []) .
 
 (* **A declarator's brackets after the first**, since ROADMAP 6.12's fourth
@@ -408,6 +408,15 @@ local-declarator = s:pointer "(" "*" q:{ "const" } t:pointer n:name "[" c:intege
  * its stars and its brackets a `Paren`: the name inside is still a factor
  * of the alternative, which `%names` needs. *)
 brackets = "[" n:integer "]" r:[ brackets ] -> Dim(count: int($n), of: $r) .
+
+(* **A name in parentheses is the name**, since 2026-10-04: `int (x) = 3;`
+ * declares `x` as `int x = 3;` does, C11 6.7.6p6, and so does `int ((x))`,
+ * and `int (*(p))` is `int (*p)`. The parentheses say nothing of the type
+ * and are gone once parsed, so the declarator is the one it would be
+ * without them, and its name is bound early in its own initialiser as any
+ * is. The rule answers the name's text, which is what `%names` binds, so
+ * the name is in force from the last `)`, where C11 6.2.1p7 puts it. *)
+dname = name | "(" n:dname ")" -> $n .
 
 (* **An initialiser in braces**, C11 6.7.9, since ROADMAP 6.13's first part:
  * a list of values and of lists, with a comma allowed after the last. A
@@ -3140,7 +3149,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : basew   = at($means, 4)
            : tagname = at($means, 5)
            ! not defined($env, $name) and size($lit) = 0 and $name = $ownname
-               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where its declarator has parentheses, or where it is an array with braces" of $name
+               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where its declarator has a '*' in parentheses, or where it is an array with braces" of $name
            ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name) and not (size($lit) = 0 and $name = $ownname)
                : lookup([[true, "'{}' is called before it is declared"]], $callpos, "'{}' is not declared") of $name .
 
