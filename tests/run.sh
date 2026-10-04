@@ -2923,6 +2923,27 @@ refuses "'++' of an enumerator" "'++' wants somewhere a value is kept" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-enumerator.c"
 refuses "an enumerator from a global" "'A' is given a value this subset does not work out" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-not-constant.c"
+refuses "an enumerator chosen by a variable" "'A' is given a value this subset does not work out" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-chosen-by-a-variable.c"
+# **Unsigned arithmetic in an enumerator is refused by name where it
+# differs from exact**, since 2026-10-04, when `-1 / 2u` was found compiled
+# as 0 and `cc` makes it 2147483647. `cc` compiles each of these, two of
+# them as a C23 extension; each is a place `eu` or `eun` is carried or set.
+u="'A' is given a value whose unsigned arithmetic this subset does not work out"
+refuses "an enumerator: a negative number divided by an unsigned one" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-divided.c"
+refuses "and divided by an unsigned '?:'" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-chosen-divides.c"
+refuses "and compared with one" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-compared.c"
+refuses "and chosen beside one" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-chosen.c"
+refuses "an unsigned number negated" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-negated.c"
+refuses "and inverted" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-inverted.c"
+refuses "and shifted past 2^32" "$u" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-unsigned-shifted.c"
 # **A call by name is still a call by name**, since ROADMAP 6.14's second
 # part made every call one node: `bl _apply`, and a call through a
 # pointer is a `blr`. Both ways the program says the same, so only the

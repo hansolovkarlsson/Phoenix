@@ -1416,7 +1416,10 @@ arg  = e:assignment -> Arg(value: $e) .
           * pass, and is not read here as one. *)
          : ebad    = $ioct and (size(split($idigits, "8")) > 1 or size(split($idigits, "9")) > 1)
          : eok     = $ndigits <= 15 and not $ebad
-         : ev      = int(lookup([[true, "0"]], $ebad, slice($idigits, 1, 15)), lookup([[true, 16]], $ihex, lookup([[true, 8]], $ioct, 10))) .
+         : ev      = int(lookup([[true, "0"]], $ebad, slice($idigits, 1, 15)), lookup([[true, 16]], $ihex, lookup([[true, 8]], $ioct, 10)))
+         (* Whether it is unsigned, for `eu` below: a `u`, or a hex or
+          * octal constant past an `int`, C11 6.4.4.1p5. *)
+         : eu      = $ihasu or (not $idec and $ev > 2147483647) .
 
   (* The table is a thread, because *what has been declared so far* is what
    * a walk in document order has. All three are set afresh at each function
@@ -2071,12 +2074,45 @@ arg  = e:assignment -> Arg(value: $e) .
    * product or shift passes 2^62 and nothing here traps: these are worked
    * out at every `Binary` in a program, and `unsigned-folds.c` multiplies
    * two numbers near 2^32. *)
+  (*
+   * **Unsigned arithmetic is not worked out where it differs**, since
+   * 2026-10-04, when `-1 / 2u` was found compiled as 0 where `cc` makes it
+   * 2147483647: `ev` is exact, and C converts an operand beside an
+   * unsigned one to unsigned. `eu` says a value is an `unsigned int`, and
+   * where one is, an operand or an answer that is negative, or 2^32 or
+   * past it, is not worked out, `eun`, which the enumerator refuses in
+   * its own words. Where neither happens, exact and unsigned agree, so
+   * `1u << 4` and `A | B` are worked out as before. `-` and `~` of an
+   * unsigned set `eun` and leave `eok` alone: what they make is never 0,
+   * so no null pointer constant can tell, and every operator above them
+   * asks `eun`. A shift's answer is its left side's type, which is
+   * negative only when `eun` already says so, and too wide when it
+   * passes 2^32, `(3u << 31) >> 31`.
+   *
+   * **And comparisons, `!`, `&&`, `||` and `?:`**, since 2026-10-04,
+   * C11 6.6p6, each answering an `int`, but for `?:`, whose answer is
+   * unsigned if either arm is. A comparison asks of its operands what any
+   * operator does, since an unsigned operand converts the other. *)
   otherwise ev  = 0
   otherwise econst = false
   otherwise eok = false
-  Negate : ev = 0 - $value.ev : eok = $value.eok .
-  Plus   : ev = $value.ev     : eok = $value.eok .
-  Invert : ev = -1 - $value.ev : eok = $value.eok .
+  otherwise eu  = false
+  otherwise eun = false
+  Negate : ev = 0 - $value.ev : eu = $value.eu : eok = $value.eok
+         : eun = $value.eun or ($value.eu and $value.ev <> 0) .
+  Plus   : ev = $value.ev : eu = $value.eu : eun = $value.eun : eok = $value.eok .
+  Invert : ev = -1 - $value.ev : eu = $value.eu : eok = $value.eok
+         : eun = $value.eun or $value.eu .
+  Not    : ev = lookup([[0, 1]], $value.ev, 0) : eun = $value.eun : eok = $value.eok .
+  Logical : ev  = lookup([["&&", lookup([[true, 1]], $left.ev <> 0 and $right.ev <> 0, 0)]], $op,
+                         lookup([[true, 1]], $left.ev <> 0 or $right.ev <> 0, 0))
+          : eun = $left.eun or $right.eun
+          : eok = $left.eok and $right.eok .
+  Choose : ev    = lookup([[0, $other.ev]], $cond.ev, $then.ev)
+         : eu    = $then.eu or $other.eu
+         : eubad = ($then.eu or $other.eu) and lookup([[0, $other.ev]], $cond.ev, $then.ev) < 0
+         : eun   = $cond.eun or $then.eun or $other.eun or $eubad
+         : eok   = $cond.eok and $then.eok and $other.eok and not $eubad .
   Binary : down callpos = false
          : esmall = $left.ev >= 0 - 2147483648 and $left.ev <= 2147483648 and $right.ev >= 0 - 2147483648 and $right.ev <= 2147483648
          : el     = lookup([[true, $left.ev]], $esmall, 0)
@@ -2085,9 +2121,19 @@ arg  = e:assignment -> Arg(value: $e) .
          : epow   = at([1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728, 268435456, 536870912, 1073741824, 2147483648], lookup([[true, $er]], $er >= 0 and $er < 32, 0) + 1)
          : ev     = lookup([["+", $el + $er], ["-", $el - $er], ["*", $el * $er], ["/", quotient($el, $enz)], ["%", remainder($el, $enz)],
                             ["<<", $el * $epow], [">>", $el div $epow], ["&", bitand($el, $er)], ["|", bitor($el, $er)], ["^", bitxor($el, $er)]], $op, 0)
-         : eok    = $left.eok and $right.eok and $esmall
+         : eshift = $op = "<<" or $op = ">>"
+         : eu     = lookup([[true, $left.eu]], $eshift, $left.eu or $right.eu)
+         : eubad  = lookup([[true, $left.eu and $ev >= 4294967296]], $eshift,
+                           ($left.eu or $right.eu) and ($el < 0 or $er < 0 or $ev < 0 or $ev >= 4294967296))
+         : eun    = $left.eun or $right.eun or $eubad
+         : eok    = $left.eok and $right.eok and $esmall and not $eubad
                     and lookup([["+", true], ["-", true], ["*", true], ["/", $er <> 0], ["%", $er <> 0], ["<<", $er >= 0 and $er < 32],
                                 [">>", $er >= 0 and $er < 32], ["&", true], ["|", true], ["^", true]], $op, false) .
+  Compare : ev    = lookup([[true, 1]], lookup([["<", $left.ev < $right.ev], ["<=", $left.ev <= $right.ev], [">", $left.ev > $right.ev],
+                                                [">=", $left.ev >= $right.ev], ["==", $left.ev = $right.ev]], $op, $left.ev <> $right.ev), 0)
+          : eubad = ($left.eu or $right.eu) and ($left.ev < 0 or $right.ev < 0)
+          : eun   = $left.eun or $right.eun or $eubad
+          : eok   = $left.eok and $right.eok and not $eubad .
 
   (* **An enumeration**, C11 6.7.2.2, since ROADMAP 6.15's fourth part: its
    * constants counted on from 0, or from what an `=` says, `enext`, and
@@ -2115,8 +2161,10 @@ arg  = e:assignment -> Arg(value: $e) .
              : env     = bind($env, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4", $val])
              : scope   = bind($scope, $name, true)
              : globals = lookup([[true, bind($globals, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4", $val])]], not $infunc, $globals)
-             ! size($value) > 0 and not at(flatten([$value.eok, [false]]), 1)
-                 : "'{}' is given a value this subset does not work out: C11 6.7.2.2p2 wants an integer constant expression, and this works one out only from numbers, characters, enumerators, parentheses and the arithmetic and bitwise operators" of $name
+             ! size($value) > 0 and at(flatten([$value.eun, [false]]), 1)
+                 : "'{}' is given a value whose unsigned arithmetic this subset does not work out: C converts a negative operand or answer to an unsigned int, and this works in exact integers" of $name
+             ! size($value) > 0 and not at(flatten([$value.eok, [false]]), 1) and not at(flatten([$value.eun, [false]]), 1)
+                 : "'{}' is given a value this subset does not work out: C11 6.7.2.2p2 wants an integer constant expression, and this works one out only from numbers, characters, enumerators, parentheses, and the arithmetic, bitwise, comparison and logical operators and '?:'" of $name
              ! lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) > 2147483647
                or lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) < 0 - 2147483648
                  : "'{}' is {}, past an int's range, which C23 allows and C11 6.7.2.2p2 does not" of $name, lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1))

@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C enumerators from comparisons, logic and `?:`, and a wrong value refused
+
+**An enumerator may be given a comparison, `!`, `&&`, `||` or `?:`** of
+constants: `enum { LT = 1 < 2, P = LT ? 10 : 20 }`. They had been refused
+by name. `1 ? 0 : 0` is now a null pointer constant, as C has it.
+
+**A fix for wrong code.** An enumerator's value with unsigned arithmetic
+in it was worked out as if every number were signed, so `-1 / 2u` was 0,
+where `cc` makes it 2147483647, and `-2 % 3u` was -2 where it is 2. Each
+place where the unsigned answer differs from the exact one, a negative
+operand or answer beside an unsigned number, or one past 2^32, is now
+refused by name. Where they agree, `1u << 4` and `A | B`, nothing changes.
+
+**Tests:** 677 → 685. Eight refusals. One program joins the C oracle:
+341 agree with `cc`, none diverges. Refusals: 445.
+
+---
+
 ## 2026-10-04: C pointers to functions checked at a call and a `return`
 
 **A pointer to a function is passed and returned only as its own type**,

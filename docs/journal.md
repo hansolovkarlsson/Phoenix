@@ -7191,3 +7191,40 @@ That refusal is false too, since a plain `0` is taken, and it goes on
 ROADMAP's initialisers row. A comment of mine wrote `(void *)0`, whose
 `*)` ended it, and the description stopped loading; the comments say "a 0
 cast to `void *`" instead. Proem is eight of ten again. 669 → 677 checks.
+
+**The fourth fix, and a wrong answer found on the way.** The standup's line
+was "`?:` in a constant expression with `const` operands", and nothing else
+in the records said more. Hans confirmed the reading: an enumerator's
+value, the `ev` and `eok` of `locals`, took no `?:`, comparison, `!`,
+`&&` or `||` even when every operand was a constant, which C11 6.6p6 makes
+an integer constant expression; and since `npc` reads the same two, `1 ?
+0 : 0` was no null pointer constant either.
+
+Before writing it, a probe of what `ev` answers beside an unsigned number
+found **wrong code**: `ev` is exact, and C converts an operand beside an
+unsigned one to unsigned, so `enum { A = -1 / 2u }` compiled to 0 where
+`cc` gives 2147483647, and `-2 % 3u` to -2 where it gives 2. No test had
+an unsigned constant meet a negative one in an enumerator. Hans chose to
+refuse it by name rather than build unsigned arithmetic here: `eu` says a
+value is an `unsigned int`, a `u` or a hex or octal constant past an
+`int`, and `eun` that an unsigned answer would differ from the exact one,
+which is when an operand or the answer beside an unsigned is negative, or
+the answer passes 2^32. The enumerator refuses `eun` in its own words.
+Where nothing is negative and nothing wraps, exact and unsigned agree,
+which is every use in Proem: `1u << 0` and `|`.
+
+Comparisons are `Compare` nodes, not `Binary`, which the first draft
+assumed and the probe showed when `1 < 2` was still refused; they got a
+rule of their own. Twenty-one breaks first, fourteen caught. Of the seven,
+two were guards no program reaches, `eok` on `-` and `~` of an unsigned,
+since `eun` already refuses the enumerator and a negative is never a null
+pointer constant; they were taken out. One showed the shift clause asked
+the wrong thing, a negative left side, which only a child already marked
+can be, where what can happen is passing 2^32, `(3u << 31) >> 31`; that
+had been refused already by the operand bound, so it was never wrong code,
+and it is now refused as unsigned. Four wanted witnesses: a variable as a
+`?:`'s condition, `eu` carried through `+` and through `?:`, and `<` and
+`<=` on equal operands. With them, and `-1u` alone as the negated witness,
+twenty-five breaks, twenty-five caught. A cast and a `sizeof` in an
+enumerator are still refused by name, and are on ROADMAP's types row with
+the unsigned case. 677 → 685 checks; Proem still eight of ten.
