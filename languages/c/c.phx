@@ -2053,7 +2053,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * `unsigned int` in this `cc` when none of its constants is negative and
    * an `int` when one is, and the `types` pass, which runs before the
    * `constants` pass, has to know which. So this pass works out what an
-   * enumerator's `=` says, from numbers, earlier enumerators, `+`, `-`,
+   * enumerator's `=` says, from numbers, characters, earlier enumerators, `+`, `-`,
    * `~` and the arithmetic and bitwise operators, in exact integers: `ev`
    * the value and `eok` whether it could be, which is false for anything
    * else and refused by name at the enumerator. An operand past 2^31, a
@@ -2106,7 +2106,7 @@ arg  = e:assignment -> Arg(value: $e) .
              : scope   = bind($scope, $name, true)
              : globals = lookup([[true, bind($globals, $name, [0, 0, 0, 4, "", false, false, false, "", "0", false, "b:4:0:4", $val])]], not $infunc, $globals)
              ! size($value) > 0 and not at(flatten([$value.eok, [false]]), 1)
-                 : "'{}' is given a value this subset does not work out: C11 6.7.2.2p2 wants an integer constant expression, and this works one out only from numbers, enumerators, parentheses and the arithmetic and bitwise operators" of $name
+                 : "'{}' is given a value this subset does not work out: C11 6.7.2.2p2 wants an integer constant expression, and this works one out only from numbers, characters, enumerators, parentheses and the arithmetic and bitwise operators" of $name
              ! lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) > 2147483647
                or lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1)) < 0 - 2147483648
                  : "'{}' is {}, past an int's range, which C23 allows and C11 6.7.2.2p2 does not" of $name, lookup([[0, $enext]], size($value), at(flatten([$value.ev, [0]]), 1))
@@ -2756,6 +2756,26 @@ arg  = e:assignment -> Arg(value: $e) .
          : sone   = join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split(join(split($shex, "\\0"), "\x04"), "\\1"), "\x04"), "\\2"), "\x04"), "\\3"), "\x04"), "\\4"), "\x07"), "\\5"), "\x07"), "\\6"), "\x07"), "\\7"), "\x07"), "\x040"), "\x05"), "\x041"), "\x05"), "\x042"), "\x05"), "\x043"), "\x05"), "\x044"), "\x05"), "\x045"), "\x05"), "\x046"), "\x05"), "\x047"), "\x05"), "\x050"), "\x06"), "\x051"), "\x06"), "\x052"), "\x06"), "\x053"), "\x06"), "\x054"), "\x06"), "\x055"), "\x06"), "\x056"), "\x06"), "\x057"), "\x06"), "\x070"), "\x08"), "\x071"), "\x08"), "\x072"), "\x08"), "\x073"), "\x08"), "\x074"), "\x08"), "\x075"), "\x08"), "\x076"), "\x08"), "\x077"), "\x08"), "\x080"), "\x0b"), "\x081"), "\x0b"), "\x082"), "\x0b"), "\x083"), "\x0b"), "\x084"), "\x0b"), "\x085"), "\x0b"), "\x086"), "\x0b"), "\x087"), "\x0b")
          : snum   = size(split($ssingle, "\\")) <> size(split($sone, "\\"))
          : slen   = size($sone) - (size(split($sone, "\\")) - 1) - 2 * (size(split($sone, "\"\"")) - 1) .
+
+  (* **A character constant's code**, since 2026-10-04, worked out here and
+   * not in `types`, so that `ev` and `eok` have it and an enumerator can be
+   * written `A = 'a'`, C11 6.6p6. *)
+  Character : inner = slice($text, 2, size($text) - 1)
+            : chex  = slice($inner, 1, 2) = "\\x"
+            : coct  = slice($inner, 1, 1) = "\\" and slice($inner, 2, 2) >= "0" and slice($inner, 2, 2) <= "7"
+            : cdig  = lookup([[true, slice($inner, 3, size($inner))]], $chex,
+                             lookup([[true, slice($inner, 2, size($inner))]], $coct, "0"))
+            : cnum  = lookup([[true, int(lookup([[true, $cdig]], size($cdig) <= 2, "0"), 16)]], $chex,
+                             lookup([[true, int(lookup([[true, $cdig]], $coct, "0"), 8)]], $coct, 0))
+            : cval  = lookup([[true, $cnum]], $chex or $coct,
+                       lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
+                              ["\\\"", 34], ["\\a", 7], ["\\b", 8],
+                              ["\\f", 12], ["\\r", 13], ["\\v", 11], ["\\?", 63]], $inner,
+                             size(at(split(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
+                                           $inner), 1)) + 32))
+            : code  = lookup([[true, $cval - 256]], $cval > 127, $cval)
+            : ev    = $code
+            : eok   = true .
 
   (* **A global takes no frame**, and is bound in `globals` instead of
    * `env`, with the name its entry needs and nothing the frame counts. Its
@@ -3799,20 +3819,8 @@ arg  = e:assignment -> Arg(value: $e) .
          : width  = 1
          : size   = $length + 1 .
 
-  Character : inner = slice($text, 2, size($text) - 1)
-            : chex  = slice($inner, 1, 2) = "\\x"
-            : coct  = slice($inner, 1, 1) = "\\" and slice($inner, 2, 2) >= "0" and slice($inner, 2, 2) <= "7"
-            : cdig  = lookup([[true, slice($inner, 3, size($inner))]], $chex,
-                             lookup([[true, slice($inner, 2, size($inner))]], $coct, "0"))
-            : cnum  = lookup([[true, int(lookup([[true, $cdig]], size($cdig) <= 2, "0"), 16)]], $chex,
-                             lookup([[true, int(lookup([[true, $cdig]], $coct, "0"), 8)]], $coct, 0))
-            : cval  = lookup([[true, $cnum]], $chex or $coct,
-                       lookup([["\\n", 10], ["\\t", 9], ["\\\\", 92], ["\\'", 39],
-                              ["\\\"", 34], ["\\a", 7], ["\\b", 8],
-                              ["\\f", 12], ["\\r", 13], ["\\v", 11], ["\\?", 63]], $inner,
-                             size(at(split(" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~",
-                                           $inner), 1)) + 32))
-            : code  = lookup([[true, $cval - 256]], $cval > 127, $cval) .
+  (* A character's code is worked out in `locals`, beside a string's
+   * escapes, so that an enumerator can be given one. *)
 
   (* C11 6.5.6 lets `+` take a pointer and an integer in either order, and `-`
    * a pointer and then an integer, and counts the integer in what the pointer

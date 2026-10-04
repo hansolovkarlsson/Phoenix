@@ -2887,8 +2887,6 @@ refuses "'++' of an enumerator" "'++' wants somewhere a value is kept" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/increment-an-enumerator.c"
 refuses "an enumerator from a global" "'A' is given a value this subset does not work out" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-not-constant.c"
-refuses "an enumerator from a character" "'A' is given a value this subset does not work out" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/enumerator-from-a-character.c"
 # **A call by name is still a call by name**, since ROADMAP 6.14's second
 # part made every call one node: `bl _apply`, and a call through a
 # pointer is a `blr`. Both ways the program says the same, so only the

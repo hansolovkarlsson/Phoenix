@@ -7125,3 +7125,22 @@ declaration cannot pass for a missing feature. And it is not part of
 `make test`, since Proem is not in this repository and CLAUDE.md promises
 a suite that needs nothing outside it: it reads a checkout, beside this
 one by default.
+
+## 2026-10-04: an enumerator from a character
+
+**The easiest of the fixes first**, in the order Hans set on 2026-10-03.
+An enumerator's `=` is worked out in `locals`, as `ev` and `eok`, because
+`types` has to know before `constants` runs whether an enumeration is
+signed. A character constant's code was worked out in `types`, one pass too
+late, so `A = 'a'` was refused by name. The refusal's reason was only
+where the rule happened to stand: the rule reads nothing but the
+constant's text. It moved to `locals`, beside the string escapes that pass
+already reads, with `ev` its code and `eok` true; `types` and `constants`
+read `code` from it as before, and the arm64 emit reads it unchanged.
+
+`enumerators-from-characters.c` gives an enumeration letters, escapes, hex
+and octal, and a difference of two characters, and `'\xff'`, which is -1
+here as in `cc` and so makes the enumeration an `int`. Two breaks, `ev`
+from the unsigned `cval` and `eok` false, were both caught by it.
+`enumerator-from-a-character.c` was its refusal and is gone. 669 → 668
+checks.

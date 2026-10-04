@@ -16,6 +16,18 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C enumerators from character constants
+
+**An enumerator may be given a character constant's value**, and any
+constant expression made with one: `enum { A = 'a', NL = '\n', SUM = 'z' - 'a' + 1 }`.
+It had been refused by name. A character past 127, `'\xff'`, is negative
+here as in `cc`, and makes its enumeration an `int`.
+
+**Tests:** 669 → 668. One refusal gone to the oracle, which a program joins:
+339 agree with `cc`, none diverges. Refusals: 428.
+
+---
+
 ## 2026-10-03: C `?:` with a `void *` beside another pointer
 
 **A `void *` and a pointer to an object may be the two arms of `?:`**,
