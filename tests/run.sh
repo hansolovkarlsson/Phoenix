@@ -2080,23 +2080,16 @@ refuses "a typedef used as a value" "'T' is not declared" \
 # at the name. Both were refused until the probe of Proem's source on
 # 2026-10-02 found `T *p = calloc(n, sizeof *p)` its commonest stop, and both
 # are in the oracle. The `locals` pass binds the name before its initialiser
-# only in a plain local, and the other forms are refused by name, each of which
-# `cc` compiles: a declarator in parentheses, braces, `static`, a global.
+# wherever the declarator has no parentheses and is no array in braces, since
+# 2026-10-04 in braces, a `static` and a global too, which
+# `own-initialiser-braces-static-global.c` holds against `cc`. The two forms
+# left are refused by name, and `cc` compiles both.
 refuses "a name in its own initialiser, where the declarator has parentheses" \
         "'f' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-in-parentheses.c"
 refuses "and an array's, in braces" \
         "'a' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-array-in-braces.c"
-refuses "and a struct's, in braces" \
-        "'x' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-struct-in-braces.c"
-refuses "and a 'static' local's" \
-        "'n' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-static.c"
-refuses "and a global's" \
-        "'g' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-global.c"
 # **A struct returned**, since 2026-09-23. A `return` is a copy into what the
 # function returns, so it takes the assignment's rule: its own kind of struct,
 # and no struct where the function returns an `int`. A struct a call gives back

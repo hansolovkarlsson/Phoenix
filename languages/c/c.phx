@@ -2243,6 +2243,19 @@ arg  = e:assignment -> Arg(value: $e) .
    * its own name beside a compound literal. The parse gets the typedef
    * case right on its own, see `%names`.
    *
+   * **The same early entry is made in braces, in a `static` and in a
+   * global**, since 2026-10-04, `struct node x = { &x, sizeof x }`, by
+   * `LocalAgg`, `StaticInit`, `StaticAgg`, `GlobalInit` and `GlobalAgg`.
+   * A `static`'s label is its own on the way in, since only a `static`
+   * declaration moves `statics`; a global's entry goes in the `env` its
+   * initialiser is walked with, and not in `globals`, whose checks ask
+   * what was declared before it. `LocalAgg` claims its slot first, as
+   * this rule does; *the byte count it hands on has no witness*, since
+   * counting the slot twice makes a frame larger and every offset still
+   * right. **An array in braces is still refused by name**: its
+   * size may be what its initialiser counts, which is not known on the way
+   * in.
+   *
    * A declaration with an initialiser is never an array: the subset has no
    * way to write the initialiser one would want. It may be a struct, since
    * 2026-09-23, which is copied into the frame, so it takes what a `Local`
@@ -2399,8 +2412,13 @@ arg  = e:assignment -> Arg(value: $e) .
    * `constants` pass because it is not worked out before the program runs,
    * as `cc` refuses it. The name is bound on the way out, as a local's is. *)
   StaticInit  : down dbase   = $base
+              : down early   = size($paren) = 0
+              : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+              : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
               : down heldown = $ownname
-              : down ownname = $name
+              : down ownname = lookup([[true, $ownname]], $early, $name)
+              : down env     = lookup([[true, bind($env, $name, [0, $eptrs, 0, $base.basew, $base.tagname, true, true, $base.buns, ("{}.{}.{}" of $fn, $name, $statics), ("{}{}" of $base.bquals, $squals), false, $elv])]],
+                                      $early, $env)
               : ownname = $heldown
               : down dstars  = $stars
               : down inparen = false
@@ -2432,8 +2450,16 @@ arg  = e:assignment -> Arg(value: $e) .
    * worked out until they have been walked, after this node is entered. An
    * array of no stated size has as many elements as the walk reached. *)
   LocalAgg    : down abase    = $base
+              : down early   = size($paren) = 0 and $count = 0 and $unsized = 0
+              : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+              : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
+              : down etakes  = ((int(at(split(at(split($elv, "|"), 1), ":"), 2)) + 7) div 8) * 8
+              : down obytes  = $bytes
+              : down bytes   = lookup([[true, $bytes + $etakes]], $early, $bytes)
+              : down env     = lookup([[true, bind($env, $name, [$obytes + $etakes, $eptrs, 0, $base.basew, $base.tagname, false, false, $base.buns, "", ("{}{}" of $base.bquals, $squals), $base.sreg, $elv])]],
+                                      $early, $env)
               : down heldown = $ownname
-              : down ownname = $name
+              : down ownname = lookup([[true, $ownname]], $early, $name)
               : ownname = $heldown
               : down astars   = $stars
               : down adims    = $dims
@@ -2467,10 +2493,10 @@ arg  = e:assignment -> Arg(value: $e) .
               : tail   = $whole - $iend
               : back   = $iback
               : takes  = (($whole + 7) div 8) * 8
-              : offset = $bytes + $takes
+              : offset = lookup([[true, $obytes + $takes]], $early, $bytes + $takes)
               : env    = bind($env, $name, [$offset, $ptrs, $ecount, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])
               : scope  = bind($scope, $name, true)
-              : bytes  = $bytes + $takes
+              : bytes  = lookup([[true, $bytes]], $early, $bytes + $takes)
               ! $unsized = 1 and $icur < 1
                   : "'{}' is an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" of $name
               ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
@@ -2538,8 +2564,13 @@ arg  = e:assignment -> Arg(value: $e) .
               ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname <> "" and $base.tagname <> "void" and $base.basew = 0
                   : "a compound literal is of 'struct {}', which is not complete here, C11 6.5.2.5p1" of at(split($base.tagname, "."), 1) .
   StaticAgg   : down abase    = $base
+              : down early   = size($paren) = 0 and $count = 0 and $unsized = 0
+              : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+              : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
+              : down env     = lookup([[true, bind($env, $name, [0, $eptrs, 0, $base.basew, $base.tagname, true, true, $base.buns, ("{}.{}.{}" of $fn, $name, $statics), ("{}{}" of $base.bquals, $squals), false, $elv])]],
+                                      $early, $env)
               : down heldown = $ownname
-              : down ownname = $name
+              : down ownname = lookup([[true, $ownname]], $early, $name)
               : ownname = $heldown
               : down astars   = $stars
               : down adims    = $dims
@@ -2588,9 +2619,14 @@ arg  = e:assignment -> Arg(value: $e) .
               ! $base.unsup = "" and $base.nstore < 2 and $base.sext
                   : "'{}' is declared 'extern' in a block, and C11 6.7.9p5 gives it no initialiser" of $name
               ! defined($scope, $name) : "'{}' is declared twice" of $name .
-  GlobalAgg   : down env = $globals
+  GlobalAgg   : down dbase   = $base
+              : down early   = size($paren) = 0 and $count = 0 and $unsized = 0
+              : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+              : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
+              : down env     = lookup([[true, bind($globals, $name, [0, $eptrs, 0, $base.basew, $base.tagname, true, true, $base.buns, $name, ("{}{}" of $base.bquals, $squals), false, $elv])]],
+                                      $early, $globals)
               : down heldown = $ownname
-              : down ownname = $name
+              : down ownname = lookup([[true, $ownname]], $early, $name)
               : ownname = $heldown
               : down abase    = $base
               : down astars   = $stars
@@ -2607,7 +2643,6 @@ arg  = e:assignment -> Arg(value: $e) .
               : down iback    = false
               : down icur     = 0
               : down iend     = 0
-              : down dbase   = $base
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2916,11 +2951,15 @@ arg  = e:assignment -> Arg(value: $e) .
   (* An initialiser is an expression at file scope, where the names are the
    * globals above it: `int b = a;` finds `a`, and is refused because it is
    * not constant, as `cc` refuses it, rather than as undeclared. *)
-  GlobalInit  : down env = $globals
+  GlobalInit  : down dbase   = $base
+              : down early   = size($paren) = 0
+              : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
+              : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
+              : down env     = lookup([[true, bind($globals, $name, [0, $eptrs, 0, $base.basew, $base.tagname, true, true, $base.buns, $name, ("{}{}" of $base.bquals, $squals), false, $elv])]],
+                                      $early, $globals)
               : down heldown = $ownname
-              : down ownname = $name
+              : down ownname = lookup([[true, $ownname]], $early, $name)
               : ownname = $heldown
-              : down dbase   = $base
               : down dstars  = $stars
               : down inparen = false
               : down pP      = ""
@@ -2990,7 +3029,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : basew   = at($means, 4)
            : tagname = at($means, 5)
            ! not defined($env, $name) and size($lit) = 0 and $name = $ownname
-               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet but in a local with no parentheses in its declarator and no braces or 'static'" of $name
+               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where its declarator has parentheses, or where it is an array with braces" of $name
            ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name) and not (size($lit) = 0 and $name = $ownname)
                : lookup([[true, "'{}' is called before it is declared"]], $callpos, "'{}' is not declared") of $name .
 

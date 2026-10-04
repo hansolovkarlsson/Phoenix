@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C names in their own initialisers, in braces, `static` and global
+
+**A name may be used in its own initialiser in braces, in a `static`
+local and in a global**, as it already could in a plain local, C11
+6.2.1p7: `struct node x = { &x, sizeof x }`, `static void *p = &p;`,
+`void *g = &g;`. Each had been refused by name. Still refused by name,
+which `cc` compiles: an array in braces, whose size its initialiser may
+decide, and a declarator in parentheses.
+
+**Tests:** 685 → 682. Three refusals gone to the oracle, which one
+program joins: 342 agree with `cc`, none diverges. Refusals: 442.
+
+---
+
 ## 2026-10-04: C enumerators from comparisons, logic and `?:`, and a wrong value refused
 
 **An enumerator may be given a comparison, `!`, `&&`, `||` or `?:`** of

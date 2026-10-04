@@ -7228,3 +7228,29 @@ and it is now refused as unsigned. Four wanted witnesses: a variable as a
 twenty-five breaks, twenty-five caught. A cast and a `sizeof` in an
 enumerator are still refused by name, and are on ROADMAP's types row with
 the unsigned case. 677 → 685 checks; Proem still eight of ten.
+
+**The fifth fix, its first part: a name in its own initialiser in braces,
+a `static` and a global.** On 2026-10-02 `LocalInit` began binding the
+name on the way in, so that `T *p = calloc(n, sizeof *p)` worked, and the
+other four kinds of declaration with an initialiser were left refused by
+name through `ownname`. Each of the four only needed the same early entry.
+A `static`'s label is what it is on the way out, because only a `static`
+declaration moves `statics` and no initialiser holds one. A global's goes
+into the `env` its initialiser is walked with, not into `globals`, so the
+checks of a second definition still see only what came before. `LocalAgg`
+claims its frame slot on the way in, as `LocalInit` does, because braces
+can hold a compound literal that takes frame bytes of its own. An array in
+braces stays refused, since its size can be what the initialiser counts,
+and so can the declarator in parentheses.
+
+Two mistakes of mine, both caught at once by the description refusing to
+load: a label written `"{}.{}.{}" of $fn, $name, $statics` inside a list,
+where `of` takes the list's commas as its own, and a `down dstars` and
+`down dbase` added to rules that already had them. Eight breaks: `early`
+off in each of the five rules, and `LocalAgg`'s three slot clauses; seven
+caught. The byte count `LocalAgg` hands on has no witness, as the frame
+count in `Sig` has none, since a slot counted twice makes a larger frame
+and every offset still right; it is kept, and the comment says so.
+`own-initialiser-braces-static-global.c` puts each beside a compound
+literal and reads back the address and the `sizeof`; the three refusals
+it replaces are gone. 685 → 682 checks; Proem still eight of ten.
