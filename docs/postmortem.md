@@ -1800,3 +1800,52 @@ unreachable guard would have deleted the fixes for both holes.
 > thing. Which one it is gets settled by writing the program that should
 > have failed, never by deciding first.
 
+
+## 37. "The notation has no direct way to combine the two arms' levels"
+
+The same day was closed out twice. After the first closeout the last five
+fixes of the standup were taken in order, and then `va_list`, and four
+beliefs met them.
+
+*Failed, as a reason: `?:` keeps the first arm's `const` levels because
+"the notation has no direct way to combine the two arms' levels a
+character at a time"* (ROADMAP's expressions row, 2026-10-03). That was
+true, and it was not the obstacle. Two arms of one type have one number
+of levels, and a type here has at most twelve stars and a base, so the
+answer is sixteen positions written out with `slice`, which gives nothing
+past the end and cannot trap. It took three breaks. **A missing
+operator is not a missing answer when the input is bounded**, and every
+input this compiler reads a level text of is. It is the shape of § 35
+again: a reason for holding something out, rescored only when somebody
+tries.
+
+*Failed in part: the fixes' order, "easiest first", with the `const`
+levels of `?:` near the end* (journal, 2026-10-03; § 36 counted it as
+held so far). It was the smallest of the six: one clause, no new node,
+no new thread. The fourth, functions in a block, was the largest, and was
+sorted as a new binding on an existing pattern. The sort read the
+difficulty of a fix from how it was described, and the descriptions were
+written by what each fix touched in C, not in the description.
+
+*Failed, as an invariant nobody wrote down where it was relied on: "no
+value with a pointer's type is settled"* (`c.phx`, the `constants`
+pass's note on `why`, 2026-09-29). It was written to explain why one
+check had no witness. Four other clauses relied on it without saying so:
+`!`, `&&`, `||` and the condition of `?:` took any settled value as an
+integer. Settling a cast to a pointer, the first fix, would have folded
+`int x = !(void *)0;`. It was caught before it shipped only because the
+note said what was true and was reread. **A comment that states an
+invariant is worth more than the one check it was written for**, and the
+fix was to give each reader the question it had been skipping.
+
+*Half held: "a variadic function defined: the last stop in Proem, in
+`expr.c` and `pp.c`"* (standup, closing the first time). `expr.c` was
+accepted whole the first time the builtins ran. `pp.c` went 644 lines
+further, to a `?:` between two structs as a member's value in braces,
+which the same standup did not list because a probe finds only the
+first stop. Nine of ten.
+
+> A reason for holding something out, and an invariant written to excuse
+> one missing check, are both claims about the rest of the compiler.
+> Reread them when the compiler changes: the first may have gone, and the
+> second may be holding up more than it says.
