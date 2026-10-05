@@ -3019,6 +3019,30 @@ refuses "a variadic parameter given no prototype" "argument 1 of 'apply' $fx" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/variadic-given-a-function-without-a-prototype.c"
 refuses "a struct through a pointer with no prototype" "'h' is given a 'struct s' where no prototype says what it takes" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/struct-through-a-pointer-without-a-prototype.c"
+# **A variadic function defined**, since 2026-10-04, through the builtins
+# <stdarg.h>'s macros are in `cc`'s headers, which
+# `variadic-functions-defined.c` holds against `cc`. `cc` refuses these but
+# the second, of which it warns, the seventh, of which it warns that it is
+# undefined, and the last, which it compiles and this refuses by name, as it
+# refuses a struct passed through `...`.
+refuses "'va_start' in a function with no '...'" "'va_start' is used in 'f', which has no '...'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-start-without-dots.c"
+refuses "'va_start' naming another parameter" "'va_start' names 'a', and C11 7.16.1.4p4 wants the last parameter, 'b'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-start-not-the-last-parameter.c"
+refuses "'va_start' given an int" "'va_start' is given something that is not a 'va_list'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-start-given-an-int.c"
+refuses "'va_start' used as a value" "'void' is returned, and this function returns an int" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-start-returned.c"
+refuses "'va_end' given an int" "'va_end' is given something that is not a 'va_list'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-end-given-an-int.c"
+refuses "'va_arg' given a 'long *'" "'va_arg' is given something that is not a 'va_list'" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-arg-given-a-long-pointer.c"
+refuses "'va_arg' of a 'char'" "'va_arg' of a type of 1 bytes" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-arg-of-a-char.c"
+refuses "'va_arg' of 'void'" "'va_arg' of 'void' reads nothing" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-arg-of-void.c"
+refuses "'va_arg' of a struct" "'va_arg' of 'struct s': a struct is not passed through '...' here" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/va-arg-of-a-struct.c"
 refuses "a function returning a function" "expected ;, { or ,, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-a-function.c"
 # **A function declared in a list with other names**, since 2026-10-04,

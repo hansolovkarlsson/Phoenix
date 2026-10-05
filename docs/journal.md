@@ -7490,3 +7490,39 @@ caught. The first full run stopped the C oracle at its 600 seconds,
 which it takes about four minutes of alone; the machine's load was over
 three, and it finished on the second run. 727 → 729 checks; Proem still
 eight of ten.
+
+**`va_list`: a variadic function defined.** The last stop in `expr.c`
+and `pp.c`, and the one Hans picked after the fixes. Proem writes only
+`va_start`, `va_end` and a `va_list` handed to `vsnprintf`, but the
+builtins came as four, since `cc`'s headers make the macros
+`__builtin_va_start`, `__builtin_va_arg`, `__builtin_va_end` and
+`__builtin_va_copy`, and `va_list` a typedef of `__builtin_va_list`.
+Apple's arm64 makes the last a `char *` and passes everything after a
+`...` on the stack, eight bytes a slot, where the caller's `sp` was; this
+compiler's prologue pushes `x29` and `x30` and sets `x29` to the new
+`sp`, and refuses a ninth parameter, so no named one is ever on the stack
+and the first after the `...` is always at `x29 + 16`. So `va_start`
+stores that, `va_arg` loads from where `ap` points and adds eight, and
+`va_end` is nothing.
+
+`__builtin_va_list` is a typedef no declaration wrote, which `%names`
+cannot know, so it is a word of its own, `tname`, beside `typedef-name`
+in the six places that take one, and `Named` gives it the entry `typedef
+char *` would have bound. `va_copy` is an `Assign`, since a `va_list` is
+a pointer. `va_arg`'s type is worked out as a `sizeof`'s and typed as a
+cast's. `va_start` in a function without `...` is refused, as `cc`
+refuses it, and naming another parameter than the last, of which `cc`
+warns; `va_arg` of a type promotion changes, which `cc` warns is
+undefined, of `void`, and of a struct, which `cc` compiles and this
+refuses as it refuses a struct passed through `...`. It worked the first
+time it ran, and `expr.c` was accepted whole: nine of ten. `pp.c` goes on
+644 lines, to `file_key k = {..., id ? *id : (proem_file_id){0, 0},
+path};`, a `?:` between two structs as a member's value in braces.
+
+Sixteen breaks, and two missed. `va_arg` typed as a number showed nothing
+because the witness stored the pointer in a `char *` before reading it;
+it indexes `va_arg(ap, char *)` now. And loading eight bytes for a
+four-byte argument has no witness and cannot: AAPCS64 leaves the slot's
+other half unspecified, but `cc`, asked, writes it zero, as this compiler
+does, so no caller to hand can show it. It is kept, and says so. 729 →
+738 checks; Proem nine of ten.

@@ -651,6 +651,22 @@
    * level text's since ROADMAP 6.12's fourth part, when it stopped being
    * only a base's width or eight. *)
   SizeOfType : out = "\tldr w0, ={}\n" of $folded .
+
+  (* **The builtins of <stdarg.h>**, since 2026-10-04. Apple's arm64 passes
+   * every argument after a `...` on the stack, eight bytes each, where the
+   * caller's `sp` was at the call, and a `va_list` is a `char *` to the next
+   * one. The prologue pushes `x29` and `x30` and sets `x29` to the new `sp`,
+   * so they start at `x29 + 16`; a named parameter is never on the stack,
+   * since a ninth is refused, so that is where the first after the `...`
+   * is. `va_start` stores it in `ap`, `va_arg` loads from where `ap` points
+   * and moves it eight on, and `va_end` emits nothing. *Loading four bytes
+   * of a four-byte argument has no witness*: AAPCS64 leaves the slot's
+   * other four unspecified, and both `cc` and this compiler write them as
+   * zeros, so no caller here can show eight bytes read in their place. *)
+  VaStart : out = "{}\tadd x1, x29, #16\n\tstr x1, [x0]\n" of $ap.addr .
+  VaEnd   : out = "" .
+  VaArg   : out = "{}\tldr x1, [x0]\n\tadd x2, x1, #8\n\tstr x2, [x0]\n\t{}, [x1]\n"
+                    of $ap.addr, lookup([[4, "ldr w0"]], $size, "ldr x0") .
   SizeOfExpr : out = "\tldr w0, ={}\n" of $value.size .
 
   (* A condition is false when `x0` is 0, which is what C11 6.8.4 and 6.8.5

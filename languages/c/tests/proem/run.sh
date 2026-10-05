@@ -12,8 +12,8 @@
 # **Apple's headers stop every file first**, `long double` in <stddef.h> and
 # a `union` in Darwin's `__mbstate_t`, so the files are preprocessed against
 # `stubs/` instead: what Proem uses of each header, declared in the subset,
-# with `va_list` left to cc's builtin so that a variadic function defined
-# shows as a stop. Each file must pass `cc -std=c11 -pedantic -Wall` against
+# with `va_list` left to cc's builtins, which the subset reads since
+# 2026-10-04, so that a variadic function defined showed as a stop. Each file must pass `cc -std=c11 -pedantic -Wall` against
 # the stubs before it is checked, so a stop printed here is Phoenix's and
 # not a stub's; a file that fails is reported as the stubs falling short.
 #

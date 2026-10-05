@@ -16,6 +16,25 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-04: C variadic functions defined
+
+**A function ending in `...` can read its arguments**, through the four
+builtins <stdarg.h>'s macros expand to in `cc`'s headers:
+`__builtin_va_list` is a `char *`, `__builtin_va_start` points it at the
+first argument after the `...`, `__builtin_va_arg` reads one of an `int`,
+a `long`, an unsigned type or a pointer and moves past it,
+`__builtin_va_end` does nothing, and `__builtin_va_copy` copies one. A
+`va_list` can be handed to `vsnprintf` and the rest of libc's `v`
+functions. `va_start` outside a function with `...`, or naming another
+parameter than the last, is refused, and so is `va_arg` of a type that
+promotion changes, of a struct, or of `void`. Proem's `lib/expr.c` is
+accepted whole: nine of its ten files.
+
+**Tests:** 729 → 738. Nine refusals. One program joins the C oracle: 351
+agree with `cc`, none diverges. Refusals: 496.
+
+---
+
 ## 2026-10-04: C `?:` between two pointers is `const` where either is
 
 **`*(c ? p : q) = 1` with `q` a pointer to a `const int` is refused**, as

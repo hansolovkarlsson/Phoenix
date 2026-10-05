@@ -620,7 +620,7 @@ the arc is going after this one.
 | initialisers, 6.7.9 | *all of it since [6.13](COMPLETED.md#613-initialisers-as-c11-679-has-them)*, but for what waits on other rows: a `union`'s and a wide string; an `enum` constant as a value came with [6.15](COMPLETED.md#615-the-integer-types). Refused by name: an array designator that is an expression and not a number written out; an object nested more than eight levels deep; a struct over 32767 bytes or 86 members, in an initialiser; a struct's compound literal initialising a global, which `cc` takes as an extension. Refused where a constant is wanted, which `cc` takes as an extension and C11 6.6p6 and p8 do not: a pointer cast to an integer, and `!`, `&&`, `||` or the condition of `?:` given a pointer, since an integer cast to a pointer became an address constant on 2026-10-04; and a `?:` choosing between pointers in a global's initialiser |
 | types, 6.2.5 | *the integer types since [6.15](COMPLETED.md#615-the-integer-types)*. Left: **`union`**, `float`, `double` and `long double`, bit-fields, an enumerator's value from unsigned arithmetic where C's answer is not the exact one, `-1 / 2u`, refused by name since 2026-10-04, and one from a cast or a `sizeof`, and an array's size from a constant expression, `int t[BLUE]` |
 | qualifiers, storage and specifiers | `volatile`, `restrict`, `inline`, `_Noreturn`, `_Alignas` and `_Alignof`, `_Thread_local`, each reserved and refused by name; a qualifier after a `*` other than `const` |
-| functions | a variadic function *defined* (`va_list`, `va_arg`), a ninth parameter or a struct needing a ninth register, a struct passed through `...` or to a function with no prototype; *`()` as no prototype in a declaration, and since the same day in a pointer to a function, a typedef, a cast and a parameter*, where a definition's is still no parameters |
+| functions | *a variadic function defined, through `cc`'s builtins for <stdarg.h>, since 2026-10-04*; a ninth parameter or a struct needing a ninth register, a struct passed through `...` or to a function with no prototype; *`()` as no prototype in a declaration, and since the same day in a pointer to a function, a typedef, a cast and a parameter*, where a definition's is still no parameters |
 | lexical, 6.4 | *the escapes, octal and hex escapes and joined strings since [6.16](COMPLETED.md#616-escapes-and-joined-strings)*. Left: the prefixes `L`, `u`, `U` and `u8` on a string or a character constant, universal character names, floating constants, a character constant of more than one character; refused by name, a hex escape of more than two digits whose others are zeros |
 | expressions | `_Generic`. *`?:` between two pointers takes the `const` levels of both since 2026-10-04*, sixteen positions written out, since the notation has no loop |
 | refused by name, by choice | the four optional features above; an address with an offset in a global's or a `static` local's initialiser, until one folds |
@@ -699,6 +699,14 @@ prints each file's first stop against a Proem checkout, beside this one
 by default, after checking it against the stubs with `cc -pedantic`. It is
 not in `make test`, since Proem is not here. Twice the stubs had been
 written in a job's scratch and were not there for the next run.
+
+**A variadic function defined was lifted on 2026-10-04**, through the four
+builtins <stdarg.h>'s macros are in `cc`'s headers, and `expr.c` is
+accepted whole: **nine of the ten**. `pp.c` stops 644 lines further on,
+at line 971 of what `cc -E` makes of it, `file_key k = {id != NULL, id ?
+*id : (proem_file_id){0, 0}, path};`: **a `?:` between two structs as a
+member's value in braces**, refused as a struct where a number or a
+pointer is wanted. That is the next entry.
 
 **Outside the grammar**, the rest of the chain belongs to the later arc,
 which waits for the compiler as above, and the toolchain document has its

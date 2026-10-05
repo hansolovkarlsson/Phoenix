@@ -622,6 +622,13 @@ kr-declaration = b:specifiers s:pointer "(" "*" q:{ "const" } t:pointer n:name "
  * refuse it by name and not a parse at whatever came after it. *)
 typedef-name = name .
 
+(* **`__builtin_va_list` is a typedef's name no declaration wrote**, since
+ * 2026-10-04: what <stdarg.h> calls `va_list`, here and in `cc`'s own
+ * headers, which is a `char *` on Apple's arm64. It is a word of its own,
+ * since `%names` knows only what a declaration declared, and the `locals`
+ * pass gives it its meaning, see `Named`. *)
+tname = typedef-name | "__builtin_va_list" .
+
 (* **A struct as a specifier**, since ROADMAP 6.12's third part: its tag,
  * its tag and its definition, or a definition with no tag, which is where C
  * puts one, in any declaration's specifiers. The answer is the tag, "" for
@@ -671,7 +678,7 @@ specifiers = a:{ specifier } t:struct-core b:{ specifier }
                -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b]), "  ")), def: at($t, 2))
            | a:{ specifier } k:"union" t:name b:{ specifier }
                -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
-           | a:{ specifier } t:typedef-name b:{ specifier }
+           | a:{ specifier } t:tname b:{ specifier }
                -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
            | a:{ specifier } w:type-word r:{ type-word | specifier }
                -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r]), "  ")), def: []) .
@@ -691,9 +698,9 @@ sspecifiers = a:{ not-static } "static" b:{ not-static } t:struct-core c:{ not-s
                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["static"], $b, ["enum"], $c]), "  ")), def: at($t, 2))
             | a:{ not-static } t:enum-core b:{ not-static } "static" c:{ not-static }
                 -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b, ["static"], $c]), "  ")), def: at($t, 2))
-            | a:{ not-static } "static" b:{ not-static } t:typedef-name c:{ not-static }
+            | a:{ not-static } "static" b:{ not-static } t:tname c:{ not-static }
                 -> Named(name: $t, words: " {} " of join(flatten([$a, ["static"], $b, $c]), "  "))
-            | a:{ not-static } t:typedef-name b:{ not-static } "static" c:{ not-static }
+            | a:{ not-static } t:tname b:{ not-static } "static" c:{ not-static }
                 -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["static"], $c]), "  "))
             | a:{ not-static } "static" b:{ not-static } w:type-word r:{ type-word | not-static }
                 -> Base(name: "", words: (" {} " of join(flatten([$a, ["static"], $b, [$w], $r]), "  ")), def: [])
@@ -709,9 +716,9 @@ tdspecifiers = a:{ not-typedef } "typedef" b:{ not-typedef } t:struct-core c:{ n
                  -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["typedef"], $b, ["enum"], $c]), "  ")), def: at($t, 2))
              | a:{ not-typedef } t:enum-core b:{ not-typedef } "typedef" c:{ not-typedef }
                  -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b, ["typedef"], $c]), "  ")), def: at($t, 2))
-             | a:{ not-typedef } "typedef" b:{ not-typedef } t:typedef-name c:{ not-typedef }
+             | a:{ not-typedef } "typedef" b:{ not-typedef } t:tname c:{ not-typedef }
                  -> Named(name: $t, words: " {} " of join(flatten([$a, ["typedef"], $b, $c]), "  "))
-             | a:{ not-typedef } t:typedef-name b:{ not-typedef } "typedef" c:{ not-typedef }
+             | a:{ not-typedef } t:tname b:{ not-typedef } "typedef" c:{ not-typedef }
                  -> Named(name: $t, words: " {} " of join(flatten([$a, $b, ["typedef"], $c]), "  "))
              | a:{ not-typedef } "typedef" b:{ not-typedef } w:type-word r:{ type-word | not-typedef }
                  -> Base(name: "", words: (" {} " of join(flatten([$a, ["typedef"], $b, [$w], $r]), "  ")), def: [])
@@ -727,7 +734,7 @@ sqlist = a:{ qualifier } t:struct-core b:{ qualifier }
            -> Base(name: at($t, 1), words: (" {} " of join(flatten([$a, ["enum"], $b]), "  ")), def: at($t, 2))
        | a:{ qualifier } k:"union" t:name b:{ qualifier }
            -> Base(name: "", words: (" {} " of join(flatten([$a, [$k], $b]), "  ")), def: [])
-       | a:{ qualifier } t:typedef-name b:{ qualifier }
+       | a:{ qualifier } t:tname b:{ qualifier }
            -> Named(name: $t, words: " {} " of join(flatten([$a, $b]), "  "))
        | a:{ qualifier } w:type-word r:{ type-word | qualifier }
            -> Base(name: "", words: (" {} " of join(flatten([$a, [$w], $r]), "  ")), def: []) .
@@ -1072,6 +1079,16 @@ primary = integer -> Number(text: $1)
         | string { string } -> String(text: $1, more: $2)
         | name    -> Variable(name: $1, lit: [])
         | "_Generic" "(" assignment { "," ( typename | "default" ) ":" assignment } ")" -> Unsupported(word: "_Generic")
+        (* **A variadic function's arguments**, since 2026-10-04, C11 7.16,
+         * by the four builtins <stdarg.h>'s macros are in `cc`'s headers.
+         * `va_list` is a `char *` that `va_start` points at the first
+         * argument after the `...`, and `va_arg` reads one from and moves
+         * past; `va_end` does nothing, and `va_copy` is an assignment. *)
+        | "__builtin_va_start" "(" p:place "," n:name ")" -> VaStart(ap: $p, last: $n)
+        | "__builtin_va_arg" "(" p:place "," b:sqlist s:pointer ")"
+            -> VaArg(ap: $p, base: $b, stars: size($s), squals: join(each($s, "{}")), count: 0, dims: [], paren: [])
+        | "__builtin_va_end" "(" p:place ")" -> VaEnd(ap: $p)
+        | "__builtin_va_copy" "(" d:place "," v:assignment ")" -> Assign(place: $d, value: $v)
         | literal
         | "(" expression ")" -> $2 .
 
@@ -1757,7 +1774,7 @@ arg  = e:assignment -> Arg(value: $e) .
    * `typedef int *intp` is two. A base that is a keyword or a tag has none,
    * and `ptrs` is the sum every declaration below reads in place of its
    * `stars` field. *)
-  Named : means   = lookup($typedefs, $name, [4, 4, "", 0, false, "0", "b:4:0:4"])
+  Named : means   = lookup($typedefs, $name, lookup([["__builtin_va_list", [1, 1, "", 1, false, "00", "p:8:0:8|b:1:0:1"]]], $name, [4, 4, "", 0, false, "0", "b:4:0:4"]))
         : tq      = at($means, 6)
         : bquals  = "{}{}" of lookup([[true, slice($tq, 1, size($tq) - 1)]], size($tq) > 1, ""),
                               lookup([[true, "1"]], size(split($words, " const ")) > 1 or slice($tq, size($tq), size($tq)) = "1", "0")
@@ -1845,6 +1862,26 @@ arg  = e:assignment -> Arg(value: $e) .
              : down pouter  = $dims
              : lvin = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]], size($paren), join($paren.t))
              : lv   = lookup([[0, $lvin]], $count, "a:{}:{}:{}|{}" of $count * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $count, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin)
+             : ptrs = lookup([[true, size(at(split($lv, "a:"), 1)) div 8]], size(at(split($lv, "a:"), 1)) < size(at(split($lv, "b:"), 1)), size(at(split($lv, "b:"), 1)) div 8) .
+  (* **`va_start` names the last parameter of a function with a `...`**,
+   * C11 7.16.1.4, since 2026-10-04; `cc` refuses one in a function without
+   * a `...` and warns of another name, which is refused here. `va_arg`'s
+   * type is worked out as a `sizeof`'s is. *)
+  otherwise fvar  = 0
+  otherwise flast = ""
+  VaStart ! $fvar <> 1
+              : "'va_start' is used in '{}', which has no '...', C11 7.16.1.4p1" of $fn
+          ! $fvar = 1 and $last <> $flast
+              : "'va_start' names '{}', and C11 7.16.1.4p4 wants the last parameter, '{}'" of $last, $flast .
+  VaArg      : down dbase   = $base
+             : down dstars  = $stars
+             : down inparen = false
+             : down pP      = ""
+             : down pouter  = $dims
+             : lvin = lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv)]], size($dims), join($dims.t))]], size($paren), join($paren.t))
+             : lv   = lookup([[0, $lvin]], $count, "a:{}:{}:{}|{}" of $count * int(at(split(at(split($lvin, "|"), 1), ":"), 2)), $count, int(at(split(at(split($lvin, "|"), 1), ":"), 4)), $lvin)
+             : known = $layouts
+             : dquals = "{}{}" of $base.bquals, $squals
              : ptrs = lookup([[true, size(at(split($lv, "a:"), 1)) div 8]], size(at(split($lv, "a:"), 1)) < size(at(split($lv, "b:"), 1)), size(at(split($lv, "b:"), 1)) div 8) .
   Cast       : known = $layouts
              : down dbase   = $base
@@ -2095,6 +2132,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pP      = ""
             : down pouter  = []
             : down fn     = $name
+            : down fvar   = $variadic
+            : down flast  = at(flatten([[""], $params.name]), size($params) + 1)
             : down infunc = true
             : down fheldtags  = $tags
             : down fheldtypes = $typedefs
@@ -4042,6 +4081,36 @@ arg  = e:assignment -> Arg(value: $e) .
        ! $value.record and not ($ptrs = 0 and $base.tagname <> "")
            : "'{}' is cast to something other than 'void', and only a number or a pointer can be"
                of $value.kind .
+
+  (* **The builtins of <stdarg.h>**, since 2026-10-04. Each is given a
+   * `va_list`, which is a `char *` here, and `va_start` and `va_end` are
+   * worth nothing, as a call to a `void` function is. `va_arg` is worth
+   * what its type says, worked out as a cast's is, and reads an argument
+   * through `...`, which a caller promoted, so a type promotion changes is
+   * never there, C11 7.16.1.1p2, and `cc` warns of it; a struct is not
+   * passed through `...` here, and `void` is no value. *)
+  VaStart : tag = "void"
+          ! $ap.type <> 1 or $ap.width <> 1 or $ap.tag <> "" or $ap.uns
+              : "'va_start' is given something that is not a 'va_list', which is a 'char *' here" .
+  VaEnd   : tag = "void"
+          ! $ap.type <> 1 or $ap.width <> 1 or $ap.tag <> "" or $ap.uns
+              : "'va_end' is given something that is not a 'va_list', which is a 'char *' here" .
+  VaArg : tag   = $base.tagname
+        : xlv   = $lv
+        : type  = $ptrs
+        : bot   = slice($xlv, $type * 8 + 1, size($xlv))
+        : width = lookup([[true, at(lookup($known, $base.tagname, [0, 1, empty, false]), 1)]],
+                         $base.tagname <> "" and $base.tagname <> "void" and slice($bot, 1, 1) = "b", int(at(split(at(split($bot, "|"), 1), ":"), 2)))
+        : quals = $dquals
+        : uns   = $base.buns
+        ! $ap.type <> 1 or $ap.width <> 1 or $ap.tag <> "" or $ap.uns
+            : "'va_arg' is given something that is not a 'va_list', which is a 'char *' here"
+        ! $ptrs = 0 and $base.tagname = "void"
+            : "'va_arg' of 'void' reads nothing, and C11 7.16.1.1p2 wants an object's type"
+        ! $ptrs = 0 and $base.tagname <> "" and $base.tagname <> "void"
+            : "'va_arg' of 'struct {}': a struct is not passed through '...' here" of at(split($base.tagname, "."), 1)
+        ! $ptrs = 0 and $base.tagname = "" and $base.basew < 4
+            : "'va_arg' of a type of {} bytes, which an argument through '...' is promoted from to an 'int', so it is never there, C11 7.16.1.1p2" of $base.basew .
 
   SizeOfType : type = 0 : width = 8 : uns = true
              (* **`sizeof` of `void` is refused by name**, since 2026-09-26:
