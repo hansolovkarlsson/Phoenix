@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-05: C `*` in parentheses inside another's
+
+**`int (*(*p))` declares `p` as `int (**p)` does**, C11 6.7.6, where it was
+a syntax error: in a global, a local, a `static`, a member and a typedef,
+around a pointer to a function and to an array, any number deep. A `)` too
+many or too few after one is refused with a reason saying which. One with
+brackets or a function inside the inner parentheses, `int (*(*p)[3])`, is
+still a syntax error, and so is either kind in a parameter, which does not
+take a name in parentheses either.
+
+**Tests:** 738 → 741. Three refusals. One program joins the C oracle: 352
+agree with `cc`, none diverges. Refusals: 499.
+
+---
+
 ## 2026-10-04: C variadic functions defined
 
 **A function ending in `...` can read its arguments**, through the four

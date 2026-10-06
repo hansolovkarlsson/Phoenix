@@ -3063,6 +3063,16 @@ refuses "a function returning an array" "expected ), and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-returning-an-array.c"
 refuses "an array of functions" "expected [, =, , or ;, and found \"(\"" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/array-of-functions.c"
+# **A `*` in parentheses inside another's**, since 2026-10-05, reads the
+# `)`s after the name as many as there are, and the `locals` pass counts
+# them against the `(*`s before it, so one too many or too few is refused
+# there and not by the parse.
+refuses "a '*' in parentheses inside another's, not closed" "a declarator has a '(' with no ')' after it" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/nested-pointer-parentheses-not-closed.c"
+refuses "and closed twice" "a declarator has a ')' with no '(' before it" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/nested-pointer-parentheses-closed-twice.c"
+refuses "a '*' in parentheses closed twice" "a declarator has a ')' with no '(' before it" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/pointer-parentheses-closed-twice.c"
 # **Enumerations**, since ROADMAP 6.15's fourth part. `cc` refuses all but
 # the last, a character constant as an enumerator's value, which this
 # subset does not work out before the `types` pass and refuses by name.

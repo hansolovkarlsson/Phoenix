@@ -7526,3 +7526,37 @@ four-byte argument has no witness and cannot: AAPCS64 leaves the slot's
 other half unspecified, but `cc`, asked, writes it zero, as this compiler
 does, so no caller to hand can show it. It is kept, and says so. 729 →
 738 checks; Proem nine of ten.
+
+## 2026-10-05: four fixes from the standup
+
+**Hans said "do fixes"**, which is the four on the standup that do not
+need his call: a `*` in parentheses inside another's, a name in its own
+initialiser where the declarator has a `*` in parentheses, and the two
+about a function declared in a block. The notation's limits and the
+oracle's 600 seconds were left, as the standup says they are his.
+
+**The first fix: `int (*(*p))`.** It is `int (**p)`, since parentheses
+around stars and a name say nothing of the type, so the stars inside the
+inner parentheses only have to be added to the outer `Paren`'s. The
+trouble is the parse. The name is a factor that `%names` binds, and the
+checks refuse a name field filled from anything but one factor whose
+value is text, so a rule cannot answer both the name and the stars it
+read around it. What it can do is read the inner `(*`s before the name
+as a repetition, `o:{ pstar }`, each answering its stars, and the `)`s
+after it as another, `k:{ ")" }`, and leave whether they balance to a
+pass. The second repetition has to take the outer `)` too, because a
+repetition takes all it can and would leave none for a `")"` written
+after it. So the `Paren` has a field `extra`, the `)`s less the `(*`s
+less one, 0 in every `Paren` but these sixteen alternatives', and the
+`locals` pass refuses either sign with a reason that says which. That
+`int (*p))` is now refused there and not by the parse is the one change
+a program that was refused can see.
+
+Twenty breaks. Breaking all sixteen alternatives at once was caught, but
+the first try broke them one at a time and nine went through: the
+program had no typedef of a pointer to a function, no global without a
+value, no member or `static` with a function inside, and so on. It has
+them now, and all sixteen are caught, as are the two refusals and the
+`pstar` that counted one star short. Parameters were left: they do not
+take a name in parentheses either, and the ROADMAP row says so.
+738 → 741 checks.
