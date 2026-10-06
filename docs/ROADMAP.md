@@ -583,7 +583,9 @@ chain compiling CPP's own source, there. *CPP is now Proem, since
 2026-10-01*: the workspace's preprocessor was renamed, its folder is
 `~/Projects/Proem` and its repository `github.com/hansolovkarlsson/Proem`, and
 `~/Projects/CPP` no longer exists. Every mention of CPP on this page means
-Proem. What it asks of this page, once the
+Proem. *Since 2026-10-06 Proem's source is in DevTools*,
+`~/Projects/DevTools/proem/`, and `~/Projects/Proem` is archived as
+`~/Projects/archive/Proem`. What it asks of this page, once the
 C compiler is complete, is **a second target for `c-arm64.phx`**. Every choice the back end makes today
 is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
 signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
@@ -599,7 +601,7 @@ avoids.**
 | | |
 | --- | --- |
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
-| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/Proem`](../../Proem/) (CPP until 2026-10-01), not yet put in `cc -E`'s place |
+| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/DevTools/proem`](../../DevTools/proem/) (CPP until 2026-10-01, `~/Projects/Proem` until 2026-10-06), not yet put in `cc -E`'s place |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
 
 **The arc now: C11, before Ouroboros.** Decided by Hans on 2026-09-29,
@@ -718,8 +720,8 @@ pointers to two different types. That was lifted the same day too, and
 two, `expr.c` and `pp.c`, is `va_list`, a variadic function defined.
 **The stubs and the probe are in the repository since that evening**,
 [`languages/c/tests/proem/`](../languages/c/tests/proem/): `run.sh`
-prints each file's first stop against a Proem checkout, beside this one
-by default, after checking it against the stubs with `cc -pedantic`. It is
+prints each file's first stop against a Proem checkout, by default
+DevTools's `proem/` beside this repository (`../Proem` until 2026-10-06), after checking it against the stubs with `cc -pedantic`. It is
 not in `make test`, since Proem is not here. Twice the stubs had been
 written in a job's scratch and were not there for the next run.
 

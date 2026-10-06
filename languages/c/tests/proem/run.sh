@@ -18,9 +18,10 @@
 # not a stub's; a file that fails is reported as the stubs falling short.
 #
 # Proem is not in this repository, so this is not part of `make test`: it
-# reads a checkout, by default the one beside this repository.
+# reads a checkout, by default Proem's place in DevTools beside this
+# repository, where it has lived since 2026-10-06.
 #
-#   languages/c/tests/proem/run.sh                  ../Proem
+#   languages/c/tests/proem/run.sh                  ../DevTools/proem
 #   languages/c/tests/proem/run.sh ~/src/Proem      another checkout
 #
 # A probe finds only the first stop in each file, and the first in the
@@ -32,7 +33,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
 desc="$root/languages/c/c-arm64.phx"
-proem=${1:-"$root/../Proem"}
+proem=${1:-"$root/../DevTools/proem"}
 
 if [ ! -d "$proem/lib" ]; then
     echo "no Proem checkout at $proem -- give its path"
