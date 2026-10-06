@@ -1849,3 +1849,56 @@ first stop. Nine of ten.
 > one missing check, are both claims about the rest of the compiler.
 > Reread them when the compiler changes: the first may have gone, and the
 > second may be holding up more than it says.
+
+## 38. "Refused by name: its type is the `Paren`'s, worked out after the early entry"
+
+Four fixes from the standup of 2026-10-04, done in a session on
+2026-10-05, and three beliefs about them met the code.
+
+*Failed, as a reason: a name in its own initialiser with a `*` in
+parentheses is refused because "its type is the `Paren`'s, worked out
+after the early entry"* (standup, 2026-10-04; `c.phx`'s note on
+`LocalInit`, 2026-10-02). True of the declaration, which makes its entry
+on the way in and cannot read a child. Not true of the walk. The `Paren`
+is a sibling walked before the initialiser, and `env` is a thread, so the
+`Paren` can make the entry on its own way out. The fix was a thread
+handing it the fields it lacked. **A `down` clause cannot read a child,
+but a thread runs through the siblings in order**, and that is the way
+across. § 37's lesson again: a reason for holding a thing out is rescored
+only when somebody tries.
+
+*Failed, as an implied fix: a function declared in a block is known after
+the block "since `funcs` has no block scope"* (standup, 2026-10-04). The
+diagnosis was right, and the remedy it pointed at, putting `funcs` back
+at the block's end as `env` is, would have broken every call of a
+function declared only in a block. The `types` pass reads the `locals`
+pass's tables as they end, `$allfuncs` and the four beside it. What had
+the block's scope already was `env`, which `Variable` asks first, so the
+declaration binds the function's entry there, and a new table, `fblock`,
+says which names `funcs` must not answer for. **A table that a later pass
+reads whole cannot be scoped; the scope goes in the table it is read
+through.**
+
+*Failed, as a check: every break caught* (this session, the first round
+on the second fix). Every one failed because `$O`, holding
+`run.sh` and the program's name, was one word to zsh, so each break ran a
+command that did not exist. It was seen only because two of the breaks
+might have failed for a reason of their own, and their output was read. Run
+again, five went through: two found code the fix did not need, the
+`ownname` change and a reset of `pown`, which came out; one found a reset
+that needed a witness, which it got; two have none and say so. The fourth
+fix's round found the same kind of thing honestly: a fallback in the
+`fblock` lookup that no input can reach. **A break counts only if its
+failure is the program's answer.** A harness that cannot run reports
+every break caught.
+
+*Failed: the three `*Agg` nodes need the early entry too* (this session). They
+were given it, and the oracle program could not be written, because no
+declarator with a `*` in parentheses takes braces here unless it is an
+array, which is still refused. The change came out before it was
+committed. The six nodes were patched by pattern, from what each held,
+and not from what the grammar lets reach it.
+
+> A reason, an implied remedy and a check's green are three kinds of
+> claim, and today each was wrong in a way the claim alone could not
+> show. Read the failure a break produced before counting it.
