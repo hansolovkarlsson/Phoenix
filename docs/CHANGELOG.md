@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-05: C a name in its own initialiser, with a `*` in parentheses
+
+**`int (*f)(void) = sizeof f == 8 ? g : 0;` is compiled**, as C11 6.2.1p7
+puts `f` in scope from the end of its declarator, where it was refused by
+name: in a local, a `static` local and a global, a pointer to a function
+or to an array. An array whose initialiser is in braces is the one form
+still refused.
+
+**Tests:** 741 → 740. One refusal goes. One program joins the C oracle:
+353 agree with `cc`, none diverges. Refusals: 498.
+
+---
+
 ## 2026-10-05: C `*` in parentheses inside another's
 
 **`int (*(*p))` declares `p` as `int (**p)` does**, C11 6.7.6, where it was

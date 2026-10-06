@@ -2088,14 +2088,12 @@ refuses "a typedef used as a value" "'T' is not declared" \
 # at the name. Both were refused until the probe of Proem's source on
 # 2026-10-02 found `T *p = calloc(n, sizeof *p)` its commonest stop, and both
 # are in the oracle. The `locals` pass binds the name before its initialiser
-# wherever the declarator has no parentheses and is no array in braces, since
-# 2026-10-04 in braces, a `static` and a global too, which
-# `own-initialiser-braces-static-global.c` holds against `cc`. The two forms
-# left are refused by name, and `cc` compiles both.
-refuses "a name in its own initialiser, where the declarator has parentheses" \
-        "'f' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-in-parentheses.c"
-refuses "and an array's, in braces" \
+# wherever the declarator is no array in braces, since 2026-10-04 in braces, a
+# `static` and a global too, which `own-initialiser-braces-static-global.c`
+# holds against `cc`, and since 2026-10-05 where it has a `*` in parentheses,
+# which `own-initialiser-in-parentheses.c` does. The form left is refused by
+# name, and `cc` compiles it.
+refuses "a name in its own initialiser, an array's, in braces" \
         "'a' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/own-initialiser-array-in-braces.c"
 # **A struct returned**, since 2026-09-23. A `return` is a copy into what the

@@ -7560,3 +7560,35 @@ them now, and all sixteen are caught, as are the two refusals and the
 `pstar` that counted one star short. Parameters were left: they do not
 take a name in parentheses either, and the ROADMAP row says so.
 738 → 741 checks.
+
+**The second fix: a name in its own initialiser, with a `*` in
+parentheses.** A plain declarator's early entry is made on the way in,
+from the stars and the base its specifiers give. With parentheses the
+type text is the `Paren` child's, which exists only once the `Paren` has
+been left, and a `down` clause cannot read a child. But the `Paren` is
+walked before the initialiser, its sibling, and `env` is a thread, so the
+`Paren` can make the entry itself on its way out and the initialiser is
+walked with it. The declaration hands it the fields it knows as a thread
+of its own, `pown`, and the `Paren` adds the three its text gives, the
+offset, the stars and the text, claims the slot when it is a local's, and
+empties `pown`. `LocalInit`, `StaticInit` and `GlobalInit` hand it; the
+three `*Agg`s were given it first, and the oracle program then could not
+be written, because no declarator with a `*` in parentheses takes braces
+here unless it is an array, which is the form still refused. So theirs
+came out again.
+
+The first round of breaks said all caught, and every one of them was a
+lie: `$O` held a command and its argument, and zsh does not split
+a variable, so each break ran a command that does not exist and failed.
+Run again, five went through. The `ownname` change was not needed, since
+the name is in `env` before the initialiser reads it, and the reset of
+`pown` for the `Paren`'s own children was not either, since what one in
+a parameter binds a `Sig` puts back; both came out. Emptying `pown` on
+the way out has a witness once the initialiser holds a `sizeof` of
+another type with parentheses, which is a `Paren` too and would bind the
+name again with its own type. The stars in the entry have none, and the
+early entry without parentheses has none either, so it says so; nor has
+the byte count `LocalInit` leaves alone, for the reason `LocalAgg`'s has
+none. Twelve breaks in all: two found code that was not needed, which
+came out, two have no witness and say so, and eight are caught.
+741 → 740 checks, one refusal gone.

@@ -1541,6 +1541,10 @@ arg  = e:assignment -> Arg(value: $e) .
    * walked, where the declaration cannot bind it first, since the probe of
    * Proem's source on 2026-10-02: see `LocalInit`. *)
   thread ownname = ""
+  (* What a declarator in parentheses binds early, see `LocalInit`: the
+   * name and the entry's fields but the three its type text gives, for
+   * the `Paren` to finish. A name of "" is none. *)
+  thread pown = ["", false, 0, "", false, false, false, "", "", false]
 
   (* Which register a parameter arrives in is its **position**, which a byte
    * offset no longer says. It said it while every declaration was one slot
@@ -1827,6 +1831,7 @@ arg  = e:assignment -> Arg(value: $e) .
         ! $count < 1
             : "an array of no elements, which C11 6.7.6.2 forbids and this cc allows as an extension" .
   Paren : down inparen = true
+        : down pheld   = $pown
         (* A `)` too many or too few after a `*` in parentheses inside
          * another's: see `pstar`. *)
         ! $extra > 0 : "a declarator has a ')' with no '(' before it"
@@ -1834,7 +1839,24 @@ arg  = e:assignment -> Arg(value: $e) .
         : down sigkey  = "fn.{}.{}" of $pos.line, $pos.column
         : down pP = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""),
                               lookup([[0, lookup([[0, ("{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $dstars, ""), $dbase.blv)]], size($pouter), join($pouter.t))]], size($fn), ("b:1:0:1::fn.{}.{}" of $pos.line, $pos.column))
-        : t = lookup([[0, $pP]], size($dims), join($dims.t)) .
+        : t = lookup([[0, $pP]], size($dims), join($dims.t))
+        (* **The early entry of a declarator in parentheses**, since
+         * 2026-10-05: its type text is this, worked out here, before the
+         * initialiser after it is walked, so the name is bound here, into
+         * the thread the initialiser is walked with, and `pown` emptied,
+         * since a cast or a `sizeof` in it may have a `Paren` of its own.
+         * See `LocalInit`. *The star count in the entry has no witness*,
+         * as the early entry's without parentheses has none: what reads a
+         * name's type in its initialiser reads the text. One in a
+         * parameter of this one's sees `pown` too, and what it binds a
+         * `Sig` puts back. *)
+        : pnone  = at($pheld, 1) = ""
+        : ptakes = ((int(at(split(at(split($t, "|"), 1), ":"), 2)) + 7) div 8) * 8
+        : pptrs  = lookup([[true, size(at(split($t, "a:"), 1)) div 8]], size(at(split($t, "a:"), 1)) < size(at(split($t, "b:"), 1)), size(at(split($t, "b:"), 1)) div 8)
+        : env    = lookup([[true, $env]], $pnone, bind($env, at($pheld, 1), [lookup([[true, $bytes + $ptakes]], at($pheld, 2), 0), $pptrs, 0,
+                          at($pheld, 3), at($pheld, 4), at($pheld, 5), at($pheld, 6), at($pheld, 7), at($pheld, 8), at($pheld, 9), at($pheld, 10), $t]))
+        : bytes  = lookup([[true, $bytes + $ptakes]], not $pnone and at($pheld, 2), $bytes)
+        : pown   = ["", false, 0, "", false, false, false, "", "", false] .
 
   (* **A pointer to a function**, since ROADMAP 6.14's first part: the
    * `Paren` it is written in points at a level of its own, the function,
@@ -2457,9 +2479,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * holds before the children are walked. Without parentheses in the
    * declarator the type text is the stars and the base, which the
    * specifiers, a sibling walked already, give; with them it is the
-   * `Paren` children's, worked out on the way out, and that one form is
-   * refused by name through `ownname`, which the initialiser's `Variable`
-   * reads. The slot is claimed on the way in as well, the frame thread set
+   * `Paren` child's, worked out on its way out. That form was refused by
+   * name through `ownname`, which the initialiser's `Variable` reads, until
+   * 2026-10-05, when the `Paren` was made to bind it: it is walked before
+   * the initialiser, its sibling, so what it puts in the thread on its way
+   * out is what the initialiser is walked with. This rule hands it the
+   * entry's other fields as `pown`, and the `Paren` adds the three its type
+   * text gives and claims the slot, so this rule's own byte count leaves
+   * it alone, which has no witness for the reason `LocalAgg`'s below has
+   * none; `StaticInit` and `GlobalInit` do the same. The slot is claimed on the way in as well, the frame thread set
    * past it for the initialiser, because an initialiser can take frame
    * bytes of its own, a compound literal, and the early and the late entry
    * have to name the same slot. `own-initialiser.c` takes the address of
@@ -2489,6 +2517,8 @@ arg  = e:assignment -> Arg(value: $e) .
             : down pP      = ""
             : down pouter  = $dims
             : down early   = size($paren) = 0
+            : down pearly  = size($paren) > 0
+            : down pown    = lookup([[true, [$name, true, $base.basew, $base.tagname, false, false, $base.buns, "", ("{}{}" of $base.bquals, $squals), $base.sreg]]], $pearly, $pown)
             : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
             : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
             : down etakes  = ((int(at(split(at(split($elv, "|"), 1), ":"), 2)) + 7) div 8) * 8
@@ -2505,10 +2535,10 @@ arg  = e:assignment -> Arg(value: $e) .
             : basew  = $base.basew
             : dquals = "{}{}" of $base.bquals, $squals
             : takes  = ((int(at(split(at(split($lv, "|"), 1), ":"), 2)) + 7) div 8) * 8
-            : offset = lookup([[true, $obytes + $takes]], $early, $bytes + $takes)
+            : offset = lookup([[true, $obytes + $takes]], $early or $pearly, $bytes + $takes)
             : env    = bind($env, $name, [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])
             : scope  = bind($scope, $name, true)
-            : bytes  = lookup([[true, $bytes]], $early, $bytes + $takes)
+            : bytes  = lookup([[true, $bytes]], $early or $pearly, $bytes + $takes)
             : ownname = $heldown
             ! $stars + $base.ptrs + size($paren) = 0 and $base.tagname = "void"
                 : "'{}' is declared 'void', and an object's type has to be complete, C11 6.7p7" of $name
@@ -2636,6 +2666,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * as `cc` refuses it. The name is bound on the way out, as a local's is. *)
   StaticInit  : down dbase   = $base
               : down early   = size($paren) = 0
+              : down pearly  = size($paren) > 0
+              : down pown    = lookup([[true, [$name, false, $base.basew, $base.tagname, true, true, $base.buns, ("{}.{}.{}" of $fn, $name, $statics), ("{}{}" of $base.bquals, $squals), false]]], $pearly, $pown)
               : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
               : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
               : down heldown = $ownname
@@ -3208,6 +3240,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * not constant, as `cc` refuses it, rather than as undeclared. *)
   GlobalInit  : down dbase   = $base
               : down early   = size($paren) = 0
+              : down pearly  = size($paren) > 0
+              : down pown    = lookup([[true, [$name, false, $base.basew, $base.tagname, true, true, $base.buns, $name, ("{}{}" of $base.bquals, $squals), false]]], $pearly, $pown)
               : down elv     = "{}{}" of lookup([[0, ""], [1, "p:8:0:8|"], [2, "p:8:0:8|p:8:0:8|"], [3, "p:8:0:8|p:8:0:8|p:8:0:8|"], [4, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [5, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [6, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [7, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [8, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [9, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [10, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [11, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"], [12, "p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|p:8:0:8|"]], $stars, ""), $base.blv
               : down eptrs   = lookup([[true, size(at(split($elv, "a:"), 1)) div 8]], size(at(split($elv, "a:"), 1)) < size(at(split($elv, "b:"), 1)), size(at(split($elv, "b:"), 1)) div 8)
               : down env     = lookup([[true, bind($globals, $name, [0, $eptrs, 0, $base.basew, $base.tagname, true, true, $base.buns, $name, ("{}{}" of $base.bquals, $squals), false, $elv])]],
@@ -3284,7 +3318,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : basew   = at($means, 4)
            : tagname = at($means, 5)
            ! not defined($env, $name) and size($lit) = 0 and $name = $ownname
-               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where its declarator has a '*' in parentheses, or where it is an array with braces" of $name
+               : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where it is an array with braces" of $name
            ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name) and not (size($lit) = 0 and $name = $ownname)
                : lookup([[true, "'{}' is called before it is declared"]], $callpos, "'{}' is not declared") of $name .
 
