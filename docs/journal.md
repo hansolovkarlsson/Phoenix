@@ -7614,3 +7614,31 @@ defined($funcs, $name)` for a name `fblock` did not have, and since every
 declaration of a function now binds `fblock`, a name in `funcs` is
 always there and the fallback is never reached. It is `true` now, which
 says the same thing. Eight caught. 740 → 743 checks.
+
+## 2026-10-06: the C compiler on hold
+
+Hans decided this morning that the workspace's C compiler will not be the
+one Phoenix generates. It will be written by hand in C, in DevTools, which
+since today is the one project for the Ouroboros development tools: the
+editor, the preprocessor, the C compiler and those to come. The toolchain
+document moved there the same morning, from `~/Projects/docs/` to
+`~/Projects/DevTools/docs/`.
+
+So section 6 of the roadmap is on hold where it stands, the next stop
+included: a `?:` between two structs as a member's value in braces, which
+keeps `pp.c` out and Proem at nine files of ten. Nothing is removed.
+`languages/c/` stays in `make test`, because 354 programs agreeing with
+`cc` is the strongest evidence this repository has that a pass-oriented
+description carries a real language, and that was the claim the arc was
+also testing. The map of what is left between the subset and C11 stays as
+written, as the record of where a resumed arc would begin.
+
+What changes is the destination. Ouroboros was to receive a `cc` that
+Phoenix wrote; it is now to receive Phoenix, ported whole at some point in
+the future, with no date. Its compilers are one-file C11, so the port
+needs only a C compiler and a C runtime there, which are DevTools's and
+Ouroboros's to build. 6.11, the ELF target, existed for the old
+destination and is on hold with the rest. Ouroboros was told with a
+notice in its inbox, `docs/handoffs/2026-10-06-from-phoenix-c-compiler-on-hold.md`,
+since its roadmap names "a compiler that Phoenix generates" as part of
+its toolchain.

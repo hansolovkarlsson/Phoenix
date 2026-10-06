@@ -502,11 +502,33 @@ visibly. `languages/awk/tests/divergent/` holds all three.
 
 ## 6. A C compiler
 
+**On hold since 2026-10-06, by Hans's decision.** The workspace's C
+compiler will not be the one Phoenix generates. It is to be written by
+hand in C, in [`~/Projects/DevTools`](../../DevTools/), the project for
+the Ouroboros development tools, beside the preprocessor and the editor.
+So the arc below stops where it stands: no entry is opened, and the next
+stop it names, a `?:` between two structs at line 971 of `pp.c`, is not
+lifted. Nothing is taken out. `languages/c/` stays in the tree and in
+`make test`, as one more description that proves the notation, and the map
+below stays as the record of where the compiler stopped and what a resumed
+arc would find first. The Proem probe is no longer run against each fix.
+[6.11](#611-a-second-target-elf-under-aapcs64) is on hold with the rest,
+since its reason was a Phoenix-built `cc` running on Ouroboros.
+
+**What replaces the destination is Phoenix itself on Ouroboros**, ported
+whole at some point in the future: the tool, its descriptions, and the
+compilers it writes out, which are one-file C11 and would build there with
+whatever C compiler Ouroboros has by then. That is not an entry yet and has
+no date. It waits on that compiler, which is DevTools's, and on the C
+runtime Ouroboros is building in its
+`docs/roadmap/roadmap-c-hosting.md`. Ouroboros was told in its
+`docs/handoffs/2026-10-06-from-phoenix-c-compiler-on-hold.md`.
+
 **Why this page has a language on it.** Every other entry here is a mechanism
 the notation lacks, and a language arrives in `languages/` to test one. This
 entry is the other way round: the language is the goal and the mechanisms it
 turns out to need are the findings. The goal is the workspace's, not only this
-repository's — [`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md)
+repository's — [`../../DevTools/docs/c-compiler-toolchain.md`](../../DevTools/docs/c-compiler-toolchain.md)
 records the intent that **every tool of a C toolchain eventually exist in the
 workspace**, says what the stages are, and says why Phoenix is the one to
 start from: its passes with `thread`, `down` and environments already carried
@@ -554,7 +576,7 @@ is open now; the next entry is chosen from the map below.
 
 **The arc has a destination since 2026-09-29: C written on Ouroboros.** The
 workspace chose it, and
-[`../../docs/c-compiler-toolchain.md`](../../docs/c-compiler-toolchain.md#the-destination-c-on-ouroboros)
+[`../../DevTools/docs/c-compiler-toolchain.md`](../../DevTools/docs/c-compiler-toolchain.md#the-destination-c-on-ouroboros)
 has the order, whose last step is the one 6.10 was already steering by: the
 chain compiling CPP's own source, there. *CPP is now Proem, since
 2026-10-01*: the workspace's preprocessor was renamed, its folder is
@@ -723,10 +745,12 @@ machine) is the toolchain document's last step and belongs to it.
 *Parked on 2026-09-29, the day it was opened: the C compiler is completed
 first, and this entry is the first step of the arc after it, which starts
 only when Hans is satisfied with the compiler itself. Nothing below has
-been built, and the oracle was tried by hand only.*
+been built, and the oracle was tried by hand only. On hold since
+2026-10-06 with the rest of section 6: the C compiler for Ouroboros is
+DevTools's now, and this entry waits for the arc to resume, if it does.*
 
 The destination is C written on Ouroboros, and the first step of
-[its order](../../docs/c-compiler-toolchain.md#the-order) is this one:
+[its order](../../DevTools/docs/c-compiler-toolchain.md#the-order) is this one:
 **the back end writes for Ouroboros as well as for the Mac**, checked
 against clang under QEMU. The toolchain document put it before any
 construct, because every construct added before it is one more thing done
