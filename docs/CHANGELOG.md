@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-05: C functions declared in a block have the block's scope
+
+**A function declared in a block is known only to the block's end**, C11
+6.2.1p4, where it was known to the end of the file: a call of it or its
+name after the block is refused, as `cc` refuses it, until it is declared
+again at file scope. **And it hides a local of its name** to the block's
+end, by a declarator, `int f(void);`, or by a typedef of its type, `binop
+add;`, where both were refused by name.
+
+**Tests:** 740 → 743. Two refusals go and five join. One program joins
+the C oracle: 354 agree with `cc`, none diverges. Refusals: 501.
+
+---
+
 ## 2026-10-05: C a name in its own initialiser, with a `*` in parentheses
 
 **`int (*f)(void) = sizeof f == 8 ? g : 0;` is compiled**, as C11 6.2.1p7

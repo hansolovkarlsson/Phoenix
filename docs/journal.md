@@ -7592,3 +7592,25 @@ the byte count `LocalInit` leaves alone, for the reason `LocalAgg`'s has
 none. Twelve breaks in all: two found code that was not needed, which
 came out, two have no witness and say so, and eight are caught.
 741 → 740 checks, one refusal gone.
+
+**The third and fourth fixes: a function declared in a block has the
+block's scope.** They are one change. The obvious way, putting `funcs`
+back at the block's end as `env` is put back, cannot be taken: the
+`types` pass reads the `locals` pass's tables as they stand at the end,
+`$allfuncs` and the four beside it, so a function declared only in a
+block, `puts` say, would have no count there, and nor would the `Sig`
+keys of every pointer to a function declared in one. What `Variable`
+asks first is `env`, and for a function's name it makes an entry of its
+own from `funcs`. So a declaration in a block binds that same entry in
+`env`, which hides a local of its name and which the block already puts
+back, and a new thread, `fblock`, marks the names known only from a
+block, which `Variable` does not look up in `funcs`. Every declaration
+at file scope, a prototype, a definition, a typedef's or one in a list,
+sets it `false`. Both refusals by name went.
+
+Eleven breaks, one of which changed nothing and does not count. Two went
+through: the `FnDecl` and the typedef's `Local` each fell back to `not
+defined($funcs, $name)` for a name `fblock` did not have, and since every
+declaration of a function now binds `fblock`, a name in `funcs` is
+always there and the fallback is never reached. It is `true` now, which
+says the same thing. Eight caught. 740 → 743 checks.

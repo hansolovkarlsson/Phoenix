@@ -2916,24 +2916,22 @@ refuses "a function returned as a number" "'return' in 'get' is given a pointer 
 # too**, since 2026-10-04, and so is `int f(void);` and `int x, f(void);`,
 # which `functions-declared-in-a-block.c` holds against `cc`, as it holds a
 # parameter of a function's type, a pointer to one. `cc` refuses all of
-# these but the two that hide a local, which C allows and this refuses by
-# name: the name would be found as the local. A member of a function's
-# type is no C, and the words said otherwise until then.
+# these. One that hides a local was refused by name until 2026-10-05, and
+# `functions-in-a-block-scope.c` holds it against `cc` now, and that each
+# is known only to its block's end, which the five after the first group
+# check. A member of a function's type is no C, and the words said
+# otherwise until then.
 refuses "a function in a block with another arity" "'f' is declared twice, with a different number of parameters or '...' each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-with-another-arity.c"
 refuses "and before a definition with another" "'f' is declared twice, with a different number of parameters or '...' each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-before-another-arity.c"
-refuses "and one hiding a local" "'f' is declared a function in a block where a local of its name is in scope" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-hiding-a-local.c"
 refuses "a local named as a function in its block" "'f' is declared twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/local-named-as-a-function-in-its-block.c"
 refuses "a 'static' function in a block" "'f' is a function declared 'static' in a block" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/static-function-in-a-block.c"
 refuses "a 'register' function in a block" "'f' is a function declared 'register' in a block" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/register-function-in-a-block.c"
-refuses "a typedef's function in a block hiding a local" "'add' is declared a function in a block where a local of its name is in scope" \
-        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-hiding-a-local.c"
-refuses "and with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
+refuses "a typedef's function in a block with another arity" "'add' is declared twice, with a different number of parameters or '...' each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-with-another-arity.c"
 refuses "and before a definition with another" "'add' is declared twice, with a different number of parameters or '...' each time" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-before-another-arity.c"
@@ -2945,6 +2943,16 @@ refuses "and 'register'" "'add' is a function declared 'register' in a block" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/register-typedef-function-in-a-block.c"
 refuses "and a local of its name after it" "'add' is declared twice" \
         --driver check "$root/languages/c/c-arm64.phx" "$r/local-named-as-a-typedef-function-in-its-block.c"
+refuses "a function in a block, called after it" "'f' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-called-after-it.c"
+refuses "and named after it" "'f' is not declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-named-after-it.c"
+refuses "and called in another function" "'f' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-called-in-another-function.c"
+refuses "and declared in a list, called after it" "'f' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/function-in-a-block-in-a-list-called-after-it.c"
+refuses "and through a typedef, called after it" "'add' is called before it is declared" \
+        --driver check "$root/languages/c/c-arm64.phx" "$r/typedef-function-in-a-block-called-after-it.c"
 # A storage class on a function in a block is said in a block's words, and
 # not as the file scope's as well, which it was until the check asked.
 out=$(bounded "$phx" --quiet --driver check "$root/languages/c/c-arm64.phx" "$r/register-function-in-a-block.c" 2>&1)

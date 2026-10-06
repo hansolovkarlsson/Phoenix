@@ -1558,6 +1558,15 @@ arg  = e:assignment -> Arg(value: $e) .
    * a thread does when nothing restores it. A prototype binds on the way
    * out, which for a node with no body is the same moment. *)
   thread funcs = empty
+  (* **The functions known only from a declaration in a block**, since
+   * 2026-10-05, name to `true`. Such a declaration is in force to its
+   * block's end, C11 6.2.1p4, and while it is it has an entry in `env`
+   * as a function's name, which the block puts back; its count and its
+   * types still go in `funcs` and the tables beside it, which the passes
+   * after this one read whole, and a name here is not looked up there.
+   * A declaration at file scope makes it `false`, and every declaration
+   * of a function binds it, so a name not here is in no file scope's. *)
+  thread fblock = empty
 
   (* **The globals declared so far**, since 2026-09-26, ROADMAP 6.8, each
    * the entry a local's is, with `true` for the sixth field, which says
@@ -2078,6 +2087,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
+            : fblock = bind($fblock, $name, false)
             : funcs = lookup([[true, $funcs]], $variadic = 2 and defined($funcs, $name), bind($funcs, $name, [size($params), $variadic]))
             : sigs  = lookup([[true, $sigs]], $variadic = 2 and defined($sigs, $name), bind($sigs, $name, $params.passes))
             : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
@@ -2115,8 +2125,12 @@ arg  = e:assignment -> Arg(value: $e) .
              * when one could be declared in a block, where the locals
              * before it are still in force after it. In a block it is a
              * name of the block's, so a local of its name there after it
-             * is declared twice. *Putting `pindex` back has no witness*:
-             * nothing after a declaration in a block reads it. *)
+             * is declared twice, and since 2026-10-05 it has an entry in
+             * `env` as a function's name, the one `Variable` would make
+             * from `funcs`, which hides a local of its name and which the
+             * block puts back at its end; `fblock` says it is not known
+             * after that. *Putting `pindex` back has no witness*: nothing
+             * after a declaration in a block reads it. *)
             : down fdenv    = $env
             : down fdscope  = $scope
             : down fdbytes  = $bytes
@@ -2125,13 +2139,12 @@ arg  = e:assignment -> Arg(value: $e) .
             : down scope  = empty
             : down bytes  = 0
             : down pindex = 0
-            : env    = $fdenv
+            : env    = lookup([[true, bind($fdenv, $name, [0, 0, 0, 1, "", true, false, false, $name, "0", false, "b:1:0:1::{}" of $name])]], $dkind = "block", $fdenv)
             : scope  = lookup([[true, bind($fdscope, $name, true)]], $dkind = "block", $fdscope)
             : bytes  = $fdbytes
             : pindex = $fdpindex
             : tdfns  = lookup([[true, bind($tdfns, $name, [size($params), $variadic])]], $dkind = "block" and $variadic <> 2, $tdfns)
-            ! $dkind = "block" and defined($fdenv, $name)
-                : "'{}' is declared a function in a block where a local of its name is in scope, which C11 6.2.1p4 allows and this subset does not yet" of $name
+            : fblock = bind($fblock, $name, lookup([[true, lookup($fblock, $name, true)]], $dkind = "block", false))
             ! $dkind = "block" and $variadic <> 2 and defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) <> 2
               and lookup($funcs, $name, [0, 0]) <> [size($params), $variadic]
                 : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
@@ -2183,6 +2196,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : down bytes  = 0
             : down pindex = 0
             : down funcs  = bind($funcs, $name, [size($params), $variadic])
+            : down fblock = bind($fblock, $name, false)
             : sigs  = bind($sigs, $name, $params.passes)
             : rets  = bind($rets, $name, [lookup([[0, $ret.tagname]], size($rparen), ""), $ret.basew, $rptrs, $ret.buns, ("{}{}" of $ret.bquals, $squals), $rlv])
             : pwidths = bind($pwidths, $name, $params.pwide)
@@ -2429,7 +2443,7 @@ arg  = e:assignment -> Arg(value: $e) .
             : dquals = "{}{}" of $base.bquals, $squals
             : takes  = lookup([[true, 0]], $base.sext or $lfnty, ((int(at(split(at(split($lv, "|"), 1), ":"), 2)) + 7) div 8) * 8)
             : offset = $bytes + $takes
-            : env    = lookup([[true, $env]], $lfnty, bind($env, $name, lookup([[true, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false, $lv]]],
+            : env    = lookup([[true, bind($env, $name, [0, 0, 0, 1, "", true, false, false, $name, "0", false, "b:1:0:1::{}" of $name])]], $lfnty, bind($env, $name, lookup([[true, [0, $ptrs, 0, $basew, $base.tagname, true, false, $base.buns, $name, $dquals, false, $lv]]],
                                                $base.sext,
                                                [$offset, $ptrs, 0, $basew, $base.tagname, false, false, $base.buns, "", $dquals, $base.sreg, $lv])))
             : scope  = bind($scope, $name, true)
@@ -2437,17 +2451,17 @@ arg  = e:assignment -> Arg(value: $e) .
              * add;`, since 2026-10-04 in a block as at file scope, see
              * `Global`: no slot and no local, but the typedef's entries
              * copied to its name where it has none, and its count in
-             * `tdfns`. It may not hide a local, as a `FnDecl` may not.
+             * `tdfns`. Its name in `env` is a function's, as a `FnDecl`'s
+             * is, so it hides a local of its name to the block's end.
              * *Taking no slot has no witness*: a slot taken makes the frame
              * larger and every offset still right. *)
+            : fblock  = lookup([[true, bind($fblock, $name, lookup($fblock, $name, true))]], $lfnty, $fblock)
             : funcs   = lookup([[true, bind($funcs, $name, lookup($funcs, $lfnkey, [0, 0]))]], $lfnty and not ($lfnun and defined($funcs, $name)), $funcs)
             : sigs    = lookup([[true, bind($sigs, $name, lookup($sigs, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $sigs)
             : rets    = lookup([[true, bind($rets, $name, lookup($rets, $lfnkey, ["", 4, 0, false, "0"]))]], $lfnty and not ($lfnun and defined($funcs, $name)), $rets)
             : pwidths = lookup([[true, bind($pwidths, $name, lookup($pwidths, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $pwidths)
             : plvs    = lookup([[true, bind($plvs, $name, lookup($plvs, $lfnkey, []))]], $lfnty and not ($lfnun and defined($funcs, $name)), $plvs)
             : tdfns   = lookup([[true, bind($tdfns, $name, lookup($funcs, $lfnkey, [0, 0]))]], $lfnty, $tdfns)
-            ! $lfnty and defined($env, $name)
-                : "'{}' is declared a function in a block where a local of its name is in scope, which C11 6.2.1p4 allows and this subset does not yet" of $name
             ! $lfnty and defined($funcs, $name) and at(lookup($funcs, $name, [0, 0]), 2) <> 2 and not $lfnun
               and lookup($funcs, $name, [0, 0]) <> lookup($funcs, $lfnkey, [0, 0])
                 : "'{}' is declared twice, with a different number of parameters or '...' each time" of $name
@@ -3166,6 +3180,7 @@ arg  = e:assignment -> Arg(value: $e) .
               : pwidths = lookup([[true, bind($pwidths, $name, lookup($pwidths, $fnkey, []))]], $fnty and not ($fnun and defined($funcs, $name)), $pwidths)
               : plvs    = lookup([[true, bind($plvs, $name, lookup($plvs, $fnkey, []))]], $fnty and not ($fnun and defined($funcs, $name)), $plvs)
               : tdfns   = lookup([[true, bind($tdfns, $name, lookup($funcs, $fnkey, [0, 0]))]], $fnty, $tdfns)
+              : fblock  = lookup([[true, bind($fblock, $name, false)]], $fnty, $fblock)
               ! $stars + size($paren) + size($dims) = 0 and at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6) <> "" and defined($funcs, $name)
                 and lookup($funcs, $name, [0, 0]) <> lookup($funcs, at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6), [0, 0])
                 and at(lookup($funcs, $name, [0, 0]), 2) <> 2 and at(lookup($funcs, at(split(("{}::::::" of at(split($base.blv, "|"), 1)), ":"), 6), [0, 0]), 2) <> 2
@@ -3319,7 +3334,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : tagname = at($means, 5)
            ! not defined($env, $name) and size($lit) = 0 and $name = $ownname
                : "'{}' is named in its own initialiser, which C11 6.2.1p7 allows and this subset does not yet where it is an array with braces" of $name
-           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and not defined($funcs, $name) and not (size($lit) = 0 and $name = $ownname)
+           ! not defined($env, lookup([[0, $name]], size($lit), join($lit.lname))) and (not defined($funcs, $name) or lookup($fblock, $name, false)) and not (size($lit) = 0 and $name = $ownname)
                : lookup([[true, "'{}' is called before it is declared"]], $callpos, "'{}' is not declared") of $name .
 
   (* A member cannot be looked up here, because which struct it is in is the
