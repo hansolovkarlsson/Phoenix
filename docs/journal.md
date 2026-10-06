@@ -7642,3 +7642,13 @@ destination and is on hold with the rest. Ouroboros was told with a
 notice in its inbox, `docs/handoffs/2026-10-06-from-phoenix-c-compiler-on-hold.md`,
 since its roadmap names "a compiler that Phoenix generates" as part of
 its toolchain.
+
+DevTools was told as well, with a notice of the same name in its own
+inbox, after the first pass at this entry named only Ouroboros. It is
+the project the decision hands the work to, and its toolchain document
+still gives Phoenix steps 1 and 3 of the order and the retarget that
+was 6.11; the note lists those lines and what it could borrow from here
+without depending on it: the oracle's programs and refusals, the map of
+C11 left undone, and the Proem probe. The workspace's notice about the
+document's move was answered in the same commits: the three links were
+the ones the hold's paragraph was already rewriting.

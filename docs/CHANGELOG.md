@@ -16,6 +16,20 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-06: the C compiler on hold
+
+**`languages/c/` gains nothing more for now.** The workspace's C compiler
+is to be written by hand in C in DevTools, and the one Phoenix generates
+stops where it stands: what it compiles, it still compiles, and its
+oracle stays in `make test`, but no construct it refuses today will be
+lifted, and the ELF target for Ouroboros will not be built. Phoenix
+itself is meant to run on Ouroboros one day instead, with no date.
+[ROADMAP](ROADMAP.md#6-a-c-compiler) section 6 says what the hold keeps.
+
+**Tests:** 743 → 743, unchanged.
+
+---
+
 ## 2026-10-05: C functions declared in a block have the block's scope
 
 **A function declared in a block is known only to the block's end**, C11

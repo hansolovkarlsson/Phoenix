@@ -521,8 +521,9 @@ compilers it writes out, which are one-file C11 and would build there with
 whatever C compiler Ouroboros has by then. That is not an entry yet and has
 no date. It waits on that compiler, which is DevTools's, and on the C
 runtime Ouroboros is building in its
-`docs/roadmap/roadmap-c-hosting.md`. Ouroboros was told in its
-`docs/handoffs/2026-10-06-from-phoenix-c-compiler-on-hold.md`.
+`docs/roadmap/roadmap-c-hosting.md`. Both were told, each with a notice
+named `docs/handoffs/2026-10-06-from-phoenix-c-compiler-on-hold.md` in its
+own tree. Neither asks for anything, so nothing here waits on a reply.
 
 **Why this page has a language on it.** Every other entry here is a mechanism
 the notation lacks, and a language arrives in `languages/` to test one. This
