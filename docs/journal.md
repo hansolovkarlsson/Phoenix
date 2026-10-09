@@ -7652,3 +7652,41 @@ without depending on it: the oracle's programs and refusals, the map of
 C11 left undone, and the Proem probe. The workspace's notice about the
 document's move was answered in the same commits: the three links were
 the ones the hold's paragraph was already rewriting.
+
+## 2026-10-09: Proem is cpp again, and Futamura is out of the chain
+
+The day was the inbox. Two notices had arrived on 2026-10-06 after the
+closeout, and neither asked for anything, but each left a line here
+untrue.
+
+DevTools gave the preprocessor its first name back the same afternoon it
+moved in: Proem became cpp, and `DevTools/proem` became `DevTools/cpp`,
+with the driver now `driver/cpp.c` and the library's identifiers `cpp_...`.
+The probe's default had been rewritten that morning to follow the move,
+and it broke again with the rename: run with no argument, it stopped with
+"no Proem checkout". It reads `../DevTools/cpp` now, and the count is
+the one it had: nine of ten, `pp.c` stopping at line 971 on the `?:`
+between two structs, the stop the hold left in place. The stubs named no
+Proem identifier, so the rename reached nothing in them. The probe keeps
+its directory, `tests/proem/`, which the notice left to us: the journal,
+the postmortem and ROADMAP section 6 cite it by that path, and a name
+that is history in those records is better left matching them. For the
+same reason the quotations of `proem_...` source in them stay as they
+were printed. The links in ROADMAP and COMPLETED name the current path
+and keep CPP and Proem as the names it had before.
+
+Two renames in one day, 2026-10-06, each broke a path into another project
+that this probe reads, and they will not be the last: its default is a
+guess at where a checkout lives, and it is the guess, not the probe, that
+a rename invalidates. That is acceptable only because the probe is outside
+`make test`, and the notice system is what brought each break here rather
+than a run.
+
+Futamura's notice records Hans's decision of 2026-10-06 that Futamura
+will not describe the arm64 assembler for the Ouroboros toolchain. The
+assembler and the linker are DevTools's, written by hand in C, as the C
+compiler now is. ROADMAP 6.10's *Outside the grammar* had the assembler
+waiting on Futamura; it no longer does. Both notes are `done` and in
+`docs/handoffs/closed/`. Ouroboros, the one notice of ours still
+unanswered at the last closeout, has answered it, `done`, in its own
+`closed/`.
