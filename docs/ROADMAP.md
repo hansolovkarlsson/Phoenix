@@ -585,7 +585,10 @@ chain compiling CPP's own source, there. *CPP is now Proem, since
 `~/Projects/CPP` no longer exists. Every mention of CPP on this page means
 Proem. *Since 2026-10-06 Proem's source is in DevTools*,
 `~/Projects/DevTools/proem/`, and `~/Projects/Proem` is archived as
-`~/Projects/archive/Proem`. What it asks of this page, once the
+`~/Projects/archive/Proem`. *Later that day it took back the name cpp*, in
+`~/Projects/DevTools/cpp/`, its driver `driver/cpp.c`; the probe keeps its
+directory, `tests/proem/`, and the name Proem below is the one it had when
+the counts were made. What it asks of this page, once the
 C compiler is complete, is **a second target for `c-arm64.phx`**. Every choice the back end makes today
 is Apple's: `_main`, `@PAGE` fixups, variadic arguments on the stack, a
 signed plain `char`. Ouroboros is ELF under AAPCS64 as written, so a program
@@ -601,7 +604,7 @@ avoids.**
 | | |
 | --- | --- |
 | `x * y;` | a declaration if `x` is a typedef, a product otherwise. The scanner cannot ask the parser and the parser cannot ask a pass, so the parse cannot know. [3.3](#33-guessing-the-lexicalsyntactic-seam) refused scanner feedback with the words *if this ever comes up twice*; awk was the first, and C's `typedef` would be the second, with the difference that awk's guess is lexical and C's is a **scope** the parse itself is building. A semantic predicate on the identifier rule is the PEG answer, and it is a change to the tool. *Answered 2026-09-23 by `%names`*, [1.8](COMPLETED.md#18-names-the-parse-keeps) |
-| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/DevTools/proem`](../../DevTools/proem/) (CPP until 2026-10-01, `~/Projects/Proem` until 2026-10-06), not yet put in `cc -E`'s place |
+| `#include`, macros, `#if` | a language on the token stream, expanded and rescanned. Not a grammar and not a tree walk, so no place for it in a description. `cc -E` supplies it until the workspace has its own. *The workspace has one since 2026-09-27*, [`~/Projects/DevTools/cpp`](../../DevTools/cpp/) (CPP until 2026-10-01, then Proem, in `~/Projects/Proem` and `DevTools/proem`, until 2026-10-06), not yet put in `cc -E`'s place |
 | a machine | every backend here emits C, an outline, or `.sob` bytes. None emits an instruction sequence for a real processor; `languages/solvm/` and `languages/z80/` show that labels and an order the input never mentions are within reach of an emit pass |
 
 **The arc now: C11, before Ouroboros.** Decided by Hans on 2026-09-29,
@@ -737,9 +740,11 @@ pointer is wanted. That is the next entry.
 which waits for the compiler as above, and the toolchain document has its
 order: the **second target**
 ([6.11](#611-a-second-target-elf-under-aapcs64), parked), CPP put in
-`cc -E`'s place, and an assembler and a linker that run on Ouroboros, the
-first of which waits on whether Futamura can describe how an arm64
-instruction is encoded. Past correctness, the lcc route (an IR,
+`cc -E`'s place, and an assembler and a linker that run on Ouroboros, both
+DevTools's, written by hand in C. *Not Futamura, since 2026-10-06*: the
+assembler had waited on whether Futamura could describe how an arm64
+instruction is encoded, and Hans settled that Futamura is not part of the
+chain. Past correctness, the lcc route (an IR,
 instruction selection and a register allocator in place of the stack
 machine) is the toolchain document's last step and belongs to it.
 

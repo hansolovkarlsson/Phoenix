@@ -484,7 +484,7 @@ to assemble and link, and the assembler to turn a string literal's escapes
 into bytes, which the notation cannot do; the system libc, reached through a
 `puts` or a `putchar` declared in the program rather than included, until the
 preprocessor exists. *It exists since 2026-09-27*, as
-[`~/Projects/DevTools/proem`](../../DevTools/proem/) (CPP until 2026-10-01, `~/Projects/Proem` until 2026-10-06), and is not yet in `cc -E`'s place. *Not `printf`, since 2026-09-22*: it is variadic, and
+[`~/Projects/DevTools/cpp`](../../DevTools/cpp/) (CPP until 2026-10-01, then Proem, in `~/Projects/Proem` and `DevTools/proem`, until 2026-10-06), and is not yet in `cc -E`'s place. *Not `printf`, since 2026-09-22*: it is variadic, and
 Apple's arm64 passes variadic arguments on the stack rather than in
 registers, which is a calling convention this subset does not have.
 

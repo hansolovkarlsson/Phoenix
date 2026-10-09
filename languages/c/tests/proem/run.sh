@@ -1,13 +1,13 @@
 #!/bin/sh
 # languages/c/tests/proem/run.sh -- what a real program stops at.
 #
-# Proem is a C preprocessor written elsewhere, and the first program not
-# written for this subset that Phoenix was run on. Each of its source files
-# is preprocessed by `cc -E` and put through the `check` driver, and the
-# first stop in each is printed, or `accepted`. The ROADMAP 6 entries since
-# 2026-10-02 were chosen from what this printed, and not from a count of
-# words in the source, which had chosen them until then and missed the
-# commonest stop.
+# Proem is a C preprocessor written elsewhere, cpp again since 2026-10-06,
+# and the first program not written for this subset that Phoenix was run
+# on. Each of its source files is preprocessed by `cc -E` and put through
+# the `check` driver, and the first stop in each is printed, or
+# `accepted`. The ROADMAP 6 entries since 2026-10-02 were chosen from what
+# this printed, and not from a count of words in the source, which had
+# chosen them until then and missed the commonest stop.
 #
 # **Apple's headers stop every file first**, `long double` in <stddef.h> and
 # a `union` in Darwin's `__mbstate_t`, so the files are preprocessed against
@@ -18,10 +18,10 @@
 # not a stub's; a file that fails is reported as the stubs falling short.
 #
 # Proem is not in this repository, so this is not part of `make test`: it
-# reads a checkout, by default Proem's place in DevTools beside this
-# repository, where it has lived since 2026-10-06.
+# reads a checkout, by default its place in DevTools beside this
+# repository, `DevTools/cpp`, where it has lived since 2026-10-06.
 #
-#   languages/c/tests/proem/run.sh                  ../DevTools/proem
+#   languages/c/tests/proem/run.sh                  ../DevTools/cpp
 #   languages/c/tests/proem/run.sh ~/src/Proem      another checkout
 #
 # A probe finds only the first stop in each file, and the first in the
@@ -33,7 +33,7 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../../../.." && pwd)
 phx="$root/bin/phx"
 desc="$root/languages/c/c-arm64.phx"
-proem=${1:-"$root/../DevTools/proem"}
+proem=${1:-"$root/../DevTools/cpp"}
 
 if [ ! -d "$proem/lib" ]; then
     echo "no Proem checkout at $proem -- give its path"
