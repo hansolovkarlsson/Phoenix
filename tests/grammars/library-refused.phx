@@ -49,6 +49,9 @@ case = number -> Case(text: $1) .
        : i = int("10000000000000000", 16)
 
          (* "A count below zero is refused", rather than read as none. *)
-       : j = repeat("a", 0 - 1) .
+       : j = repeat("a", 0 - 1)
+
+         (* "Looking for nothing is refused, as splitting on nothing is." *)
+       : k = find("abc", "") .
 
 %driver check = refused .

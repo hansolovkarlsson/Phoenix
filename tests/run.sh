@@ -687,6 +687,7 @@ for want in "does not narrow a float" \
             "a float is four or eight bytes" \
             "'bitand' wants two integers" \
             "'repeat' wants a count of zero or more, and this is -1" \
+            "'find' cannot look for nothing" \
             '"9223372036854775808" does not fit in a 64-bit integer' \
             '"-9223372036854775809" does not fit in a 64-bit integer' \
             '"10000000000000000" does not fit in a 64-bit integer'; do

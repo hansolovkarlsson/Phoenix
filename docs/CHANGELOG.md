@@ -16,6 +16,18 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: `find` in the library
+
+**`find(text, part)` answers where `part` first begins in `text`**,
+counting from one, or 0 when it is not there, so `find(t, w) > 0` asks
+whether `t` contains `w`. The descriptions here asked that by splitting
+and counting, 58 times, and now ask it this way.
+
+**Tests:** 750 → 750, with four claims and one refusal added to the
+library's checks.
+
+---
+
 ## 2026-10-10: calls checked when a description is read
 
 **A call to a function that does not exist, or with the wrong number of

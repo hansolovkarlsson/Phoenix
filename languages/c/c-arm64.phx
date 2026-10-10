@@ -576,7 +576,7 @@
         * of the call is the same. A callee whose type is a function by its
         * own name, a key with no `.` in it, is called by name as before,
         * `bl _f`, and nothing of it is worked out. *)
-       : direct = $fn.fnk <> "" and size(split($fn.fnk, ".")) = 1
+       : direct = $fn.fnk <> "" and find($fn.fnk, ".") = 0
        : out = "{}{}{}{}{}\t{}\n{}{}"
            of join($args.out), (if $direct then "" else "{}\tmov x17, x0\n" of $fn.out), join($args.load),
               lookup([[0, "\tadd sp, sp, #{}\n" of 16 * size($args)]], $extras,

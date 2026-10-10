@@ -184,6 +184,7 @@ braces. A nil, a node or a list has no written form.
 | `at(list, i)` | one-based |
 | `slice(t, from, to)` | one-based, both ends included |
 | `split(t, sep)` | a list of text |
+| `find(t, part)` | where `part` first begins, from one; 0 when absent |
 | `join(list)`, `join(list, between)` | text |
 | `flatten(list)` | one level |
 | `repeat(x, n)` | text, or a list's elements, `n` times over |

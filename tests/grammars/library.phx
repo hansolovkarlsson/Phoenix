@@ -135,6 +135,12 @@ case = number -> Case(text: $1) .
        ! not (flatten([[[1]], [2]]) = [[1], 2])   : "and only one"
        ! not (flatten([1, [2, 3]]) = [1, 2, 3])   : "an element that is not a list passes through"
 
+         (* "where part first begins, counting from one, or 0" *)
+       ! not (find("abcabc", "bc") = 2)           : "find answers where a part first begins"
+       ! not (find("abc", "abc") = 1)             : "counting from one"
+       ! not (find("abc", "x") = 0)               : "and 0 when it is not there"
+       ! not (find("ab", "abc") = 0)              : "nor when it is longer than the text"
+
          (* "text, or a list's elements, n times over" *)
        ! not (repeat("ab", 3) = "ababab")         : "repeat makes text n times over"
        ! not (repeat("ab", 0) = "")               : "and none of it at zero"

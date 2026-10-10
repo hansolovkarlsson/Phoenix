@@ -1177,6 +1177,18 @@ arg  = e:assignment -> Arg(value: $e) .
 %define declof(stars, base, dims) =
     lookup([[0, ("{}{}" of repeat("p:8:0:8|", $stars), $base.blv)]], size($dims), join($dims.t)) .
 
+(* A struct's members, one character each, in the order they are declared:
+ * member `n` is the `n + 1`th character of this alphabet, so a list of
+ * members is a text that `slice` can step through. Eighty-six characters,
+ * which is the 86 members an initialiser's map refuses past, by name. `~`
+ * is not one of them, and stands for the end: past the last member.
+ * `memberindex` turns a character back into its number, with `~` as 86. *)
+%define memberchar(n) =
+    slice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", $n + 1, $n + 1) .
+
+%define memberindex(c) =
+    find("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`~", $c) - 1 .
+
 (* How many pointer levels a type has before its first array or base: each
  * `p:8:0:8|` is eight characters, and whichever of `a:` and `b:` comes
  * first ends them. *)
@@ -1231,29 +1243,29 @@ arg  = e:assignment -> Arg(value: $e) .
    * on this machine, as `long` is, and the same in every place a type is
    * asked about here; `signed char` was `char` already, which is signed on
    * this machine, and stays so. *)
-  Base  : stat    = size(split($words, " static ")) > 1
-        : tdef    = size(split($words, " typedef ")) > 1
-        : sauto   = size(split($words, " auto ")) > 1
-        : sreg    = size(split($words, " register ")) > 1
-        : sext    = size(split($words, " extern ")) > 1
+  Base  : stat    = find($words, " static ") > 0
+        : tdef    = find($words, " typedef ") > 0
+        : sauto   = find($words, " auto ") > 0
+        : sreg    = find($words, " register ") > 0
+        : sext    = find($words, " extern ") > 0
         : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
-        : pword   = at(split(("{}{}{}" of (if size(split($words, " static ")) > 1 then "static " else ""), (if size(split($words, " typedef ")) > 1 then "typedef " else ""), (if size(split($words, " auto ")) > 1 then "auto " else "")), " "), 1)
+        : pword   = at(split(("{}{}{}" of (if find($words, " static ") > 0 then "static " else ""), (if find($words, " typedef ") > 0 then "typedef " else ""), (if find($words, " auto ") > 0 then "auto " else "")), " "), 1)
         : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
-                                   (if size(split($words, " _Complex ")) > 1 then "_Complex " else ""),
-                                   (if size(split($words, " _Imaginary ")) > 1 then "_Imaginary " else ""),
-                                   (if size(split($words, " _Atomic ")) > 1 then "_Atomic " else ""),
+                                   (if find($words, " _Complex ") > 0 then "_Complex " else ""),
+                                   (if find($words, " _Imaginary ") > 0 then "_Imaginary " else ""),
+                                   (if find($words, " _Atomic ") > 0 then "_Atomic " else ""),
                                    "",
-                                   (if size(split($words, " float ")) > 1 then "float " else ""),
-                                   (if size(split($words, " double ")) > 1 then "double " else ""),
+                                   (if find($words, " float ") > 0 then "float " else ""),
+                                   (if find($words, " double ") > 0 then "double " else ""),
                                    "",
                                    "",
-                                   (if size(split($words, " union ")) > 1 then "union " else ""),
-                                   (if size(split($words, " volatile ")) > 1 then "volatile " else ""),
-                                   (if size(split($words, " restrict ")) > 1 then "restrict " else ""),
-                                   (if size(split($words, " _Thread_local ")) > 1 then "_Thread_local " else ""),
-                                   (if size(split($words, " inline ")) > 1 then "inline " else ""),
-                                   (if size(split($words, " _Noreturn ")) > 1 then "_Noreturn " else ""),
-                                   (if size(split($words, " _Alignas ")) > 1 then "_Alignas " else "")), " "), 1)
+                                   (if find($words, " union ") > 0 then "union " else ""),
+                                   (if find($words, " volatile ") > 0 then "volatile " else ""),
+                                   (if find($words, " restrict ") > 0 then "restrict " else ""),
+                                   (if find($words, " _Thread_local ") > 0 then "_Thread_local " else ""),
+                                   (if find($words, " inline ") > 0 then "inline " else ""),
+                                   (if find($words, " _Noreturn ") > 0 then "_Noreturn " else ""),
+                                   (if find($words, " _Alignas ") > 0 then "_Alignas " else "")), " "), 1)
         : key     = "{}{}{}{}{}{}{}{}{}{}{}{}" of
                          size(split($words, " void ")) - 1,
                          size(split($words, " char ")) - 1,
@@ -1297,29 +1309,29 @@ arg  = e:assignment -> Arg(value: $e) .
                                   ["000020001000", "unsigned long"],
                                   ["000120001000", "unsigned long"]], $key, "")))
         : display = join(split(slice($words, 2, size($words) - 1), "  "), " ") .
-  Named : stat    = size(split($words, " static ")) > 1
-        : tdef    = size(split($words, " typedef ")) > 1
-        : sauto   = size(split($words, " auto ")) > 1
-        : sreg    = size(split($words, " register ")) > 1
-        : sext    = size(split($words, " extern ")) > 1
+  Named : stat    = find($words, " static ") > 0
+        : tdef    = find($words, " typedef ") > 0
+        : sauto   = find($words, " auto ") > 0
+        : sreg    = find($words, " register ") > 0
+        : sext    = find($words, " extern ") > 0
         : nstore  = (size(split($words, " static ")) - 1) + (size(split($words, " typedef ")) - 1) + (size(split($words, " extern ")) - 1) + (size(split($words, " register ")) - 1) + (size(split($words, " auto ")) - 1) + (size(split($words, " _Thread_local ")) - 1)
-        : pword   = at(split(("{}{}{}" of (if size(split($words, " static ")) > 1 then "static " else ""), (if size(split($words, " typedef ")) > 1 then "typedef " else ""), (if size(split($words, " auto ")) > 1 then "auto " else "")), " "), 1)
+        : pword   = at(split(("{}{}{}" of (if find($words, " static ") > 0 then "static " else ""), (if find($words, " typedef ") > 0 then "typedef " else ""), (if find($words, " auto ") > 0 then "auto " else "")), " "), 1)
         : unsup   = at(split(("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}" of
-                                   (if size(split($words, " _Complex ")) > 1 then "_Complex " else ""),
-                                   (if size(split($words, " _Imaginary ")) > 1 then "_Imaginary " else ""),
-                                   (if size(split($words, " _Atomic ")) > 1 then "_Atomic " else ""),
+                                   (if find($words, " _Complex ") > 0 then "_Complex " else ""),
+                                   (if find($words, " _Imaginary ") > 0 then "_Imaginary " else ""),
+                                   (if find($words, " _Atomic ") > 0 then "_Atomic " else ""),
                                    "",
-                                   (if size(split($words, " float ")) > 1 then "float " else ""),
-                                   (if size(split($words, " double ")) > 1 then "double " else ""),
+                                   (if find($words, " float ") > 0 then "float " else ""),
+                                   (if find($words, " double ") > 0 then "double " else ""),
                                    "",
                                    "",
-                                   (if size(split($words, " union ")) > 1 then "union " else ""),
-                                   (if size(split($words, " volatile ")) > 1 then "volatile " else ""),
-                                   (if size(split($words, " restrict ")) > 1 then "restrict " else ""),
-                                   (if size(split($words, " _Thread_local ")) > 1 then "_Thread_local " else ""),
-                                   (if size(split($words, " inline ")) > 1 then "inline " else ""),
-                                   (if size(split($words, " _Noreturn ")) > 1 then "_Noreturn " else ""),
-                                   (if size(split($words, " _Alignas ")) > 1 then "_Alignas " else "")), " "), 1) .
+                                   (if find($words, " union ") > 0 then "union " else ""),
+                                   (if find($words, " volatile ") > 0 then "volatile " else ""),
+                                   (if find($words, " restrict ") > 0 then "restrict " else ""),
+                                   (if find($words, " _Thread_local ") > 0 then "_Thread_local " else ""),
+                                   (if find($words, " inline ") > 0 then "inline " else ""),
+                                   (if find($words, " _Noreturn ") > 0 then "_Noreturn " else ""),
+                                   (if find($words, " _Alignas ") > 0 then "_Alignas " else "")), " "), 1) .
 
   (* **An unprototyped declaration counts nothing**, since 2026-10-04: no
    * shape, since it says no arity, and **no name** either, since a name
@@ -1384,7 +1396,7 @@ arg  = e:assignment -> Arg(value: $e) .
                 : "'{}' is a function's definition declared 'typedef', which C11 6.9.1p2 forbids" of $name
             ! $ret.unsup = "" and $ret.nstore < 2 and ($ret.sauto or $ret.sreg)
                 : "'{}' is declared '{}' at file scope, which C11 6.9p2 forbids" of $name, (if $ret.sauto then "auto" else "register")
-            ! size($params) > 0 and size(split((",{}," of join($params.name, ",")), ",,")) > 1
+            ! size($params) > 0 and find((",{}," of join($params.name, ",")), ",,") > 0
                 : "a parameter of a function's definition has a name, C11 6.9.1p5"
             ! size(positions($ids)) < size($ids)
                 : "'{}' has a name twice in its list of parameters, C11 6.9.1p6" of $name
@@ -1533,12 +1545,12 @@ arg  = e:assignment -> Arg(value: $e) .
    * asked, since a typedef's name has none. *)
   Decls  : down base = $spec
          : down dkind = $kind
-         : fwd    = size($items) = 0 and size(split($spec.words, " struct ")) > 1 and size($spec.def) = 0
+         : fwd    = size($items) = 0 and find($spec.words, " struct ") > 0 and size($spec.def) = 0
          : fresh  = $fwd and not defined($tscope, $spec.name)
          : tags   = (if $fresh then bind($tags, $spec.name, (if $infunc then "{}.{}" of $spec.name, $tagn else $spec.name)) else $tags)
          : tscope = (if $fwd then bind($tscope, $spec.name, true) else $tscope)
          : tagn   = (if $fresh then $tagn + 1 else $tagn)
-         ! $kind = "for" and ($spec.stat or $spec.tdef or size(split($spec.words, " extern ")) > 1)
+         ! $kind = "for" and ($spec.stat or $spec.tdef or find($spec.words, " extern ") > 0)
              : "a 'for' declares only objects that are 'auto' or 'register', C11 6.8.5p3" .
 
   (* **A static assertion's names** are the file's when it is an item, as a
@@ -1553,8 +1565,8 @@ arg  = e:assignment -> Arg(value: $e) .
    * there reads them before the value they guard is worked out. A letter
    * `u` or `l` anywhere in it is a suffix, since no hex digit is one. *)
   Number : iszero  = $text = "0"
-         : ihasu   = size(split($text, "u")) > 1 or size(split($text, "U")) > 1
-         : ihasl   = size(split($text, "l")) > 1 or size(split($text, "L")) > 1
+         : ihasu   = find($text, "u") > 0 or find($text, "U") > 0
+         : ihasl   = find($text, "l") > 0 or find($text, "L") > 0
          : ibody   = slice($text, 1, size($text) - (if $ihasu then 1 else 0) - (size(split($text, "l")) - 1) - (size(split($text, "L")) - 1))
          : ihex    = slice($ibody, 1, 2) = "0x" or slice($ibody, 1, 2) = "0X"
          : ioct    = not $ihex and slice($ibody, 1, 1) = "0" and size($ibody) > 1
@@ -1563,7 +1575,7 @@ arg  = e:assignment -> Arg(value: $e) .
          : ndigits = size($idigits)
          (* An octal constant with an 8 or a 9 is refused by the `types`
           * pass, and is not read here as one. *)
-         : ebad    = $ioct and (size(split($idigits, "8")) > 1 or size(split($idigits, "9")) > 1)
+         : ebad    = $ioct and (find($idigits, "8") > 0 or find($idigits, "9") > 0)
          : eok     = $ndigits <= 15 and not $ebad
          : ev      = int((if $ebad then "0" else slice($idigits, 1, 15)), (if $ihex then 16 else (if $ioct then 8 else 10)))
          (* Whether it is unsigned, for `eu` below: a `u`, or a hex or
@@ -1844,7 +1856,7 @@ arg  = e:assignment -> Arg(value: $e) .
   Named : means   = lookup($typedefs, $name, lookup([["__builtin_va_list", [1, 1, "", 1, false, "00", "p:8:0:8|b:1:0:1"]]], $name, [4, 4, "", 0, false, "0", "b:4:0:4"]))
         : tq      = at($means, 6)
         : bquals  = "{}{}" of (if size($tq) > 1 then slice($tq, 1, size($tq) - 1) else ""),
-                              (if size(split($words, " const ")) > 1 or slice($tq, size($tq), size($tq)) = "1" then "1" else "0")
+                              (if find($words, " const ") > 0 or slice($tq, size($tq), size($tq)) = "1" then "1" else "0")
         : hasconst = at(lookup($layouts, at($means, 3), [0, 1, empty, false]), 4)
         : buns    = at($means, 5)
         : sized   = at($means, 3) <> "" and at($means, 3) <> "void"
@@ -1997,7 +2009,7 @@ arg  = e:assignment -> Arg(value: $e) .
        : mlist   = $hmlist
        : tkey    = (if $name = "" and size($def) = 0 then $tname else (if size($def) > 0 then join($def.mykey) else lookup($tags, $name, $name)))
        : ptrs    = 0
-       : bquals  = (if size(split($words, " const ")) > 1 then "1" else "0")
+       : bquals  = (if find($words, " const ") > 0 then "1" else "0")
        : layout  = lookup($layouts, $tkey, [0, 1, empty, false])
        : hasconst = at($layout, 4)
        : basew   = at($layout, 1)
@@ -2025,7 +2037,7 @@ arg  = e:assignment -> Arg(value: $e) .
        (* **An enumeration is named after its list**, C11 6.7.2.3p3, since
         * ROADMAP 6.15's fourth part: there is no `enum e;` before one, as
         * there is a `struct s;`. *)
-       ! size(split($words, " enum ")) > 1 and size($def) = 0 and not defined($tags, $name)
+       ! find($words, " enum ") > 0 and size($def) = 0 and not defined($tags, $name)
            : "'enum {}' is named before its list, and C11 6.7.2.3p3 has no enumeration declared without one" of $name .
 
   (* A member starts at the next offset its alignment allows. An element is
@@ -2050,7 +2062,7 @@ arg  = e:assignment -> Arg(value: $e) .
                : ealign = int(at(split(at(split($lv, "|"), 1), ":"), 4))
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
                : fields = bind($fields, $name, [$offset, $ptrs, 0, $basew, $base.tagname, $base.buns, $dquals, $lv])
-               : mch    = slice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", size($mlist) + 1, size($mlist) + 1)
+               : mch    = memberchar(size($mlist))
                : mrun   = join(split(slice($dots, 1, $offset - $moff + (if $count = 0 then $ebytes else $count * $ebytes)), "."), (if size($mlist) < 86 then $mch else "?"))
                : mlist  = flatten([$mlist, [$name]])
                : moff   = $offset + $ebytes
@@ -2081,7 +2093,7 @@ arg  = e:assignment -> Arg(value: $e) .
                : ealign = int(at(split(at(split($lvin, "|"), 1), ":"), 4))
                : offset = (($moff + $ealign - 1) div $ealign) * $ealign
                : fields = bind($fields, $name, [$offset, $ptrs, $count, $basew, $base.tagname, $base.buns, $dquals, $lv])
-               : mch    = slice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", size($mlist) + 1, size($mlist) + 1)
+               : mch    = memberchar(size($mlist))
                : mrun   = join(split(slice($dots, 1, $offset - $moff + (if $count = 0 then $ebytes else $count * $ebytes)), "."), (if size($mlist) < 86 then $mch else "?"))
                : mlist  = flatten([$mlist, [$name]])
                : moff   = $offset + $count * $ebytes
@@ -2998,7 +3010,7 @@ arg  = e:assignment -> Arg(value: $e) .
            : down qt0 = $pobj
            : down qp0 = $icur - $plb
            : down qa0 = $plb
-           : down qm0 = lookup(at(layoutof($layouts, $qt0), 3), at(flatten([at(layoutof($layouts, $qt0), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1))), 1)) < size(at(layoutof($layouts, $qt0), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1))), 1)) + 1 else size(at(layoutof($layouts, $qt0), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : down qm0 = lookup(at(layoutof($layouts, $qt0), 3), at(flatten([at(layoutof($layouts, $qt0), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1))) < size(at(layoutof($layouts, $qt0), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $qt0), 6)), $qp0 + 1, $qp0 + 1))) + 1 else size(at(layoutof($layouts, $qt0), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : down qe0 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($qt0), 1, 2))), int(("0{}" of lvfield(elemof($qt0), 1, 2))))
            : down qk0 = $qp0 div $qe0
            : down qt1 = (if (slice($qt0, 1, 1) = "b" and lvfield($qt0, 1, 5) <> "") and at(layoutof($layouts, $qt0), 7) then at($qm0, 8) else (if (slice($qt0, 1, 1) = "a") then (if int(("0{}" of lvfield($qt0, 1, 3))) > 0 and $qk0 >= int(("0{}" of lvfield($qt0, 1, 3))) then "END" else elemof($qt0)) else (if (slice($qt0, 1, 1) = "b" and lvfield($qt0, 1, 5) <> "") then "BIG" else (if (slice($qt0, 1, 1) = "p" or (slice($qt0, 1, 1) = "b" and lvfield($qt0, 1, 5) = "")) and $qp0 > 0 then "END" else $qt0))))
@@ -3046,49 +3058,49 @@ arg  = e:assignment -> Arg(value: $e) .
            : dt0 = $myobj
            : dp0 = $icur - $lb
            : da0 = $lb
-           : dm0 = lookup(at(layoutof($layouts, $dt0), 3), at(flatten([at(layoutof($layouts, $dt0), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1))), 1)) < size(at(layoutof($layouts, $dt0), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt0), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm0 = lookup(at(layoutof($layouts, $dt0), 3), at(flatten([at(layoutof($layouts, $dt0), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1))) < size(at(layoutof($layouts, $dt0), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt0), 6)), $dp0 + 1, $dp0 + 1))) + 1 else size(at(layoutof($layouts, $dt0), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de0 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt0), 1, 2))), int(("0{}" of lvfield(elemof($dt0), 1, 2))))
            : dk0 = $dp0 div $de0
            : dt1 = (if (slice($dt0, 1, 1) = "b" and lvfield($dt0, 1, 5) <> "") and at(layoutof($layouts, $dt0), 7) then at($dm0, 8) else (if (slice($dt0, 1, 1) = "a") then (if int(("0{}" of lvfield($dt0, 1, 3))) > 0 and $dk0 >= int(("0{}" of lvfield($dt0, 1, 3))) then "END" else elemof($dt0)) else (if (slice($dt0, 1, 1) = "b" and lvfield($dt0, 1, 5) <> "") then "BIG" else (if (slice($dt0, 1, 1) = "p" or (slice($dt0, 1, 1) = "b" and lvfield($dt0, 1, 5) = "")) and $dp0 > 0 then "END" else $dt0))))
            : dp1 = (if (slice($dt0, 1, 1) = "b" and lvfield($dt0, 1, 5) <> "") then (if $dp0 < at($dm0, 1) then 0 else $dp0 - at($dm0, 1)) else (if (slice($dt0, 1, 1) = "a") then $dp0 mod $de0 else $dp0))
            : da1 = (if (slice($dt0, 1, 1) = "b" and lvfield($dt0, 1, 5) <> "") then $da0 + at($dm0, 1) else (if (slice($dt0, 1, 1) = "a") then $da0 + $dk0 * $de0 else $da0))
-           : dm1 = lookup(at(layoutof($layouts, $dt1), 3), at(flatten([at(layoutof($layouts, $dt1), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1))), 1)) < size(at(layoutof($layouts, $dt1), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt1), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm1 = lookup(at(layoutof($layouts, $dt1), 3), at(flatten([at(layoutof($layouts, $dt1), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1))) < size(at(layoutof($layouts, $dt1), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt1), 6)), $dp1 + 1, $dp1 + 1))) + 1 else size(at(layoutof($layouts, $dt1), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de1 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt1), 1, 2))), int(("0{}" of lvfield(elemof($dt1), 1, 2))))
            : dk1 = $dp1 div $de1
            : dt2 = (if (slice($dt1, 1, 1) = "b" and lvfield($dt1, 1, 5) <> "") and at(layoutof($layouts, $dt1), 7) then at($dm1, 8) else (if (slice($dt1, 1, 1) = "a") then (if int(("0{}" of lvfield($dt1, 1, 3))) > 0 and $dk1 >= int(("0{}" of lvfield($dt1, 1, 3))) then "END" else elemof($dt1)) else (if (slice($dt1, 1, 1) = "b" and lvfield($dt1, 1, 5) <> "") then "BIG" else (if (slice($dt1, 1, 1) = "p" or (slice($dt1, 1, 1) = "b" and lvfield($dt1, 1, 5) = "")) and $dp1 > 0 then "END" else $dt1))))
            : dp2 = (if (slice($dt1, 1, 1) = "b" and lvfield($dt1, 1, 5) <> "") then (if $dp1 < at($dm1, 1) then 0 else $dp1 - at($dm1, 1)) else (if (slice($dt1, 1, 1) = "a") then $dp1 mod $de1 else $dp1))
            : da2 = (if (slice($dt1, 1, 1) = "b" and lvfield($dt1, 1, 5) <> "") then $da1 + at($dm1, 1) else (if (slice($dt1, 1, 1) = "a") then $da1 + $dk1 * $de1 else $da1))
-           : dm2 = lookup(at(layoutof($layouts, $dt2), 3), at(flatten([at(layoutof($layouts, $dt2), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1))), 1)) < size(at(layoutof($layouts, $dt2), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt2), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm2 = lookup(at(layoutof($layouts, $dt2), 3), at(flatten([at(layoutof($layouts, $dt2), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1))) < size(at(layoutof($layouts, $dt2), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt2), 6)), $dp2 + 1, $dp2 + 1))) + 1 else size(at(layoutof($layouts, $dt2), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de2 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt2), 1, 2))), int(("0{}" of lvfield(elemof($dt2), 1, 2))))
            : dk2 = $dp2 div $de2
            : dt3 = (if (slice($dt2, 1, 1) = "b" and lvfield($dt2, 1, 5) <> "") and at(layoutof($layouts, $dt2), 7) then at($dm2, 8) else (if (slice($dt2, 1, 1) = "a") then (if int(("0{}" of lvfield($dt2, 1, 3))) > 0 and $dk2 >= int(("0{}" of lvfield($dt2, 1, 3))) then "END" else elemof($dt2)) else (if (slice($dt2, 1, 1) = "b" and lvfield($dt2, 1, 5) <> "") then "BIG" else (if (slice($dt2, 1, 1) = "p" or (slice($dt2, 1, 1) = "b" and lvfield($dt2, 1, 5) = "")) and $dp2 > 0 then "END" else $dt2))))
            : dp3 = (if (slice($dt2, 1, 1) = "b" and lvfield($dt2, 1, 5) <> "") then (if $dp2 < at($dm2, 1) then 0 else $dp2 - at($dm2, 1)) else (if (slice($dt2, 1, 1) = "a") then $dp2 mod $de2 else $dp2))
            : da3 = (if (slice($dt2, 1, 1) = "b" and lvfield($dt2, 1, 5) <> "") then $da2 + at($dm2, 1) else (if (slice($dt2, 1, 1) = "a") then $da2 + $dk2 * $de2 else $da2))
-           : dm3 = lookup(at(layoutof($layouts, $dt3), 3), at(flatten([at(layoutof($layouts, $dt3), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1))), 1)) < size(at(layoutof($layouts, $dt3), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt3), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm3 = lookup(at(layoutof($layouts, $dt3), 3), at(flatten([at(layoutof($layouts, $dt3), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1))) < size(at(layoutof($layouts, $dt3), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt3), 6)), $dp3 + 1, $dp3 + 1))) + 1 else size(at(layoutof($layouts, $dt3), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de3 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt3), 1, 2))), int(("0{}" of lvfield(elemof($dt3), 1, 2))))
            : dk3 = $dp3 div $de3
            : dt4 = (if (slice($dt3, 1, 1) = "b" and lvfield($dt3, 1, 5) <> "") and at(layoutof($layouts, $dt3), 7) then at($dm3, 8) else (if (slice($dt3, 1, 1) = "a") then (if int(("0{}" of lvfield($dt3, 1, 3))) > 0 and $dk3 >= int(("0{}" of lvfield($dt3, 1, 3))) then "END" else elemof($dt3)) else (if (slice($dt3, 1, 1) = "b" and lvfield($dt3, 1, 5) <> "") then "BIG" else (if (slice($dt3, 1, 1) = "p" or (slice($dt3, 1, 1) = "b" and lvfield($dt3, 1, 5) = "")) and $dp3 > 0 then "END" else $dt3))))
            : dp4 = (if (slice($dt3, 1, 1) = "b" and lvfield($dt3, 1, 5) <> "") then (if $dp3 < at($dm3, 1) then 0 else $dp3 - at($dm3, 1)) else (if (slice($dt3, 1, 1) = "a") then $dp3 mod $de3 else $dp3))
            : da4 = (if (slice($dt3, 1, 1) = "b" and lvfield($dt3, 1, 5) <> "") then $da3 + at($dm3, 1) else (if (slice($dt3, 1, 1) = "a") then $da3 + $dk3 * $de3 else $da3))
-           : dm4 = lookup(at(layoutof($layouts, $dt4), 3), at(flatten([at(layoutof($layouts, $dt4), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1))), 1)) < size(at(layoutof($layouts, $dt4), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt4), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm4 = lookup(at(layoutof($layouts, $dt4), 3), at(flatten([at(layoutof($layouts, $dt4), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1))) < size(at(layoutof($layouts, $dt4), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt4), 6)), $dp4 + 1, $dp4 + 1))) + 1 else size(at(layoutof($layouts, $dt4), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de4 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt4), 1, 2))), int(("0{}" of lvfield(elemof($dt4), 1, 2))))
            : dk4 = $dp4 div $de4
            : dt5 = (if (slice($dt4, 1, 1) = "b" and lvfield($dt4, 1, 5) <> "") and at(layoutof($layouts, $dt4), 7) then at($dm4, 8) else (if (slice($dt4, 1, 1) = "a") then (if int(("0{}" of lvfield($dt4, 1, 3))) > 0 and $dk4 >= int(("0{}" of lvfield($dt4, 1, 3))) then "END" else elemof($dt4)) else (if (slice($dt4, 1, 1) = "b" and lvfield($dt4, 1, 5) <> "") then "BIG" else (if (slice($dt4, 1, 1) = "p" or (slice($dt4, 1, 1) = "b" and lvfield($dt4, 1, 5) = "")) and $dp4 > 0 then "END" else $dt4))))
            : dp5 = (if (slice($dt4, 1, 1) = "b" and lvfield($dt4, 1, 5) <> "") then (if $dp4 < at($dm4, 1) then 0 else $dp4 - at($dm4, 1)) else (if (slice($dt4, 1, 1) = "a") then $dp4 mod $de4 else $dp4))
            : da5 = (if (slice($dt4, 1, 1) = "b" and lvfield($dt4, 1, 5) <> "") then $da4 + at($dm4, 1) else (if (slice($dt4, 1, 1) = "a") then $da4 + $dk4 * $de4 else $da4))
-           : dm5 = lookup(at(layoutof($layouts, $dt5), 3), at(flatten([at(layoutof($layouts, $dt5), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1))), 1)) < size(at(layoutof($layouts, $dt5), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt5), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm5 = lookup(at(layoutof($layouts, $dt5), 3), at(flatten([at(layoutof($layouts, $dt5), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1))) < size(at(layoutof($layouts, $dt5), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt5), 6)), $dp5 + 1, $dp5 + 1))) + 1 else size(at(layoutof($layouts, $dt5), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de5 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt5), 1, 2))), int(("0{}" of lvfield(elemof($dt5), 1, 2))))
            : dk5 = $dp5 div $de5
            : dt6 = (if (slice($dt5, 1, 1) = "b" and lvfield($dt5, 1, 5) <> "") and at(layoutof($layouts, $dt5), 7) then at($dm5, 8) else (if (slice($dt5, 1, 1) = "a") then (if int(("0{}" of lvfield($dt5, 1, 3))) > 0 and $dk5 >= int(("0{}" of lvfield($dt5, 1, 3))) then "END" else elemof($dt5)) else (if (slice($dt5, 1, 1) = "b" and lvfield($dt5, 1, 5) <> "") then "BIG" else (if (slice($dt5, 1, 1) = "p" or (slice($dt5, 1, 1) = "b" and lvfield($dt5, 1, 5) = "")) and $dp5 > 0 then "END" else $dt5))))
            : dp6 = (if (slice($dt5, 1, 1) = "b" and lvfield($dt5, 1, 5) <> "") then (if $dp5 < at($dm5, 1) then 0 else $dp5 - at($dm5, 1)) else (if (slice($dt5, 1, 1) = "a") then $dp5 mod $de5 else $dp5))
            : da6 = (if (slice($dt5, 1, 1) = "b" and lvfield($dt5, 1, 5) <> "") then $da5 + at($dm5, 1) else (if (slice($dt5, 1, 1) = "a") then $da5 + $dk5 * $de5 else $da5))
-           : dm6 = lookup(at(layoutof($layouts, $dt6), 3), at(flatten([at(layoutof($layouts, $dt6), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1))), 1)) < size(at(layoutof($layouts, $dt6), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt6), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm6 = lookup(at(layoutof($layouts, $dt6), 3), at(flatten([at(layoutof($layouts, $dt6), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1))) < size(at(layoutof($layouts, $dt6), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt6), 6)), $dp6 + 1, $dp6 + 1))) + 1 else size(at(layoutof($layouts, $dt6), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de6 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt6), 1, 2))), int(("0{}" of lvfield(elemof($dt6), 1, 2))))
            : dk6 = $dp6 div $de6
            : dt7 = (if (slice($dt6, 1, 1) = "b" and lvfield($dt6, 1, 5) <> "") and at(layoutof($layouts, $dt6), 7) then at($dm6, 8) else (if (slice($dt6, 1, 1) = "a") then (if int(("0{}" of lvfield($dt6, 1, 3))) > 0 and $dk6 >= int(("0{}" of lvfield($dt6, 1, 3))) then "END" else elemof($dt6)) else (if (slice($dt6, 1, 1) = "b" and lvfield($dt6, 1, 5) <> "") then "BIG" else (if (slice($dt6, 1, 1) = "p" or (slice($dt6, 1, 1) = "b" and lvfield($dt6, 1, 5) = "")) and $dp6 > 0 then "END" else $dt6))))
            : dp7 = (if (slice($dt6, 1, 1) = "b" and lvfield($dt6, 1, 5) <> "") then (if $dp6 < at($dm6, 1) then 0 else $dp6 - at($dm6, 1)) else (if (slice($dt6, 1, 1) = "a") then $dp6 mod $de6 else $dp6))
            : da7 = (if (slice($dt6, 1, 1) = "b" and lvfield($dt6, 1, 5) <> "") then $da6 + at($dm6, 1) else (if (slice($dt6, 1, 1) = "a") then $da6 + $dk6 * $de6 else $da6))
-           : dm7 = lookup(at(layoutof($layouts, $dt7), 3), at(flatten([at(layoutof($layouts, $dt7), 5), [""]]), (if size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1))), 1)) < size(at(layoutof($layouts, $dt7), 5)) then size(at(split("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./;<=>?@[]^_`", (if slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1))), 1)) + 1 else size(at(layoutof($layouts, $dt7), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
+           : dm7 = lookup(at(layoutof($layouts, $dt7), 3), at(flatten([at(layoutof($layouts, $dt7), 5), [""]]), (if memberindex((if slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1))) < size(at(layoutof($layouts, $dt7), 5)) then memberindex((if slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1) = "" then "~" else slice(("{}~" of at(layoutof($layouts, $dt7), 6)), $dp7 + 1, $dp7 + 1))) + 1 else size(at(layoutof($layouts, $dt7), 5)) + 1)), [0, 0, 0, 0, "", false, "0", "END"])
            : de7 = lookup([[0, 1]], int(("0{}" of lvfield(elemof($dt7), 1, 2))), int(("0{}" of lvfield(elemof($dt7), 1, 2))))
            : dk7 = $dp7 div $de7
            : dt8 = (if (slice($dt7, 1, 1) = "b" and lvfield($dt7, 1, 5) <> "") and at(layoutof($layouts, $dt7), 7) then at($dm7, 8) else (if (slice($dt7, 1, 1) = "a") then (if int(("0{}" of lvfield($dt7, 1, 3))) > 0 and $dk7 >= int(("0{}" of lvfield($dt7, 1, 3))) then "END" else elemof($dt7)) else (if (slice($dt7, 1, 1) = "b" and lvfield($dt7, 1, 5) <> "") then "BIG" else (if (slice($dt7, 1, 1) = "p" or (slice($dt7, 1, 1) = "b" and lvfield($dt7, 1, 5) = "")) and $dp7 > 0 then "END" else $dt7))))
@@ -4242,7 +4254,7 @@ arg  = e:assignment -> Arg(value: $e) .
          : width  = (if not $ihasl and ((not $ihasu and ($fint or (not $idec and $fuint)))
                                                       or ($ihasu and $fuint)) then 4 else 8)
          : uns    = $ihasu or $bits < 0 or ($width = 4 and not $fint)
-         ! $ioct and (size(split($idigits, "8")) > 1 or size(split($idigits, "9")) > 1)
+         ! $ioct and (find($idigits, "8") > 0 or find($idigits, "9") > 0)
              : "'{}' is an octal constant, and 8 and 9 are not octal digits" of $text
          ! ($ihex and $ndigits > 16 and join(split(slice($idigits, 1, $ndigits - 16), "0")) <> "")
            or ($ioct and (($ndigits > 22 and join(split(slice($idigits, 1, $ndigits - 22), "0")) <> "")
@@ -4293,9 +4305,9 @@ arg  = e:assignment -> Arg(value: $e) .
          : length = $slen
          (* Worked out in `locals`, numeric escapes and all; the two
           * substitutions that find what C refuses are read here. *)
-         ! size(split($sone, "\x0c")) > 1
+         ! find($sone, "\x0c") > 0
              : "a hex escape in this string has more than two digits, which this subset does not take; C11 6.4.4.4p9 allows more only as zeros before the two"
-         ! size(split($sone, "\x0b")) > 1
+         ! find($sone, "\x0b") > 0
              : "an octal escape in this string is past 255, the largest an unsigned char holds, C11 6.4.4.4p9"
          : type   = 1
          : width  = 1

@@ -7838,3 +7838,28 @@ Writing it up found a third claim of the same kind, in the reference's
 own table of read-time checks: "the wrong number of `{}` holes, counted
 when the description is read", listed under actions. It had never been
 true anywhere, actions included. The row now says when it became true.
+
+**And `find`.** The last of the day's small library entries, and the
+second of two recommended after the calls: nothing in the notation asked
+*where* one text is in another, or *whether*. `c.phx` asked whether by
+splitting on a word and counting the pieces, 56 times, and asked where in
+one place only, but 18 times: a struct's members are one character each of
+an 86-character alphabet, and a character went back to its number by
+splitting the alphabet on it and measuring what came before. `find(t,
+part)` answers where, from one, or 0, and refuses to look for nothing, as
+`split` refuses to split on it.
+
+**The decode was the one that needed care.** Split-and-measure answers 86
+for a character not in the alphabet, and `find` answers 0. The characters
+that reach it are the alphabet's and `~`, which the description appends
+to mean "past the last member", so `memberindex(c)` is `find` over the
+alphabet with `~` on the end, minus one, which answers 86 for `~` as
+before. The encode beside it became `memberchar(n)`. The 86-member limit
+is the alphabet's length, and stays: it is the encoding, which is C work.
+
+The converted description was held as each before it: all 354 oracle
+programs compile to identical bytes, and this time all 501 refusal
+programs were compared as well, diagnostic for diagnostic, before and
+after. The first attempt to add the two defines failed in the script that
+wrote them, and the read-time call check, a few hours old, refused every
+call to them with its position.

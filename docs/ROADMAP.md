@@ -244,6 +244,19 @@ that was not true. The rule this section states was met, since `n` copies for an
 could not be written; what the rule does not ask is what writing it the
 other way costs, and here that was a silent bound.
 
+The same day, **one more**:
+
+| | |
+| --- | --- |
+| `find(t, part)` | where `part` first begins in `t`, from one, or 0. Nothing else asks *where*, or even *whether*, one text is in another |
+
+`c.phx` asked whether by splitting on the word and counting the pieces,
+`size(split($words, " static ")) > 1`, 56 times, and asked where by
+splitting an alphabet on a character and measuring the first piece, 18
+times, which is how a struct member's character turned back into its
+number. All of it is `find` now, and every C program and refusal reads and
+compiles as before.
+
 ### 3.5 Conditionals in the meta-language
 
 *Left on 2026-10-10, built:* `if c then a else b`, which works out only the arm

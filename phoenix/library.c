@@ -125,7 +125,7 @@ static const struct { const char *name; int least, most; } library_names[] = {
     {"bytes", 2, 2},     {"slice", 3, 3},     {"split", 2, 2},
     {"size", 1, 1},      {"sizes", 1, 1},     {"at", 2, 2},
     {"flatten", 1, 1},   {"each", 2, 3},      {"join", 1, 2},
-    {"repeat", 2, 2},
+    {"repeat", 2, 2},    {"find", 2, 2},
 };
 
 bool library_arity(const char *name, int *least, int *most)
@@ -491,6 +491,25 @@ Value *eval_call(Eval *e, const Expr *x)
         if (to < from) return value_text(a, "", 0);
 
         return value_text(a, args[0]->text + (from - 1), (size_t)(to - from + 1));
+    }
+
+    /* `find(text, part)` -- where `part` first begins in `text`, counting
+     * from one, or 0 when it is not there. Without it a description asked
+     * "is this in that?" by splitting on it and counting the pieces, 55
+     * times in `languages/c/c.phx`, and "where?" by splitting and measuring
+     * the first piece. Looking for nothing is refused, as splitting on
+     * nothing is: it is everywhere, and no answer would be the right one. */
+    if (strcmp(f, "find") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[0]->kind != V_TEXT || args[1]->kind != V_TEXT)
+            return library_fail(e, x, "'find' wants text and text");
+        if (args[1]->len == 0)
+            return library_fail(e, x, "'find' cannot look for nothing");
+
+        for (size_t i = 0; i + args[1]->len <= args[0]->len; i++)
+            if (memcmp(args[0]->text + i, args[1]->text, args[1]->len) == 0)
+                return value_int(a, (long long)i + 1);
+        return value_int(a, 0);
     }
 
     if (strcmp(f, "split") == 0) {

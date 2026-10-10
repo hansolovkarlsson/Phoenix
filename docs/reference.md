@@ -1006,6 +1006,7 @@ belong to the booleans. None can overflow, and each wants two integers.
 | `size(t)` | bytes |
 | `slice(t, from, to)` | one-based, both ends included. Out-of-range ends are clamped |
 | `split(t, sep)` | a list of text. Splitting on nothing is an error |
+| `find(t, part)` | where `part` first begins in `t`, counting from one, or 0 when it is not there. `find(t, w) > 0` asks whether `t` contains `w`. Looking for nothing is an error |
 | `join(list)`, `join(list, between)` | one piece of text |
 
 Turning a Pascal `'it''s'` into `"it's"` is

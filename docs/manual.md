@@ -629,7 +629,7 @@ when it is about a value handed to it.
 
 Small, and drawn around on purpose: *a library nobody drew a line around is a
 language nobody can reimplement.* Environments (`empty`, `bind`, `lookup`,
-`defined`, `positions`), conversions, text (`size`, `slice`, `split`, `join`),
+`defined`, `positions`), conversions, text (`size`, `slice`, `split`, `find`, `join`),
 lists (`at`, `sizes`, `flatten`, `each`, `repeat`) and `bytes`. Every entry is one a pass
 for a real language needed and could not write in the notation.
 [reference.md § 11](reference.md#11-the-library) has all of them.

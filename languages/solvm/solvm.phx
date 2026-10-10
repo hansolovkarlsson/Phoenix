@@ -181,7 +181,7 @@ constant = intlit   -> IntConst(text: $1)
          : tab   = join(split($nl, "\\t"), "\t")
          : cr    = join(split($tab, "\\r"), "\r")
          : word  = join(split($cr, "\\\""), "\"")
-         ! size(split($raw, "\\\\")) > 1
+         ! find($raw, "\\\\") > 0
              : "a doubled backslash in a text literal is not supported" .
 
   otherwise word = "" .
