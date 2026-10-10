@@ -1085,6 +1085,25 @@ else
     report fail "one file, no flags, no headers" "it did not compile"
 fi
 
+# **And it is C11**, which plain `cc` does not ask: it takes C23's `= {}`
+# and an array of no elements without a word, and every compiler `-o` wrote
+# had both, for each table its description left empty. calc has no rewrites
+# and no embeds; phoenix.phx has no passes and no drivers. The description's
+# own text is one literal longer than the 4095 bytes C11 promises, which
+# every compiler in use takes, and the Makefile says the same of `phx`.
+c11() {
+    if bounded "$phx" "$1" -o "$tmp0/c11.c" 2>/dev/null \
+       && out=$(cc -std=c11 -pedantic-errors -Wno-overlength-strings \
+                   -fsyntax-only "$tmp0/c11.c" 2>&1); then
+        report pass "$2"
+    else
+        report fail "$2" "$(printf '%s' "$out" | grep 'error:' | head -2 | tr '\n' ' ')"
+    fi
+}
+out=
+c11 "$root/languages/calc/calc-c.phx" "and C11 to the letter, with no rewrites or embeds"
+c11 "$root/languages/phx/phoenix.phx" "and with no passes or drivers"
+
 # **A literal may hold a NUL**, and three kinds of thing here can be one: a
 # grammar literal, a pattern and a template. The length beside each is what
 # says how long it is, and writing them out with `strlen` carried a shorter

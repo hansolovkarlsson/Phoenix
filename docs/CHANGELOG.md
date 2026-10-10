@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: a written-out compiler is C11
+
+**`phx -o` writes a compiler that is C11 to the letter.** A table the
+description left empty, its rewrites or embeds, say, was written as
+`= {}`, which is C23's, and an array of no elements, which is an
+extension. Plain `cc` took both without a word, so every compiler written
+out compiled, and none of them was C11: each failed
+`cc -std=c11 -pedantic-errors`. An empty table now gets one zeroed row,
+which nothing reads.
+
+**Tests:** 750 → 752, compiling two written-out compilers under
+`-std=c11 -pedantic-errors`.
+
+---
+
 ## 2026-10-10: `find` in the library
 
 **`find(text, part)` answers where `part` first begins in `text`**,

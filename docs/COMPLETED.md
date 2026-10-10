@@ -13,7 +13,7 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **10,081 lines** hand-written.
+C11, no dependencies, **10,099 lines** hand-written.
 
 The figure usually quoted is ~14,600, and both are right about different
 things: `phoenix/` also holds `runtime.h`, 4,656 generated lines which are the
@@ -1690,6 +1690,7 @@ and the entries after the table say how.
 | **three refusals were asserted by nothing** | `case-sizeof-below-zero.c`, `case-inverts-sizeof.c` and `global-negated-sizeof.c` were written on 2026-09-27 for `sizeof` becoming unsigned, and no line of `tests/run.sh` named them, so each was refused for any reason at all and the suite counted none of them. Found on 2026-09-29 by looking for their assertions in order to change the message they held. `tests/run.sh` now checks that every program in `languages/c/tests/refused/` is named by one |
 | **a template's holes were counted only when a node reached it** | docs/semantics.md and [reference.md](reference.md) § 12 both said *when the description is read*, and nothing counted them then. A `%define`'s body wrote `"{}||" of $t, "|"`, where `of` took the separator as a second value, and `phx` read it cleanly. Found on 2026-10-10 by the C oracle, comparing all 354 programs' output before and after a rewrite of `c.phx`: every one differed. Counted at read time since, over every expression |
 | **a call to no function, or with the wrong count, read cleanly** | a call to the library was checked only when a node reached it, so `jion($x, ", ")` in a clause no test input reached was a description that read and could not run. Found on 2026-10-10 by a probe written to ask what else read cleanly after the row above. Refused at read time since, from a table of the library's names and counts; nothing in the repository was refused |
+| **a written-out compiler was not C11** | every table a description left empty was written as `= {}`, C23's, and so an array of no elements, an extension. The suite compiled written-out compilers with plain `cc`, which takes both silently, so all of them compiled and none was C11, while `c.phx` refused the same `{}` in a C program as C23's. Found on 2026-10-10 by compiling each language's written-out compiler under `-std=c11 -pedantic-errors`: 5 to 9 errors each. An empty table gets one zeroed row since, and two of them are compiled that way by the suite |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.

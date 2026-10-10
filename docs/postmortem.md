@@ -9,7 +9,7 @@ this is what was **believed** about it.*
 *Revised after awk, which is the first language described here that was not
 chosen to suit the tool.*
 
-Phoenix is 10,081 hand-written lines of C11 with no dependencies (~14,600 if
+Phoenix is 10,099 hand-written lines of C11 with no dependencies (~14,600 if
 the generated `runtime.h` is counted; [COMPLETED.md](COMPLETED.md#the-tool)
 says why both are true). The descriptions written
 against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and

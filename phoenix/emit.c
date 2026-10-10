@@ -33,6 +33,11 @@
  * **post-order**, so that a node's children are already declared as static
  * variables by the time the node naming them is. No forward declarations, no
  * fix-up pass, and the C compiler checks the shape on the way past.
+ *
+ * **No table is written empty.** `= {}` is C23's and an array of no elements
+ * is an extension, so a description with no rewrites, say, would make a
+ * compiler that is not C11. An empty table gets one zeroed row instead, which
+ * nothing reads: every table's count is written beside it.
  */
 #include "phx.h"
 #include "runtime.h"
@@ -235,6 +240,7 @@ static void emit_rules(Emit *e)
                 r->lexical, r->fragment, r->skip, r->used, r->required,
                 r->nullable, r->pos, r->scope, r->guard);
     }
+    if (!g->nrules) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -324,6 +330,7 @@ static void emit_passes(Emit *e)
                 if (cw[m] >= 0) fprintf(e->out, "&x%d,", cw[m]); else fputs("NULL,", e->out);
                 fprintf(e->out, "%zu},", c->pos);
             }
+            if (!pr->nclauses) fputs("{0}", e->out);
             fputs("};\n", e->out);
             fprintf(e->out, "#define pp%d_%d (&p%d)\n", i, k, pat);
         }
@@ -348,6 +355,7 @@ static void emit_passes(Emit *e)
         for (int k = 0; k < p->nrules; k++)
             fprintf(e->out, "{pp%d_%d,cl%d_%d,%d,%zu},",
                     i, k, i, k, p->rules[k].nclauses, p->rules[k].pos);
+        if (!p->nrules) fputs("{0}", e->out);
         fputs("};\n", e->out);
     }
 
@@ -363,6 +371,7 @@ static void emit_passes(Emit *e)
         else              fputs("NULL,0,", e->out);
         fprintf(e->out, "%zu},\n", p->pos);
     }
+    if (!g->npasses) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -388,6 +397,7 @@ static void emit_embeds(Emit *e)
         emit_string(e, g->embeds[i].path);
         fprintf(e->out, ",%zu},\n", g->embeds[i].pos);
     }
+    if (!g->nembeds) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -411,6 +421,7 @@ static void emit_rewrites(Emit *e)
         fprintf(e->out, "static RewriteRule rr%d[] = {", i);
         for (int k = 0; k < w->nrules; k++)
             fprintf(e->out, "{&p%d,&x%d,%zu},", pat[k], to[k], w->rules[k].pos);
+        if (!w->nrules) fputs("{0}", e->out);
         fputs("};\n", e->out);
     }
 
@@ -422,6 +433,7 @@ static void emit_rewrites(Emit *e)
         fprintf(e->out, ",%d,rr%d,%d,%d,%zu},\n",
                 (int)w->how, i, w->nrules, w->nrules, w->pos);
     }
+    if (!g->nrewrites) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -469,10 +481,12 @@ static void emit_drivers(Emit *e)
             emit_string(e, d->passes[k]);
             fputc(',', e->out);
         }
+        if (!d->npasses) fputs("NULL", e->out);
         fputs("};\n", e->out);
 
         fprintf(e->out, "static size_t dw%d[] = {", i);
         for (int k = 0; k < d->npasses; k++) fprintf(e->out, "%zu,", d->pass_pos[k]);
+        if (!d->npasses) fputs("0", e->out);
         fputs("};\n", e->out);
 
         fprintf(e->out, "static char *du%d[] = {", i);
@@ -480,6 +494,7 @@ static void emit_drivers(Emit *e)
             emit_string(e, d->until ? d->until[k] : NULL);
             fputc(',', e->out);
         }
+        if (!d->npasses) fputs("NULL", e->out);
         fputs("};\n", e->out);
     }
 
@@ -492,6 +507,7 @@ static void emit_drivers(Emit *e)
         emit_string(e, d->answer);
         fprintf(e->out, ",%zu,dw%d,du%d},\n", d->pos, i, i);
     }
+    if (!g->ndrivers) fputs("  {0}\n", e->out);
     fputs("};\n", e->out);
 }
 
@@ -541,6 +557,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         emit_string(&e, g->map.units[i].path);
         fprintf(out, ",%zu,%zu},\n", g->map.units[i].start, g->map.units[i].size);
     }
+    if (!g->map.n) fputs("  {0}\n", out);
     fputs("};\n", out);
 
     fprintf(out, "\nstatic char *phx_reserved[] = {");
@@ -548,6 +565,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         emit_string(&e, g->reserved[i]);
         fputc(',', out);
     }
+    if (!g->nreserved) fputs("NULL", out);
     fputs("};\n", out);
 
     fprintf(out,
