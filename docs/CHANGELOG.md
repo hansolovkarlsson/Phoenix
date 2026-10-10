@@ -1907,7 +1907,7 @@ a *second* stage table which is the original plan rather than the delivery.
 Both now say which they are. This page was itself wrong within the hour, and
 that correction is recorded in [journal.md](journal.md) rather than hidden.
 
-**Measured, a fourth time.** [ROADMAP 1.2](ROADMAP.md#12-compiling-the-tables-to-code)
+**Measured, a fourth time.** [ROADMAP 1.2](COMPLETED.md#12-compiling-the-tables-to-code)
 — whether the tables should be compiled to code — came out the same way again,
 now with the control it had been missing. The assembler's grammar has no
 expression ladder, so it is what the matcher costs when a grammar asks nothing
