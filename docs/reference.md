@@ -983,6 +983,7 @@ other way here.
 | `sizes(list)` | the same, for each element |
 | `at(list, i)` | one-based |
 | `flatten(list)` | **one level** only, because a deeper one would be guessing |
+| `repeat(x, n)` | text `n` times over, or a list's elements `n` times over. The one way to make something of a computed length; a count below zero is refused |
 | `each(list, template)` | the template's `{}` is the element |
 | `each(a, b, template)` | two lists **in step**, one hole from each. It runs to the **longer** of the two; a list that runs out contributes nothing rather than ending the walk |
 

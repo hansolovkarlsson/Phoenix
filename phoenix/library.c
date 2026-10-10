@@ -696,5 +696,45 @@ Value *eval_call(Eval *e, const Expr *x)
         return value_text(a, buf, used);
     }
 
+    /* `repeat(x, n)` -- text, or a list's elements, `n` times over.
+     *
+     * Nothing else in the notation makes a thing of a computed length: `each`
+     * and `.` keep a list's length, and a template is fixed when it is read.
+     * `languages/c/c.phx` wanted `n` pointer levels, `"p:8:0:8|"` per star,
+     * and wrote it as a thirteen-row table, 65 times, which was a tenth of
+     * the file and stopped at twelve stars: the thirteenth answered the
+     * table's default, so a valid program lost every level of its pointer
+     * and was refused for a reason that was not true. */
+    if (strcmp(f, "repeat") == 0) {
+        if (!want(e, x, 2, args)) return NULL;
+        if (args[1]->kind != V_INT)
+            return library_fail(e, x, "'repeat' wants an integer count, and this is %s",
+                                value_kind_name(args[1]));
+        if (args[1]->ival < 0)
+            return library_fail(e, x, "'repeat' wants a count of zero or more, and this is %lld",
+                                args[1]->ival);
+        if (args[0]->kind != V_TEXT && args[0]->kind != V_LIST)
+            return library_fail(e, x, "'repeat' wants text or a list, and this is %s",
+                                value_kind_name(args[0]));
+
+        size_t n    = (size_t)args[1]->ival;
+        size_t unit = args[0]->kind == V_TEXT ? args[0]->len : (size_t)args[0]->n;
+        size_t total;
+        if (__builtin_mul_overflow(unit, n, &total) || total > INT_MAX)
+            return library_fail(e, x, "'repeat' would make something too large to hold");
+
+        if (args[0]->kind == V_TEXT) {
+            char *buf = arena_alloc(a, total + 1);
+            for (size_t i = 0; i < n; i++) memcpy(buf + i * unit, args[0]->text, unit);
+            buf[total] = '\0';
+            return value_text(a, buf, total);
+        }
+
+        Value **items = arena_alloc(a, (total ? total : 1) * sizeof *items);
+        for (size_t i = 0; i < n; i++)
+            memcpy(items + i * unit, args[0]->items, unit * sizeof *items);
+        return list_of(a, items, (int)total);
+    }
+
     return library_fail(e, x, "there is no function called '%s'", f);
 }

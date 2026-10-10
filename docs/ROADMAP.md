@@ -227,6 +227,21 @@ for free. The rule this section states was met by both and they are still here,
 so the rule is not enough on its own: **a library entry answers one case, and
 what it costs is the chance to see the shape of the rest.**
 
+C's pointer levels added **one more**, on 2026-10-10:
+
+| | |
+| --- | --- |
+| `repeat(x, n)` | text, or a list's elements, `n` times over. Nothing else makes a thing of a computed length: `each` and `.` keep a list's length and a template is fixed when it is read |
+
+`c.phx` wanted `n` pointer levels and wrote them as a thirteen-row table, 65
+times, and as a twelve-copy string cut to length, 4 times: about 48 KB, a
+tenth of the file. **And the table was a limit nobody had written down.** It
+stopped at twelve stars, the thirteenth answered the table's default, and a
+valid program lost every level of its pointer and was refused for a reason
+that was not true. The rule this section states was met, since `n` copies for any `n`
+could not be written; what the rule does not ask is what writing it the
+other way costs, and here that was a silent bound.
+
 ### 3.5 Conditionals in the meta-language
 
 *Left on 2026-10-10, built:* `if c then a else b`, which works out only the arm

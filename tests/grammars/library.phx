@@ -135,6 +135,12 @@ case = number -> Case(text: $1) .
        ! not (flatten([[[1]], [2]]) = [[1], 2])   : "and only one"
        ! not (flatten([1, [2, 3]]) = [1, 2, 3])   : "an element that is not a list passes through"
 
+         (* "text, or a list's elements, n times over" *)
+       ! not (repeat("ab", 3) = "ababab")         : "repeat makes text n times over"
+       ! not (repeat("ab", 0) = "")               : "and none of it at zero"
+       ! not (repeat([1, 2], 2) = [1, 2, 1, 2])   : "and a list's elements"
+       ! not (repeat([[1]], 2) = [[1], [1]])      : "each element whole, not opened"
+
        ! not (each(["a", "b"], "<{}>") = ["<a>", "<b>"])
            : "each fills the template's hole with the element"
        ! not (each([1, 2], ["x", "y"], "{}{}") = ["1x", "2y"])

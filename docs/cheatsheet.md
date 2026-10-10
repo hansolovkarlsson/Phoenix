@@ -186,6 +186,7 @@ braces. A nil, a node or a list has no written form.
 | `split(t, sep)` | a list of text |
 | `join(list)`, `join(list, between)` | text |
 | `flatten(list)` | one level |
+| `repeat(x, n)` | text, or a list's elements, `n` times over |
 | `each(list, template)`, `each(a, b, template)` | the template's `{}` is the element; two lists run in step, to the **longer** |
 | `bytes(n, width)` | 1–8 bytes, little-endian. A list of numbers gives a list of encodings |
 

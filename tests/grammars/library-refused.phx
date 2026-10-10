@@ -46,6 +46,9 @@ case = number -> Case(text: $1) .
           * folded to the largest. *)
        : g = int("9223372036854775808")
        : h = int("-9223372036854775809")
-       : i = int("10000000000000000", 16) .
+       : i = int("10000000000000000", 16)
+
+         (* "A count below zero is refused", rather than read as none. *)
+       : j = repeat("a", 0 - 1) .
 
 %driver check = refused .

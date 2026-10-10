@@ -7751,3 +7751,28 @@ The comments in the Pascal, awk, Solveig and SolVM descriptions that said
 "there is no `if` in the notation" now say why each choice is written the
 way it is, which in most of them was a reason that never needed the
 absence.
+
+**Then `repeat`, the same afternoon.** Asked what else could be improved,
+the answer was measured in `c.phx` again, and the cheapest large thing in
+it was a table: `[[0, ""], [1, "p:8:0:8|"], ... [12, ...]]`, the text of
+`n` pointer levels, looked up by `n` and pasted 65 times, with four more
+places cutting a twelve-copy string to `8 * n` characters. About 48 KB of
+a 528 KB file. The notation had no way to make anything of a computed
+length, so the table was what could be written, and it stopped at twelve.
+
+**Before replacing it, the edge was tried**, as the postmortem's § 39 had
+said to do that morning. Twelve levels compiled and agreed with `cc`.
+Thirteen were refused, "'*' wants a pointer, and this is an int", which
+was false: the lookup's default is the empty text, so the thirteenth star
+removed every level and left an `int`. Nothing recorded the bound.
+
+`repeat(x, n)` makes text or a list's elements `n` times over, refuses a
+count below zero and one whose result would not fit. A script replaced
+each table after checking every row was the unit repeated its own number
+of times, and a pattern replaced the four cut strings. All 354 C oracle
+programs gave byte-identical output again. The thirteen-level program and
+a forty-level one now agree with `cc`, 15 and 17, and the thirteen-level
+one joins the oracle as `pointer-thirteen-levels.c`, since a fix that
+nothing holds is one a later rewrite can lose. That lifts a refusal while
+the C arc is on hold, and it is kept because the refusal was not a
+construct the subset declined but a wrong answer the notation forced.

@@ -16,6 +16,21 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: `repeat` in the library
+
+**`repeat(x, n)` makes text, or a list's elements, `n` times over.** It
+replaces a thirteen-row table the C description had pasted 65 times,
+about a tenth of the file.
+
+**C pointers of thirteen or more levels now compile.** The table stopped
+at twelve, and a thirteenth level was refused with a wrong message. Every
+other C program in the oracle compiles to the same bytes as before.
+
+**Tests:** 743 → 743. Four claims and one refusal join the library's
+checks, and one program joins the C oracle: 355 agree with `cc`.
+
+---
+
 ## 2026-10-10: `if` in the notation
 
 **A clause can choose with `if c then a else b`**, which works out only
