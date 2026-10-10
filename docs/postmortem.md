@@ -1941,3 +1941,40 @@ record before naming a gap, and probe before proposing to build.**
 > Both failures have the same root: a claim about what the notation can
 > say, made from the shape of the code that uses it. The idiom in `c.phx`
 > looked like a workaround, and was one for one reason and not the other.
+
+## 40. "Every obvious fix was a second mechanism"
+
+COMPLETED [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)'s
+words for sharing a computation, answered with `otherwise`, the
+general clause about a node. Rescored on 2026-10-10, with ROADMAP 3.4's
+rule for the library beside it, because the day tested both.
+
+*Failed, as a boundary: the general clause was the whole answer.* It was
+the answer for what 1.3 measured, an attribute every node has. It never
+reached a computation about a *value* handed in rather than the node it is
+on, and `c.phx` wrote one such computation 1,110 times in four spellings
+before anything could name it. `%define` is the second mechanism 1.3 was
+afraid of. What kept it from being the danger 1.3 meant is one rule, that
+the body sees only its parameters: a define that could read its caller's
+fields would have been a macro, meaning something different at each call.
+[COMPLETED 1.9](COMPLETED.md#19-a-computation-shared-across-values) has the
+measurements.
+
+*Held, and not enough: ROADMAP 3.4's "a pass needed it, and it could not be
+written in the notation."* `repeat` and `find` both met it, and both were
+added. But the rule asks only whether a thing *can* be written, and both
+had been written: as a thirteen-row table pasted 65 times, and as split and
+count. The table stopped at twelve and refused a valid program with a
+false message, which no one had recorded. **What a workaround costs is not
+a question the rule asks**, and today it was a silent bound and a tenth
+of a file.
+
+*Failed, as documentation: two read-time checks the reference listed did
+not exist.* A template's holes and a call's arguments were checked only
+when a node reached them. Each was found by a rewrite that should have
+been harmless, not by reading the table that claimed them. Both are true
+now; COMPLETED's list of defects has the rows.
+
+> A rule about when to add is scored by what it let in. The ones that let
+> in nothing were never tested, and the price of a workaround it accepts
+> is paid somewhere the rule does not look.
