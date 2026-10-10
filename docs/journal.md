@@ -7863,3 +7863,57 @@ programs were compared as well, diagnostic for diagnostic, before and
 after. The first attempt to add the two defines failed in the script that
 wrote them, and the read-time call check, a few hours old, refused every
 call to them with its position.
+
+**And, after the closeout, a sweep for what nobody had looked at.** The
+question was what else could be improved, and the records already answer
+it for the notation, so the afternoon went to the one thing they could not
+say about themselves: whether the C under the tool and under what it
+writes is sound. `phx` was built with AddressSanitizer and
+UndefinedBehaviorSanitizer and given the whole suite, then 748 malformed
+inputs: four descriptions each cut short at 37 points, and descriptions
+and Pascal programs with bytes flipped, dropped and copied. The generated Pascal
+compiler and the generated C compiler were built the same way, and the C
+one compiled all 856 programs in its oracle and refused directories. Nothing
+faulted anywhere, and an expression nested 200,000 deep was refused at
+10,000 by name rather than overflowing the stack.
+
+The first fuzz run reported all 148 of its inputs bad. Every one had
+exited 127, which is the shell failing to find `timeout`, because macOS
+has none. That is the reason `tests/limit.c` exists, and its own comment
+says so; the run went through `bin/limit` and came back clean.
+
+**What the sanitizers did not find, a stricter compiler did.** Every
+compiler `-o` writes failed `cc -std=c11 -pedantic-errors`, five to nine
+errors each, and all of one kind: a table the description left empty,
+its rewrites or embeds or passes or drivers, written as `= {}`. That is
+C23's empty initialiser and an array of no elements, and plain `cc` takes
+both without a word, which is all the suite ever asked of it. The same
+`{}` is what `c.phx` refuses in a C program as "C23's, not C11's". The
+emitter already knew the answer for three of its tables, `phx_names`,
+`phx_defines` and a define's parameters, which are written `{0}` or `NULL`
+when empty because the count beside each is what is read; the fix was to
+do the same everywhere. Two written-out compilers are compiled that way
+by the suite now, `calc-c.phx`'s, which has no rewrites or embeds, and
+`phoenix.phx`'s, which has no passes or drivers, and both checks were
+made to fail against the old emitter before they were trusted.
+
+**Three things in the records had drifted.** The roadmap opened by naming
+three languages and a fourth description; the tree has eight and the
+notation's own. ROADMAP 3.5 was a stub and 3.6 a whole entry under "What
+is deliberately not here", and both were built, 3.6 on 2026-09-01 with
+stage 7, so 3.6 moved to COMPLETED and section 3 opens with a table naming
+the two, as sections 1 and 2 do. Two links still named roadmap sections
+that had left long ago, 1.2 and 6.9, and every link into a section of
+either file now resolves. The README's "Three languages" was left as it
+is: read in place, it counts the three whose grammars came from somewhere
+else, which is still true.
+
+**And the claim counts.** The standup's open fix, the suite reporting 54
+claims from `semantics.phx` and 82 from `library.phx`. Counting `! not`
+gave 54 for the first as well, which disagreed with the standup's 55,
+until one claim turned up written without a `not`: `! (false and (1 div
+0 = 0))`, that `and` short-circuits. So 55 and 83 are right, and each
+file lost one only because its first claim shared a line with `Case`.
+`Case` has its own line in both now, as in `define.phx`; the count itself
+was left alone, and a claim written on that line again would hide the
+same way.
