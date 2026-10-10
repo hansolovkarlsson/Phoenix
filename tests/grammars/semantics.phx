@@ -26,7 +26,8 @@ case = number -> Case(text: $1) .
 %pass claims
 
   (* ---- integers: division and modulo are floored ---- *)
-  Case ! not ( 7 div  2 =  3) : "7 div 2"
+  Case
+       ! not ( 7 div  2 =  3) : "7 div 2"
        ! not (-7 div  2 = -4) : "-7 div 2"
        ! not ( 7 div -2 = -4) : "7 div -2"
        ! not (-7 div -2 =  3) : "-7 div -2"

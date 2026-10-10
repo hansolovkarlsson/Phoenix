@@ -25,7 +25,8 @@ case = number -> Case(text: $1) .
 %pass claims
 
   (* ---- environments ---- *)
-  Case ! not (size(empty) = 0)          : "empty is the empty environment"
+  Case
+       ! not (size(empty) = 0)          : "empty is the empty environment"
        ! not (empty() = empty)          : "and empty() is the same thing"
 
          (* "bind puts a pair on the front, so shadowing is what naturally
