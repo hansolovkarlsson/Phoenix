@@ -10,9 +10,12 @@ what it got wrong first; [postmortem.md](postmortem.md) scores the predictions;
 [CHANGELOG.md](CHANGELOG.md) answers the *when* this page deliberately does
 not.
 
-Three languages are described and compiled: Pascal against `fpc`, Solveig
-against `solas`, awk against `/usr/bin/awk`, and a fourth description targets
-SolVM's bytecode.
+Eight languages are described, and each that compiles is held against
+something that already did: Pascal against `fpc`, Solveig against `solas`,
+awk against `/usr/bin/awk`, C against `cc`, Z80 assembly against `z80asm`,
+and SolVM assembly against the bytes it assembled to last. Pascal's units
+and calc, the worked example, make up the eight, and a ninth description,
+`languages/phx/`, is the notation written in itself.
 
 **Two entries were opened this way, and one is still open.** Section
 1 and section 2 stood empty from 2026-09-03, every stage and every borrowed
@@ -108,6 +111,15 @@ whose. **All five are settled**: three built, and two tested and refused.
 | [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | circular attributes, from JastAdd: a driver runs a pass `until` an attribute of the root settles |
 
 ## 3. What is deliberately not here
+
+**Four entries stand here, and two have left, both built.** Each of the two
+was something this section said the notation would not have until a
+description made the case, and one did:
+
+| | |
+| --- | --- |
+| [3.5](COMPLETED.md#35-conditionals-in-the-meta-language) | `if c then a else b`, built 2026-10-10 from the 1,072 tables `c.phx` wrote in its place |
+| [3.6](COMPLETED.md#36-threaded-and-inherited-wanted-to-be-one-thing) | a `down` clause on a thread sets it for the subtree, built 2026-09-01 for a `.sob` method chunk |
 
 ### 3.1 An interpreter that can loop
 
@@ -256,28 +268,6 @@ splitting an alphabet on a character and measuring the first piece, 18
 times, which is how a struct member's character turned back into its
 number. All of it is `find` now, and every C program and refusal reads and
 compiles as before.
-
-### 3.5 Conditionals in the meta-language
-
-*Left on 2026-10-10, built:* `if c then a else b`, which works out only the arm
-it takes. [COMPLETED.md](COMPLETED.md#35-conditionals-in-the-meta-language) has
-what arrived, and the 1,072 tables it replaced.
-
-### 3.6 Threaded and inherited wanted to be one thing
-
-A threaded attribute accumulates left to right along the walk. An inherited
-one is scoped to a subtree. **A `.sob` method chunk wanted both**: its own
-name and constant tables, accumulated in walk order, started empty on the way
-in and put back on the way out.
-
-The fix was not a new mechanism but a meaning for a combination that had none:
-a `down` clause naming a threaded attribute sets the thread for the subtree.
-The save is then an ordinary `down` attribute and the restore is the node's
-own leaving clause, and it nests because a stack nests. `run.c` grew eleven
-lines and knows nothing about chunks.
-
-This is the first thing the design could not express, and it is recorded here
-in the terms 3.5 asked for: not a puzzle, a decision arriving.
 
 ---
 

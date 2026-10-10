@@ -520,7 +520,7 @@ returns = ":" t:identifier -> NamedType(name: $t)
 
 and `NoType : show = ""`. That is better than the conditional would have been,
 and it is the clearest evidence so far for
-[3.5](ROADMAP.md#35-conditionals-in-the-meta-language) being the right call.
+[3.5](COMPLETED.md#35-conditionals-in-the-meta-language) being the right call.
 The other half of the same story is `Param(byref: true)` and
 `Param(byref: false)` as two clauses: shape matching *is* the conditional, and
 it reads better than one.
@@ -765,7 +765,7 @@ lookup([["array", "{}"]], $shapeof, "(*{})")        which template to apply
 `lookup` with a default *is* the conditional, and reading these back they are
 better than the `if`s would have been: each one is a small explicit table of
 what differs, with everything else falling through to a default that is right.
-[3.5](ROADMAP.md#35-conditionals-in-the-meta-language) has now survived a real
+[3.5](COMPLETED.md#35-conditionals-in-the-meta-language) has now survived a real
 compiler.
 
 ### Three findings, and `cc -Wall` found the worst one

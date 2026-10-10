@@ -64,7 +64,7 @@ Everything below is built, and each line names the entry that argued for it.
 | `%include` | a *target* language's own includes, spliced by the reader — [1.0](#10-a-reader-level-mechanism-for-a-target-languages-imports) |
 | `%names` | names the parse keeps while it matches, declared and hidden by the nodes it builds, and asked by one rule: [1.8](#18-names-the-parse-keeps) |
 | `->` actions | what a production *builds*; no host-language splices — [3.2](ROADMAP.md#32-actions-as-host-language-fragments) |
-| `%pass`, clauses keyed on node type | attributes: synthesised, `down`, `thread` |
+| `%pass`, clauses keyed on node type | attributes: synthesised, `down`, `thread`, and a `down` on a thread to scope it: [3.6](#36-threaded-and-inherited-wanted-to-be-one-thing) |
 | `otherwise` | what a node answers when its own rule works nothing out — [1.3](#13-a-way-for-a-description-to-share-a-computation) |
 | `%rewrite` with `topdown` `bottomup` `innermost` | replacing a node rather than decorating it — [2.2](#22-strategies--from-stratego) |
 | patterns, including `[ a, b ]` over lists | one for every kind a value can be |
@@ -442,6 +442,24 @@ rule, over a list that read better, and **a node built in a pass was always
 possible**: `Level(kind: "a", size: 24, count: 2, align: 4)` and `$t.size`
 work today. So a typed record needs no new mechanism. It needs `c.phx`'s types
 rewritten, which is C work and waits with the C hold.
+
+### 3.6 Threaded and inherited wanted to be one thing
+
+*Built 2026-09-01*, with stage 7. A threaded attribute accumulates left to
+right along the walk. An inherited one is scoped to a subtree. **A `.sob`
+method chunk wanted both**: its own name and constant tables, accumulated in
+walk order, started empty on the way in and put back on the way out.
+
+The fix was not a new mechanism but a meaning for a combination that had none:
+a `down` clause naming a threaded attribute sets the thread for the subtree.
+The save is then an ordinary `down` attribute and the restore is the node's
+own leaving clause, and it nests because a stack nests. `run.c` grew eleven
+lines and knows nothing about chunks.
+
+This is the first thing the design could not express, and it was recorded in
+the terms 3.5 asked for: not a puzzle, a decision arriving.
+[reference.md](reference.md) has the rule, and the journal's stage 7 has the
+`Block` that needed it.
 
 ### 6.1 Step one — a subset that runs, and `cc` as its oracle
 
