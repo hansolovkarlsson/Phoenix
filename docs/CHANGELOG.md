@@ -16,6 +16,17 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: calls checked when a description is read
+
+**A call to a function that does not exist, or with the wrong number of
+arguments, is refused when the description is read**, where it used to be
+found only when a node reached it. A typo in a clause no test input
+reached could sit in a description that read cleanly.
+
+**Tests:** 749 → 750.
+
+---
+
 ## 2026-10-10: `%define`, named computations
 
 **A description can name a computation and call it**:

@@ -684,6 +684,10 @@ Value *eval_call(Eval *e, const Expr *x);
  * cannot take one's name and change what a call means. */
 bool library_has(const char *name);
 
+/* And how many arguments it takes, from `least` to `most`. False when the
+ * library has no such function. */
+bool library_arity(const char *name, int *least, int *most);
+
 Value *value_int(Arena *a, long long n);
 Value *value_float(Arena *a, double d);
 Value *value_bool(Arena *a, bool b);

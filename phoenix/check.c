@@ -1718,6 +1718,33 @@ static bool define_reaches(const Grammar *g, const Expr *x, int goal, char *seen
     return false;
 }
 
+/* A call names a %define or a library function, with as many arguments as
+ * it takes. Until 2026-10-10 the library's half was asked only when a node
+ * reached the call, so `jion($x, ", ")` in a clause no test input reached
+ * was a description that read cleanly and could not run. The defines were
+ * resolved by now, onto Expr.index. */
+static void check_call(Check *c, Expr *x)
+{
+    if (x->kind == X_CALL && x->index == 0) {
+        int least, most;
+        if (!library_arity(x->name, &least, &most)) {
+            diag_error(&c->g->src, x->pos, "there is no function called '%s' -- "
+                       "it is not the library's, and no %%define names it", x->name);
+            c->ok = false;
+        } else if (x->nkids < least || x->nkids > most) {
+            char takes[32];
+            if (least == most) snprintf(takes, sizeof takes, "%d argument%s",
+                                        least, least == 1 ? "" : "s");
+            else               snprintf(takes, sizeof takes, "%d or %d arguments",
+                                        least, most);
+            diag_error(&c->g->src, x->pos, "'%s' takes %s, and %d %s given",
+                       x->name, takes, x->nkids, x->nkids == 1 ? "was" : "were");
+            c->ok = false;
+        }
+    }
+    for (int i = 0; i < x->nkids; i++) check_call(c, x->kids[i]);
+}
+
 static void check_defines(Check *c)
 {
     Grammar *g = c->g;
@@ -1792,6 +1819,7 @@ bool grammar_check(Grammar *g)
     if (!c.ok) return false;
 
     each_expr(&c, template_holes);
+    each_expr(&c, check_call);
     if (!c.ok) return false;
 
     compute_nullable(g);

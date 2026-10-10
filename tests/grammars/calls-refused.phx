@@ -1,0 +1,23 @@
+(* A call that cannot run, refused when the description is read. Until
+ * 2026-10-10 each of these was found only when a node reached it, and the
+ * clause below is reached by no input this description is ever given: it
+ * matches a node no production builds. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%define twice(n) = $n * 2 .
+
+%pass refused
+  Case  : out = "{}" of twice(2) .
+  Never : a = jion(["a"], ", ")
+        : b = size("a", "b")
+        : c = slice("abc", 1)
+        : d = lookup(empty, "a", 1, 2)
+        : e = empty(1) .
+
+%driver run = refused -> out .

@@ -1075,7 +1075,7 @@ correct file reported as broken, at a place that is not the mistake.
 | `$$` with nothing to fold onto | the fold and its subject are in different lists |
 | one node type, two shapes | a pass keyed on it would have to handle both *(warning)* |
 | a field called `pos` | the name every node says its position with |
-| the wrong number of `{}` holes | counted when the description is read |
+| the wrong number of `{}` holes | counted when the description is read, in an action, a clause, a rewrite or a define, since 2026-10-10. This row said so before it was true: until then they were counted only when a node reached the template |
 
 ### About passes
 
@@ -1091,6 +1091,23 @@ correct file reported as broken, at a place that is not the mistake.
 | `otherwise down` | what a node hands its children is not what it answers with |
 | a bare `$name` nothing could answer | not bound by the pattern, a field of any node, an attribute this pass defines or any pass leaves on a node, or an embed. A thread or an inherited attribute counts only in its own pass, which is the one walk it exists in |
 | a clause defining `pos` | one reserved name, meaning one thing |
+
+### About calls and defines
+
+All since 2026-10-10. Before then, a call that could not run was found only when
+a node reached it, so one in a clause no test input reached was a description
+that read cleanly and could not work.
+
+| | |
+| --- | --- |
+| a call to no function | not the library's, and no `%define` names it |
+| the wrong number of arguments | to the library, whose counts are in [§ 11](#11-the-library), or to a define |
+| a define with the library's name | it would change what every call of that name means |
+| a define named twice, or a parameter named twice | |
+| a name in a define's body that is not a parameter | the body would read whatever the calling clause had, and mean something different at each |
+| `$n` or `$$` in a define's body | those belong to a production |
+| a define that calls itself | directly or through another: a pass is one walk that ends |
+| a read inside a define | counts as a read by every clause that calls it, so the driver's order is checked through the call |
 
 ### About rewrites and drivers
 

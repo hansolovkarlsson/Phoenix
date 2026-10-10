@@ -107,22 +107,41 @@ static Value *pair(Arena *a, Value *k, Value *v)
 
 /* ------------------------------------------------------------------ */
 
-/* Every name below, once, so that the checks can refuse a %define that would
- * take one. Kept beside the dispatch it lists, and `make test` holds the two
- * against each other. */
-static const char *const library_names[] = {
-    "empty", "bind", "lookup", "defined", "positions",
-    "int", "float", "text", "floor", "ceiling", "round", "truncate",
-    "quotient", "remainder", "bitand", "bitor", "bitxor", "bytes",
-    "slice", "split", "size", "sizes", "at", "flatten", "each", "join",
-    "repeat",
+/* Every function below, once, with how many arguments it takes, so that the
+ * checks can refuse a call to one that is not here, a call with the wrong
+ * number, and a %define that would take a name, all when the description is
+ * read. Kept beside the dispatch it lists. `make test` holds the names
+ * against the dispatch, and the library's own claims call every function at
+ * the fewest and the most arguments it takes, so a count here that refused
+ * one of those would refuse the claims. One that allowed too many is still
+ * refused by the dispatch, when a node reaches it. */
+static const struct { const char *name; int least, most; } library_names[] = {
+    {"empty", 0, 0},     {"bind", 3, 3},      {"lookup", 2, 3},
+    {"defined", 2, 2},   {"positions", 1, 1},
+    {"int", 1, 2},       {"float", 1, 1},     {"text", 1, 1},
+    {"floor", 1, 1},     {"ceiling", 1, 1},   {"round", 1, 1},
+    {"truncate", 1, 1},  {"quotient", 2, 2},  {"remainder", 2, 2},
+    {"bitand", 2, 2},    {"bitor", 2, 2},     {"bitxor", 2, 2},
+    {"bytes", 2, 2},     {"slice", 3, 3},     {"split", 2, 2},
+    {"size", 1, 1},      {"sizes", 1, 1},     {"at", 2, 2},
+    {"flatten", 1, 1},   {"each", 2, 3},      {"join", 1, 2},
+    {"repeat", 2, 2},
 };
+
+bool library_arity(const char *name, int *least, int *most)
+{
+    for (size_t i = 0; i < sizeof library_names / sizeof *library_names; i++)
+        if (strcmp(library_names[i].name, name) == 0) {
+            if (least) *least = library_names[i].least;
+            if (most)  *most  = library_names[i].most;
+            return true;
+        }
+    return false;
+}
 
 bool library_has(const char *name)
 {
-    for (size_t i = 0; i < sizeof library_names / sizeof *library_names; i++)
-        if (strcmp(library_names[i], name) == 0) return true;
-    return false;
+    return library_arity(name, NULL, NULL);
 }
 
 /* A call to a %define: its arguments worked out left to right, as any call's

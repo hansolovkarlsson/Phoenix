@@ -7816,3 +7816,25 @@ library's list of names, which a define may not take, is held by
 the defines name the idioms over them, and the change to nodes, when the
 C arc resumes, now rewrites 320 calls of one name rather than 1,110
 spellings of four.
+
+**Then the calls, which closed the day.** Asked once more what could be
+improved, a probe answered first: `jion(["a"], 1, 2, 3)` in a clause read
+cleanly and failed only when a node reached it. That is the template
+count again, a mistake the notation can see on the page and left for the
+walk to find, and in a clause no test input reaches it is never found. The
+library's name list, made that afternoon so a define could not take a
+name, became a table of names and how many arguments each takes, and
+every call is checked against it, or against its define, when the
+description is read. Nothing in the repository was refused.
+
+The table is a second statement of what the dispatch accepts, so it is
+held two ways: its names against the names the dispatch tests, and its
+counts by the library's own claims, which call every function at the
+fewest and the most arguments it takes, so a count too strict would
+refuse them. A count too loose is still refused by the dispatch, at the
+node, as before.
+
+Writing it up found a third claim of the same kind, in the reference's
+own table of read-time checks: "the wrong number of `{}` holes, counted
+when the description is read", listed under actions. It had never been
+true anywhere, actions included. The row now says when it became true.

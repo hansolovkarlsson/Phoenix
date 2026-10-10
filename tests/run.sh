@@ -739,6 +739,22 @@ refuses "a template's holes are counted when the description is read" \
         "this template has 1 {} and 2 values were given" \
         "$root/tests/grammars/template-holes.phx"
 
+cout=$(bounded "$phx" --quiet "$root/tests/grammars/calls-refused.phx" 2>&1)
+cmissing=""
+for want in "there is no function called 'jion'" \
+            "'size' takes 1 argument, and 2 were given" \
+            "'slice' takes 3 arguments, and 2 were given" \
+            "'lookup' takes 2 or 3 arguments, and 4 were given" \
+            "'empty' takes 0 arguments, and 1 was given"; do
+    printf '%s' "$cout" | grep -qF -- "$want" || cmissing="$cmissing [$want]"
+done
+if [ -z "$cmissing" ]; then
+    report pass "a call that cannot run is refused when the description is read"
+else
+    report fail "a call that cannot run is refused when the description is read" \
+                "missing:$cmissing"
+fi
+
 # A define may not take a library function's name, and the list that says
 # which names those are is kept by hand beside the dispatch it lists. A
 # function added to one and not the other is a name a define could take.

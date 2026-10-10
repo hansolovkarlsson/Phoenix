@@ -13,10 +13,10 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **10,011 lines** hand-written.
+C11, no dependencies, **10,062 lines** hand-written.
 
 The figure usually quoted is ~14,600, and both are right about different
-things: `phoenix/` also holds `runtime.h`, 4,614 generated lines which are the
+things: `phoenix/` also holds `runtime.h`, 4,637 generated lines which are the
 seven runtime files re-emitted as a C string literal so that a compiler `phx`
 writes is one file. Counting it measures what is in the directory; not counting
 it measures what anybody wrote. The runtime is in both numbers, once or twice.
@@ -1664,10 +1664,9 @@ Pascal units are not it.
 
 ## Defects found, and what found them
 
-Every one of these but the last was found by a test comparing Phoenix
-against something outside it, and the last was confirmed by one. Only the last
-was found by reading the code. Several rows before it widen what *outside it*
-has meant, and the entries after the table say how.
+Most of these were found by a test comparing Phoenix against something outside
+it, and each row says what found it. Several widen what *outside it* has meant,
+and the entries after the table say how.
 
 | | |
 | --- | --- |
@@ -1689,6 +1688,8 @@ has meant, and the entries after the table say how.
 | **an `int` a call returned was trusted to be zero-extended** | the C emit pass tests all of `x0` in every condition, on the header's promise that an `int` sits there zero-extended, and AAPCS64 leaves the upper half of a returned `int` unspecified. A callee `cc` compiled, `int lnarrow(long x) { return x; }`, hands back the whole `long` even at `-O0`, so `if (lnarrow(4294967296))` was taken. `tests/abi/` linked Phoenix to `cc` from the start and never tested more than the low half of what came back |
 | **a name was out of scope in its own initialiser** | C11 6.2.1p7 starts a name's scope at the end of its declarator, and the `locals` pass bound it at the end of the declaration, so `T *p = calloc(n, sizeof *p)` was refused as undeclared. Written down on 2026-09-23 as a refusal and held by a refusal program, and then on no list. Found to matter on 2026-10-02 by running Proem's source through the `check` driver, the first time a program written elsewhere was: it was the first stop in four of Proem's ten files, and Proem writes it thirteen times. Fixed the same day for a plain local, refused by name in the other forms, of which an array in braces is the one left since 2026-10-05 |
 | **three refusals were asserted by nothing** | `case-sizeof-below-zero.c`, `case-inverts-sizeof.c` and `global-negated-sizeof.c` were written on 2026-09-27 for `sizeof` becoming unsigned, and no line of `tests/run.sh` named them, so each was refused for any reason at all and the suite counted none of them. Found on 2026-09-29 by looking for their assertions in order to change the message they held. `tests/run.sh` now checks that every program in `languages/c/tests/refused/` is named by one |
+| **a template's holes were counted only when a node reached it** | docs/semantics.md and [reference.md](reference.md) § 12 both said *when the description is read*, and nothing counted them then. A `%define`'s body wrote `"{}||" of $t, "|"`, where `of` took the separator as a second value, and `phx` read it cleanly. Found on 2026-10-10 by the C oracle, comparing all 354 programs' output before and after a rewrite of `c.phx`: every one differed. Counted at read time since, over every expression |
+| **a call to no function, or with the wrong count, read cleanly** | a call to the library was checked only when a node reached it, so `jion($x, ", ")` in a clause no test input reached was a description that read and could not run. Found on 2026-10-10 by a probe written to ask what else read cleanly after the row above. Refused at read time since, from a table of the library's names and counts; nothing in the repository was refused |
 
 **The rule this repeats**: a round trip can be green while the parse is
 consistently wrong, because what is written back out is wrong in the same way.
