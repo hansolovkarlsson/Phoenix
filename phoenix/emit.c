@@ -425,6 +425,39 @@ static void emit_rewrites(Emit *e)
     fputs("};\n", e->out);
 }
 
+/* The defines, each body an expression like any other. The calls to them
+ * were resolved onto Expr.index when the description was checked, and that
+ * index is in every emitted call already, so this table is all a generated
+ * compiler needs. */
+static void emit_defines(Emit *e)
+{
+    const Grammar *g = e->g;
+
+    int *body = arena_alloc(g->arena,
+                            (size_t)(g->ndefines ? g->ndefines : 1) * sizeof *body);
+    for (int i = 0; i < g->ndefines; i++) {
+        const Define *d = &g->defines[i];
+        body[i] = emit_expr(e, d->body);
+        fprintf(e->out, "static char *dfp%d[] = {", i);
+        for (int k = 0; k < d->nparams; k++) {
+            emit_string(e, d->params[k]);
+            fputc(',', e->out);
+        }
+        if (!d->nparams) fputs("NULL", e->out);
+        fputs("};\n", e->out);
+    }
+
+    fputs("\nstatic Define phx_defines[] = {\n", e->out);
+    for (int i = 0; i < g->ndefines; i++) {
+        const Define *d = &g->defines[i];
+        fputs("  {", e->out);
+        emit_string(e, d->name);
+        fprintf(e->out, ",dfp%d,%d,&x%d,%zu},\n", i, d->nparams, body[i], d->pos);
+    }
+    if (!g->ndefines) fputs("  {0}\n", e->out);
+    fputs("};\n", e->out);
+}
+
 static void emit_drivers(Emit *e)
 {
     const Grammar *g = e->g;
@@ -488,6 +521,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
     emit_passes(&e);
     emit_rewrites(&e);
     emit_embeds(&e);
+    emit_defines(&e);
     emit_drivers(&e);
 
     /* The description's own text, so that a fault in a pass still reports
@@ -547,8 +581,8 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
     emit_string(&e, g->include_type);
     fputs(", ", out);
     emit_string(&e, g->include_field);
-    fprintf(out, ", %zu,\n  false,\n  phx_names, %d, %d\n};\n",
-            g->include_pos, g->nnames, g->nnames);
+    fprintf(out, ", %zu,\n  false,\n  phx_names, %d, %d,\n  phx_defines, %d, %d\n};\n",
+            g->include_pos, g->nnames, g->nnames, g->ndefines, g->ndefines);
 
     fprintf(out, "%s", "\n"
         "/* ------------------------------------------------------------------ */\n"

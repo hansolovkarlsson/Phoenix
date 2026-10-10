@@ -602,6 +602,29 @@ zero. There is always an `else`, and the condition must be a boolean.
 `lookup(env, name, default)` is still the answer for absence, and `otherwise`
 for a node with no clause.
 
+### Naming a computation: `%define`
+
+An expression written out again with a different `$name` in it is a
+computation that wants a name:
+
+```
+%define ptrsof(t) =
+    if size(at(split($t, "a:"), 1)) < size(at(split($t, "b:"), 1))
+    then size(at(split($t, "a:"), 1)) div 8
+    else size(at(split($t, "b:"), 1)) div 8 .
+
+Variable : ptrs = ptrsof($lv) .
+Member   : ptrs = ptrsof($elv) .
+```
+
+It is called like a library function, and **its body sees its parameters and
+nothing else**, so it means the same thing wherever it is called; what it
+needs from the node is passed to it. It may call another define but not
+itself, directly or through another, because a pass is a walk that ends. Use
+an attribute when the computation is about the node it is on, and a define
+when it is about a value handed to it.
+[reference.md § 3](reference.md#define) has the rules.
+
 ### The library
 
 Small, and drawn around on purpose: *a library nobody drew a line around is a

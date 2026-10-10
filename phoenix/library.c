@@ -107,8 +107,54 @@ static Value *pair(Arena *a, Value *k, Value *v)
 
 /* ------------------------------------------------------------------ */
 
+/* Every name below, once, so that the checks can refuse a %define that would
+ * take one. Kept beside the dispatch it lists, and `make test` holds the two
+ * against each other. */
+static const char *const library_names[] = {
+    "empty", "bind", "lookup", "defined", "positions",
+    "int", "float", "text", "floor", "ceiling", "round", "truncate",
+    "quotient", "remainder", "bitand", "bitor", "bitxor", "bytes",
+    "slice", "split", "size", "sizes", "at", "flatten", "each", "join",
+    "repeat",
+};
+
+bool library_has(const char *name)
+{
+    for (size_t i = 0; i < sizeof library_names / sizeof *library_names; i++)
+        if (strcmp(library_names[i], name) == 0) return true;
+    return false;
+}
+
+/* A call to a %define: its arguments worked out left to right, as any call's
+ * are, and then its body with those as the only names it can see. The calls
+ * were resolved and counted when the description was read, and none is
+ * recursive, so this nests only as deep as the defines are written. */
+static Value *call_define(Eval *e, const Expr *x)
+{
+    const Define *d = &e->g->defines[x->index - 1];
+
+    Value **args = arena_alloc(e->a, (size_t)(d->nparams ? d->nparams : 1)
+                                      * sizeof *args);
+    for (int i = 0; i < d->nparams; i++) {
+        args[i] = eval_expr(e, x->kids[i]);
+        if (!args[i]) return NULL;
+        if (value_failed(args[i])) return args[i];
+    }
+
+    const Define *outer      = e->define;
+    Value       **outer_args = e->args;
+    e->define = d;
+    e->args   = args;
+    Value *v  = eval_expr(e, d->body);
+    e->define = outer;
+    e->args   = outer_args;
+    return v;
+}
+
 Value *eval_call(Eval *e, const Expr *x)
 {
+    if (x->index > 0) return call_define(e, x);
+
     Arena *a    = e->a;
     Value *args[4];
     int    argc = x->nkids < 4 ? x->nkids : 4;

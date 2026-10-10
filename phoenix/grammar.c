@@ -887,6 +887,83 @@ static bool read_embed(Reader *r, MToken *d, const char *path)
     return true;
 }
 
+/* `%define name(a, b) = expression .` -- see the comment on `Define` in
+ * phx.h. Everything about what the body may say is the checks' business;
+ * this reads the shape. */
+static bool read_define(Reader *r, MToken *d)
+{
+    Grammar *g = r->g;
+
+    if (!at(r, T_NAME)) {
+        diag_error(r->src, d->pos, "%%define wants a name, its parameters and '='");
+        diag_note("as in `%%define twice(n) = $n * 2 .`");
+        return false;
+    }
+    MToken *name = advance(r);
+
+    if (name->text[0] < 'a' || name->text[0] > 'z') {
+        diag_error(r->src, name->pos,
+                   "a %%define is called like a function, so its name starts "
+                   "with a lower-case letter, and '%s' does not", name->text);
+        return false;
+    }
+
+    char  **params  = NULL;
+    int     nparams = 0;
+    if (at(r, T_LPAREN)) {
+        advance(r);
+        while (!at(r, T_RPAREN)) {
+            if (!at(r, T_NAME)) {
+                diag_error(r->src, peek(r)->pos, "expected a parameter's name");
+                return false;
+            }
+            MToken *p = advance(r);
+            char **big = arena_alloc(r->a, (size_t)(nparams + 1) * sizeof *big);
+            if (nparams) memcpy(big, params, (size_t)nparams * sizeof *big);
+            big[nparams++] = p->text;
+            params = big;
+            if (at(r, T_COMMA)) { advance(r); continue; }
+            break;
+        }
+        if (!at(r, T_RPAREN)) {
+            diag_error(r->src, peek(r)->pos, "expected ')'");
+            return false;
+        }
+        advance(r);
+    }
+
+    if (!at(r, T_DEFSYM)) {
+        diag_error(r->src, peek(r)->pos, "expected '=' after %%define %s's parameters",
+                   name->text);
+        return false;
+    }
+    advance(r);
+
+    Expr *body = read_expr(r);
+    if (!body) return false;
+
+    /* Required, where most directives take it or leave it: a body is an
+     * expression, and the next production's `name =` would otherwise read
+     * as more of it. */
+    if (!at(r, T_DOT)) {
+        diag_error(r->src, peek(r)->pos, "expected '.' at the end of %%define %s",
+                   name->text);
+        return false;
+    }
+
+    if (g->ndefines == g->capdefines) {
+        int     cap = g->capdefines ? g->capdefines * 2 : 8;
+        Define *big = arena_alloc(r->a, (size_t)cap * sizeof *big);
+        if (g->ndefines) memcpy(big, g->defines, (size_t)g->ndefines * sizeof *big);
+        g->defines    = big;
+        g->capdefines = cap;
+    }
+    g->defines[g->ndefines++] = (Define){ .name = name->text, .params = params,
+                                          .nparams = nparams, .body = body,
+                                          .pos = name->pos };
+    return true;
+}
+
 static bool read_file(Reader *r, const char *path)
 {
     Grammar *g       = r->g;
@@ -938,6 +1015,9 @@ static bool read_file(Reader *r, const char *path)
                 if (!read_names(r, d)) return false;
                 continue;
             }
+            else if (strcmp(d->text, "define")     == 0) {
+                if (!read_define(r, d)) return false;
+            }
             else if (strcmp(d->text, "rewrite")    == 0) {
                 if (!read_rewrite(r, d)) return false;
                 continue;
@@ -946,7 +1026,7 @@ static bool read_file(Reader *r, const char *path)
                 diag_error(r->src, d->pos, "unknown directive %%%s", d->text);
                 diag_note("the directives are %%tokens %%syntax %%fragment "
                           "%%skip %%start %%ignorecase %%pass %%rewrite "
-                          "%%import %%embed %%require %%driver %%include %%names");
+                          "%%import %%embed %%require %%driver %%include %%names %%define");
                 return false;
             }
 

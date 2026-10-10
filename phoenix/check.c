@@ -747,8 +747,17 @@ static void check_default_threads(Check *c)
  * below asks it.
  */
 
+/* The description being checked, so that a read inside a %define's body is
+ * counted at every clause that calls it: `declof($base)` reads `.blv` as
+ * surely as `$base.blv` does. The calls are resolved and acyclic by the time
+ * anything here runs. */
+static const Grammar *reading;
+
 static void expr_reads(const Expr *x, const char **names, int *n, int cap)
 {
+    if (x->kind == X_CALL && x->index > 0 && reading)
+        expr_reads(reading->defines[x->index - 1].body, names, n, cap);
+
     if (x->kind == X_DOT) {
         for (int i = 0; i < *n; i++)
             if (strcmp(names[i], x->name) == 0) goto down;
@@ -1567,9 +1576,194 @@ static void check_defaults(Check *c)
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Named computations
+ *
+ * A %define is checked as a function: its name is its own and not the
+ * library's, its parameters are distinct, its body reads nothing but them,
+ * every call to it passes as many arguments as it has parameters, and none
+ * reaches itself through the calls in its body. Each of those, got wrong,
+ * is a call that means something different from what it says, and the last
+ * is a pass that never ends, which ROADMAP 3.1 refuses. */
+
+static int define_find(const Grammar *g, const char *name)
+{
+    for (int i = 0; i < g->ndefines; i++)
+        if (strcmp(g->defines[i].name, name) == 0) return i;
+    return -1;
+}
+
+static void define_body(Check *c, const Define *d, const Expr *x)
+{
+    Grammar *g = c->g;
+
+    if (x->kind == X_ACC) {
+        diag_error(&g->src, x->pos, "$$ belongs in a production's action, "
+                   "not in %%define %s", d->name);
+        c->ok = false;
+    } else if (x->kind == X_REF && !x->name) {
+        diag_error(&g->src, x->pos, "$%d numbers a production's factors, and "
+                   "%%define %s names its parameters", x->index, d->name);
+        c->ok = false;
+    } else if (x->kind == X_REF) {
+        bool known = false;
+        for (int i = 0; i < d->nparams; i++)
+            if (strcmp(d->params[i], x->name) == 0) known = true;
+        if (!known) {
+            diag_error(&g->src, x->pos, "%%define %s sees only its parameters, "
+                       "and '%s' is not one of them", d->name, x->name);
+            diag_note("a define means the same thing wherever it is called, "
+                      "so what it needs from the node is passed to it");
+            c->ok = false;
+        }
+    }
+    for (int i = 0; i < x->nkids; i++) define_body(c, d, x->kids[i]);
+}
+
+/* Every call that names a define is resolved onto it here, and counted. */
+static void define_calls(Check *c, Expr *x)
+{
+    if (!x) return;
+    if (x->kind == X_CALL) {
+        int i = define_find(c->g, x->name);
+        if (i >= 0) {
+            const Define *d = &c->g->defines[i];
+            if (x->nkids != d->nparams) {
+                diag_error(&c->g->src, x->pos, "'%s' takes %d argument%s, "
+                           "and %d %s given", d->name, d->nparams,
+                           d->nparams == 1 ? "" : "s", x->nkids,
+                           x->nkids == 1 ? "was" : "were");
+                c->ok = false;
+            }
+            x->index = i + 1;
+        }
+    }
+    for (int k = 0; k < x->nkids; k++) define_calls(c, x->kids[k]);
+}
+
+/* Every expression a description holds, each handed to `visit`: actions,
+ * clauses, checks, `otherwise`, threads' starting values, rewrites and
+ * defines' bodies. */
+typedef void (*Visit)(Check *c, Expr *x);
+
+static void each_action(Check *c, GNode *n, Visit visit)
+{
+    if (n->action) visit(c, n->action);
+    for (int i = 0; i < n->nkids; i++) each_action(c, n->kids[i], visit);
+}
+
+static void each_expr(Check *c, Visit visit)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->ndefines; i++) visit(c, g->defines[i].body);
+    for (int i = 0; i < g->nrules; i++)
+        if (g->rules[i].body) each_action(c, g->rules[i].body, visit);
+    for (int i = 0; i < g->npasses; i++) {
+        Pass *p = &g->passes[i];
+        for (int k = 0; k < p->nrules; k++)
+            for (int m = 0; m < p->rules[k].nclauses; m++) {
+                if (p->rules[k].clauses[m].value) visit(c, p->rules[k].clauses[m].value);
+                if (p->rules[k].clauses[m].when)  visit(c, p->rules[k].clauses[m].when);
+            }
+        for (int k = 0; k < p->ndefaults; k++)
+            if (p->defaults[k].value) visit(c, p->defaults[k].value);
+        for (int k = 0; k < p->nthreads; k++)
+            if (p->initial[k]) visit(c, p->initial[k]);
+    }
+    for (int i = 0; i < g->nrewrites; i++)
+        for (int k = 0; k < g->rewrites[i].nrules; k++)
+            visit(c, g->rewrites[i].rules[k].to);
+}
+
+/* `"{} {}" of a, b` with as many values as holes, when the template is
+ * written out and not computed. docs/semantics.md said this was checked
+ * when the grammar is read, and until 2026-10-10 it was checked only when a
+ * node reached it: a `%define` whose `of` took a comma it was not meant to
+ * was found by an oracle and not by reading. */
+static void template_holes(Check *c, Expr *x)
+{
+    if (x->kind == X_FORMAT && x->kids[0]->kind == X_TEXT) {
+        const char *t = x->kids[0]->name;
+        int len = x->kids[0]->len, holes = 0;
+        for (int i = 0; i < len; i++) {
+            if ((t[i] == '{' || t[i] == '}') && i + 1 < len && t[i + 1] == t[i]) { i++; continue; }
+            if (t[i] == '{' && i + 1 < len && t[i + 1] == '}') { holes++; i++; }
+        }
+        if (holes != x->nkids - 1) {
+            diag_error(&c->g->src, x->pos, "this template has %d {} and %d value%s "
+                       "%s given", holes, x->nkids - 1, x->nkids == 2 ? "" : "s",
+                       x->nkids == 2 ? "was" : "were");
+            c->ok = false;
+        }
+    }
+    for (int i = 0; i < x->nkids; i++) template_holes(c, x->kids[i]);
+}
+
+/* Whether define `at` reaches define `goal` through the calls in its body.
+ * `seen` keeps a diamond from being walked twice; a cycle not through `goal`
+ * is found when its own members are asked. */
+static bool define_reaches(const Grammar *g, const Expr *x, int goal, char *seen)
+{
+    if (x->kind == X_CALL && x->index > 0) {
+        int i = x->index - 1;
+        if (i == goal) return true;
+        if (!seen[i]) {
+            seen[i] = 1;
+            if (define_reaches(g, g->defines[i].body, goal, seen)) return true;
+        }
+    }
+    for (int k = 0; k < x->nkids; k++)
+        if (define_reaches(g, x->kids[k], goal, seen)) return true;
+    return false;
+}
+
+static void check_defines(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->ndefines; i++) {
+        const Define *d = &g->defines[i];
+
+        if (library_has(d->name)) {
+            diag_error(&g->src, d->pos, "'%s' is already the library's, and a "
+                       "%%define of it would change what every call means", d->name);
+            c->ok = false;
+        }
+        for (int k = 0; k < i; k++)
+            if (strcmp(g->defines[k].name, d->name) == 0) {
+                diag_error(&g->src, d->pos, "'%s' is defined twice", d->name);
+                c->ok = false;
+            }
+        for (int p = 0; p < d->nparams; p++)
+            for (int q = 0; q < p; q++)
+                if (strcmp(d->params[p], d->params[q]) == 0) {
+                    diag_error(&g->src, d->pos, "%%define %s names the parameter "
+                               "'%s' twice", d->name, d->params[p]);
+                    c->ok = false;
+                }
+        define_body(c, d, d->body);
+    }
+
+    each_expr(c, define_calls);
+
+    char *seen = calloc((size_t)(g->ndefines ? g->ndefines : 1), 1);
+    for (int i = 0; i < g->ndefines; i++) {
+        memset(seen, 0, (size_t)g->ndefines);
+        if (define_reaches(g, g->defines[i].body, i, seen)) {
+            diag_error(&g->src, g->defines[i].pos, "%%define %s calls itself, "
+                       "directly or through another, and a pass is one walk "
+                       "that ends", g->defines[i].name);
+            c->ok = false;
+        }
+    }
+    free(seen);
+}
+
 bool grammar_check(Grammar *g)
 {
     Check c = { .g = g, .ok = true };
+    reading = g;
 
     free(vocabulary);
     vocabulary  = NULL;
@@ -1592,6 +1786,12 @@ bool grammar_check(Grammar *g)
         }
         resolve(&c, r->body, r);
     }
+    if (!c.ok) return false;
+
+    check_defines(&c);
+    if (!c.ok) return false;
+
+    each_expr(&c, template_holes);
     if (!c.ok) return false;
 
     compute_nullable(g);
@@ -1626,6 +1826,9 @@ bool grammar_check(Grammar *g)
         for (int k = 0; k < g->passes[i].ndefaults; k++)
             if (g->passes[i].defaults[k].value)
                 collect_types(&c, g->passes[i].defaults[k].value);
+
+    /* So does a define, for whatever calls it. */
+    for (int i = 0; i < g->ndefines; i++) collect_types(&c, g->defines[i].body);
 
     /* A rewrite builds nodes and is the whole reason some node types exist --
      * `--nodes` has to say so, and a clause keyed on one has to be checked

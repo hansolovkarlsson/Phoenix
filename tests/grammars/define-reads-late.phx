@@ -1,0 +1,21 @@
+(* A read inside a %define's body is a read by every clause that calls it.
+ * `later` reads `.late`, which only the second pass defines, so the first
+ * pass calling it is a driver claiming an order that cannot hold -- the
+ * same refusal `$node.late` written in the clause would get. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%define later(n) = $n.late .
+
+%pass early
+  Case : out = later(Case(text: $text)) .
+
+%pass after
+  Case : late = 1 .
+
+%driver run = early, after -> out .

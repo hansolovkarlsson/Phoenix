@@ -133,6 +133,10 @@ directive-item = "%tokens" "."     -> Tokens
                | "%start"  n:name    "." -> Start(name: $n)
                | "%import" p:literal "." -> Import(path: $p)
                | "%embed" n:name p:literal "." -> Embed(name: $n, path: $p)
+               | "%define" n:name "(" p:word { "," q:word -> $q } ")" "=" b:action "."
+                   -> Define(name: $n, params: [$p, ...$5], body: $b)
+               | "%define" n:name [ "(" ")" ] "=" b:action "."
+                   -> Define(name: $n, params: [], body: $b)
                | "%include" t:name f:name "." -> Include(type: $t, field: $f)
                | "%names" n:name w:{ names-word } "." -> Names(name: $n, words: $w)
                | "%pass"   n:name c:{ clause } -> PassBlock(name: $n, clauses: $c)

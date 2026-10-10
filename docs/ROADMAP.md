@@ -48,7 +48,9 @@ predicted wrong, which is the more useful half, and one left **settled against
 building it** after four measurements. The eighth, 1.8, arrived and left on
 the same day, 2026-09-23, with its failure measured before any code: ROADMAP 6
 said the predicate would be an entry here, and it was one for as long as it
-took to build.
+took to build. A ninth, [1.9](COMPLETED.md#19-a-computation-shared-across-values),
+a computation shared across values, never stood here: it was built on
+2026-10-10 from evidence in `c.phx`, the day the question was asked.
 
 ### 1.7 A repetition that counts
 

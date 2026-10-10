@@ -1,0 +1,17 @@
+(* docs/semantics.md: "Too few or too many arguments is an error, checked
+ * when the grammar is read rather than when the pass runs." Until
+ * 2026-10-10 it was checked only when a node reached the template, so this
+ * description was accepted and the input below that never builds a node
+ * would never have found it. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%pass emit
+  Case : out = "{}" of 1, 2 .
+
+%driver run = emit -> out .

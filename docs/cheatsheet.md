@@ -193,11 +193,12 @@ braces. A nil, a node or a list has no written form.
 ## Directives
 
 `%tokens` `%syntax` `%fragment` `%skip` `%start` `%ignorecase` `%import`
-`%embed` `%require` `%include` `%pass` `%rewrite` `%driver`
+`%embed` `%require` `%include` `%define` `%pass` `%rewrite` `%driver`
 
 ```
 %import "expression.phx" .       beside this file, then in lib/
 %embed  runtime "rt.c" .         the file's bytes, under a name
+%define twice(n) = $n * 2 .      a named computation; sees only its parameters
 %require primary .               a hole this module leaves open
 %include Include path .          which node is an include, and which field is the file
 %driver c = show, typecheck, emit-c -> out .

@@ -1,0 +1,33 @@
+(* What a %define is, as claims that must hold. Run through `phx` and
+ * through a compiler `phx` wrote, the way the specification's are. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+%define twice(n) = $n * 2 .
+%define quad(n) = twice(twice($n)) .
+%define ten = 10 .
+%define pair(a, b) = [$a, $b] .
+%define level(size) = Level(size: $size, align: 8) .
+%define safe(n) = if $n = 0 then 0 else 100 div $n .
+
+(* `text` is a field of `Case`, the node every clause below is about. Here
+ * it is a parameter, and a parameter is what it means. *)
+%define echo(text) = $text .
+
+%pass claims
+  Case
+       ! not (twice(4) = 8)                     : "a define is called like a function"
+       ! not (quad(1) = 4)                      : "and may call another"
+       ! not (ten = 10 and ten() = 10)          : "one with no parameters is a bare name"
+       ! not (pair(1, "a") = [1, "a"])          : "its parameters are in order"
+       ! not (level(24).size = 24)              : "it may build a node, read like any"
+       ! not (safe(0) = 0)                      : "an if inside one is still lazy"
+       ! not (echo("x") = "x")                  : "a parameter is read before a field"
+       ! not (echo($text) = $text)              : "and a field reaches it as an argument" .
+
+%driver check = claims .

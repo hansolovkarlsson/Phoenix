@@ -698,6 +698,61 @@ else
     report fail "and the refusals it names" "missing:$lmissing"
 fi
 
+# `%define`, the same way: what it is, through `phx` and through a compiler
+# `phx` wrote, and every refusal, each of which is a call that would mean
+# something other than what it says.
+dclaims=$(grep -c '^ *! ' "$root/tests/grammars/define.phx")
+accepts "$dclaims claims about %define hold" \
+        "$root/tests/grammars/define.phx" "$root/tests/sources/one-node.txt"
+if bounded "$phx" "$root/tests/grammars/define.phx" -o "$tmp0/def.c" 2>/dev/null \
+   && cc -o "$tmp0/defc" "$tmp0/def.c" 2>/dev/null \
+   && bounded "$tmp0/defc" "$root/tests/sources/one-node.txt" >/dev/null 2>&1; then
+    report pass "and hold in a compiler phx wrote"
+else
+    report fail "and hold in a compiler phx wrote"
+fi
+
+dout=$(bounded "$phx" --quiet "$root/tests/grammars/define-refused.phx" \
+       "$root/tests/sources/one-node.txt" 2>&1)
+dmissing=""
+for want in "'size' is already the library's" \
+            "'twice' is defined twice" \
+            "names the parameter 'x' twice" \
+            "sees only its parameters, and 'text' is not one of them" \
+            "\$1 numbers a production's factors, and %define numbered" \
+            "'one' takes 1 argument, and 2 were given" \
+            "%define ping calls itself" \
+            "%define pong calls itself"; do
+    printf '%s' "$dout" | grep -qF -- "$want" || dmissing="$dmissing [$want]"
+done
+if [ -z "$dmissing" ]; then
+    report pass "and every refusal it names"
+else
+    report fail "and every refusal it names" "missing:$dmissing"
+fi
+
+refuses "a read inside a define is a read by the clause that calls it" \
+        "runs 'early', which reads '.late', and nothing before it defines one" \
+        "$root/tests/grammars/define-reads-late.phx"
+
+refuses "a template's holes are counted when the description is read" \
+        "this template has 1 {} and 2 values were given" \
+        "$root/tests/grammars/template-holes.phx"
+
+# A define may not take a library function's name, and the list that says
+# which names those are is kept by hand beside the dispatch it lists. A
+# function added to one and not the other is a name a define could take.
+listed=$(sed -n '/library_names\[\] = {/,/};/p' "$root/phoenix/library.c" \
+         | grep -o '"[a-z]*"' | sort -u)
+dispatched=$(grep -o 'strcmp(f, "[a-z]*")' "$root/phoenix/library.c" \
+             | grep -o '"[a-z]*"' | sort -u)
+if [ "$listed" = "$dispatched" ]; then
+    report pass "the library's names are the ones it dispatches on"
+else
+    report fail "the library's names are the ones it dispatches on" \
+                "library_names: $(echo $listed); dispatch: $(echo $dispatched)"
+fi
+
 # The records' *arithmetic*, which nothing ran until a sweep found nine stale
 # counts on 2026-09-05 -- four drifted over three days, two of them two hours
 # old. The prose in these documents is executed a dozen ways above; the numbers

@@ -16,6 +16,26 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: `%define`, named computations
+
+**A description can name a computation and call it**:
+`%define twice(n) = $n * 2 .` and then `twice($x)` in any clause. The body
+sees only its parameters, so it means the same thing wherever it is
+called; a define may call another but not itself. This adds to the
+notation, and `%define` is a new directive.
+
+**A template's `{}` count is now checked when the description is read**,
+as the specification always said, and not only when a node reached it.
+
+The C description uses six defines and is about a sixth smaller, 480 KB
+to 402 KB; every C program in the oracle compiles to the same bytes.
+
+**Tests:** 743 → 749. The new checks cover what a define is, in `phx` and
+in a compiler it wrote, every refusal, a read inside a define seen by the
+driver check, the library's names, and the template count.
+
+---
+
 ## 2026-10-10: `repeat` in the library
 
 **`repeat(x, n)` makes text, or a list's elements, `n` times over.** It

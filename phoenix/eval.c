@@ -380,6 +380,14 @@ Value *eval_expr(Eval *e, const Expr *x)
     case X_TEXT:  return value_text(e->a, x->name, (size_t)x->len);
 
     case X_REF:
+        /* In a %define's body a name is one of its parameters, and the
+         * checks have refused every other, so the clause that called it is
+         * never consulted. */
+        if (e->define && x->name)
+            for (int i = 0; i < e->define->nparams; i++)
+                if (strcmp(e->define->params[i], x->name) == 0) return e->args[i];
+        return e->ref(e, x);
+
     case X_ACC:
     case X_DOT:
         return e->ref(e, x);

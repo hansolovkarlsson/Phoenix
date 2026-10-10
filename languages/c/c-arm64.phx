@@ -321,7 +321,7 @@
                               $place.size,
                               (if $place.size = 4 and $value.wide then "\tmov w0, w0\n" else ""))
             : store = "{}\tstr x0, [sp, #-16]!\n{}{}{}\tldr x1, [sp], #16\n\t{}, [x1]\n{}"
-                        of $place.addr, $value.out, $widen, (if (at(split(("{}:::::::" of at(split($place.xlv, "|"), 1)), ":"), 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""),
+                        of $place.addr, $value.out, $widen, (if (lvfield($place.xlv, 1, 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""),
                            lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $place.size, "str x0"),
                            $narrow
             : copied = "{}\tstr x0, [sp, #-16]!\n{}\tldr x1, [sp], #16\n{}\tmov x0, x1\n"
@@ -376,7 +376,7 @@
                            (if $place.size = 4 and $wideop then "\tmov w0, w0\n" else ""))
          : out = "{}\tstr x0, [sp, #-16]!\n{}\tmov x1, x0\n\tldr x2, [sp], #16\n\t{}, [x2]\n\tmov x4, x0\n{}{}{}\t{}, [x2]\n{}{}"
              of $place.addr, $value.out, $load, $lwiden, $vwiden,
-                ("{}{}" of lookup([[0, $number]], $place.type, $pointer), (if (at(split(("{}:::::::" of at(split($place.xlv, "|"), 1)), ":"), 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else "")),
+                ("{}{}" of lookup([[0, $number]], $place.type, $pointer), (if (lvfield($place.xlv, 1, 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else "")),
                 $store, $narrow, (if $post then "\tmov x0, x4\n" else "") .
 
   (* A declaration with an initialiser knows its own slot, so it stores
@@ -386,7 +386,7 @@
             : out   = (if $copies then "{}\tsub x1, x29, #{}\n{}"
                                        of $value.out, $offset,
                                           ($copy of $basew, $n, "x0", "x1", $n) else "{}{}{}{}\t{}, {}\n"
-                               of $value.out, (if (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""), (if $offset <= 255 then "" else "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset),
+                               of $value.out, (if (lvfield($lv, 1, 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""), (if $offset <= 255 then "" else "\tmov x16, #{}\n\tsub x16, x29, x16\n" of $offset),
                                   (if $ptrs = 0 and $base.tagname = "" and $basew = 8
                                            and $value.type = 0 and not $value.wide
                                            and not $value.uns then "\tsxtw x0, w0\n" else ""),
@@ -418,7 +418,7 @@
            : bytes = (if $fill then (if $value.slen + 1 < $iw then $value.slen + 1 else $iw) else $iw)
            : dest  = "\tsub x1, x29, #{}\n" of $aoff - $ioff
            : ext   = (if $iw = 8 and slice($leaf, 1, 1) = "b" and $value.type = 0 and not $value.wide and not $value.uns then "\tsxtw x0, w0\n" else "")
-           : act   = (if $moves then $copy of $bytes, $n, "x0", "x1", $n else "{}{}\t{}, [x1]\n" of $ext, (if (at(split(("{}:::::::" of at(split($leaf, "|"), 1)), ":"), 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""), lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $iw, "str x0"))
+           : act   = (if $moves then $copy of $bytes, $n, "x0", "x1", $n else "{}{}\t{}, [x1]\n" of $ext, (if (lvfield($leaf, 1, 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else ""), lookup([[1, "strb w0"], [2, "strh w0"], [4, "str w0"]], $iw, "str x0"))
            : out   = "{}{}{}" of $value.out, $dest, $act
            (* A store made at start-up, for a global whose values are not in
             * address order: its address and the offset, then the same. *)
@@ -429,7 +429,7 @@
            : gap   = lookup([[0, ""]], $igap, "\t.space {}\n" of $igap)
            : gd    = (if $fill then "{}\t.ascii \"{}\"\n{}" of $gap, $value.asm,
                                      lookup([[0, ""]], $iw - $value.slen, "\t.space {}\n" of $iw - $value.slen) else "{}\t{} {}\n" of $gap, lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $iw, ".quad"),
-                               (if $value.anchored and not $value.settled then $value.sym else (if (at(split(("{}:::::::" of at(split($leaf, "|"), 1)), ":"), 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                               (if $value.anchored and not $value.settled then $value.sym else (if (lvfield($leaf, 1, 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                              $iw, $value.folded)))) .
   Discard   : out = $value.out .
 
@@ -874,7 +874,7 @@
          : eight  = $ptrs > 0 or $base.basew = 8
          : from8  = $value.type > 0 or $value.wide
          : out = "{}{}" of $value.out,
-                   (if (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else (if $tovoid then "" else (if $eight then (if $from8 or $value.uns then "" else "\tsxtw x0, w0\n") else lookup([[1, (if $base.buns then "\tand w0, w0, #255\n" else "\tsxtb w0, w0\n")], [2, (if $base.buns then "\tuxth w0, w0\n" else "\tsxth w0, w0\n")]],
+                   (if (lvfield($lv, 1, 7) = "B") then "\tcmp x0, #0\n\tcset w0, ne\n" else (if $tovoid then "" else (if $eight then (if $from8 or $value.uns then "" else "\tsxtw x0, w0\n") else lookup([[1, (if $base.buns then "\tand w0, w0, #255\n" else "\tsxtb w0, w0\n")], [2, (if $base.buns then "\tuxth w0, w0\n" else "\tsxth w0, w0\n")]],
                               $base.basew,
                               (if $from8 then "\tmov w0, w0\n" else ""))))) .
 
@@ -995,7 +995,7 @@
             * `char` the same way**, since 2026-10-03, its eight bits; a
             * `_Bool` is a byte too, and is made 0 or 1 by `retbool` instead,
             * since narrowing first would make 256 false. *)
-           : down retbool   = (at(split(("{}:::::::" of at(split($rlv, "|"), 1)), ":"), 7) = "B")
+           : down retbool   = (lvfield($rlv, 1, 7) = "B")
            : down retnarrow = lookup([[2, (if $ret.buns then "\tuxth w0, w0\n" else "\tsxth w0, w0\n")],
                                       [1, (if $retbool then "" else (if $ret.buns then "\tand w0, w0, #255\n" else "\tsxtb w0, w0\n"))]],
                                      (if $rptrs = 0 and $ret.tagname = "" then $ret.basew else 0), "")
@@ -1065,7 +1065,7 @@
               : gdata = "{}{}\t.p2align {}\n_{}:\n\t{} {}\n"
                           of $gdata, $globl, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $name,
                              lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
-                             (if $value.anchored and not $value.settled then $value.sym else (if (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                             (if $value.anchored and not $value.settled then $value.sym else (if (lvfield($lv, 1, 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded))) .
   (* *A `short`'s data wrapped to sixteen bits has no witness*, since
    * ROADMAP 6.15's second part: only a constant out of its range needs it,
@@ -1127,7 +1127,7 @@
               : gdata = "{}\t.p2align {}\n_{}:\n\t{} {}\n"
                           of $gdata, lookup([[1, 0], [2, 1], [4, 2]], $galign, 3), $label,
                              lookup([[1, ".byte"], [2, ".short"], [4, ".long"]], $ebytes, ".quad"),
-                             (if $value.anchored and not $value.settled then $value.sym else (if (at(split(("{}:::::::" of at(split($lv, "|"), 1)), ":"), 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
+                             (if $value.anchored and not $value.settled then $value.sym else (if (lvfield($lv, 1, 7) = "B") then lookup([[0, 0]], $value.folded, 1) else lookup([[1, $value.folded mod 256], [2, $value.folded mod 65536], [4, $value.folded mod 4294967296]],
                                            $ebytes, $value.folded))) .
   Program   : down initialised = bind(empty, $inits, true)
             : down copy = "\tldr x9, ={}\nL{}.copy:\n\tsub x9, x9, #1\n\tldrb w10, [{}, x9]\n\tstrb w10, [{}, x9]\n\tcbnz x9, L{}.copy\n"

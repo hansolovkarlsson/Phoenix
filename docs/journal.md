@@ -7776,3 +7776,43 @@ one joins the oracle as `pointer-thirteen-levels.c`, since a fix that
 nothing holds is one a later rewrite can lose. That lifts a refusal while
 the C arc is on hold, and it is kept because the refusal was not a
 construct the subset declined but a wrong answer the notation forced.
+
+**And `%define`, last.** The third improvement asked for was the one the
+morning's question had really been about: `c.phx` writes the same
+expression again and again with a different `$name` in it, 34 times for
+the pointer count alone, and nothing in the notation could name it. An
+attribute shares a computation within a node, and COMPLETED 1.3 settled
+on that and called everything else a second mechanism. This is one, and
+it was made as small as a function can be: a name, parameters, and a body
+that sees only the parameters. That last rule is the one that matters. A
+body that could read the caller's fields and threads would be a macro, and
+mean something different at every call; this one is a function of its
+arguments, which is checked when the description is read along with its
+arity, its name against the library's, and that no define reaches itself.
+
+**Measured before named.** A script grouped every repeated subexpression
+in `c.phx` with its `$names` abstracted, and the biggest families were all
+one thing: field `k` of level `n` of a type held as text, written out
+1,101 times with four different paddings. The paddings were checked to
+answer the same for every field each one read, and one define, `lvfield`,
+took all of them, with nine more in `c-arm64.phx`. On that, five more
+shapes became small enough to see and were named: `fnkey`, `layoutof`,
+`ptrsof`, `elemof`, `declof`, 453 expressions between them. `c.phx` went
+from 480 KB to 402 KB, and all 354 C programs compiled to the same bytes.
+
+**The first run of the oracle failed on every program**, and it was
+`lvfield`'s own body: `"{}||" of $t, "|"`, where `of` took the separator
+as a second value. The original had parentheses for exactly that reason.
+The message came at run time, which docs/semantics.md says it should not:
+a template's holes are counted "when the grammar is read". They were not.
+They are now, over every expression a description holds, and nothing
+here had a template it refuses. Two more checks came out of the same
+work: a read inside a define's body counts as a read by every clause that
+calls it, so the driver's order check sees through a call; and the
+library's list of names, which a define may not take, is held by
+`make test` against the names the library dispatches on.
+
+`languages/phx/phoenix.phx` reads `%define`. The C types are still text;
+the defines name the idioms over them, and the change to nodes, when the
+C arc resumes, now rewrites 320 calls of one name rather than 1,110
+spellings of four.

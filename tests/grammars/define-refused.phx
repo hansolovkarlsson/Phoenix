@@ -1,0 +1,38 @@
+(* What a %define may not be, one refusal each. Every one is a call that
+ * would mean something other than what it says, or a pass that would not
+ * end, and all of them are found when the description is read. *)
+%fragment digit .
+digit  = "0" .. "9" .
+number = digit { digit } .
+
+%syntax .
+%start case .
+case = number -> Case(text: $1) .
+
+(* The library's name, so that `size(x)` would stop meaning size. *)
+%define size(x) = 1 .
+
+(* Twice. *)
+%define twice = 1 .
+%define twice = 2 .
+
+(* A parameter named twice: which one would `$x` be? *)
+%define both(x, x) = $x .
+
+(* A name that is not a parameter: it would be read from whatever clause
+ * called it, and mean something different at every call. *)
+%define leaky(x) = $x + $text .
+
+(* A factor's number, which only a production has. *)
+%define numbered(x) = $1 .
+
+(* Calling itself through another: a pass is one walk that ends. *)
+%define ping(n) = pong($n) .
+%define pong(n) = ping($n) .
+
+%define one(n) = $n .
+
+%pass refused
+  Case : a = one(1, 2) .
+
+%driver check = refused .

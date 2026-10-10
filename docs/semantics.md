@@ -187,7 +187,9 @@ finding it at the node that produced it.
 ## Evaluation order
 
 **Left to right, everywhere**, and the operands of an operator are evaluated
-before it. Fixed because two backends evaluating in different orders would
+before it. So are a call's arguments, whether it calls the library or a
+`%define`, whose body then sees those values under its parameters' names and
+no other name. Fixed because two backends evaluating in different orders would
 report two different first errors on the same input.
 
 Precedence, tightest first:

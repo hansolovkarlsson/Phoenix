@@ -143,6 +143,7 @@ clause of every pass.
 | `%embed name "path" .` | that file's bytes, readable as `$name` |
 | `%require name .` | this module leaves that rule open |
 | `%include Type field .` | which node an include is built as, and which field holds the file |
+| `%define name(a, b) = expr .` | a named computation, called like a library function |
 | `%pass name` | clauses, until the next directive |
 | `%rewrite name strategy` | rewrite rules, until the next directive |
 | `%driver name = a, b -> attr .` | stages in order, and which attribute of the root is the answer. `b until x` runs a pass until the root's `x` settles |
@@ -244,6 +245,42 @@ position wanted.
 
 `--no-includes` asks about one file's own text instead, with the include nodes
 still in the tree — which is what a round trip is a question about.
+
+### `%define`
+
+```
+%define ptrsof(t) =
+    if size(at(split($t, "a:"), 1)) < size(at(split($t, "b:"), 1))
+    then size(at(split($t, "a:"), 1)) div 8
+    else size(at(split($t, "b:"), 1)) div 8 .
+
+Variable : ptrs = ptrsof($lv) .
+```
+
+A named expression with parameters, called the way a library function is.
+An attribute shares a computation within a node; a define shares one across
+values, which is what an expression written out again with a different
+`$name` in it wants.
+
+- **The body sees its parameters and nothing else.** No field, attribute or
+  thread of the clause that calls it: what it needs is passed. So a define
+  means the same thing at every call, and a name in the body that is not a
+  parameter is refused when the description is read.
+- **The arguments are worked out left to right before the body**, as any
+  call's are. An `if` inside the body still works out only the arm it takes.
+- **No define calls itself**, directly or through another. A pass is one walk
+  that ends ([ROADMAP 3.1](ROADMAP.md#31-an-interpreter-that-can-loop)).
+- Its name starts with a lower-case letter and is not the library's, since
+  either would change what a call means. One with no parameters is called
+  bare, `ten`, or with `()`.
+- The `.` at the end is required: a body is an expression, and the next
+  production's `name =` would otherwise read as more of it.
+- A read inside the body counts as a read by every clause that calls it, so
+  a driver that runs the caller before the pass defining what the body reads
+  is refused, as it would be with the read written in the clause.
+
+Defines belong to the whole description, imports included, and a generated
+compiler carries them with everything else.
 
 ---
 

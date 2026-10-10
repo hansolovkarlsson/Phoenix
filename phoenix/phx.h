@@ -137,7 +137,8 @@ struct Expr {
     char      *name;   /* X_NODE: the type. X_REF/X_DOT: the name.
                         * X_TEXT: the bytes. X_BINOP/X_UNOP/X_CALL: which    */
     int        len;    /* X_TEXT: its length                                 */
-    int        index;  /* X_REF: the 1-based position, or 0 when by name     */
+    int        index;  /* X_REF: the 1-based position, or 0 when by name.
+                        * X_CALL: the %define it calls, from 1; 0: library  */
     long long  ival;   /* X_INT, X_BOOL                                      */
     double     real;   /* X_FLOAT                                            */
     char     **fields; /* X_NODE: one name per kid, else NULL throughout     */
@@ -285,6 +286,32 @@ typedef struct {
     size_t  pos;    /* where it was named, for the checks */
 } Embed;
 
+/* ------------------------------------------------------------------ */
+/* Named computations
+ *
+ *     %define ptrs(t) = if ... $t ... else ... .
+ *
+ * An expression with a name and parameters, called like a library function:
+ * `ptrs($lv)`. An attribute already shares a computation *within* a node
+ * (COMPLETED 1.3); this shares one across values, which an attribute cannot,
+ * because an attribute is about the node it is on and not about whatever it
+ * is handed. `languages/c/c.phx` wrote the same expression over `$lv`,
+ * `$lvin` and `$elv` thirty-four times for want of it.
+ *
+ * **The body sees its parameters and nothing else**: no field, no attribute,
+ * no thread of whatever clause calls it, which is checked when the
+ * description is read. A define is therefore a function of its arguments and
+ * means the same thing at every call. And none calls itself, directly or
+ * through another, so every pass is still one walk that ends (ROADMAP 3.1).
+ */
+typedef struct {
+    char   *name;
+    char  **params;
+    int     nparams;
+    Expr   *body;
+    size_t  pos;
+} Define;
+
 typedef struct {
     Arena     *arena;
     Source     src;         /* every imported file, joined */
@@ -338,6 +365,12 @@ typedef struct {
     Names  *names;
     int     nnames;
     int     capnames;
+
+    /* `%define` -- named computations. A call to one is resolved by the
+     * checks onto Expr.index, the define's position here plus one. */
+    Define *defines;
+    int     ndefines;
+    int     capdefines;
 } Grammar;
 
 /* Reads a `.phx` file. Answers NULL when it could not, having said why. */
@@ -634,6 +667,11 @@ struct Eval {
     void          *data;                          /* whatever ref needs      */
     size_t         pos;   /* where in the *source* a node built here belongs */
     size_t         endpos;/* and where it ends -- see Value.endpos           */
+
+    /* Inside a %define's body: its parameters, which `$name` reads before
+     * anything `ref` knows. NULL everywhere else. */
+    const Define  *define;
+    Value        **args;
 };
 
 Value *eval_expr(Eval *e, const Expr *x);
@@ -641,6 +679,10 @@ Value *eval_expr(Eval *e, const Expr *x);
 /* The functions a pass may call -- library.c, kept separate so that the
  * question of where the library stops stays a visible one. */
 Value *eval_call(Eval *e, const Expr *x);
+
+/* Whether the library has a function of this name -- so that a %define
+ * cannot take one's name and change what a call means. */
+bool library_has(const char *name);
 
 Value *value_int(Arena *a, long long n);
 Value *value_float(Arena *a, double d);
