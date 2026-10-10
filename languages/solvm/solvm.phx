@@ -172,8 +172,8 @@ constant = intlit   -> IntConst(text: $1)
    * the `otherwise` at the foot of this pass is "otherwise" to. *)
 
   (* `\n`, `\t` and `\"` come off; a doubled backslash is refused rather
-   * than guessed at. Unescaping in a notation with no conditional is a
-   * chain of split-and-join, and each step here can only ever fire on
+   * than guessed at. Unescaping is a chain of split-and-join, written
+   * before the notation had a conditional, and each step here can only ever fire on
    * what the step before it left -- which holds because `\\` is not
    * accepted, so nothing can produce another escape's trigger. *)
   Quoted : inner = slice($raw, 2, size($raw) - 1)

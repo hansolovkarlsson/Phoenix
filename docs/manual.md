@@ -582,9 +582,8 @@ A float writes as **the shortest decimal that reads back as the same value**, so
 because a default rendering for a node is a thing that would silently appear in
 generated code.
 
-### There is no conditional
+### Choosing: shape first, then `if`
 
-None, on purpose ([ROADMAP 3.5](ROADMAP.md#35-conditionals-in-the-meta-language)).
 Two spellings that differ are two clauses, keyed on shape:
 
 ```
@@ -592,9 +591,16 @@ Logical(op: "and") : out = "({} && {})" of $left.out, $right.out .
 Logical(op: "or")  : out = "({} || {})" of $left.out, $right.out .
 ```
 
-and the library carries the two places where that is not enough:
-`lookup(env, name, default)` is the answer for absence, and `otherwise` is the
-answer for a node with no clause.
+A choice about a *value*, which no pattern can see, is an `if`:
+
+```
+Number : out = if $v = 0 then "zero" else "{}" of 100 div $v .
+```
+
+Only the arm taken is worked out, so the `100 div $v` above never divides by
+zero. There is always an `else`, and the condition must be a boolean.
+`lookup(env, name, default)` is still the answer for absence, and `otherwise`
+for a node with no clause.
 
 ### The library
 
@@ -952,7 +958,7 @@ like — that is what an emit pass *is*.
 
 ### A filter is `[]` plus `flatten`
 
-There is no filter and no conditional. A node that contributes nothing
+There is no filter. A node that contributes nothing
 contributes an empty list, and one level of `flatten` drops them:
 
 ```

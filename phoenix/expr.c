@@ -14,6 +14,7 @@
  *     postfix    = primary { "." name } .
  *     primary    = "$" ( number | name | "$" ) | number | real | literal
  *                | "true" | "false" | "nil"
+ *                | "if" expression "then" expression "else" expression
  *                | name [ "(" [ argument { "," argument } ] ")" ]
  *                | "[" [ element { "," element } ] "]"
  *                | "(" expression ")" .
@@ -178,6 +179,35 @@ static Expr *read_primary(Reader *r)
             return x;
         }
         if (strcmp(t->text, "nil") == 0) return expr_new(r, X_NIL, t->pos);
+
+        /* `if c then a else b` -- a choice that works out only the arm it
+         * takes. Until 2026-10-10 the notation had none, and a choice was
+         * written `lookup([[true, a]], c, b)`, which works out both: 528
+         * lines of `languages/c/c.phx` were that idiom, and an arm that
+         * could not be worked out when it was not wanted could not be
+         * written that way at all (ROADMAP 3.5). There is always an `else`,
+         * because an expression always has a value, and each arm runs as
+         * far as an expression does, so `else if` needs nothing of its own. */
+        if (strcmp(t->text, "if") == 0) {
+            Expr *x = expr_new(r, X_IF, t->pos);
+            static const char *const words[] = { "then", "else" };
+
+            for (int k = 0; k < 3; k++) {
+                if (k > 0) {
+                    if (!is_word(r, words[k - 1])) {
+                        diag_error(r->src, peek(r)->pos,
+                                   "expected '%s' -- an 'if' is 'if c then a else b'",
+                                   words[k - 1]);
+                        return NULL;
+                    }
+                    advance(r);
+                }
+                Expr *part = read_expr(r);
+                if (!part) return NULL;
+                expr_add(r, x, NULL, part);
+            }
+            return x;
+        }
 
         /* A capital starts a node type and a lower-case letter starts a
          * function. That is the one convention this notation asks for, and it

@@ -88,6 +88,16 @@ case = number -> Case(text: $1) .
        ! not (true or (1 div 0 = 0))             : "or short-circuits"
        ! not (not false)                         : "not"
 
+  (* ---- if: only the arm taken is worked out ----
+   *
+   * Asserted the same way: the arm not taken divides by zero. *)
+       ! not ((if true then 1 else 1 div 0) = 1) : "if does not work out its else"
+       ! not ((if false then 1 div 0 else 2) = 2): "nor its then"
+       ! not ((if false then 1 else if true then 2 else 3) = 2)
+                                                 : "else if needs nothing of its own"
+       ! not ((if true then "{}" of 1 else "x") = "1")
+                                                 : "an arm may be a formatting"
+
   (* ---- precedence, tightest first ---- *)
        ! not (1 + 2 * 3 = 7)                     : "* binds tighter than +"
        ! not (0 - 2 * 3 = 0 - 6)                 : "and unary minus is not part of the literal"

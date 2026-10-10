@@ -330,8 +330,8 @@ procedure-declaration = "procedure" n:identifier p:formal-parameters ";" b:body
 function-declaration  = "function" n:identifier p:formal-parameters r:returns ";" b:body
                       -> Function(name: $n, params: $p, returns: $r, body: $b) .
 
-(* A node rather than `nil`, because there is no `if` in the notation and a
- * pass reading `$returns.show` should not have to ask first. This is the
+(* A node rather than `nil`, because a pass reading `$returns.show` should
+ * not have to ask first, with an `if` or without one. This is the
  * design working rather than being worked around: where another language
  * would test for absence, this one gives absence a name. *)
 returns = ":" t:identifier -> NamedType(name: $t)

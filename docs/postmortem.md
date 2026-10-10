@@ -9,13 +9,13 @@ this is what was **believed** about it.*
 *Revised after awk, which is the first language described here that was not
 chosen to suit the tool.*
 
-Phoenix is 9,505 hand-written lines of C11 with no dependencies (~13,900 if
+Phoenix is 9,558 hand-written lines of C11 with no dependencies (~14,000 if
 the generated `runtime.h` is counted; [COMPLETED.md](COMPLETED.md#the-tool)
 says why both are true). The descriptions written
 against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and
-two backends), Solveig in 1,129 (15 node types) with a bytecode backend, awk in
-993 with a 682-line C runtime it embeds, calc in 494 across three backends, and
-Phoenix's own notation in 274.
+two backends), Solveig in 1,094 (15 node types) with a bytecode backend, awk in
+990 with a 682-line C runtime it embeds, calc in 494 across three backends, and
+Phoenix's own notation in 277.
 
 ---
 
@@ -57,6 +57,9 @@ The suite compares `.sob` files now, and a description whose literals hold a
 NUL in a grammar, a pattern and a template at once.
 
 ### Held: tables-as-conditionals, in place of an `if`
+
+*Rescored on 2026-10-10, in [§ 39](#39-the-assumption-in-the-design-most-likely-to-be-wrong):
+failed at scale, and built.*
 
 Roadmap 3.5 called this "the assumption in the design most likely to be
 wrong" and asked to have its first failure recognised as a decision arriving.
@@ -1902,3 +1905,39 @@ and not from what the grammar lets reach it.
 > A reason, an implied remedy and a check's green are three kinds of
 > claim, and today each was wrong in a way the claim alone could not
 > show. Read the failure a break produced before counting it.
+
+## 39. "The assumption in the design most likely to be wrong"
+
+ROADMAP 3.5's own words for "there is no `if`", and § 1 above scored it
+*Held* after the bytecode backend and again after awk. Rescored on
+2026-10-10, when it was built.
+
+*Failed, at scale: tables-as-conditionals in place of an `if`.* The § 1
+score was right about what it measured. No backend found a choice it could
+not write, and none ever did: `lookup([[true, a]], c, b)` says every
+choice that does not need an arm left unworked. What § 1 did not measure
+was what the idiom costs when it is the commonest thing in a file, because
+no description had made it that until C. `c.phx` held 876 such tables on
+418 lines, nested, each reading answer, condition, alternative. Asked
+whether the notation could use a struct, a map or mutation, the question
+went to `c.phx` for evidence, and the count was the first thing it
+answered.
+
+*Failed, as a forecast of the form: "the first thing it cannot express".*
+The entry expected a construct the notation could not say. What came was
+a construct it could say at a price nobody counted, and a gap that is
+only a price never meets a failure to announce it. **A count is a way a
+design decision arrives**, and it is a kind ROADMAP 3.4's rule cannot see,
+since that rule asks only whether a thing can be written.
+
+*Failed, as a diagnosis made the same afternoon: that a pass could not
+build a record.* Offered as the second gap behind `c.phx`'s types as
+text, `a:24:2:4|b:4:0:4`. A five-line probe built `Ty(kind: "int", size:
+3)` in a clause and read `$t.size` back. The journal of 2026-09-30 had
+already said why the types are text, and it was 3.4's rule choosing text
+over a list that read better, not a missing mechanism. **Read the decision
+record before naming a gap, and probe before proposing to build.**
+
+> Both failures have the same root: a claim about what the notation can
+> say, made from the shape of the code that uses it. The idiom in `c.phx`
+> looked like a workaround, and was one for one reason and not the other.

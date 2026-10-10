@@ -127,7 +127,8 @@ typedef enum {
     X_UNOP,    /* not a, -a                                                 */
     X_CALL,    /* f(a, b)                                                   */
     X_DOT,     /* $left.val -- an attribute of another node                 */
-    X_FORMAT   /* "{} {}" of a, b                                           */
+    X_FORMAT,  /* "{} {}" of a, b                                           */
+    X_IF       /* if c then a else b -- kids: the condition and both arms   */
 } XKind;
 
 typedef struct Expr Expr;

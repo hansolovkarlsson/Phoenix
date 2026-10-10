@@ -163,9 +163,10 @@ names-word = t:name f:attribute -> Binder(type: $t, field: $f)
 (* **Every word-shaped literal in a syntactic rule becomes a reserved word**,
  * worked out from the grammar rather than declared -- which is a good rule
  * and one a description of the notation trips over, because `of`, `and`, `or`,
- * `not`, `div`, `mod`, `thread` and `down` are all operators *here* and all
- * perfectly good field names *there*. `pascal.phx` writes `of: $t` and means
- * a field.
+ * `not`, `div`, `mod`, `thread`, `down`, `if`, `then` and `else` are all
+ * operators *here* and all perfectly good field names *there*. `pascal.phx`
+ * writes `of: $t` and means a field, and `calc.phx` builds
+ * `IfElse(cond: $c, then: $t, else: $f)`.
  *
  * Phoenix itself does not reserve them: its reader knows an operator from a
  * field name by where it is looking. The notation has no way to say that, so
@@ -173,7 +174,7 @@ names-word = t:name f:attribute -> Binder(type: $t, field: $f)
  * the wart the README calls *a grammar module imposes reserved words*, met in
  * the one description guaranteed to meet it. *)
 word = name | "of" | "and" | "or" | "not" | "div" | "mod" | "thread" | "down"
-     | "otherwise" .
+     | "otherwise" | "if" | "then" | "else" .
 answer = "->" a:name -> $a
        | -> NoAnswer .
 
@@ -252,7 +253,9 @@ unary = "not" u:unary -> Negation(value: $u)
 
 postfix = p:primary { a:attribute -> Of(attr: $a) } -> Reach(value: $p, through: $2) .
 
-primary = reference          -> Ref(name: $1)
+primary = "if" c:action "then" a:action "else" b:action
+            -> Choose(test: $c, yes: $a, no: $b)
+        | reference          -> Ref(name: $1)
         | literal            -> TextValue(text: $1)
         | real               -> RealValue(text: $1)
         | integer            -> IntegerValue(text: $1)

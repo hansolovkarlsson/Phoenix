@@ -161,8 +161,19 @@ interchangeable, and a backend is free to share them.
 
 `and` and `or` **short-circuit**, left to right. `not` takes a boolean.
 
-There is no truthiness: a condition must be a boolean, and `if 0` would be an
-error if there were an `if`. Nothing else converts to a boolean.
+There is no truthiness: a condition must be a boolean, and `if 0 then a else
+b` is an error. Nothing else converts to a boolean.
+
+## Conditionals
+
+`if c then a else b` works out `c`, then **only the arm it chooses**. The arm
+not taken is never evaluated, so its errors are never raised: `if $n = 0 then 0
+else 100 div $n` is safe. This is the whole difference from
+`lookup([[true, a]], c, b)`, which works out both.
+
+There is always an `else`, because an expression always has a value. Each arm
+runs as far as an expression can, so `else if` needs nothing of its own, and an
+`if` in the middle of an operator wants parentheses: `1 + (if c then 2 else 3)`.
 
 ## nil
 
@@ -191,6 +202,9 @@ and
 or                          
 of                          formatting, loosest
 ```
+
+`if c then a else b` is not in the table: it starts where a value can start,
+and its `else` arm takes everything an expression would.
 
 ## Formatting
 

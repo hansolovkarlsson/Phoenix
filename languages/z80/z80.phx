@@ -180,7 +180,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
      : known = defined($seen, $target)
      : back  = lookup($seen, $target, 0) - ($pc + 2)
      : first = $known and $back >= -128
-     : pc    = $pc + lookup([[true, 2]], $first, 3) .
+     : pc    = $pc + (if $first then 2 else 3) .
 
   (* The one item that occupies no space and is the reason for two passes.
    * `seen` is a thread and `entry` is not, which is the whole difference
@@ -255,7 +255,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   Br : addr2 = $pc2
      : est   = lookup($table, $target, 0) - ($pc2 + 2)
      : short = $est >= -128 and $est <= 127
-     : pc2   = $pc2 + lookup([[true, 2]], $short, 3) .
+     : pc2   = $pc2 + (if $short then 2 else 3) .
 
   Label : entry2 = [[$name, $pc2]] .
 
@@ -335,9 +335,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
 
   (* `short` was decided in `layout` and is read back here, so the two walks
    * cannot disagree about how many bytes this is. *)
-  Br : out = lookup([[true, join([bytes(24, 1), bytes($disp mod 256, 1)])]],
-                    $short,
-                    join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)]))
+  Br : out = (if $short then join([bytes(24, 1), bytes($disp mod 256, 1)]) else join([bytes(195, 1), bytes(lookup($table, $target, 0), 2)]))
      ! not defined($table, $target)
          : "no label called '{}'" of $target
      (* The monotonicity argument, checked rather than believed. A `br` that
@@ -389,8 +387,7 @@ cond = "nz" -> Cond(name: "nz", jp: "194", jr: "32")
   Call   : out = "        call {}" of $target .
 
   (* The decision, written out. *)
-  Br : out = lookup([[true, "        jr {}" of $target]], $short,
-                    "        jp {}" of $target) .
+  Br : out = (if $short then "        jr {}" of $target else "        jp {}" of $target) .
 
 %driver code    = layout, relax until labels, reach, code -> out .
 %driver listing = layout, relax until labels, listing -> out .

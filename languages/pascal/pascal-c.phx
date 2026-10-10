@@ -92,9 +92,10 @@
    * a program's variables are C globals and a routine's are C locals, and a
    * `var` parameter is a pointer that every use of has to dereference.
    *
-   * There is no `if` in the notation, so both are done with `lookup` against a
-   * default: a name that is not by reference looks up to itself. That is the
-   * conditional, written as a table. *)
+   * Both are done with `lookup` against a default: a name that is not by
+   * reference looks up to itself. That is the conditional, written as a
+   * table, which is how it was written before the notation had an `if` and
+   * is still the right shape for a choice among the entries of a table. *)
 
 
 
@@ -348,8 +349,7 @@
    *
    * `writeln(x)` picks its format from the argument's *type*, which the
    * typechecker worked out and left on the node. The choice is a `lookup`
-   * against a table, which is what a notation with no conditional uses for
-   * one. *)
+   * against a table, because the choices are a table. *)
 
   Argument : out   = $value.out
            : write = lookup($writes, $value.type,

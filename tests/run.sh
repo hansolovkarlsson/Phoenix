@@ -653,6 +653,7 @@ for want in "there is no conversion" \
             "division by zero" \
             "no order across kinds" \
             "wants a boolean" \
+            "'if' wants a boolean" \
             "nil has no written form" \
             "a list has no written form" \
             "'...' wants a list"; do

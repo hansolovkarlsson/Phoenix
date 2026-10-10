@@ -1167,6 +1167,15 @@ static void dump_action(FILE *out, const Expr *x)
         }
         fputs(")", out);
         return;
+    case X_IF:
+        fputs("(if ", out);
+        dump_action(out, x->kids[0]);
+        fputs(" then ", out);
+        dump_action(out, x->kids[1]);
+        fputs(" else ", out);
+        dump_action(out, x->kids[2]);
+        fputs(")", out);
+        return;
     case X_FORMAT:
         dump_action(out, x->kids[0]);
         fputs(" of ", out);

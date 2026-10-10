@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: `if` in the notation
+
+**A clause can choose with `if c then a else b`**, which works out only
+the arm it takes, so `if $n = 0 then 0 else 100 div $n` never divides by
+zero. The condition must be a boolean, and the `else` is required. This
+changes the notation: `if`, `then` and `else` now begin and end arms of an
+expression, though they stay usable as field names.
+
+Every `lookup([[true, a]], c, b)` in the descriptions here, 1,072 of them,
+876 in the C description alone, is now an `if`, and every C program the
+oracle runs compiles to the same bytes as before.
+
+**Tests:** 743 → 743, with four claims and one refusal added to the
+specification's own checks.
+
+---
+
 ## 2026-10-06: the C compiler on hold
 
 **`languages/c/` gains nothing more for now.** The workspace's C compiler

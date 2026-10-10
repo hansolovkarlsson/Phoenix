@@ -121,8 +121,8 @@
    * that the file does not carry.
    *
    * A name is added **only if it is not already there**, which is a
-   * conditional -- so it is a table, as every conditional here is:
-   * `lookup([[true, unchanged]], defined(...), changed)`.
+   * conditional: `if defined(...) then unchanged else changed`. Until
+   * 2026-10-10 the notation had no `if` and this was a table lookup.
    *)
   (* The table is **seeded** with the three names the desugarings need.
    * `[a, b]` compiles to `array:of(a, b)` and `#[k = v]` to
@@ -193,11 +193,9 @@
   otherwise runs = "{}{}" of bytes(size($code), 4), bytes($pos.line, 4)
 
   otherwise fileidx  = lookup($files, $pos.file, size($files))
-  otherwise filetext = lookup([[true, $filetext]], defined($files, $pos.file),
-                              "{}{}{}" of $filetext,
+  otherwise filetext = (if defined($files, $pos.file) then $filetext else "{}{}{}" of $filetext,
                                           bytes(size($pos.file), 2), $pos.file)
-  otherwise files    = lookup([[true, $files]], defined($files, $pos.file),
-                              [...$files, [$pos.file, size($files)]])
+  otherwise files    = (if defined($files, $pos.file) then $files else [...$files, [$pos.file, size($files)]])
 
   (* ---- literals ---- *)
 
@@ -226,20 +224,16 @@
        : slot   = lookup(positions($slotnames), $name, -1)
        : oslot  = lookup($outerslot, $name, -1)
        : odepth = lookup($outerdepth, $name, -1)
-       : reaches = lookup([[true, true]], $slot < 0 and $oslot > -1, $reaches)
+       : reaches = (if $slot < 0 and $oslot > -1 then true else $reaches)
        : idx = lookup($names, $name, size($names))
-       : nametext = lookup([[true, $nametext]], defined($names, $name) or $slot > -1 or $oslot > -1,
-                           "{}{}{}" of $nametext, bytes(size($name), 2), $name)
-       : names = lookup([[true, $names]], defined($names, $name) or $slot > -1 or $oslot > -1,
-                        [...$names, [$name, size($names)]])
+       : nametext = (if defined($names, $name) or $slot > -1 or $oslot > -1 then $nametext else "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+       : names = (if defined($names, $name) or $slot > -1 or $oslot > -1 then $names else [...$names, [$name, size($names)]])
          (* A slot of this frame, a slot of one further out, or a global --
           * and the depth is the difference between the two frames' distances
           * from the script, which is why each frame records its own. *)
-       : code = lookup([[true, "{}{}" of bytes(4, 1), bytes($slot, 1)]], $slot > -1,
-                lookup([[true, "{}{}{}" of bytes(6, 1),
+       : code = (if $slot > -1 then "{}{}" of bytes(4, 1), bytes($slot, 1) else (if $oslot > -1 then "{}{}{}" of bytes(6, 1),
                                           bytes($bdepth - $odepth, 1),
-                                          bytes($oslot, 1)]], $oslot > -1,
-                       "{}{}" of bytes(2, 1), bytes($idx, 2))) .
+                                          bytes($oslot, 1) else "{}{}" of bytes(2, 1), bytes($idx, 2))) .
 
   (* ---- a send ----
    *
@@ -248,10 +242,8 @@
    * index and the code that uses it agree without anything being arranged.
    *)
   Send : idx = lookup($names, $message, size($names))
-       : nametext = lookup([[true, $nametext]], defined($names, $message),
-                           "{}{}{}" of $nametext, bytes(size($message), 2), $message)
-       : names = lookup([[true, $names]], defined($names, $message),
-                        [...$names, [$message, size($names)]])
+       : nametext = (if defined($names, $message) then $nametext else "{}{}{}" of $nametext, bytes(size($message), 2), $message)
+       : names = (if defined($names, $message) then $names else [...$names, [$message, size($names)]])
          (* A nested `of` is parenthesised: `of` does not chain, so without
           * them the second one would be reading the first one's arguments. *)
          (* **A send's own four bytes go in after its arguments**, so the line
@@ -288,18 +280,14 @@
                          "\\\""), "\"")
        : value  = join(split($cooked, "\x01"), "\\")
        : idx      = lookup($names, $value, size($names))
-       : nametext = lookup([[true, $nametext]], defined($names, $value),
-                           "{}{}{}" of $nametext, bytes(size($value), 2), $value)
-       : names    = lookup([[true, $names]], defined($names, $value),
-                           [...$names, [$value, size($names)]])
+       : nametext = (if defined($names, $value) then $nametext else "{}{}{}" of $nametext, bytes(size($value), 2), $value)
+       : names    = (if defined($names, $value) then $names else [...$names, [$value, size($names)]])
        : code = "{}{}" of bytes(9, 1), bytes($idx, 2) .
 
   Symbol : value    = slice($name, 2, size($name))
          : idx      = lookup($names, $value, size($names))
-         : nametext = lookup([[true, $nametext]], defined($names, $value),
-                             "{}{}{}" of $nametext, bytes(size($value), 2), $value)
-         : names    = lookup([[true, $names]], defined($names, $value),
-                             [...$names, [$value, size($names)]])
+         : nametext = (if defined($names, $value) then $nametext else "{}{}{}" of $nametext, bytes(size($value), 2), $value)
+         : names    = (if defined($names, $value) then $names else [...$names, [$value, size($names)]])
          : code = "{}{}" of bytes(10, 1), bytes($idx, 2) .
 
   (* ---- floats ----
@@ -346,17 +334,13 @@
   Bind : slot   = lookup(positions($slotnames), $name, -1)
        : oslot  = lookup($outerslot, $name, -1)
        : odepth = lookup($outerdepth, $name, -1)
-       : reaches = lookup([[true, true]], $slot < 0 and $oslot > -1, $reaches)
+       : reaches = (if $slot < 0 and $oslot > -1 then true else $reaches)
        : idx      = lookup($names, $name, size($names))
-       : nametext = lookup([[true, $nametext]], defined($names, $name) or $slot > -1 or $oslot > -1,
-                           "{}{}{}" of $nametext, bytes(size($name), 2), $name)
-       : names    = lookup([[true, $names]], defined($names, $name) or $slot > -1 or $oslot > -1,
-                           [...$names, [$name, size($names)]])
-       : store = lookup([[true, "{}{}" of bytes(5, 1), bytes($slot, 1)]], $slot > -1,
-                 lookup([[true, "{}{}{}" of bytes(7, 1),
+       : nametext = (if defined($names, $name) or $slot > -1 or $oslot > -1 then $nametext else "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+       : names    = (if defined($names, $name) or $slot > -1 or $oslot > -1 then $names else [...$names, [$name, size($names)]])
+       : store = (if $slot > -1 then "{}{}" of bytes(5, 1), bytes($slot, 1) else (if $oslot > -1 then "{}{}{}" of bytes(7, 1),
                                            bytes($bdepth - $odepth, 1),
-                                           bytes($oslot, 1)]], $oslot > -1,
-                        "{}{}" of bytes(3, 1), bytes($idx, 2)))
+                                           bytes($oslot, 1) else "{}{}" of bytes(3, 1), bytes($idx, 2)))
          (* The store goes in after the value, so its line is where the value
           * ends -- the same rule as a send's, and for the same reason. *)
        : runs = "{}{}{}" of $value.runs,
@@ -365,10 +349,8 @@
 
   (* `o:x := v` -- the object, the value, and the name to bind on it. *)
   SetSlot : idx      = lookup($names, $name, size($names))
-          : nametext = lookup([[true, $nametext]], defined($names, $name),
-                              "{}{}{}" of $nametext, bytes(size($name), 2), $name)
-          : names    = lookup([[true, $names]], defined($names, $name),
-                              [...$names, [$name, size($names)]])
+          : nametext = (if defined($names, $name) then $nametext else "{}{}{}" of $nametext, bytes(size($name), 2), $name)
+          : names    = (if defined($names, $name) then $names else [...$names, [$name, size($names)]])
           : runs = join([$to.runs, $value.runs,
                          bytes(3, 4), bytes($pos.endline, 4)], "")
           : code = "{}{}{}{}" of $to.code, $value.code,
@@ -392,10 +374,8 @@
    * after a branch expects a value on the stack whichever way it went.
    *)
   IfTrue : idx      = lookup($names, "ifTrue", size($names))
-         : nametext = lookup([[true, $nametext]], defined($names, "ifTrue"),
-                             "{}{}{}" of $nametext, bytes(6, 2), "ifTrue")
-         : names    = lookup([[true, $names]], defined($names, "ifTrue"),
-                             [...$names, ["ifTrue", size($names)]])
+         : nametext = (if defined($names, "ifTrue") then $nametext else "{}{}{}" of $nametext, bytes(6, 2), "ifTrue")
+         : names    = (if defined($names, "ifTrue") then $names else [...$names, ["ifTrue", size($names)]])
          : joined   = join(each($body.code, "{}\x12"), "")
          : bodycode = lookup([[0, bytes(1, 1)]], size($body),
                              slice($joined, 1, size($joined) - 1))
@@ -417,10 +397,8 @@
   (* Inverted: the branch that *is* taken runs the body, so falling through is
    * the true case and answers nil. *)
   IfFalse : idx      = lookup($names, "ifFalse", size($names))
-          : nametext = lookup([[true, $nametext]], defined($names, "ifFalse"),
-                              "{}{}{}" of $nametext, bytes(7, 2), "ifFalse")
-          : names    = lookup([[true, $names]], defined($names, "ifFalse"),
-                              [...$names, ["ifFalse", size($names)]])
+          : nametext = (if defined($names, "ifFalse") then $nametext else "{}{}{}" of $nametext, bytes(7, 2), "ifFalse")
+          : names    = (if defined($names, "ifFalse") then $names else [...$names, ["ifFalse", size($names)]])
           : joined   = join(each($body.code, "{}\x12"), "")
           : bodycode = lookup([[0, bytes(1, 1)]], size($body),
                               slice($joined, 1, size($joined) - 1))
@@ -439,10 +417,8 @@
                          $bodycode], "") .
 
   IfElse : idx      = lookup($names, "ifElse", size($names))
-         : nametext = lookup([[true, $nametext]], defined($names, "ifElse"),
-                             "{}{}{}" of $nametext, bytes(6, 2), "ifElse")
-         : names    = lookup([[true, $names]], defined($names, "ifElse"),
-                             [...$names, ["ifElse", size($names)]])
+         : nametext = (if defined($names, "ifElse") then $nametext else "{}{}{}" of $nametext, bytes(6, 2), "ifElse")
+         : names    = (if defined($names, "ifElse") then $names else [...$names, ["ifElse", size($names)]])
          : yjoined  = join(each($yes.code, "{}\x12"), "")
          : yescode  = lookup([[0, bytes(1, 1)]], size($yes),
                              slice($yjoined, 1, size($yjoined) - 1))
@@ -473,10 +449,8 @@
   (* The shortcut answers a constant -- tag 3 and a byte -- so that rebinding
    * the global `false` cannot make the two paths disagree. *)
   AndThen : idx      = lookup($names, "and", size($names))
-          : nametext = lookup([[true, $nametext]], defined($names, "and"),
-                              "{}{}{}" of $nametext, bytes(3, 2), "and")
-          : names    = lookup([[true, $names]], defined($names, "and"),
-                              [...$names, ["and", size($names)]])
+          : nametext = (if defined($names, "and") then $nametext else "{}{}{}" of $nametext, bytes(3, 2), "and")
+          : names    = (if defined($names, "and") then $names else [...$names, ["and", size($names)]])
           : cidx     = $nconsts
           : consts   = "{}{}{}" of $consts, bytes(3, 1), bytes(0, 1)
           : nconsts  = $nconsts + 1
@@ -500,10 +474,8 @@
                          bytes(0, 1), bytes($cidx, 2)], "") .
 
   OrElse : idx      = lookup($names, "or", size($names))
-         : nametext = lookup([[true, $nametext]], defined($names, "or"),
-                             "{}{}{}" of $nametext, bytes(2, 2), "or")
-         : names    = lookup([[true, $names]], defined($names, "or"),
-                             [...$names, ["or", size($names)]])
+         : nametext = (if defined($names, "or") then $nametext else "{}{}{}" of $nametext, bytes(2, 2), "or")
+         : names    = (if defined($names, "or") then $names else [...$names, ["or", size($names)]])
          : cidx     = $nconsts
          : consts   = "{}{}{}" of $consts, bytes(3, 1), bytes(1, 1)
          : nconsts  = $nconsts + 1
@@ -562,10 +534,8 @@
    * The condition has to answer a boolean, and unlike `whileTrue` there is a
    * selector to say so with when it does not. *)
   DoUntil : idx      = lookup($names, "doUntil", size($names))
-          : nametext = lookup([[true, $nametext]], defined($names, "doUntil"),
-                              "{}{}{}" of $nametext, bytes(7, 2), "doUntil")
-          : names    = lookup([[true, $names]], defined($names, "doUntil"),
-                              [...$names, ["doUntil", size($names)]])
+          : nametext = (if defined($names, "doUntil") then $nametext else "{}{}{}" of $nametext, bytes(7, 2), "doUntil")
+          : names    = (if defined($names, "doUntil") then $names else [...$names, ["doUntil", size($names)]])
           : bjoined  = join(each($body.code, "{}\x12"), "")
           : bodycode = lookup([[0, bytes(1, 1)]], size($body),
                               slice($bjoined, 1, size($bjoined) - 1))
@@ -704,7 +674,7 @@
           (* name, arity, slots, flags, body. The flag is `IS_BLOCK`; the
            * `CAPTURES` flag is set only for a chunk containing `OP_OUTER`,
            * and this backend refuses those, so it is never on. *)
-        : flags  = lookup([[true, 3]], $reaches, 1)
+        : flags  = (if $reaches then 3 else 1)
         : record = join([bytes(5, 2), "block", bytes(size($params), 2),
                          bytes($nslots, 2), bytes($flags, 2), $chunk], "")
 
@@ -726,11 +696,9 @@
            * other. The restore and the intern are one clause because the
            * table they both answer with is one value. *)
         : fileidx  = lookup($heldfl, $pos.file, size($heldfl))
-        : filetext = lookup([[true, $heldft]], defined($heldfl, $pos.file),
-                            "{}{}{}" of $heldft,
+        : filetext = (if defined($heldfl, $pos.file) then $heldft else "{}{}{}" of $heldft,
                                         bytes(size($pos.file), 2), $pos.file)
-        : files    = lookup([[true, $heldfl]], defined($heldfl, $pos.file),
-                            [...$heldfl, [$pos.file, size($heldfl)]]) .
+        : files    = (if defined($heldfl, $pos.file) then $heldfl else [...$heldfl, [$pos.file, size($heldfl)]]) .
 
   (* ---- a group ----
    *
@@ -750,13 +718,10 @@
                               "{}\x01\x00\x00\x00{}"), "")
         : runs   = slice($rawruns, 1, size($rawruns) - 8)
           (* The frame needs room for the deepest group in it, not the last. *)
-        : nslots = lookup([[true, $nslots]], $nslots > size($slotnames),
-                          size($slotnames))
+        : nslots = (if $nslots > size($slotnames) then $nslots else size($slotnames))
           (* And the names for those slots, kept the same way: the deepest
            * group's, not the last one's. *)
-        : frameslots = lookup([[true, $frameslots]],
-                              size($frameslots) > size($slotnames),
-                              $slotnames) .
+        : frameslots = (if size($frameslots) > size($slotnames) then $frameslots else $slotnames) .
 
   (* ---- the file ----
    *

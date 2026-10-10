@@ -7690,3 +7690,64 @@ waiting on Futamura; it no longer does. Both notes are `done` and in
 `docs/handoffs/closed/`. Ouroboros, the one notice of ours still
 unanswered at the last closeout, has answered it, `done`, in its own
 `closed/`.
+
+## 2026-10-10: `if`, and the 1,072 tables it replaced
+
+Hans asked whether the notation has structs and arrays, and then whether
+`c.phx` would be easier, shorter or more to the point with mutation, a map
+or a dictionary. The answer looked at `c.phx` rather than at the notation.
+A map is already there: an environment, `bind` and `lookup`, and the C
+description's tables of linkage, tags and typedefs are written that way.
+Mutation is there as far as a walk can have it: a thread accumulates, and a
+`down` clause gives it a scope that is put back on the way out. Real
+mutation would break the rule that an attribute is computed once per node,
+and that rule is what makes a pass checkable, so it was not proposed.
+
+**What the count found was the missing `if`.** `lookup([[true, a]], c, b)`
+on 418 of `c.phx`'s 4,854 lines, 876 times, nested, and both arms worked
+out every time. ROADMAP 3.5 had asked for exactly this to be recognised as
+the decision arriving, and § 1 of the postmortem had scored it held twice.
+Hans's direction was that the C exercise exists to find what Phoenix lacks,
+so the gap is closed in Phoenix.
+
+**The form is an expression, `if c then a else b`**, read where a value can
+start, with each arm running as far as an expression does. So `else if`
+needs nothing, and an `if` inside an operator wants parentheses, which is
+how ML reads it. The condition must be a boolean, by the no-truthiness rule
+`not` and `and` already keep. The `else` is required. Only the arm taken is
+evaluated, which is the one thing it adds over the table and the thing awk
+had changed its grammar to avoid needing. `if`, `then` and `else` are
+words only where an expression starts or an arm ends, so `IfElse(then: $t,
+else: $f)` in `calc.phx` still reads. `languages/phx/phoenix.phx`, whose
+grammar reserves every word it uses, had to add the three to `word` for
+the same reason it already lists `of` and `down`.
+
+**Every table was rewritten, by a script, and held three ways.** The
+script parses each argument list and its strings and comments, so that a
+format in the answer, `[true, "{}.{}" of a, b]`, takes its commas with it,
+as the reader takes them. It converted 876 in `c.phx`, 144 in
+`c-arm64.phx`, 37 in `solveig-sob.phx`, 6 in `awk-c.phx`, 5 in
+`solvm-sob.phx` and 4 in `z80.phx`. Then: `make test` gave the same lines
+with the old file and the new, but for the Solveig line counting programs
+that do not repeat themselves, which moved between two runs of the old
+file as well; all 354 C oracle programs, run through
+`c-arm64.phx` with both, gave byte-identical assembly and byte-identical
+refusals; and `phoenix.phx` reads every description. The time across the
+354 was 26.1 seconds before and 27.9 after, which is noise, so no speed is
+claimed for it. One `make test` run in the middle was spoiled by editing
+`tests/run.sh` while it ran: a shell reads its script as it goes, and the
+edit moved the text under it. It was run again with the tree left alone.
+
+**The second gap proposed was not one.** It was offered that a pass
+cannot build a record, and that this is why `c.phx`'s types are text,
+`a:24:2:4|b:4:0:4`. A probe built `Ty(kind: "int", size: 3)` in a clause
+and read `$t.size`, and 2026-09-30's entry says the text was chosen over a
+list that read better, by ROADMAP 3.4's rule. A typed record therefore
+needs no new mechanism; it needs `c.phx`'s types rewritten as nodes, which
+is C work, and waits with the hold. The postmortem has both failures as
+§ 39.
+
+The comments in the Pascal, awk, Solveig and SolVM descriptions that said
+"there is no `if` in the notation" now say why each choice is written the
+way it is, which in most of them was a reason that never needed the
+absence.

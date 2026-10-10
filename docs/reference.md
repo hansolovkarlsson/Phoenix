@@ -792,6 +792,16 @@ or                          short-circuits, left to right
 of                          formatting, loosest
 ```
 
+**`if c then a else b`** chooses, and works out only the arm it takes, so the
+other may be something that would fail. `c` must be a boolean. The `else` is
+required, and it runs as far as an expression does, so `else if` chains and an
+`if` inside an operator wants parentheses:
+
+```
+: out  = if $n = 0 then "zero" else if $n mod 2 = 0 then "even" else "odd"
+: safe = if $n = 0 then 0 else 100 div $n
+```
+
 Evaluation is **left to right everywhere**, and the operands of an operator are
 evaluated before it.
 
@@ -874,9 +884,10 @@ Block  : down indent = "{}    " of $indent
 
 A second `Block` rule further down would never be reached.
 
-Shape matching is how a clause says that two spellings differ, rather than a
-conditional inside one clause — and there is no conditional in the notation, on
-purpose ([ROADMAP 3.5](ROADMAP.md#35-conditionals-in-the-meta-language)):
+Shape matching is how a clause says that two spellings differ, and it is still
+the first thing to reach for. A choice that is about a node's shape belongs in
+the pattern; `if` ([§ 9](#9-expressions)) is for a choice about a value the
+pattern cannot see:
 
 ```
 Logical(op: "and") : out = "({} && {})" of $left.out, $right.out .
@@ -916,7 +927,7 @@ naturally happens and nobody implemented it.
 | `empty` | the empty environment. A bare lower-case name is a call with no arguments, so `empty()` is the same thing |
 | `bind(env, name, value)` | a new environment with that pair on the front. `name` may be a **list** of names — as many values as names binds them pairwise, one value binds every name to it |
 | `lookup(env, name)` | the value, or `nil` |
-| `lookup(env, name, default)` | the value, or that default — which is what a notation with no conditional needs |
+| `lookup(env, name, default)` | the value, or that default. Both are worked out, so a choice where one side can fail is an `if` |
 | `defined(env, name)` | a boolean |
 | `positions(list)` | a table of `[value, index]` pairs. **The index is zero-based**, which is what turns a list of names into slot numbers. A repeated element keeps its first position, matching what `lookup` would answer |
 
@@ -937,9 +948,10 @@ Keys are compared the way `=` compares, not as text only.
 | --- | --- |
 | `quotient(a, b)`, `remainder(a, b)` | division that **truncates toward zero**, as C, Java and Pascal do |
 
-These exist because there is no way to write truncation in terms of flooring in
-a notation with no conditional — and without them an emit pass and an eval pass
-for the same language quietly disagree about negative division.
+These were added because truncation could not be written in terms of flooring
+while the notation had no conditional, and without them an emit pass and an
+eval pass for the same language quietly disagree about negative division. They
+stay because the name says which rule a pass means.
 
 | | |
 | --- | --- |

@@ -209,15 +209,11 @@
   otherwise nnew = size($nm) > 0 and not defined($names, $iw)
   otherwise knew = size($kn) > 0 and not defined($consts, $ik)
 
-  otherwise names     = lookup([[true, bind($names, $iw, size($names))]],
-                               $nnew, $names)
-  otherwise nametext  = lookup([[true, "{}{}{}"
-                                   of $nametext, bytes(size($iw), 2), $iw]],
-                               $nnew, $nametext)
-  otherwise consts    = lookup([[true, bind($consts, $ik, size($consts))]],
-                               $knew, $consts)
-  otherwise consttext = lookup([[true, "{}{}" of $consttext, $ik]],
-                               $knew, $consttext)
+  otherwise names     = (if $nnew then bind($names, $iw, size($names)) else $names)
+  otherwise nametext  = (if $nnew then "{}{}{}"
+                                   of $nametext, bytes(size($iw), 2), $iw else $nametext)
+  otherwise consts    = (if $knew then bind($consts, $ik, size($consts)) else $consts)
+  otherwise consttext = (if $knew then "{}{}" of $consttext, $ik else $consttext)
 
   (* ---- a block is its own chunk ----
    *
@@ -419,7 +415,7 @@
            : lineruns = join(each(bytes(sizes($items.code), 4),
                                   bytes($items.pos.line, 4), "{}{}"))
            : methods  = join(flatten($items.record))
-           : flags    = lookup([[true, 3]], $owncaptures, 1)
+           : flags    = (if $owncaptures then 3 else 1)
            : chunk = join([
                bytes($ownnnames, 4), $ownnametext,
                bytes($ownnconsts, 4), $ownconsttext,

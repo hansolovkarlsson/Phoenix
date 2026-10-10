@@ -45,10 +45,10 @@
   TypeDef   : line = "  type      {} = {}" of $name, $type.show .
   VarDecl   : line = "  var       {} : {}" of join($names, ", "), $type.show .
 
-  (* Two clauses rather than a conditional inside one. There is no `if` in
-   * the notation, and matching on the shape is what stands in for it --
-   * which needs `true` in a pattern to be the value and not a name that
-   * binds anything, and it is. *)
+  (* Two clauses rather than a conditional inside one. The choice is about
+   * the node's shape, and matching on the shape is how the notation says
+   * one -- which needs `true` in a pattern to be the value and not a name
+   * that binds anything, and it is. *)
   Param(byref: true)  : show = "var {} : {}" of join($names, ", "), $type .
   Param(byref: false) : show = "{} : {}"     of join($names, ", "), $type .
   Procedure : line = "  procedure {}({})" of $name, join($params.show, "; ") .

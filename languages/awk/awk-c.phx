@@ -72,17 +72,14 @@
                            ["SUBSEP", true], ["FNR", true],
                            ["FILENAME", true]], $name)
       : known   = $special or defined($names, $name)
-      : decls   = lookup([[true, $decls]], $known,
-                         "{}static Cell v_{};\n" of $decls, $name)
-      : inits   = lookup([[true, $inits]], $known,
-                         "{}  v_{} = uninit();\n" of $inits, $name)
+      : decls   = (if $known then $decls else "{}static Cell v_{};\n" of $decls, $name)
+      : inits   = (if $known then $inits else "{}  v_{} = uninit();\n" of $inits, $name)
       (* And the same names again as a table, so that a `name=value` on the
        * command line can find the variable it is about. awk assigns those
        * when the reader reaches them, which is a run-time question about a
        * name, and this is the only place the answer exists. *)
-      : gtable  = lookup([[true, $gtable]], $known,
-                         "{}  {{\"{}\", &v_{}}},\n" of $gtable, $name, $name)
-      : names   = lookup([[true, $names]], $known, [...$names, [$name, true]]) .
+      : gtable  = (if $known then $gtable else "{}  {{\"{}\", &v_{}}},\n" of $gtable, $name, $name)
+      : names   = (if $known then $names else [...$names, [$name, true]]) .
 
   Program : declarations = $decls
           : initialisers = $inits
@@ -312,8 +309,9 @@
   Call(name: "int")    : out = "mknum((double)(long long)num_of({}))"
                                  of join($args.out, "") .
   (* `length` with no argument is the length of the record, so the record is
-   * put after the arguments and the first of them is taken -- which is how a
-   * notation with no conditional says "this, or that when there is no this". *)
+   * put after the arguments and the first of them is taken -- which is how
+   * the notation said "this, or that when there is no this" before it had an
+   * `if`, and is still the shortest way to say it. *)
   Call(name: "length") : out = "mknum((double)strlen(str_of({})))"
                                  of at([...$args.out, "fld_of(mknum(0))"], 1) .
   Call(name: "substr")  : out = "awk_substr({}, {}, {}, {})"
@@ -402,7 +400,7 @@
    * field is read before an attribute. The checks say so when a description
    * tries it, which is how this one found out. *)
   Nothing : out = "" .
-  For : test = lookup([[true, ""]], $cond.out = "", "truth_of({})" of $cond.out)
+  For : test = (if $cond.out = "" then "" else "truth_of({})" of $cond.out)
       : out  = "  for ({}; {}; {}) {{\n{}  }}\n"
                  of $init.out, $test, $step.out, $body.stmt
       : stmt = $out .
@@ -481,8 +479,7 @@
 
   (* A program of nothing but `BEGIN` does not read its input, which is what
    * lets `awk 'BEGIN {{ print 1 }}' < /dev/tty` answer rather than wait. *)
-  Program : loop = lookup([[true, ""]], join($items.reads, "") = "",
-                          "  while (next_record()) {{\n{}    awk_next: ;\n  }}\n"
+  Program : loop = (if join($items.reads, "") = "" then "" else "  while (next_record()) {{\n{}    awk_next: ;\n  }}\n"
                             of join($items.rules, ""))
           : out = join([
               $runtime,

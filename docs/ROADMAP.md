@@ -182,8 +182,9 @@ nobody noticed.
 
 The rule an entry has to meet: **a pass for a real language needed it, and it
 could not be written in the notation.** `quotient` and `remainder` are the
-worked example — target languages disagree about negative division, and
-truncation cannot be written in terms of flooring without a conditional.
+worked example: target languages disagree about negative division, and
+truncation could not be written in terms of flooring while the notation had
+no conditional.
 
 The `.sob` backend added three, and each says what was missing:
 
@@ -228,42 +229,9 @@ what it costs is the chance to see the shape of the rest.**
 
 ### 3.5 Conditionals in the meta-language
 
-There is no `if`. Clauses match on shape, and a clause that needs a choice is
-evidence for another clause:
-
-```
-Binary(op: "+") : val = $left.val + $right.val .
-Binary(op: "-") : val = $left.val - $right.val .
-```
-
-This is the assumption in the design most likely to be wrong, and it is written
-here so that the first thing it cannot express is recognised as this decision
-arriving rather than as a puzzle.
-
-**It has not arrived.** Tables-as-conditionals carried an entire bytecode
-backend — three-way choices between a local, an outer slot and a global, an
-append-if-absent on four tables at once — without wanting an `if`. What gave
-way first was something else entirely: see 3.6.
-
-**But it has a shape, and awk found it.** `lookup` is a function, so **both
-answers are worked out** before it chooses. That is fine when both can be, and
-it is not when one of them cannot:
-
-```
-lookup([[true, ""]], $init = nil, "{};" of $init.out)    (* fails on the nil *)
-```
-
-A conditional would have skipped the branch it did not take. What was done
-instead is worth more than the `if` would have been: the **grammar** changed so
-that there is no nil. An omitted `for` part builds a `Nothing` node that renders
-as nothing, every part is emitted the same way whether it is there or not, and
-the question disappears rather than being answered.
-
-That is the third time the answer to "the notation cannot say this" has been
-"say something else earlier" — see [1.3](COMPLETED.md#13-a-way-for-a-description-to-share-a-computation)
-and [2.4](COMPLETED.md#24-inlining-a-block--from-solas). It is not proof that an `if` is
-never wanted. It is one more case where wanting one was a sign that a tree had
-the wrong shape.
+*Left on 2026-10-10, built:* `if c then a else b`, which works out only the arm
+it takes. [COMPLETED.md](COMPLETED.md#35-conditionals-in-the-meta-language) has
+what arrived, and the 1,072 tables it replaced.
 
 ### 3.6 Threaded and inherited wanted to be one thing
 
@@ -420,9 +388,9 @@ closing the uses graph over itself.
 that, written down. A pass that adds one step of reachability, run `until` the
 table settles, would now say it; nobody has written that pass, because `fpc`
 already refuses the program and no one has asked for the diagnostic. It is a different absence from
-[3.5](#35-conditionals-in-the-meta-language): a conditional is a thing the
-notation says *no* to on purpose, and this is a thing nothing has yet made a
-case for.
+[3.5](COMPLETED.md#35-conditionals-in-the-meta-language): a conditional was a
+thing the notation said *no* to on purpose until a description made the case,
+and this is a thing nothing has yet made a case for.
 
 *A `thread` declared after the rules that assign it was silently not a thread,
 and is now refused.* Kept here because the shape is worth having written down.

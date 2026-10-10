@@ -153,6 +153,9 @@ or                  short-circuits
 of                  formatting, loosest
 ```
 
+`if c then a else b` works out only the arm it takes; `c` must be a boolean
+and the `else` is required.
+
 Six kinds of value: **integer** (64-bit, traps on overflow), **float**
 (IEEE 754), **text** (bytes, one-based, both ends inclusive), **boolean**,
 **nil**, **node** and **list**. `1 + 1.0` is an error — nothing converts

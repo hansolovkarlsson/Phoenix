@@ -40,6 +40,8 @@ case = number -> Case(text: $1) .
        : ordered    = 1 < "1"
        (* "not takes a boolean ... Nothing else converts to a boolean." *)
        : notted     = not 1
+       (* "There is no truthiness: a condition must be a boolean" *)
+       : iffed      = if 1 then 2 else 3
 
        (* "nil: an error. node, list: an error." -- a default rendering for a
         * node is a thing that would silently appear in generated code *)

@@ -529,6 +529,19 @@ Value *eval_expr(Eval *e, const Expr *x)
     case X_CALL:
         return eval_call(e, x);
 
+    /* Only the arm taken is worked out, which is the whole of what this adds
+     * over `lookup`. The condition is a boolean or an error, as `and`'s
+     * operands are: there is no truthiness. */
+    case X_IF: {
+        Value *c = eval_expr(e, x->kids[0]);
+        if (!c) return NULL;
+        if (value_failed(c)) return c;
+        if (c->kind != V_BOOL)
+            return eval_fail(e, x, "'if' wants a boolean, and this is %s",
+                             value_kind_name(c));
+        return eval_expr(e, x->kids[c->ival ? 1 : 2]);
+    }
+
     case X_SPREAD:
         return eval_fail(e, x, "'...' belongs inside a list");
     }
