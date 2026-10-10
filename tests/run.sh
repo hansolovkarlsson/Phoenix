@@ -132,6 +132,63 @@ else
     report fail "a program that never stops printing is stopped, and says so" "got: $out"
 fi
 
+# **The harnesses run at the same time as everything else**, since
+# 2026-10-10. One after another they took seven and a half minutes on a
+# twelve-core machine, the C oracle four of them alone, against a cap of ten
+# under which a loaded machine had already stopped it once. Each writes only
+# under its own directory in build/, so none can see another; each is started
+# here, once the limit above has been shown to work, and its output is
+# collected where its check has always been, so what is printed, and in what
+# order, is what it was. A harness behind a guard is started behind the same
+# guard, and one `collect` finds not started it runs there and then, as
+# before. PHX_SERIAL=1 starts none, for a run whose timing is to be read.
+hdir="$root/build/harness"; rm -rf "$hdir"; mkdir -p "$hdir"
+started=""
+hkey() { printf '%s' "${1#"$root"/}" | tr '/' '_'; }
+start() {
+    [ -n "${PHX_SERIAL:-}" ] && return 0
+    _k=$(hkey "$1")
+    : > "$hdir/$_k.out"
+    ( harness "$1" > "$hdir/$_k.out" 2>&1
+      echo $? > "$hdir/$_k.tmp"; mv "$hdir/$_k.tmp" "$hdir/$_k.st" ) &
+    started="$started $!"
+}
+collect() {
+    _k=$(hkey "$1")
+    [ -f "$hdir/$_k.out" ] || { harness "$1"; return; }
+    while [ ! -f "$hdir/$_k.st" ]; do sleep 1; done
+    cat "$hdir/$_k.out"
+    return "$(cat "$hdir/$_k.st")"
+}
+# Each `limit` passes a signal on to everything under it, so a Ctrl-C, which
+# reaches them all, leaves nothing behind. A signal to this shell alone is
+# acted on once the `collect` it is waiting in returns, and then stops the
+# rest.
+stop_harnesses() { for _p in $started; do pkill -TERM -P "$_p" 2>/dev/null; done; }
+trap stop_harnesses EXIT
+trap 'stop_harnesses; exit 130' INT TERM
+
+# The slowest first, so it has the longest to run before it is wanted.
+[ "$(uname -m)" = "arm64" ] && start "$root/languages/c/tests/oracle/run.sh"
+start "$root/tests/counts.sh"
+command -v fpc >/dev/null 2>&1 && start "$root/languages/pascal/tests/oracle/run.sh"
+start "$root/languages/solveig/tests/roundtrip.sh"
+if [ -x "${SOLVEIG:-$root/../Solveig}/bin/solas" ]; then
+    start "$root/languages/solveig/tests/conformance/run.sh"
+    start "$root/languages/solveig/tests/bytecode.sh"
+fi
+start "$root/languages/units/tests/run.sh"
+start "$root/tests/tutorials.sh"
+start "$root/languages/solvm/tests/run.sh"
+command -v z80asm >/dev/null 2>&1 && start "$root/languages/z80/tests/oracle/run.sh"
+start "$root/languages/awk/tests/roundtrip.sh"
+start "$root/languages/awk/tests/oracle.sh"
+start "$root/languages/awk/tests/backend/run.sh"
+if [ "$(uname -m)" = "arm64" ]; then
+    start "$root/languages/c/tests/abi/run.sh"
+    start "$root/languages/c/tests/link/run.sh"
+fi
+
 echo "grammars it should accept"
 accepts "calc.phx"                  "$root/languages/calc/calc-c.phx"
 accepts "an empty production"       "$root/tests/grammars/empty-production.phx"
@@ -774,7 +831,7 @@ fi
 # counts on 2026-09-05 -- four drifted over three days, two of them two hours
 # old. The prose in these documents is executed a dozen ways above; the numbers
 # were executed by nobody. tests/counts.sh has the reasoning.
-if cnt=$(harness "$root/tests/counts.sh" 2>&1); then
+if cnt=$(collect "$root/tests/counts.sh" 2>&1); then
     n=$(printf '%s' "$cnt" | grep -c '^  ok')
     report pass "$n counts in the records match the tree"
 else
@@ -1523,7 +1580,7 @@ done
 
 echo "the oracle"
 if command -v fpc >/dev/null 2>&1; then
-    if oracle=$(harness "$root/languages/pascal/tests/oracle/run.sh" 2>&1); then
+    if oracle=$(collect "$root/languages/pascal/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$oracle" | grep -c '^  ok')
         report pass "$n Pascal programs agree with fpc -Miso"
     else
@@ -1540,7 +1597,7 @@ fi
 # implementation of it -- see languages/solveig/README.md.
 echo "Solveig"
 accepts "the description reads" "$root/languages/solveig/solveig.phx"
-if rt=$(harness "$root/languages/solveig/tests/roundtrip.sh" 2>&1); then
+if rt=$(collect "$root/languages/solveig/tests/roundtrip.sh" 2>&1); then
     n=$(printf '%s' "$rt" | awk '/round-trip to an identical tree/{print $1}')
     report pass "$n Solveig files parse, render, and parse to the same tree"
 else
@@ -1550,14 +1607,14 @@ fi
 echo "Solveig conformance"
 sol=${SOLVEIG:-$root/../Solveig}
 if [ -x "$sol/bin/solas" ]; then
-    if conf=$(harness "$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
+    if conf=$(collect "$root/languages/solveig/tests/conformance/run.sh" 2>&1); then
         n=$(printf '%s' "$conf" | grep -c '^  ok')
         report pass "$n Solveig programs conform"
     else
         report fail "Solveig programs conform"
         printf '%s\n' "$conf" | grep -A6 FAIL | sed 's/^/        /' | head -12
     fi
-    if bc=$(harness "$root/languages/solveig/tests/bytecode.sh" 2>&1); then
+    if bc=$(collect "$root/languages/solveig/tests/bytecode.sh" 2>&1); then
         printf '%s\n' "$bc" | grep -E '^[0-9]+ programs|^  and [0-9]+ trace' \
             | while IFS= read -r line; do
                   printf '  ok    %s\n' "$(printf '%s' "$line" | sed 's/^  and /and /')"
@@ -1578,7 +1635,7 @@ fi
 # them. languages/units/README.md has the answer.
 echo "Pascal units"
 accepts "the description reads" "$root/languages/units/units.phx"
-if un=$(harness "$root/languages/units/tests/run.sh" 2>&1); then
+if un=$(collect "$root/languages/units/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$un" | grep -c '^  ok')
     report pass "$n checks, and the two divergences are still the ones written down"
 else
@@ -1591,7 +1648,7 @@ fi
 # back appears verbatim in the page -- so a pasted output that drifts fails
 # here. Reading them did not find what running them did.
 echo "Tutorials"
-if tut=$(harness "$root/tests/tutorials.sh" 2>&1); then
+if tut=$(collect "$root/tests/tutorials.sh" 2>&1); then
     n=$(printf '%s' "$tut" | grep -c '^  ok')
     report pass "$n steps of docs/tutorial-picture.md and docs/tutorial-assembler.md"
 else
@@ -1607,7 +1664,7 @@ fi
 echo "SolVM assembly"
 accepts "the language reads"  "$root/languages/solvm/solvm.phx"
 accepts "and the assembler"   "$root/languages/solvm/solvm-sob.phx"
-if sa=$(harness "$root/languages/solvm/tests/run.sh" 2>&1); then
+if sa=$(collect "$root/languages/solvm/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$sa" | grep -c '^  ok')
     report pass "$n checks: the bytes, the round trip, the refusals$(printf '%s' "$sa" | grep -q 'solas' && printf ', solas, and the tutorial')"
 else
@@ -1670,7 +1727,7 @@ prints "and one that needs a fourth" "131" \
 prints "which the first walk left three bytes long" "134" \
        --driver code --show size "$root/languages/z80/z80.phx" "$o/three-rounds.z80"
 if command -v z80asm >/dev/null 2>&1; then
-    if za=$(harness "$root/languages/z80/tests/oracle/run.sh" 2>&1); then
+    if za=$(collect "$root/languages/z80/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$za" | grep -c '^  ok')
         report pass "$n Z80 programs assemble to the bytes z80asm makes, exactly"
     else
@@ -1688,7 +1745,7 @@ fi
 # `corpus/` is awk that e2fsprogs, ncurses and vim ship.
 echo "awk"
 accepts "the description reads" "$root/languages/awk/awk.phx"
-if rt=$(harness "$root/languages/awk/tests/roundtrip.sh" 2>&1); then
+if rt=$(collect "$root/languages/awk/tests/roundtrip.sh" 2>&1); then
     report pass "$(printf '%s' "$rt" | tail -1)"
 else
     report fail "awk programs round-trip"
@@ -1743,7 +1800,7 @@ refuses "a call with more arguments than parameters" "and this gives 2" \
 accepts "a function called above where it is defined" \
         --driver check "$a" "$root/languages/awk/tests/conformance/functions.awk"
 
-if orc=$(harness "$root/languages/awk/tests/oracle.sh" 2>&1); then
+if orc=$(collect "$root/languages/awk/tests/oracle.sh" 2>&1); then
     report pass "$(printf '%s' "$orc" | tail -1)"
 else
     report fail "rendered awk does the same thing"
@@ -1752,7 +1809,7 @@ fi
 
 # The conformance rule with a third language under it: awk compiled to C, run,
 # and compared with what `/usr/bin/awk` prints on the same input.
-if be=$(harness "$root/languages/awk/tests/backend/run.sh" 2>&1); then
+if be=$(collect "$root/languages/awk/tests/backend/run.sh" 2>&1); then
     report pass "$(printf '%s' "$be" | tail -1)"
 else
     report fail "awk compiled to C prints what awk prints"
@@ -3238,7 +3295,7 @@ else
     report fail "every refused C program is asserted by name" "not named:$unnamed"
 fi
 if [ "$(uname -m)" = "arm64" ]; then
-    if co=$(harness "$root/languages/c/tests/oracle/run.sh" 2>&1); then
+    if co=$(collect "$root/languages/c/tests/oracle/run.sh" 2>&1); then
         n=$(printf '%s' "$co" | grep -c '^  ok')
         report pass "$n C programs exit with what cc makes them exit with"
     else
@@ -3249,7 +3306,7 @@ if [ "$(uname -m)" = "arm64" ]; then
     # a caller and a callee in two files, each compiled by each. The oracle
     # cannot see a struct passed wrongly when both ends are Phoenix's, and
     # this is the only witness for the caller's copy of a large one.
-    if ab=$(harness "$root/languages/c/tests/abi/run.sh" 2>&1); then
+    if ab=$(collect "$root/languages/c/tests/abi/run.sh" 2>&1); then
         report pass "structs pass between Phoenix's code and cc's, both ways"
     else
         report fail "structs pass between Phoenix's code and cc's, both ways"
@@ -3257,7 +3314,7 @@ if [ "$(uname -m)" = "arm64" ]; then
     fi
     # **Linkage, which one file cannot show**, since 2026-09-29, ROADMAP
     # 6.10: two files each with `static` names of the other's, linked.
-    if lk=$(harness "$root/languages/c/tests/link/run.sh" 2>&1); then
+    if lk=$(collect "$root/languages/c/tests/link/run.sh" 2>&1); then
         report pass "a static name is its own file's, linked beside another"
     else
         report fail "a static name is its own file's, linked beside another"
@@ -3273,7 +3330,12 @@ else
 fi
 
 # The log of every program stopped anywhere above. The two the limit's own
-# checks stop on purpose are not in it.
+# checks stop on purpose are not in it. Every harness started has finished
+# before it is read, collected or not, so none is still writing to it.
+for _o in "$hdir"/*.out; do
+    [ -f "$_o" ] || continue
+    while [ ! -f "${_o%.out}.st" ]; do sleep 1; done
+done
 echo "the whole run"
 if [ ! -s "$PHX_LIMIT_LOG" ]; then
     report pass "every program the suite ran finished"

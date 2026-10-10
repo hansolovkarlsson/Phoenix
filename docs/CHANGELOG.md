@@ -16,6 +16,18 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: `make test` in half the time
+
+**The suite's harnesses run at the same time**, each beside the rest of
+the suite, rather than one after another. On a twelve-core machine a run
+took 450 seconds before and 236 after, with the same 752 checks printing
+the same lines in the same order. `PHX_SERIAL=1 make test` runs them one
+at a time, as before.
+
+**Tests:** 752 → 752, unchanged.
+
+---
+
 ## 2026-10-10: a written-out compiler is C11
 
 **`phx -o` writes a compiler that is C11 to the letter.** A table the

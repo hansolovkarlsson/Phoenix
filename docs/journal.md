@@ -7917,3 +7917,30 @@ file lost one only because its first claim shared a line with `Case`.
 `Case` has its own line in both now, as in `define.phx`; the count itself
 was left alone, and a claim written on that line again would hide the
 same way.
+
+**The harnesses run at the same time now.** Asked what else could be
+improved, the one answer not already on a page was the suite itself:
+450 seconds on a twelve-core machine, every check one after another, and
+the C oracle four minutes of it alone against the ten each harness is
+given, a cap a loaded machine had already stopped it at once. The fifteen
+harnesses are separate scripts, and each writes only under a directory of
+`build/` that no other names, so `tests/run.sh` starts all of them once
+the limit's own checks have passed, behind the same guards their checks
+have, and collects each one's output where its check has always been.
+What is printed, and in what order, is what it was. The same run took 236
+seconds at the same load of about eleven, 752 passed.
+
+Diffed against `PHX_SERIAL=1`, which starts none and is the old order, one
+line differed: the `.sob` traces were 43 identical and 40 unsteady
+serially, and 42 and 41 in parallel. That was not the change.
+`examples/time.sol` prints the current time to the second, so its two
+traces agree only when both land in the same second, and a busier machine
+makes that rarer. No check asserts the split and no record quotes it.
+
+An interrupt was tried both ways. A Ctrl-C reaches every `limit`, each
+passes it on, and nothing was left running. A SIGTERM to the shell alone
+waits for the `collect` it arrives in, here the Pascal oracle's, about
+fifty seconds, and then the trap stops the rest. The first attempt at that
+test said otherwise and was wrong about itself: started with `&` from
+another shell, the run inherited SIGINT ignored, and `sh` cannot trap a
+signal it was born ignoring.
