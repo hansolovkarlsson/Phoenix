@@ -8060,3 +8060,34 @@ rebuilt, where the old Makefile would have said nothing to be done.
 Restoring the file rebuilt again, and a second `make` did nothing. The
 Makefile is in the checksum so that changed flags rebuild too. The cost is
 one `cksum` over about 390 KB at every `make`.
+
+**And the warning ROADMAP § 5 had written and not built.** The standup left
+it as Hans's call, whether one description meeting it once was enough. It
+was, because when it happens the answer is a well-typed wrong one, and a
+warning breaks nothing that reads cleanly today.
+
+The first version asked every clause. A clause reading a bare `$x` at a node
+type with a field `x`, in a pass that hands `x` down from somewhere else,
+was warned about, and the repository answered with twelve warnings, all in
+`c.phx` and none of them a mistake. `functions`, `locals`, `types` and
+`constants` all hand a declaration's specifier down as `base`, and a `Cast`,
+`SizeOfType`, `VaArg`, `Param` or `Literal` inside a declaration reads its
+own `base` field, a type name, as `$base.tagname` or to hand it on under
+another name. `fn` was the same with `Call`. Twelve to one is a check
+people learn to ignore.
+
+What told the two apart was where the read was written. A clause in a rule
+for `Cast` was written looking at `Cast`'s fields, and reading one there is
+what it says. The units mistake was in an `otherwise` clause, which names no
+type and runs at every node, so it cannot mean the field at three node types
+and the table everywhere else. The check asks only defaults now, and only
+where the default actually runs: a node type whose own rule answers the
+attribute is left out. The repository is silent, and the units description
+with `graph` named back to `uses` is warned about at the line where the
+mistake was made, `otherwise walk = step($walk, $uses, $outs)`.
+
+`tests/grammars/down-read-at-field.phx` holds both halves: a pass whose
+default reads a handed-down `tag` at a `W` with a field `tag`, which prints
+the words where `root` was meant, and the same pass with a rule answering at
+`W`, which is not warned about. The suite counts one warning. The tool is
+10,193 lines, and the three records that state its size say so.

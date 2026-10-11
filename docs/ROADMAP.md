@@ -440,14 +440,22 @@ attribute, so a `down` clause naming one of its own node's fields hands a value
 to that node's children which the node itself cannot read back. It is a warning
 rather than an error, because handing it down may be the whole point.
 
-*What is not warned about is the same collision one node further down.* On
+*The same collision one node further down is warned about in a default.* On
 2026-10-10 `languages/units/` handed a table down from its root as `uses`, and
 an `otherwise` clause read `$uses` at every node, three kinds of which have a
 field called `uses`. There the field won, the walk saw an empty list of what
-each unit uses, and the answer was wrong without a word. Nothing checks a read
-of `$x` in a clause whose node type has a field `x` against the `down`
-attributes of the same pass, and it is decidable from the description. It is
-written here rather than built because one description has met it, once.
+each unit uses, and the answer was wrong without a word. Since 2026-10-11 a
+default that reads `$x`, in a pass that hands `x` down, is warned about when it
+runs at a node type with a field `x`;
+[`tests/grammars/down-read-at-field.phx`](../tests/grammars/down-read-at-field.phx)
+is the witness.
+
+A clause in a rule for one node type is not asked, on evidence. Asked of
+everything, the check found twelve such reads in `c.phx` and every one was
+meant: a declaration hands its `base` down to its declarators, and a `Cast`
+inside one reads its own `base` field, a type name. A clause keyed on a type is
+written looking at that type's fields; a default names no type, so it cannot
+mean the field at some nodes and the attribute at the rest.
 
 The *threaded* version of the same collision is an error, and the difference is
 worth the two entries: a synthesised or inherited attribute that is shadowed is

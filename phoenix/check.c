@@ -694,6 +694,95 @@ static void check_clause_order(Check *c)
     }
 }
 
+static bool pass_hands_down(const Pass *p, const char *name)
+{
+    for (int i = 0; i < p->nrules; i++)
+        for (int k = 0; k < p->rules[i].nclauses; k++) {
+            const Clause *cl = &p->rules[i].clauses[k];
+            if (cl->kind == C_DOWN && strcmp(cl->attr, name) == 0) return true;
+        }
+    for (int i = 0; i < p->ndefaults; i++)
+        if (p->defaults[i].kind == C_DOWN
+            && strcmp(p->defaults[i].attr, name) == 0) return true;
+    return false;
+}
+
+/* Whether this pass has a rule for the type that defines the attribute, so
+ * that a default for it never runs there. */
+static bool type_answers(const Pass *p, const char *type, const char *attr)
+{
+    for (int i = 0; i < p->nrules; i++) {
+        const PassRule *rule = &p->rules[i];
+        if (rule->pattern->kind != P_TYPE
+            || strcmp(rule->pattern->name, type) != 0) continue;
+        for (int k = 0; k < rule->nclauses; k++)
+            if (rule->clauses[k].attr
+                && strcmp(rule->clauses[k].attr, attr) == 0) return true;
+    }
+    return false;
+}
+
+/* The node type, if any, where a default reading `$name` reads a field. */
+static const char *default_meets_field(const Pass *p, const Clause *def,
+                                       const char *name)
+{
+    for (int i = 0; i < nvocabulary; i++)
+        for (int k = 0; k < vocabulary[i].nfields; k++)
+            if (vocabulary[i].fields[k]
+                && strcmp(vocabulary[i].fields[k], name) == 0
+                && !(def->attr && type_answers(p, vocabulary[i].type, def->attr)))
+                return vocabulary[i].type;
+    return NULL;
+}
+
+/* 1c. The collision one node further down. 1b warns when a `down` clause
+ * names a field of its own node; this is a default reading a bare `$name` in
+ * a pass that hands an attribute of that name down, where some node it runs
+ * at has a field of that name. The field is read first, so there what was
+ * handed down never arrives, and the answer is a well-typed wrong one.
+ *
+ * Found on 2026-10-10 by `languages/units/`: its `order` pass handed the uses
+ * table down from the root as `uses`, and `otherwise walk = step($walk, $uses,
+ * ...)` ran at three node types with a field `uses`, where it read the node's
+ * own list.
+ *
+ * **Only a default is asked.** A clause in a rule for one node type is
+ * written looking at that type's fields, and reading one there is what it
+ * says: `c.phx` hands a declaration's `base` down to its declarators, and a
+ * `Cast` inside one reads its own `base` twelve times, each meant. A default
+ * names no type, so it cannot mean the field at some nodes and the attribute
+ * at the rest. A warning and not an error, because every node it runs at may
+ * have the field; renaming either side says which was meant. */
+static void check_down_reads(Check *c)
+{
+    Grammar *g = c->g;
+
+    for (int i = 0; i < g->npasses; i++) {
+        const Pass *pass = &g->passes[i];
+
+        for (int d = 0; d < pass->ndefaults; d++) {
+            const Clause *def = &pass->defaults[d];
+
+            for (int v = 0; v < nvocabulary; v++)
+                for (int f = 0; f < vocabulary[v].nfields; f++) {
+                    const char *name = vocabulary[v].fields[f];
+                    if (!name || !pass_hands_down(pass, name)) continue;
+                    if (!refers_to(def->value, name)) continue;
+
+                    const char *type = default_meets_field(pass, def, name);
+                    if (!type) continue;
+                    diag_warn(&g->src, def->pos,
+                              "'%s' is handed down by this pass and is also a "
+                              "field of '%s' -- a field is read first, so at "
+                              "'%s' this default reads the field and not what "
+                              "was handed down", name, type, type);
+                    goto next;
+                }
+        next:;
+        }
+    }
+}
+
 /* The same question for `otherwise`, which the loop above does not reach: it
  * walks the rules, and a default is not one. */
 static void check_default_threads(Check *c)
@@ -1868,6 +1957,7 @@ bool grammar_check(Grammar *g)
     check_reachable(&c);
     check_clause_order(&c);
     check_default_threads(&c);
+    check_down_reads(&c);
     check_drivers(&c);
     /* Not in a module with a hole in it, for `check_spellable`'s reason
      * below: `lib/expression.phx` reads `$text` of a `Number` that only the

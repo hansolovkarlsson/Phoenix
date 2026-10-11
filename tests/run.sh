@@ -213,6 +213,15 @@ refuses "a thread declared below the rules that update it" \
         "$root/tests/grammars/thread-declared-late.phx"
 warns   "a field of an inherited attribute's name" "cannot read" \
         "$root/tests/grammars/down-shadowed.phx"
+# The same collision one node further down, met by languages/units on
+# 2026-10-10: a default reading what its pass hands down, at a node with a
+# field of that name. One warning, for `p`; `q` answers at that node itself.
+out=$(bounded "$phx" --quiet "$root/tests/grammars/down-read-at-field.phx" 2>&1)
+case $(printf '%s' "$out" | grep -c 'this default reads the field') in
+    1) report pass "a default reading a field where an attribute was handed down" ;;
+    *) report fail "a default reading a field where an attribute was handed down" \
+                   "$(printf '%s' "$out" | grep -c 'this default reads the field') warnings, wanted 1" ;;
+esac
 refuses "an inherited clause reading its own rule's work" \
         "an inherited clause runs on the way in" \
         "$root/tests/grammars/down-reads-own.phx"

@@ -13,7 +13,7 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **10,103 lines** hand-written.
+C11, no dependencies, **10,193 lines** hand-written.
 
 The figure usually quoted is ~14,600, and both are right about different
 things: `phoenix/` also holds `runtime.h`, 4,660 generated lines which are the

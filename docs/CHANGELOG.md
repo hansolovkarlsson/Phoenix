@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-11: a default reading a field where an attribute was handed down
+
+**`phx` warns when an `otherwise` clause reads `$x` in a pass that hands `x`
+down, and some node it runs at has a field `x`.** A field is read before an
+attribute, so at that node the default reads the field, and what was handed
+down never arrives. A clause in a rule for one node type is not warned about,
+since there the field is usually the one meant. No description in the
+repository is warned about.
+
+**Tests:** 752 → 753.
+
+---
+
 ## 2026-10-11: `make` rebuilds after an edit in the same second
 
 **`make` no longer skips a rebuild because a source and `bin/phx` share a
