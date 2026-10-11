@@ -1978,3 +1978,40 @@ now; COMPLETED's list of defects has the rows.
 > A rule about when to add is scored by what it let in. The ones that let
 > in nothing were never tested, and the price of a workaround it accepts
 > is paid somewhere the rule does not look.
+
+## 41. "A pass that adds one step of reachability, run `until` the table settles, would now say it"
+
+ROADMAP § 5's words for `A -> B -> C -> A` in `languages/units/`, written
+when 2.5 was built for the Z80 and the units customer was left
+unconverted. Scored on 2026-10-10 with the claim beside it, from
+[lineage.md](lineage.md) and COMPLETED 2.5, that the units' two
+divergences were *reachability and topological sort, the same missing
+thing twice*.
+
+*Held, with a condition nobody wrote: the table could not be a list.*
+The pass is the one the sentence describes, and it refuses the cycle in
+fpc's words. But what a unit reaches, kept as a list of names, gains a
+duplicate every round on a cycle and never comes out equal to the round
+before, and the library has no way to say *each name once*. It works
+because each unit is one **bit**, and a bit set cannot grow. The
+sentence was right about the mechanism and silent about the value it
+iterates, which is where the work was.
+
+*Failed, as a diagnosis: "topological sort".* fpc's initialisation order,
+asked of fpc on twelve graphs before anything was written, is a
+depth-first walk from the program in which a unit already entered is
+not entered again, and on an implementation cycle that rule, not any
+topological order, decides who goes first. Nor is it a fixpoint in
+JastAdd's sense. It was built as a **state stepped one move per node**,
+with `until` used as a loop that stops when a finished walk steps to
+itself. The session's own forecast that morning, a pass run `until`
+each unit's rank settles, would have computed an order fpc does not
+use.
+
+*Held: "the same missing thing twice".* Both were answered by `until`
+and nothing else, on the same day, with no change to the tool.
+
+> A forecast of a mechanism is scored by what the mechanism is asked to
+> carry. Both were right that `until` would do; both were silent about
+> the value it carries, a set that must not grow and a stack the tree
+> does not have, and both of those were found by asking, not by reading.

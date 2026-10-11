@@ -8022,3 +8022,12 @@ types changed. The Makefile and the suite's C11 check both ask for it now.
 Twice in the day a rebuild was skipped because the binary and the source
 it was built from had the same second for a timestamp, and make, comparing
 seconds, took it as current. A stale `phx` was trusted both times, briefly.
+
+**The C oracle stopped once, and the cause was the machine.** The first
+full run after the units change failed: the C oracle ran out of its 600
+seconds, which failed the run's count and its log of stopped programs. The
+load was about 40, from another session's `qemu` and `leaks`, none of it
+this tree's. Run again at about 13, the suite passed in 284 seconds. The
+cap is what the morning's change was partly for, and it held at the load
+this machine usually has; at three times that, the oracle alone does not
+fit, and making it run its own programs side by side is C work and waits.
