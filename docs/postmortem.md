@@ -2015,3 +2015,33 @@ and nothing else, on the same day, with no change to the tool.
 > carry. Both were right that `until` would do; both were silent about
 > the value it carries, a set that must not grow and a stack the tree
 > does not have, and both of those were found by asking, not by reading.
+
+## 42. "Nothing checks a read of `$x` in a clause whose node type has a field `x` ... and it is decidable from the description"
+
+ROADMAP § 5's words, written on 2026-10-10 after `languages/units/` read a
+field where its pass had handed a table down. Scored on 2026-10-11, when
+the check was built, with the standup's forecast for the make defect
+beside it, because both were a fix named in a sentence before anybody
+tried it.
+
+*Held: decidable.* Every read the check needs is in the description,
+and it was written in an afternoon from functions `check.c` already had.
+
+*Failed, as a scope: "a clause".* Built as written, it warned twelve times
+in `c.phx` and never about a mistake: a `Cast` inside a declaration reads
+its own `base` field while the pass hands the declaration's `base` down.
+Of the two kinds of clause the sentence covered, only one can mean the
+handed-down value at a node with the field. A rule for one type is written
+looking at that type's fields; a default names no type. The check asks
+defaults only, and the repository is silent.
+
+*Held, with a condition nobody wrote: "a stamp of the sources' checksum".*
+A stamp file is a file with a timestamp, and make 3.81 compares those to
+the second too, so a stamp written in the binary's second would have
+been trusted exactly as the binary was. The checksum had to be compared
+when the Makefile is read, before make looks at any timestamp.
+
+> A fix named in one sentence is scored by what it is asked of. Both were
+> right about the mechanism and wrong about where it applies: one asked
+> every clause when only one kind can be wrong, and the other compared in
+> the place that had already failed.
