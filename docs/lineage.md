@@ -174,9 +174,9 @@ notation has no way to say one.
 **JastAdd's circular attributes** — [2.5](COMPLETED.md#25-circular-attributes--from-jastadd), *built 2026-09-23 as a driver stage run `until` an attribute settles.*
 An attribute defined by a fixpoint rather than in one walk.
 [`languages/units/`](../languages/units/) could not refuse `A -> B -> C -> A`
-and cannot order initialisation, and both were in its `divergent/` directory
-with a test keeping them honest. Reachability and topological sort are the
-same missing thing twice; the first has been answered since 2026-10-10.
+or order initialisation, and both were in its `divergent/` directory with a
+test keeping them honest. Reachability and a walk of a graph are the same
+missing thing twice, and both have been answered since 2026-10-10.
 
 **And one that is not on the roadmap and should not be.** Silver's
 **forwarding** — a construct says what it is shorthand for, and unanswered

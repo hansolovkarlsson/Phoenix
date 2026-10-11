@@ -395,8 +395,9 @@ divergences, a three-unit cycle and initialisation order, are the other
 customer the entry named. *The cycle was converted on 2026-10-10*: a
 `reach` pass run `until` its table settles, with each unit one bit of what a
 unit reaches, because a list of names would gain a duplicate every round on
-a cycle and the library cannot drop one. Initialisation order is not
-converted, and nobody has asked for it.
+a cycle and the library cannot drop one. *Initialisation order was
+converted the same day*, by a depth-first walk that is a state rather than a
+pass's own walk, one step per node and as many rounds as it takes.
 
 ### 3.5 Conditionals in the meta-language
 
@@ -1671,12 +1672,13 @@ answer a forward reference gets.
 
 **Two things here are graph-shaped, and neither is resolution.** Refusing a
 circular *interface* `uses` is reachability, and initialisation order is a
-topological sort. *The first is answered at any depth since 2026-10-10*, by a
-`reach` pass the driver runs `until` the table of what each unit reaches
-settles, [2.5](#25-circular-attributes--from-jastadd); until then it was two
-units deep and `A -> B -> C -> A` was a divergence. The second is in
-[`divergent/`](../languages/units/divergent/), written down rather than hidden,
-and the suite checks it is still the divergence it says it is.
+depth-first walk of the uses graph. *Both are answered since 2026-10-10*, each
+by a pass the driver runs `until` it settles,
+[2.5](#25-circular-attributes--from-jastadd): `reach`, the table of what each
+unit reaches, and `order`, a walk carried as a state from round to round with
+every node taking one step of it. Until then the first was two units deep and
+the second ran units in the order they are written, and both were in
+`divergent/`, which is empty now.
 
 **What to look for instead**, if this is ever reopened: a language where
 visibility *composes* — Rust's `pub use`, ML's `open` inside a signature, a

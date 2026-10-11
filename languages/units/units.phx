@@ -15,7 +15,7 @@
  * -Mtp` compiles every program under `tests/` here.
  *
  * ---------------------------------------------------------------------------
- * The five rules, every one of them settled against `fpc -Mtp`
+ * The six rules, every one of them settled against `fpc -Mtp`
  *
  *   1. `uses a, b` and both export `x`  ->  **b wins**. Later in the list
  *      shadows earlier.
@@ -27,6 +27,9 @@
  *      real programs have them.
  *   5. A cycle between two **interface** `uses` clauses is refused:
  *      *Circular unit reference between ug and uf*.
+ *   6. Initialisation sections run in the order a depth-first walk from the
+ *      program finishes the units: interface `uses`, then implementation
+ *      `uses`, each unit entered once.
  *
  * ---------------------------------------------------------------------------
  * What is left out, and why it is not a dodge
@@ -110,15 +113,22 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
    * reaches through**: rule 3 says visibility does not compose, so this
    * is the one place where a graph would have had to be walked and is
    * not. *)
-  Interface : exports = flatten($decls.entry) .
-  Unit      : export-of = [[$name, $iface.exports]] .
+  Interface : exports = flatten($decls.entry)
+            : names   = $uses.name .
+  Implementation : names = $uses.name .
+  Program   : names = $uses.name .
+  Unit      : export-of = [[$name, $iface.exports]]
+            : uses-of   = [[$name, [...$iface.names, ...$impl.names]]] .
   otherwise export-of = []
+  otherwise uses-of   = []
 
   (* `reaches` is where the `reach` pass below starts from, and it starts
    * from nothing: no unit is yet known to reach any other. A unit is one
    * bit of a sixty-four-bit integer there, hence the limit. *)
   File : units-by-name = flatten($units.export-of)
        : reaches = []
+       : uses-by-name = [["@main", $main.names], ...flatten($units.uses-of)]
+       : state = ["@main 0;", "|", []]
        ! size(positions(flatten($units.export-of))) < size(flatten($units.export-of))
            : "two units have the same name"
        ! size($units) > 63
@@ -208,7 +218,8 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
   File : down table  = $units-by-name
        : down reach  = $reaches
        : down index  = positions($units.name)
-       : out = join([...$units.out, $main.out], "") .
+       : out = join([...$units.out, $main.out], "")
+       : outs-by-name = flatten($units.out-of) .
 
   (* A unit's interface sees its interface `uses` and its own interface
    * declarations. Its implementation sees those **and** its own, which is
@@ -223,7 +234,9 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
   Unit : down env  = []
        : down mine  = $name
        : down ifexp = $iface.exports
-       : out = "{}{}" of $iface.out, $impl.out .
+       : out = "{}{}" of $iface.out, $impl.out
+       : out-of = [[$name, $impl.out]] .
+  otherwise out-of = []
 
   Interface : down in-interface = true
             : out = "" .
@@ -272,4 +285,64 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
 
   otherwise out = "" .
 
-%driver run = interfaces, reach until reaches, resolve -> out .
+(* ------------------------------------------------------------------ *)
+(* Pass four, run until it settles: in what order do the units'        *)
+(* initialisation sections run?                                         *)
+(*                                                                     *)
+(* **fpc's order is a depth-first walk of the uses graph**, from the     *)
+(* program: a unit's interface `uses` and then its implementation's,     *)
+(* in the order written, each unit entered once, and a unit initialised  *)
+(* when everything it reaches has been. A unit already entered is not    *)
+(* entered again, which is what makes an implementation cycle legal and *)
+(* is also what decides its order. Settled against fpc -Mtp on ten       *)
+(* shapes of graph before it was written, and until 2026-10-10 this ran *)
+(* them in the order they are written, which `divergent/` held.          *)
+(*                                                                     *)
+(* A depth-first walk is a stack, and the tree is not the graph, so the  *)
+(* walk is not this pass's walk. It is a **state**, carried from round   *)
+(* to round, and every node this pass visits takes one step of it: a    *)
+(* thread does the stepping, `until` does the rounds, and a walk that is *)
+(* finished steps to itself, which is what lets it settle.               *)
+(*                                                                     *)
+(* The state is three things. The stack is text, `name next;` per        *)
+(* entry with the top first, because popping wants what is after the    *)
+(* first entry and `slice` takes that of text and not of a list. What    *)
+(* has been entered is text too, `|ua|ub|`, which `find` asks about.     *)
+(* And what has been initialised is the list of their outputs, in order. *)
+
+%define top(s) = at(split(at($s, 1), ";"), 1) .
+%define below(s) = slice(at($s, 1), size(top($s)) + 2, size(at($s, 1))) .
+
+(* The step. A top with uses left goes on to the next one, entering it
+ * if nothing has yet; a top with none left is done, and initialises. *)
+%define step(s, uses, outs) =
+  if at($s, 1) = "" then $s
+  else advance($s, $uses, $outs, at(split(top($s), " "), 1),
+               int(at(split(top($s), " "), 2))) .
+
+%define advance(s, uses, outs, u, i) =
+  if $i < size(lookup($uses, $u, []))
+  then enter($s, $uses, $u, $i + 1, at(lookup($uses, $u, []), $i + 1))
+  else [below($s), at($s, 2),
+        if $u = "@main" then at($s, 3)
+        else [...at($s, 3), lookup($outs, $u, "")]] .
+
+%define enter(s, uses, u, next, v) =
+  if find(at($s, 2), ("|{}|" of $v)) > 0 or not defined($uses, $v)
+  then [("{} {};{}" of $u, $next, below($s)), at($s, 2), at($s, 3)]
+  else [("{} 0;{} {};{}" of $v, $u, $next, below($s)),
+        ("{}{}|" of at($s, 2), $v), at($s, 3)] .
+
+%pass order
+
+  thread walk
+
+  File : down walk = $state
+       : down graph = $uses-by-name
+       : down outs = $outs-by-name
+       : state     = $walk
+       : ordered   = join([...at($walk, 3), $main.out], "") .
+
+  otherwise walk = step($walk, $graph, $outs)
+
+%driver run = interfaces, reach until reaches, resolve, order until state -> ordered .

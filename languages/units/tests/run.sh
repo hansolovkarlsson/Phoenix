@@ -7,8 +7,10 @@
 # into the units it describes and handed to the real compiler -- and what the
 # two print must agree.
 #
-# `tests/` holds what must be refused and `divergent/` what this description
-# gets wrong, which is one thing and is written down in it.
+# `tests/` holds what must be refused. `divergent/` held what this description
+# got wrong, a three-unit cycle and the order units are initialised in, until
+# both were answered on 2026-10-10; the loop that holds a divergence to what
+# it says is kept for the next one, and passes over an empty directory.
 
 set -u
 
@@ -95,6 +97,7 @@ done
 # went away would mean the file is now a lie, and one that changed shape means
 # something else moved.
 for f in $lang/divergent/*.pas; do
+    [ -f "$f" ] || continue
     n=$(basename "$f" .pas)
     d="$tmp/div-$n"; mkdir -p "$d"
     split_units "$f" "$d"

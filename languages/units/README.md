@@ -14,7 +14,7 @@ languages/units/tests/run.sh
 | [`units.phx`](units.phx) | the language: `unit`, `interface`, `implementation`, `uses`, and names that refer to declarations |
 | [`programs/`](programs/) | programs that agree with `fpc -Mtp` exactly, with what each prints beside it |
 | [`tests/`](tests/) | what must be refused, each carrying the message `fpc` refuses it with |
-| [`divergent/`](divergent/) | the two things this gets wrong, written down inside the files |
+| `divergent/` | what this gets wrong, written down inside the files. Empty since 2026-10-10, when both of its files were answered, and the suite's loop over it is kept for the next |
 
 ## The question
 
@@ -83,8 +83,9 @@ is the only mechanism this description needed that a single walk does not have.
 
 ## What *is* graph-shaped here, and neither is resolution
 
-The first is answered here since 2026-10-10. The second is in
-[`divergent/`](divergent/), and honest about it.
+Both were in `divergent/`, written down rather than hidden, and both are
+answered since 2026-10-10, each by a pass the driver runs `until` what it
+works out settles.
 
 **Rule 5 is reachability.** Detecting a circular interface `uses` is a question
 about the *uses graph*, and until 2026-10-10 this description answered it only
@@ -109,10 +110,25 @@ Neither `.ppu` can be written without the other. It is a well-formedness rule
 about files, not a rule about scopes, and in a single file it constrains
 nothing.
 
-**Initialisation order is a topological sort.** `fpc` runs a unit's
-initialisation after the units it depends on; this runs them in the order they
-are written. Every name still resolves identically — what differs is *when
-things run*, which is a different question from *what a name means*.
+**Initialisation order is a depth-first walk.** Every name resolves the same
+whatever the order, so what this is about is *when things run*, which is a
+different question from *what a name means*. Until 2026-10-10 the units ran in
+the order they are written. fpc's order, settled on twelve shapes of graph
+before it was written down, is a walk from the program: a unit's interface
+`uses` and then its implementation's, in the order written, each unit entered
+once, and a unit initialised when everything it reaches has been. Entering a
+unit once is what makes an implementation cycle legal, and also what decides
+its order: [`programs/circular-impl.pas`](programs/circular-impl.pas) prints
+D, E, D, and [`programs/init-order.pas`](programs/init-order.pas) initialises
+three units in neither the order they are written in nor the order they are
+named.
+
+A walk is a stack, and the graph is not the tree, so the walk cannot be the
+pass's own. The `order` pass carries it as a **state** from round to round,
+every node it visits takes one step, and a finished walk steps to itself,
+which is what lets `until` see it settle. The stack is text, `name next;` per
+entry, because popping one wants what comes after the first entry, and
+`slice` takes that of text and not of a list.
 
 ## The verdict, and the sharper test it suggests
 

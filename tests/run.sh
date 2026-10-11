@@ -1637,7 +1637,7 @@ echo "Pascal units"
 accepts "the description reads" "$root/languages/units/units.phx"
 if un=$(collect "$root/languages/units/tests/run.sh" 2>&1); then
     n=$(printf '%s' "$un" | grep -c '^  ok')
-    report pass "$n checks, and the divergence is still the one written down"
+    report pass "$n checks against fpc -Mtp, and nothing left divergent"
 else
     report fail "the unit experiment holds"
     printf '%s\n' "$un" | grep -A5 FAIL | sed 's/^/        /' | head -14

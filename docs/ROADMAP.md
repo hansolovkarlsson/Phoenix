@@ -29,7 +29,7 @@ notation cannot say:
 | | |
 | --- | --- |
 | [1.7](#17-a-repetition-that-counts) | `languages/solvm/` **emits `.sob` and cannot read it** |
-| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | *built 2026-09-23, for `languages/z80/`, as a driver stage run `until` an attribute settles.* `languages/units/` cannot order initialisation. *It refuses `A -> B -> C -> A` since 2026-10-10* |
+| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | *built 2026-09-23, for `languages/z80/`, as a driver stage run `until` an attribute settles.* `languages/units/` *refuses `A -> B -> C -> A`, and orders initialisation as fpc does, since 2026-10-10* |
 
 Neither is new. Both have been true for days and were recorded as costs rather
 than as work; what changed is [lineage.md](lineage.md) naming the prior art, so
@@ -439,6 +439,15 @@ per file. `tests/grammars/thread-declared-late.phx` is the witness.
 attribute, so a `down` clause naming one of its own node's fields hands a value
 to that node's children which the node itself cannot read back. It is a warning
 rather than an error, because handing it down may be the whole point.
+
+*What is not warned about is the same collision one node further down.* On
+2026-10-10 `languages/units/` handed a table down from its root as `uses`, and
+an `otherwise` clause read `$uses` at every node, three kinds of which have a
+field called `uses`. There the field won, the walk saw an empty list of what
+each unit uses, and the answer was wrong without a word. Nothing checks a read
+of `$x` in a clause whose node type has a field `x` against the `down`
+attributes of the same pass, and it is decidable from the description. It is
+written here rather than built because one description has met it, once.
 
 The *threaded* version of the same collision is an error, and the difference is
 worth the two entries: a synthesised or inherited attribute that is shadowed is
