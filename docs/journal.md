@@ -8031,3 +8031,32 @@ this tree's. Run again at about 13, the suite passed in 284 seconds. The
 cap is what the morning's change was partly for, and it held at the load
 this machine usually has; at three times that, the oracle alone does not
 fit, and making it run its own programs side by side is C work and waits.
+
+---
+
+## 2026-10-11: a checksum where make compared seconds
+
+The standup carried one fix that needed no decision: make had taken a stale
+`bin/phx` as current three times the day before. The make here is GNU make
+3.81, the one macOS ships, and it compares modification times to the
+second. A source saved in the second the binary was linked is not newer
+than it, so nothing is rebuilt and nothing says so.
+
+Two ways were on the list: a stamp of the sources' checksum, or `make test`
+always relinking. Relinking costs about a second, but it would mend only
+`make test` and not a bare `make`, and it changes what `make` means.
+A stamp file alone would not have worked either, since a stamp written in
+the same second as the binary has the same problem one step further along.
+So the checksum is compared when the Makefile is read, before make looks
+at any timestamp: `cksum` over the sources, the headers, `tests/limit.c`
+and the Makefile itself, against `bin/sources.sum`. When they differ the
+binaries, the sum and the generated `phoenix/runtime.h` are removed, and
+the ordinary rules rebuild them. The sum is written only after `phx` links,
+so a failed build leaves nothing that claims to be current.
+
+The witness is the case that went wrong: append a line to `eval.c`, set its
+time to the binary's own second with `touch -t`, and run `make`. It
+rebuilt, where the old Makefile would have said nothing to be done.
+Restoring the file rebuilt again, and a second `make` did nothing. The
+Makefile is in the checksum so that changed flags rebuild too. The cost is
+one `cksum` over about 390 KB at every `make`.

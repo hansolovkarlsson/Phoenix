@@ -16,6 +16,19 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-11: `make` rebuilds after an edit in the same second
+
+**`make` no longer skips a rebuild because a source and `bin/phx` share a
+timestamp.** The make macOS ships compares seconds, so an edit saved in
+the second the binary was linked left the old binary in place. The
+Makefile now compares a checksum of the sources with the one the binaries
+were built from, and rebuilds when they differ. A `make` with nothing
+changed still does nothing.
+
+**Tests:** 752 → 752, unchanged.
+
+---
+
 ## 2026-10-10: units initialised in fpc's order, and `const` kept
 
 **`languages/units/` runs initialisation sections in fpc's order**, a

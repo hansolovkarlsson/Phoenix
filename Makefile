@@ -27,6 +27,16 @@ HDR = phoenix/phx.h phoenix/reader.h
 
 all: bin/phx bin/limit
 
+# Make 3.81, the one macOS ships, compares timestamps to the second, so a
+# source saved in the second its binary was linked is taken as older and the
+# binary as current. What the binaries were built from is recorded instead as
+# a checksum, and when the sources no longer match it the products go before
+# make looks at a timestamp: the rebuild then cannot be skipped.
+SUM := $(shell cat $(SRC) $(HDR) tests/limit.c Makefile | cksum)
+ifneq ($(SUM),$(shell cat bin/sources.sum 2>/dev/null))
+$(shell rm -f bin/phx bin/limit bin/sources.sum phoenix/runtime.h)
+endif
+
 # The runtime, as a C string literal, so that phx carries its own runtime and a
 # generated compiler is one file. `#include "phx.h"` is dropped because the
 # header is prepended; the guard in it makes a second copy harmless anyway.
@@ -50,6 +60,7 @@ phoenix/emit.c: phoenix/runtime.h
 bin/phx: $(SRC) $(HDR) phoenix/runtime.h
 	@mkdir -p bin
 	$(CC) $(CFLAGS) $(WARN) -o $@ $(SRC)
+	@echo '$(SUM)' > bin/sources.sum
 
 # What the suite runs every program under, so that one which never finishes
 # fails instead of hanging. See tests/limit.c.
