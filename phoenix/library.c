@@ -394,7 +394,7 @@ Value *eval_call(Eval *e, const Expr *x)
 
     if (strcmp(f, "text") == 0) {
         if (!want(e, x, 1, args)) return NULL;
-        char  *out;
+        const char *out;
         size_t len;
         if (!value_format(a, args[0], &out, &len))
             return library_fail(e, x, "a %s has no written form", value_kind_name(args[0]));
@@ -578,14 +578,14 @@ Value *eval_call(Eval *e, const Expr *x)
         Value **items = arena_alloc(a, (size_t)(args[0]->n ? args[0]->n : 1)
                                          * sizeof *items);
         for (int i = 0; i < args[0]->n; i++) {
-            const Value *it = args[0]->items[i];
+            Value *it = args[0]->items[i];
             /* A failure among the elements has already been reported once, and
              * once is the right number -- so it passes through rather than
              * becoming a second complaint about the element's kind. `join` has
              * always done this; these did not, and the difference showed as a
              * diagnostic naming a line of the *description* after a check in it
              * had correctly named a line of the user's program. */
-            if (value_failed(it)) return (Value *)it;
+            if (value_failed(it)) return it;
             switch (it->kind) {
             case V_TEXT: items[i] = value_int(a, (long long)it->len); break;
             case V_LIST:
@@ -694,7 +694,7 @@ Value *eval_call(Eval *e, const Expr *x)
         Value **items = arena_alloc(a, (size_t)(n ? n : 1) * sizeof *items);
 
         for (int i = 0; i < n; i++) {
-            char  *pieces[2] = { "", "" };
+            const char *pieces[2] = { "", "" };
             size_t lens[2]   = { 0, 0 };
 
             if (i < args[0]->n && value_failed(args[0]->items[i]))
@@ -758,7 +758,7 @@ Value *eval_call(Eval *e, const Expr *x)
         for (int i = 0; i < args[0]->n; i++) {
             if (value_failed(args[0]->items[i])) return args[0]->items[i];
 
-            char  *piece;
+            const char *piece;
             size_t len;
             if (!value_format(a, args[0]->items[i], &piece, &len))
                 return library_fail(e, x, "'join' cannot write a %s",
@@ -770,7 +770,7 @@ Value *eval_call(Eval *e, const Expr *x)
         size_t used = 0;
         for (int i = 0; i < args[0]->n; i++) {
             if (i) { memcpy(buf + used, sep, seplen); used += seplen; }
-            char  *piece;
+            const char *piece;
             size_t len;
             value_format(a, args[0]->items[i], &piece, &len);
             memcpy(buf + used, piece, len);

@@ -1148,10 +1148,13 @@ fi
 # and no embeds; phoenix.phx has no passes and no drivers. The description's
 # own text is one literal longer than the 4095 bytes C11 promises, which
 # every compiler in use takes, and the Makefile says the same of `phx`.
+# A cast that drops a `const` is refused here as it is in the Makefile,
+# since 2026-10-10: the tables a compiler is written with are its runtime's
+# types, and the runtime keeps every `const` it is given.
 c11() {
     if bounded "$phx" "$1" -o "$tmp0/c11.c" 2>/dev/null \
        && out=$(cc -std=c11 -pedantic-errors -Wno-overlength-strings \
-                   -fsyntax-only "$tmp0/c11.c" 2>&1); then
+                   -Werror=cast-qual -fsyntax-only "$tmp0/c11.c" 2>&1); then
         report pass "$2"
     else
         report fail "$2" "$(printf '%s' "$out" | grep 'error:' | head -2 | tr '\n' ' ')"

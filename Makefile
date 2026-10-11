@@ -7,7 +7,7 @@
 CC      ?= cc
 CFLAGS  ?= -std=c11 -O2 -g
 WARN     = -Wall -Wextra -Wpedantic -Wshadow -Wstrict-prototypes \
-           -Wmissing-prototypes -Wno-unused-parameter
+           -Wmissing-prototypes -Wcast-qual -Wno-unused-parameter
 
 # The **runtime** is what *runs* a description: the scanner, the matcher, the
 # evaluator and the library. A generated compiler is these files plus its own

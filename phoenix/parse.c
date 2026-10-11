@@ -603,7 +603,7 @@ static void dump(FILE *out, Arena *a, const Value *v, const char *prefix,
         return;
 
     case V_INT: case V_FLOAT: case V_BOOL: case V_NIL: {
-        char  *text;
+        const char *text;
         size_t len;
         if (v->kind == V_NIL)                fputs("nil\n", out);
         else if (value_format(a, v, &text, &len)) fprintf(out, "%.*s\n", (int)len, text);

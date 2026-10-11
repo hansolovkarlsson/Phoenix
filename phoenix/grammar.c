@@ -623,7 +623,7 @@ static Rule *add_rule(Reader *r, const char *name, size_t pos, bool lexical)
     }
     Rule *rule = &g->rules[g->nrules++];
     memset(rule, 0, sizeof *rule);
-    rule->name    = (char *)name;
+    rule->name    = name;
     rule->pos     = pos;
     rule->lexical = lexical;
     return rule;

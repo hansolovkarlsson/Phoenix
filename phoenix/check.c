@@ -360,7 +360,7 @@ static void check_refs(Check *c, const Rule *owner, const GNode *seq, const Expr
  * of these, not thousands. */
 typedef struct {
     const char  *type;
-    char       **fields;
+    const char **fields;
     int          nfields;
     size_t       pos;
     bool         seeded;   /* Position, which every node has and none builds */
@@ -410,7 +410,7 @@ static void note_node_type(Check *c, const Expr *x)
  * driver check finds `line` on a node type it knows, and `--nodes` says so. */
 static void seed_position_type(Check *c)
 {
-    static char *fields[] = { "line", "column", "file", "endline", "endcolumn" };
+    static const char *fields[] = { "line", "column", "file", "endline", "endcolumn" };
     Expr         shape    = { 0 };
 
     shape.kind   = X_NODE;

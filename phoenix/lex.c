@@ -166,7 +166,7 @@ bool lex_run(Arena *a, const Grammar *g, const Source *src, Tokens *out)
 
 bool lex_produces(const Grammar *g, const char *text, size_t len)
 {
-    Source one = { .path = "", .text = (char *)text, .size = len };
+    Source one = { .path = "", .text = text, .size = len };
     Lex    l   = { .g = g, .src = &one };
 
     for (int i = 0; i < g->nrules; i++) {

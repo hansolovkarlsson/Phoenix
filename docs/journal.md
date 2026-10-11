@@ -7983,3 +7983,42 @@ at its first failed argument and the spread was never reached. And the
 check was first trusted against a stale `phx`: `git stash pop` left
 `eval.c` and the binary on the same second, and make took that as up to
 date.
+
+**Initialisation order, and `divergent/` empty.** fpc was asked first. Ten
+shapes of uses graph, each unit's initialisation printing its name, then two
+more: all twelve are a depth-first walk from the program, a unit's interface
+`uses` and then its implementation's, in the order written, each unit
+entered once and initialised when it is finished. The old description, the
+written order, got eleven of the twelve wrong.
+
+A walk is a stack, and the tree a pass walks is not the uses graph, so the
+walk cannot be the pass's own. The `order` pass carries it as a state from
+round to round, a thread steps it once at every node, and `until` stops it
+when a finished walk steps to itself. The stack is text, `name next;` with
+the top first, because a pop wants what comes after the first entry and
+`slice` takes that of text and not of a list. The steps were tried in a
+scratch grammar, four by hand, before they were trusted inside the pass.
+
+They were right, and the pass was wrong, because of a name. The table of
+what each unit uses was handed down from the root as `uses`, and three node
+types have a **field** called `uses`. A field is read first, so at those
+nodes the step saw the node's own list of `UnitRef`s, not the table, and the
+walk entered `ud` and found nothing to go on to. No warning: the check that
+exists is for a `down` clause naming a field of its own node, and this one
+was on the root, which has none. Renamed to `graph`, and written in ROADMAP
+§5 as a check nobody has built, since it is decidable and has been met once.
+
+Two breaks were tried. The written order back as the answer fails
+`circular-impl` and `init-order`; a walk that forgets what it has entered
+never settles, and the tool stops it at 256 rounds and says so.
+`circular-impl.pas` moved to `programs/` with fpc's D, E, D beside it.
+
+**And `-Wcast-qual`.** Seven casts dropped a `const` the code never needed
+to drop: `Expr` and `Rule` names, field lists, a source's text, an embed's,
+and what `value_format` hands back, are only read. Declared `const`, the
+casts went, and so did the `char *` the emitter wrote for the field tables of
+a compiler it writes out, which `-pedantic-errors` refused once the runtime's
+types changed. The Makefile and the suite's C11 check both ask for it now.
+Twice in the day a rebuild was skipped because the binary and the source
+it was built from had the same second for a timestamp, and make, comparing
+seconds, took it as current. A stale `phx` was trusted both times, briefly.

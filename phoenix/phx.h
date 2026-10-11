@@ -57,7 +57,7 @@ typedef struct {
 
 typedef struct {
     const char      *path;
-    char            *text;
+    const char      *text;
     size_t           size;
     const SourceMap *map;    /* NULL when the text is one file */
 } Source;
@@ -134,14 +134,14 @@ typedef enum {
 typedef struct Expr Expr;
 struct Expr {
     XKind      kind;
-    char      *name;   /* X_NODE: the type. X_REF/X_DOT: the name.
+    const char *name;   /* X_NODE: the type. X_REF/X_DOT: the name.
                         * X_TEXT: the bytes. X_BINOP/X_UNOP/X_CALL: which    */
     int        len;    /* X_TEXT: its length                                 */
     int        index;  /* X_REF: the 1-based position, or 0 when by name.
                         * X_CALL: the %define it calls, from 1; 0: library  */
     long long  ival;   /* X_INT, X_BOOL                                      */
     double     real;   /* X_FLOAT                                            */
-    char     **fields; /* X_NODE: one name per kid, else NULL throughout     */
+    const char **fields; /* X_NODE: one name per kid, else NULL throughout     */
     Expr     **kids;
     int        nkids;
     size_t     pos;
@@ -186,7 +186,7 @@ struct GNode {
 };
 
 typedef struct {
-    char   *name;
+    const char *name;
     GNode  *body;
     bool    lexical;   /* declared before %syntax                           */
     bool    fragment;  /* %fragment: a helper, never a token on its own     */
@@ -280,7 +280,7 @@ typedef struct Rewrite Rewrite;
  */
 typedef struct {
     char   *name;
-    char   *text;
+    const char *text;
     size_t  len;
     char   *path;   /* where it came from, for --imports */
     size_t  pos;    /* where it was named, for the checks */
@@ -435,7 +435,7 @@ struct Pattern {
     char      *name;    /* P_TYPE: the type. P_BIND: the name. P_TEXT: bytes */
     int        len;
     long long  ival;
-    char     **fields;  /* P_TYPE: which field each kid tests                */
+    const char **fields;  /* P_TYPE: which field each kid tests                */
     Pattern  **kids;
     int        nkids;
     size_t     pos;
@@ -702,7 +702,7 @@ Value *value_text(Arena *a, const char *text, size_t len);
 
 /* Writes a value the way `of` writes it -- see docs/semantics.md. Answers
  * false, having reported, for the kinds that refuse to be written. */
-bool value_format(Arena *a, const Value *v, char **out, size_t *len);
+bool value_format(Arena *a, const Value *v, const char **out, size_t *len);
 
 const char *value_kind_name(const Value *v);
 

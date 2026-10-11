@@ -165,7 +165,7 @@ static int emit_expr(Emit *e, const Expr *x)
         for (int i = 0; i < nkids; i++) fprintf(e->out, "&x%d,", kids[i]);
         fputs("};\n", e->out);
 
-        fprintf(e->out, "static char *xf%d[] = {", id);
+        fprintf(e->out, "static const char *xf%d[] = {", id);
         for (int i = 0; i < nkids; i++) {
             emit_string(e, x->fields ? x->fields[i] : NULL);
             fputc(',', e->out);
@@ -201,7 +201,7 @@ static int emit_pattern(Emit *e, const Pattern *p)
         for (int i = 0; i < nkids; i++) fprintf(e->out, "&p%d,", kids[i]);
         fputs("};\n", e->out);
 
-        fprintf(e->out, "static char *pf%d[] = {", id);
+        fprintf(e->out, "static const char *pf%d[] = {", id);
         for (int i = 0; i < nkids; i++) {
             emit_string(e, p->fields[i]);
             fputc(',', e->out);
@@ -681,7 +681,7 @@ bool emit_compiler(const Grammar *g, const char *name, FILE *out)
         "        return 1;\n"
         "    }\n"
         "\n"
-        "    char  *text;\n"
+        "    const char *text;\n"
         "    size_t len;\n"
         "    if (value_format(a, answer, &text, &len)) {\n"
         "        fwrite(text, 1, len, stdout);\n"

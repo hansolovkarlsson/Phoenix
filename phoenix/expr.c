@@ -44,13 +44,13 @@ void expr_add(Reader *r, Expr *parent, const char *field, Expr *kid)
 {
     int    n      = parent->nkids;
     Expr **kids   = arena_alloc(r->a, (size_t)(n + 1) * sizeof *kids);
-    char **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
+    const char **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
 
     memcpy(kids,   parent->kids,   (size_t)n * sizeof *kids);
     memcpy(fields, parent->fields, (size_t)n * sizeof *fields);
 
     kids[n]   = kid;
-    fields[n] = (char *)field;
+    fields[n] = field;
 
     parent->kids   = kids;
     parent->fields = fields;
@@ -61,7 +61,7 @@ void expr_add(Reader *r, Expr *parent, const char *field, Expr *kid)
 static Expr *binop(Reader *r, const char *op, Expr *lhs, Expr *rhs, size_t pos)
 {
     Expr *x = expr_new(r, X_BINOP, pos);
-    x->name = (char *)op;
+    x->name = op;
     expr_add(r, x, NULL, lhs);
     expr_add(r, x, NULL, rhs);
     return x;

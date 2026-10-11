@@ -73,14 +73,14 @@ static int format_float(double d, char *buf, size_t size)
     return snprintf(buf, size, "%.17g", d);
 }
 
-bool value_format(Arena *a, const Value *v, char **out, size_t *len)
+bool value_format(Arena *a, const Value *v, const char **out, size_t *len)
 {
     char buf[64];
     int  wrote;
 
     switch (v->kind) {
     case V_TEXT:
-        *out = (char *)v->text;
+        *out = v->text;
         *len = v->len;
         return true;
 
@@ -333,7 +333,7 @@ static Value *format(Eval *e, const Expr *x)
             if (!arg) return NULL;
             if (value_failed(arg)) return arg;
 
-            char  *text;
+            const char *text;
             size_t len;
             if (!value_format(e->a, arg, &text, &len))
                 return eval_fail(e, x->kids[next - 1], "a %s cannot fill a {}",

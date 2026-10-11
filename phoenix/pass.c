@@ -60,13 +60,13 @@ static void pat_add(Reader *r, Pattern *parent, const char *field, Pattern *kid)
 {
     int       n      = parent->nkids;
     Pattern **kids   = arena_alloc(r->a, (size_t)(n + 1) * sizeof *kids);
-    char    **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
+    const char **fields = arena_alloc(r->a, (size_t)(n + 1) * sizeof *fields);
 
     memcpy(kids,   parent->kids,   (size_t)n * sizeof *kids);
     memcpy(fields, parent->fields, (size_t)n * sizeof *fields);
 
     kids[n]   = kid;
-    fields[n] = (char *)field;
+    fields[n] = field;
 
     parent->kids   = kids;
     parent->fields = fields;

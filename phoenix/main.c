@@ -394,7 +394,7 @@ int main(int argc, char **argv)
     }
 
     if (!quiet) {
-        char  *text;
+        const char *text;
         size_t len;
         if (value_format(a, answer, &text, &len)) {
             fwrite(text, 1, len, stdout);

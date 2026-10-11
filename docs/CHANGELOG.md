@@ -16,6 +16,23 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: units initialised in fpc's order, and `const` kept
+
+**`languages/units/` runs initialisation sections in fpc's order**, a
+depth-first walk from the program through each unit's interface `uses` and
+then its implementation's, each unit entered once. It ran them in the order
+they are written. Its `divergent/` directory is empty: both of the things
+it got wrong are answered.
+
+**`phx` builds with `-Wcast-qual`, and so does every compiler it writes.**
+The names and texts the runtime only reads are declared `const`, and the
+casts that hid the difference are gone.
+
+**Tests:** 752 → 752. The units harness holds thirteen checks, and the
+written-out compilers are compiled with `-Werror=cast-qual`.
+
+---
+
 ## 2026-10-10: a circular unit reference at any depth
 
 **`languages/units/` refuses `A -> B -> C -> A`**, a cycle through interface
