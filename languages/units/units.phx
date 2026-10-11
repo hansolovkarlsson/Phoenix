@@ -110,17 +110,63 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
    * reaches through**: rule 3 says visibility does not compose, so this
    * is the one place where a graph would have had to be walked and is
    * not. *)
-  Interface : exports = flatten($decls.entry)
-            : uses-of = $uses.name .
-  Unit      : export-of = [[$name, $iface.exports]]
-            : iuses-of  = [[$name, $iface.uses-of]] .
+  Interface : exports = flatten($decls.entry) .
+  Unit      : export-of = [[$name, $iface.exports]] .
   otherwise export-of = []
-  otherwise iuses-of  = []
 
-  File : interface-uses = flatten($units.iuses-of)
-       : units-by-name = flatten($units.export-of)
+  (* `reaches` is where the `reach` pass below starts from, and it starts
+   * from nothing: no unit is yet known to reach any other. A unit is one
+   * bit of a sixty-four-bit integer there, hence the limit. *)
+  File : units-by-name = flatten($units.export-of)
+       : reaches = []
        ! size(positions(flatten($units.export-of))) < size(flatten($units.export-of))
-           : "two units have the same name" .
+           : "two units have the same name"
+       ! size($units) > 63
+           : "{} units, and the circularity check counts to 63" of size($units) .
+
+(* ------------------------------------------------------------------ *)
+(* Pass two, run until it settles: which units can each unit's          *)
+(* interface reach?                                                     *)
+(*                                                                     *)
+(* **This is rule 5 at any depth**, and until 2026-10-10 it was two     *)
+(* units deep, because what it needs is the transitive closure of the   *)
+(* interface `uses` graph and the notation had no way to iterate over   *)
+(* data. It has had one since 2026-09-23, ROADMAP 2.5: a driver runs a  *)
+(* pass `until` an attribute of the root comes out as it went in.       *)
+(*                                                                     *)
+(* Each round, a unit's interface reaches the units it uses and         *)
+(* everything **they** reached last round. Round one finds the direct   *)
+(* uses, round two the uses two deep, and so on, until a round adds     *)
+(* nothing. What a unit reaches is a set of units, and it is kept as    *)
+(* one bit per unit rather than as a list of names, because a list has  *)
+(* to be told when it holds a name twice and the library has no way to  *)
+(* say *once each*. A bit set cannot grow, and only gains bits, so it   *)
+(* settles in at most as many rounds as there are units.                *)
+
+%define bit(i) = int(("1{}" of repeat("0", $i)), 2) .
+
+%pass reach
+
+  thread far = 0
+
+  File : down was   = $reaches
+       : down index = positions($units.name)
+       : reaches    = flatten($units.row) .
+
+  (* The thread starts again at each interface, and what is left of it
+   * on the way out is everything that interface's `uses` reached. *)
+  Interface : down far = 0
+            : reached  = $far .
+  Unit : row = [[$name, $iface.reached]] .
+  otherwise row = []
+
+  (* An implementation's or a program's `uses` adds to the thread as
+   * well, and nothing reads it: only an interface's counts. A name that
+   * is not a unit adds nothing, and `resolve` says so. *)
+  UnitRef : far = if defined($index, $name)
+                  then bitor($far, bitor(bit(lookup($index, $name)),
+                                         lookup($was, $name, 0)))
+                  else $far .
 
 (* ------------------------------------------------------------------ *)
 (* Pass two: what does each name refer to?                            *)
@@ -134,34 +180,34 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
    * is worth saying because the library has no way to reverse one. *)
   thread env = []
 
-  (* ---- rule 5, and the one thing here the notation cannot finish ----
+  (* ---- rule 5 ----
    *
    * `fpc` refuses an interface `uses` that comes back round: *Circular unit
    * reference between ug and uf*. The reason is **separate compilation** --
    * neither `.ppu` can be written without the other -- and not resolution, so
    * in a single file it constrains nothing. It is checked anyway, for
-   * fidelity, and it is checked **only two units deep**:
+   * fidelity, and at any depth: an interface's `uses` of a unit is circular
+   * when that unit's interface reaches back to this one, which is what the
+   * `reach` pass worked out. The message names this unit and then the one
+   * it uses, which is fpc's order. `A -> B -> C -> A` is refused three
+   * times, once at each `uses` on the cycle, where fpc stops at the first.
    *
-   *     A's interface uses B, and B's interface uses A back.
-   *
-   * `A -> B -> C -> A` is not caught. Catching one needs the transitive
-   * closure of the uses graph, and closure needs iteration to a fixpoint,
-   * which nothing in this notation does over *data*. `tests/three-cycle.pas`
-   * is that divergence, written down rather than hidden.
-   *
-   * It is worth being exact about what this shows: the limit is **graph
-   * reachability**, not name resolution. Resolution never needed a walk. *)
+   * It is worth being exact about what this shows: what needed the
+   * iteration was **graph reachability**, not name resolution. Resolution
+   * never needed a walk. *)
   UnitRef : env = [...lookup($table, $name, []), ...$env]
           ! not defined($table, $name)
               : "no unit called '{}'" of $name
           ! $in-interface
-            and defined(positions(lookup($iusestab, $name, [])), $mine)
-              : "circular unit reference between {} and {}" of $name, $mine .
+            and bitand(lookup($reach, $name, 0),
+                       bit(lookup($index, $mine, 0))) <> 0
+              : "circular unit reference between {} and {}" of $mine, $name .
 
   (* Every unit's exports, by name, handed down from the root -- which is
    * what pass one was for. *)
   File : down table  = $units-by-name
-       : down iusestab = $interface-uses
+       : down reach  = $reaches
+       : down index  = positions($units.name)
        : out = join([...$units.out, $main.out], "") .
 
   (* A unit's interface sees its interface `uses` and its own interface
@@ -226,4 +272,4 @@ expr = q:name "." n:name -> Qualified(unit: $q, name: $n)
 
   otherwise out = "" .
 
-%driver run = interfaces, resolve -> out .
+%driver run = interfaces, reach until reaches, resolve -> out .

@@ -29,7 +29,7 @@ notation cannot say:
 | | |
 | --- | --- |
 | [1.7](#17-a-repetition-that-counts) | `languages/solvm/` **emits `.sob` and cannot read it** |
-| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | *built 2026-09-23, for `languages/z80/`, as a driver stage run `until` an attribute settles.* `languages/units/` cannot refuse `A -> B -> C -> A`, and cannot order initialisation |
+| [2.5](COMPLETED.md#25-circular-attributes--from-jastadd) | *built 2026-09-23, for `languages/z80/`, as a driver stage run `until` an attribute settles.* `languages/units/` cannot order initialisation. *It refuses `A -> B -> C -> A` since 2026-10-10* |
 
 Neither is new. Both have been true for days and were recorded as costs rather
 than as work; what changed is [lineage.md](lineage.md) naming the prior art, so
@@ -400,17 +400,15 @@ the narrower thing: every list operation in the library answers in one step.
 of them can be asked to run again on what it produced.
 
 The cost was transitive closure, and
-[`languages/units/`](../languages/units/) is the first thing to want one. It
-refuses a circular interface `uses` two units deep — *does the unit I use use me
-back* — and cannot refuse `A -> B -> C -> A`, because catching that means
-closing the uses graph over itself.
-[`divergent/three-cycle.pas`](../languages/units/divergent/three-cycle.pas) is
-that, written down. A pass that adds one step of reachability, run `until` the
-table settles, would now say it; nobody has written that pass, because `fpc`
-already refuses the program and no one has asked for the diagnostic. It is a different absence from
-[3.5](COMPLETED.md#35-conditionals-in-the-meta-language): a conditional was a
-thing the notation said *no* to on purpose until a description made the case,
-and this is a thing nothing has yet made a case for.
+[`languages/units/`](../languages/units/) was the first thing to want one.
+*It has one since 2026-10-10*: a pass that adds one step of reachability, run
+`until` the table settles, refuses `A -> B -> C -> A`. What it showed is the
+narrower thing above. The table holds one **bit** per unit rather than a list
+of names, because a list gains a duplicate every round on a cycle and never
+settles, and nothing in the library answers *each element once*. A bit set
+was available and is enough for 63 units. A second description needing a set
+of names that cannot be numbered would be the case for one; until then it is
+a thing nothing has made a case for.
 
 *A `thread` declared after the rules that assign it was silently not a thread,
 and is now refused.* Kept here because the shape is worth having written down.

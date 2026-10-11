@@ -6,6 +6,10 @@
  * number -- but `sizes`, `each` and `bytes` over a list complained about it
  * instead, naming a line of the *description*. So a correct diagnosis about
  * somebody's program was followed by what read as an internal error.
+ *
+ * `...` did the same until 2026-10-10, saying a failure was not a list, found
+ * by `languages/units/` refusing a circular `uses`: the unit's environment
+ * is spread into the next one, and every refusal came with a second line.
  *)
 %fragment digit .
 digit  = "0" .. "9" .
@@ -19,6 +23,7 @@ line = { number -> N(text: $1) } -> L(items: $1) .
 
 %pass p
   N : out = "{}" of $text
+    : parts = [$text]
     ! $text = "0" : "zero is refused, and this is the only complaint" .
 
   (* Each of these met the failure and used to add a complaint of its own.
@@ -28,8 +33,10 @@ line = { number -> N(text: $1) } -> L(items: $1) .
    * whether it was a struct. *)
   L : both   = size($items) > 0 and join($items.out) = ""
     : either = size($items) = 0 or join($items.out) = ""
-    : out = "{} {} {} {} {}" of join($items.out),
-                                join(each($items.out, "<{}>")),
-                                join(sizes($items.out), ","), $both, $either .
+    : spread = [...at($items.parts, 2)]
+    : out = "{} {} {} {} {} {}" of join($items.out),
+                                   join(each($items.out, "<{}>")),
+                                   join(sizes($items.out), ","), $both, $either,
+                                   size($spread) .
 
 %driver d = p -> out .

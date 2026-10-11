@@ -9,7 +9,7 @@ this is what was **believed** about it.*
 *Revised after awk, which is the first language described here that was not
 chosen to suit the tool.*
 
-Phoenix is 10,099 hand-written lines of C11 with no dependencies (~14,600 if
+Phoenix is 10,103 hand-written lines of C11 with no dependencies (~14,600 if
 the generated `runtime.h` is counted; [COMPLETED.md](COMPLETED.md#the-tool)
 says why both are true). The descriptions written
 against it come to ~4,300 lines: Pascal in 1,434 (56 node types, a checker and
@@ -697,7 +697,7 @@ written down somewhere else**:
 | entry | where it had been living instead |
 | --- | --- |
 | 1.7 — a repetition that counts | [CHANGELOG.md](CHANGELOG.md) 2026-09-03, in the sentence announcing the assembler: *Phoenix can emit `.sob` and cannot read it* |
-| 2.5 — circular attributes | [`languages/units/divergent/three-cycle.pas`](../languages/units/divergent/three-cycle.pas), a test file, since the day units were described |
+| 2.5 — circular attributes | [`languages/units/divergent/three-cycle.pas`](../languages/units/tests/three-cycle.pas), a test file, since the day units were described. *Refused since 2026-10-10, and in `tests/`* |
 
 Not a commit message, which is what § 11 guessed. A **changelog entry** and a
 **test fixture** — both durable, both version-controlled, both entirely

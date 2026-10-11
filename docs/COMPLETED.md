@@ -13,10 +13,10 @@ evidence is a decision as much as one built.
 
 ## The tool
 
-C11, no dependencies, **10,099 lines** hand-written.
+C11, no dependencies, **10,103 lines** hand-written.
 
 The figure usually quoted is ~14,600, and both are right about different
-things: `phoenix/` also holds `runtime.h`, 4,656 generated lines which are the
+things: `phoenix/` also holds `runtime.h`, 4,660 generated lines which are the
 seven runtime files re-emitted as a C string literal so that a compiler `phx`
 writes is one file. Counting it measures what is in the directory; not counting
 it measures what anybody wrote. The runtime is in both numbers, once or twice.
@@ -392,8 +392,11 @@ with `-o` runs the loop, because it lives in the runtime.
 a fourth walk, 134 bytes after one and 131 after four, worked round by round
 in its comment and simulated before it was run. `languages/units/`'s two
 divergences, a three-unit cycle and initialisation order, are the other
-customer the entry named and are **not** converted: `fpc` already refuses
-the first, and nobody has asked for either.
+customer the entry named. *The cycle was converted on 2026-10-10*: a
+`reach` pass run `until` its table settles, with each unit one bit of what a
+unit reaches, because a list of names would gain a duplicate every round on
+a cycle and the library cannot drop one. Initialisation order is not
+converted, and nobody has asked for it.
 
 ### 3.5 Conditionals in the meta-language
 
@@ -1667,12 +1670,13 @@ hands across because the earlier pass had already worked them out. The same
 answer a forward reference gets.
 
 **Two things here are graph-shaped, and neither is resolution.** Refusing a
-circular *interface* `uses` is reachability, and this description manages it
-only two units deep — a longer cycle needs transitive closure, and closure
-needs a fixpoint over *data*, which nothing in this notation does. And
-initialisation order is a topological sort. Both are in
+circular *interface* `uses` is reachability, and initialisation order is a
+topological sort. *The first is answered at any depth since 2026-10-10*, by a
+`reach` pass the driver runs `until` the table of what each unit reaches
+settles, [2.5](#25-circular-attributes--from-jastadd); until then it was two
+units deep and `A -> B -> C -> A` was a divergence. The second is in
 [`divergent/`](../languages/units/divergent/), written down rather than hidden,
-and the suite checks they are still the divergences they say they are.
+and the suite checks it is still the divergence it says it is.
 
 **What to look for instead**, if this is ever reopened: a language where
 visibility *composes* — Rust's `pub use`, ML's `open` inside a signature, a
@@ -1708,6 +1712,7 @@ and the entries after the table say how.
 | **three refusals were asserted by nothing** | `case-sizeof-below-zero.c`, `case-inverts-sizeof.c` and `global-negated-sizeof.c` were written on 2026-09-27 for `sizeof` becoming unsigned, and no line of `tests/run.sh` named them, so each was refused for any reason at all and the suite counted none of them. Found on 2026-09-29 by looking for their assertions in order to change the message they held. `tests/run.sh` now checks that every program in `languages/c/tests/refused/` is named by one |
 | **a template's holes were counted only when a node reached it** | docs/semantics.md and [reference.md](reference.md) § 12 both said *when the description is read*, and nothing counted them then. A `%define`'s body wrote `"{}||" of $t, "|"`, where `of` took the separator as a second value, and `phx` read it cleanly. Found on 2026-10-10 by the C oracle, comparing all 354 programs' output before and after a rewrite of `c.phx`: every one differed. Counted at read time since, over every expression |
 | **a call to no function, or with the wrong count, read cleanly** | a call to the library was checked only when a node reached it, so `jion($x, ", ")` in a clause no test input reached was a description that read and could not run. Found on 2026-10-10 by a probe written to ask what else read cleanly after the row above. Refused at read time since, from a table of the library's names and counts; nothing in the repository was refused |
+| **`...` complained about a failure** | a failed check leaves its node's attributes as failures, and `[...x]` of one said *`...` wants a list, and this is a failure*, naming a line of the description under every correct refusal. Found by `languages/units/` refusing a circular `uses`, whose environment is spread into the next; `tests/grammars/one-complaint.phx` holds it now |
 | **a written-out compiler was not C11** | every table a description left empty was written as `= {}`, C23's, and so an array of no elements, an extension. The suite compiled written-out compilers with plain `cc`, which takes both silently, so all of them compiled and none was C11, while `c.phx` refused the same `{}` in a C program as C23's. Found on 2026-10-10 by compiling each language's written-out compiler under `-std=c11 -pedantic-errors`: 5 to 9 errors each. An empty table gets one zeroed row since, and two of them are compiled that way by the suite |
 
 **The rule this repeats**: a round trip can be green while the parse is

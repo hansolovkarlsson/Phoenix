@@ -469,6 +469,10 @@ Value *eval_expr(Eval *e, const Expr *x)
             if (item->kind == X_SPREAD) {
                 Value *inner = eval_expr(e, item->kids[0]);
                 if (!inner) return NULL;
+                /* A failure has been reported where it happened, and is
+                 * passed on rather than reported again as not being a list,
+                 * which names a line of the description. */
+                if (value_failed(inner)) return inner;
 
                 /* `...` of something that is not a list used to spread to
                  * the thing itself, which is quiet and wrong: `[$e, ...$3]`

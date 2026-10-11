@@ -16,6 +16,24 @@ entry below that changes it says so.
 
 ---
 
+## 2026-10-10: a circular unit reference at any depth
+
+**`languages/units/` refuses `A -> B -> C -> A`**, a cycle through interface
+`uses` of any length, where it caught only two units using each other. A
+`reach` pass, run `until` what each unit reaches settles, does the closing;
+the message names the unit and the unit it uses in fpc's order, *circular
+unit reference between ub3 and ua3*. A description over 63 units is refused,
+since each unit is one bit of what another reaches.
+
+**A failed check is reported once when `...` meets it.** `[...x]` of a
+failure said *`...` wants a list*, a second line naming the description
+under a correct refusal of the program.
+
+**Tests:** 752 → 752. The units harness holds ten checks where it held
+eight, and is reported as one.
+
+---
+
 ## 2026-10-10: `make test` in half the time
 
 **The suite's harnesses run at the same time**, each beside the rest of

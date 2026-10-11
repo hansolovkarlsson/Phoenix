@@ -7944,3 +7944,42 @@ fifty seconds, and then the trap stops the rest. The first attempt at that
 test said otherwise and was wrong about itself: started with `&` from
 another shell, the run inherited SIGINT ignored, and `sh` cannot trap a
 signal it was born ignoring.
+
+**`languages/units/` closes the uses graph.** The `A -> B -> C -> A` that
+`divergent/three-cycle.pas` had held since units were described was waiting
+on iteration over data, and ROADMAP 2.5 gave the notation that on
+2026-09-23 without anyone writing the pass. It is a `reach` pass, run
+`until` the root's table settles: each round, an interface reaches the
+units it uses and whatever they reached the round before.
+
+The first shape was a list of names per unit, and it cannot work. On a
+cycle each round adds names already there, the list never comes out equal
+to the last one, and the library has no way to say *each name once*:
+`positions` keeps the first of each, but gives back pairs, and nothing
+takes a column of pairs back out. So a unit is a bit, `bit(i)` is
+`int` of a one and `i` zeros in base two, and what a unit reaches is
+`bitor` of the bits of what it uses and what they reached. A set of bits
+only gains bits, so it settles within as many rounds as there are units,
+and the price is 63 of them, which is refused by name past that.
+
+fpc decides the wording. `ub3.pas(3,9) Fatal: Circular unit reference
+between ub3 and ua3` names the unit being compiled and then the one it
+uses, and the description had the two the other way round. The two-unit
+test passed anyway, because both of its `uses` are refused and one of the
+two messages has the pair in fpc's order. Now each `uses` on a cycle is
+refused in fpc's order, and fpc stops at the first. The file moved to
+`tests/`, and `programs/deep-chain.pas`, four units deep with two
+implementation `uses` pointing back, is the case that must not be
+refused, held against fpc. Making `reach` ignore last round's table fails
+`three-cycle` and nothing else.
+
+**Every refusal had come with a second line.** `...` of a failure
+complained that it was not a list, naming the line of the description where
+`Init` spreads its environment, and it had done so since the refusal was
+written. Every other place a failure meets the library passes it on, and
+`tests/grammars/one-complaint.phx` says why; `...` was the one left. The
+witness needed the spread in a clause of its own, because a template stops
+at its first failed argument and the spread was never reached. And the
+check was first trusted against a stale `phx`: `git stash pop` left
+`eval.c` and the binary on the same second, and make took that as up to
+date.

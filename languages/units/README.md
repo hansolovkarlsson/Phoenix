@@ -83,14 +83,26 @@ is the only mechanism this description needed that a single walk does not have.
 
 ## What *is* graph-shaped here, and neither is resolution
 
-Both are in [`divergent/`](divergent/), and both are honest about it.
+The first is answered here since 2026-10-10. The second is in
+[`divergent/`](divergent/), and honest about it.
 
 **Rule 5 is reachability.** Detecting a circular interface `uses` is a question
-about the *uses graph*, and this description answers it only two units deep —
-does the unit I use use me back. `A -> B -> C -> A` is not caught, because
-catching it needs the transitive closure, and closure needs iteration to a
-fixpoint over **data**. A `%rewrite innermost` reaches a fixpoint over the shape
-of a tree, not over a table.
+about the *uses graph*, and until 2026-10-10 this description answered it only
+two units deep, does the unit I use use me back. A longer cycle needs the
+transitive closure, and closure needs iteration to a fixpoint over **data**.
+The notation has had that since 2026-09-23, a driver running a pass `until` an
+attribute of the root settles, and the `reach` pass is that: each round, a
+unit reaches the units its interface uses and everything they reached the
+round before. [`tests/three-cycle.pas`](tests/three-cycle.pas), `A -> B -> C ->
+A`, moved there from `divergent/` and is refused in fpc's words, and
+[`programs/deep-chain.pas`](programs/deep-chain.pas), a chain four deep with
+implementation `uses` pointing back, is accepted, as fpc accepts it.
+
+What a unit reaches is kept as **one bit per unit**, not as a list of names.
+A list of names gains a duplicate every round on a cycle and never settles,
+and the library has no way to say *each name once*; a bit set cannot grow,
+so it settles in at most as many rounds as there are units. The price is 63
+units, and more are refused by name.
 
 It is also worth knowing *why* `fpc` refuses this at all: separate compilation.
 Neither `.ppu` can be written without the other. It is a well-formedness rule
